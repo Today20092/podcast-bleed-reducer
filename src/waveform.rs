@@ -15,6 +15,25 @@ use std::{
 };
 
 const BASE_BUCKET: usize = 256;
+const ATTENUATION_HATCH_SPACING: f32 = 20.0;
+
+fn attenuation_hatches(left: f32, right: f32, height: f32) -> Vec<(Point, Point)> {
+    let first = ((left - height) / ATTENUATION_HATCH_SPACING).floor() * ATTENUATION_HATCH_SPACING;
+    let mut base = first;
+    let mut lines = Vec::new();
+    while base < right {
+        let start_x = base.max(left);
+        let end_x = (base + height).min(right);
+        if end_x > start_x {
+            lines.push((
+                Point::new(start_x, height - (start_x - base)),
+                Point::new(end_x, height - (end_x - base)),
+            ));
+        }
+        base += ATTENUATION_HATCH_SPACING;
+    }
+    lines
+}
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub(crate) struct WaveformCache {
@@ -375,7 +394,7 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
                             (Color::from_rgba8(70, 190, 120, 0.14), 0)
                         }
                         Decision::Uncertain => (Color::from_rgba8(235, 180, 55, 0.14), 2),
-                        _ => (Color::from_rgba8(220, 75, 85, 0.14), 1),
+                        _ => (Color::from_rgba8(220, 75, 85, 0.10), 1),
                     };
                     frame.fill(
                         &canvas::Path::rectangle(
@@ -385,18 +404,13 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
                         color,
                     );
                     if pattern == 1 {
-                        let mut x = left - bounds.height;
-                        while x < right {
+                        for (start, end) in attenuation_hatches(left, right, bounds.height) {
                             frame.stroke(
-                                &canvas::Path::line(
-                                    Point::new(x.max(left), bounds.height),
-                                    Point::new((x + bounds.height).min(right), 0.0),
-                                ),
+                                &canvas::Path::line(start, end),
                                 canvas::Stroke::default()
-                                    .with_width(0.7)
-                                    .with_color(Color::from_rgba8(230, 230, 235, 0.25)),
+                                    .with_width(0.5)
+                                    .with_color(Color::from_rgba8(230, 230, 235, 0.16)),
                             );
-                            x += 12.0;
                         }
                     } else if pattern == 2 {
                         let mut x = left + 4.0;
@@ -527,6 +541,32 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
 mod tests {
     use super::*;
     use bwavfile::{WaveFmt, WaveWriter};
+
+    #[test]
+    fn attenuation_hatches_keep_screen_phase_and_clip_to_region() {
+        let wide = attenuation_hatches(17.0, 93.0, 40.0);
+        let clipped = attenuation_hatches(31.0, 71.0, 40.0);
+
+        assert!(wide.iter().chain(&clipped).all(|(start, end)| {
+            start.x >= 17.0 && end.x <= 93.0 && start.y >= 0.0 && end.y <= 40.0
+        }));
+        assert_eq!(
+            clipped,
+            wide.into_iter()
+                .filter_map(|(start, end)| {
+                    let base = start.x + start.y - 40.0;
+                    let start_x = start.x.max(31.0);
+                    let end_x = end.x.min(71.0);
+                    (end_x > start_x).then(|| {
+                        (
+                            Point::new(start_x, 40.0 - (start_x - base)),
+                            Point::new(end_x, 40.0 - (end_x - base)),
+                        )
+                    })
+                })
+                .collect::<Vec<_>>()
+        );
+    }
 
     fn wav(path: &Path, samples: &[f32]) {
         let writer = WaveWriter::create(path, WaveFmt::new_pcm_mono(48_000, 16)).unwrap();
