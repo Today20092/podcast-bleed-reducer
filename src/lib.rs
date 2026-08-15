@@ -6,6 +6,7 @@ mod project;
 pub mod release_gate;
 mod review;
 mod vad;
+mod waveform;
 
 pub use engine::*;
 pub use export::*;

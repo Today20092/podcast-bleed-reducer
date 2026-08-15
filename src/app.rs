@@ -1,10 +1,11 @@
 use crate::{
     Comparison, Project, RenderState, ReviewState, ReviewWorkspace, RunRequest, WorkflowStep,
     export, run_with_progress, validate,
+    waveform::{self, Waveform, WaveformCache},
 };
 use iced::{
     Element, Fill, Length, Subscription, Task, Theme,
-    widget::{Space, button, column, container, responsive, row, scrollable, text},
+    widget::{Space, button, canvas, column, container, responsive, row, scrollable, text},
     window,
 };
 use std::{
@@ -45,6 +46,28 @@ fn available_project_path(directory: &std::path::Path) -> PathBuf {
 
 #[cfg(test)]
 mod tests {
+    use std::path::PathBuf;
+
+    #[test]
+    fn both_import_entry_points_share_deterministic_queueing() {
+        let paths = [
+            PathBuf::from("B.wav"),
+            PathBuf::from("a.wav"),
+            PathBuf::from("B.wav"),
+        ];
+        let mut picker = super::CleanSlateApp::default();
+        picker.queue_stems(paths.clone());
+        let mut drop = super::CleanSlateApp::default();
+        for path in paths {
+            drop.queue_stems([path]);
+        }
+        assert_eq!(picker.pending_stems, drop.pending_stems);
+        assert_eq!(
+            picker.pending_stems,
+            [PathBuf::from("a.wav"), PathBuf::from("B.wav")]
+        );
+    }
+
     #[test]
     fn inspector_stacks_only_in_compact_windows() {
         assert!(super::compact_workspace(1280.0));
@@ -78,6 +101,7 @@ pub struct CleanSlateApp {
     processing: Option<Processing>,
     review: Option<ReviewWorkspace>,
     playback: Vec<Child>,
+    waveforms: Vec<WaveformCache>,
 }
 
 struct Processing {
@@ -132,6 +156,14 @@ fn compact_workspace(width: f32) -> bool {
 }
 
 impl CleanSlateApp {
+    fn queue_stems(&mut self, paths: impl IntoIterator<Item = PathBuf>) {
+        self.pending_stems.extend(paths);
+        self.pending_stems
+            .sort_by_key(|path| path.to_string_lossy().to_lowercase());
+        self.pending_stems.dedup();
+        self.messages.clear();
+    }
+
     fn import_stems(&mut self) {
         let Some(paths) = rfd::FileDialog::new()
             .set_directory(dialog_start_directory())
@@ -140,12 +172,7 @@ impl CleanSlateApp {
         else {
             return;
         };
-        for path in paths {
-            if !self.pending_stems.contains(&path) {
-                self.pending_stems.push(path);
-            }
-        }
-        self.messages.clear();
+        self.queue_stems(paths);
     }
 
     fn theme(&self) -> Theme {
@@ -177,10 +204,25 @@ impl CleanSlateApp {
             return;
         };
         let project_path = available_project_path(directory);
-        match Project::create(project_path, std::mem::take(&mut self.pending_stems)) {
-            Ok(project) => {
+        let paths = self.pending_stems.clone();
+        let validation = match validate(&paths) {
+            Ok(validation) => validation,
+            Err(blocker) => {
+                self.pending_stems.clear();
+                self.messages = vec![format!("Render blocker: {blocker}")];
+                return;
+            }
+        };
+        match Project::create(&project_path, paths.clone()) {
+            Ok(mut project) => {
+                self.waveforms = waveform::load_or_build(&project_path, &paths).unwrap_or_default();
+                if let Err(error) = project.mark_validated() {
+                    self.messages = vec![error.to_string()];
+                    return;
+                }
                 self.project = Some(project);
-                self.messages.clear();
+                self.pending_stems.clear();
+                self.messages = validation.warnings;
             }
             Err(error) => self.messages = vec![error.to_string()],
         }
@@ -196,6 +238,8 @@ impl CleanSlateApp {
         };
         match Project::open(path) {
             Ok(project) => {
+                self.waveforms = waveform::load_or_build(project.path(), &project.source_paths())
+                    .unwrap_or_default();
                 self.project = Some(project);
                 self.load_review();
                 self.messages.clear();
@@ -349,10 +393,7 @@ impl CleanSlateApp {
                     .extension()
                     .is_some_and(|extension| extension.eq_ignore_ascii_case("wav"))
                 {
-                    if !self.pending_stems.contains(&path) {
-                        self.pending_stems.push(path);
-                    }
-                    self.messages.clear();
+                    self.queue_stems([path]);
                 } else {
                     self.messages = vec![format!("Ignored non-WAV file: {}", path.display())];
                 }
@@ -371,9 +412,16 @@ impl CleanSlateApp {
                     .set_directory(start)
                     .add_filter("WAV audio", &["wav"])
                     .pick_file()
-                    && let Err(error) = self.project.as_mut().unwrap().relink(index, path)
                 {
-                    self.messages = vec![error.to_string()];
+                    let project = self.project.as_mut().unwrap();
+                    match project.relink(index, path) {
+                        Ok(()) => {
+                            self.waveforms =
+                                waveform::load_or_build(project.path(), &project.source_paths())
+                                    .unwrap_or_default();
+                        }
+                        Err(error) => self.messages = vec![error.to_string()],
+                    }
                 }
             }
             Message::Validate => self.validate(),
@@ -541,12 +589,21 @@ impl CleanSlateApp {
             );
         } else if let Some(project) = &self.project {
             for (index, source) in project.sources.iter().enumerate() {
-                let mut track = row![text(source.path.display().to_string())];
+                let mut header = row![text(source.path.display().to_string())];
                 if !source.available {
-                    track = track.push(button("Relink source").on_press(Message::Relink(index)));
+                    header = header.push(button("Relink source").on_press(Message::Relink(index)));
                 }
+                let waveform: Element<'_, Message> = self.waveforms.get(index).map_or_else(
+                    || {
+                        container(text("Waveform loading…"))
+                            .height(80)
+                            .center_y(Fill)
+                            .into()
+                    },
+                    |cache| canvas(Waveform(cache)).width(Fill).height(80).into(),
+                );
                 timeline_content = timeline_content.push(
-                    container(track)
+                    container(column![header, waveform].spacing(8))
                         .padding(12)
                         .width(Fill)
                         .style(container::bordered_box),
