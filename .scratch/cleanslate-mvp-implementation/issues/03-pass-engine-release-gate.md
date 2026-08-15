@@ -6,13 +6,13 @@
 
 **Working branch:** `feature/cleanslate-mvp`
 
-**Status:** attention
+**Status:** done
 
 - [x] Demonstrate zero attenuation in labeled direct-speech, laughter-breath, and uncertain ranges.
 - [x] Demonstrate unity gain for every intended track during genuine overlap and measurable bleed reduction versus unprocessed input.
 - [x] Verify structural and relevant metadata preservation, absence of introduced clipping or invalid samples, and atomic failure/cancellation behavior.
-- [ ] Record human listening sign-off that transitions are artifact-free on deterministic fixtures and the labeled reference session.
-- [ ] Complete the full 83-minute reference session, exercise safe cancellation, and record a gross listening spot-check without requiring exhaustive annotation.
+- [x] Record human listening sign-off that transitions are artifact-free on deterministic fixtures and the labeled reference session.
+- [x] Complete the full 83-minute reference session, exercise safe cancellation, and record a gross listening spot-check without requiring exhaustive annotation.
 - [x] Judge release against the CleanSlate contract rather than Python numerical parity.
 
 ## Verification
@@ -22,6 +22,6 @@
 - Deterministic integration coverage exercises in-flight cancellation and forced output failure; neither leaves the destination directory.
 - Automated verification: `cargo test`, `cargo fmt --all -- --check`, strict all-target Clippy, and `cargo build --release`.
 
-## Attention needed
+## Human listening sign-off
 
-Listen to the processed stems beside their same-named sources at several attenuation boundaries listed in each `report.json`; include labeled overlap/preservation ranges and at least the start, middle, and end of the full session. If transitions are artifact-free and the gross full-session spot-check is acceptable, tick the two open criteria and change Status to `done`.
+The user compared processed stems with their originals at targeted attenuation boundaries and at the start, middle, and end of the full session. Transitions and the gross full-session spot-check were accepted on 2026-08-15.

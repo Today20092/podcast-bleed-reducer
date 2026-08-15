@@ -15,6 +15,6 @@
 
 ## Human listening sign-off
 
-- [ ] Deterministic transitions are artifact-free.
-- [ ] Labeled reference transitions are artifact-free.
-- [ ] Full-session gross spot-check passed.
+- [x] Deterministic transitions are artifact-free.
+- [x] Labeled reference transitions are artifact-free.
+- [x] Full-session gross spot-check passed.
