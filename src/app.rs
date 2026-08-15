@@ -7,6 +7,7 @@ use iced::{
     widget::{button, column, container, row, scrollable, text},
 };
 use std::{
+    path::PathBuf,
     process::{Child, Command},
     sync::{
         Arc,
@@ -15,6 +16,28 @@ use std::{
     },
     time::{SystemTime, UNIX_EPOCH},
 };
+
+fn dialog_start_directory() -> PathBuf {
+    std::env::var_os("USERPROFILE")
+        .map(PathBuf::from)
+        .map(|path| path.join("Documents"))
+        .filter(|path| path.is_dir())
+        .or_else(|| {
+            std::env::current_exe()
+                .ok()
+                .and_then(|path| path.parent().map(std::path::Path::to_path_buf))
+        })
+        .or_else(|| std::env::current_dir().ok())
+        .unwrap_or_else(|| PathBuf::from("."))
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn file_dialog_starts_in_an_existing_local_directory() {
+        assert!(super::dialog_start_directory().is_dir());
+    }
+}
 
 #[derive(Default)]
 pub struct CleanSlateApp {
@@ -71,7 +94,15 @@ impl CleanSlateApp {
     }
 
     fn export_current(&mut self) {
-        let Some(destination) = rfd::FileDialog::new().pick_folder() else {
+        let Some(destination) = rfd::FileDialog::new()
+            .set_directory(
+                self.project
+                    .as_ref()
+                    .and_then(|project| project.path().parent())
+                    .unwrap_or_else(|| std::path::Path::new(".")),
+            )
+            .pick_folder()
+        else {
             return;
         };
         match export(self.project.as_ref().unwrap(), &destination, None) {
@@ -84,10 +115,16 @@ impl CleanSlateApp {
 
     fn create_project(&mut self) {
         let stems = rfd::FileDialog::new()
+            .set_directory(dialog_start_directory())
             .add_filter("WAV audio", &["wav"])
             .pick_files();
         let Some(stems) = stems else { return };
+        let save_directory = stems
+            .first()
+            .and_then(|stem| stem.parent())
+            .unwrap_or_else(|| std::path::Path::new("."));
         let Some(path) = rfd::FileDialog::new()
+            .set_directory(save_directory)
             .add_filter("CleanSlate project", &["cleanslate"])
             .set_file_name("project.cleanslate")
             .save_file()
@@ -105,6 +142,7 @@ impl CleanSlateApp {
 
     fn open_project(&mut self) {
         let Some(path) = rfd::FileDialog::new()
+            .set_directory(dialog_start_directory())
             .add_filter("CleanSlate project", &["cleanslate"])
             .pick_file()
         else {
@@ -261,7 +299,15 @@ impl CleanSlateApp {
             Message::NewProject => self.create_project(),
             Message::OpenProject => self.open_project(),
             Message::Relink(index) => {
+                let start = self
+                    .project
+                    .as_ref()
+                    .and_then(|project| project.sources.get(index))
+                    .and_then(|source| source.path.parent())
+                    .map(std::path::Path::to_path_buf)
+                    .unwrap_or_else(dialog_start_directory);
                 if let Some(path) = rfd::FileDialog::new()
+                    .set_directory(start)
                     .add_filter("WAV audio", &["wav"])
                     .pick_file()
                     && let Err(error) = self.project.as_mut().unwrap().relink(index, path)
