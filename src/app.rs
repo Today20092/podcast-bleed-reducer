@@ -52,26 +52,38 @@ fn available_project_path(directory: &std::path::Path) -> PathBuf {
 
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
+    fn write_wav(path: &std::path::Path, samples: &[f32]) {
+        let writer =
+            bwavfile::WaveWriter::create(path, bwavfile::WaveFmt::new_pcm_mono(48_000, 16))
+                .unwrap();
+        let mut frames = writer.audio_frame_writer().unwrap();
+        frames.write_frames(samples).unwrap();
+        frames.end().unwrap();
+    }
 
     #[test]
-    fn both_import_entry_points_share_deterministic_queueing() {
-        let paths = [
-            PathBuf::from("B.wav"),
-            PathBuf::from("a.wav"),
-            PathBuf::from("B.wav"),
-        ];
-        let mut picker = super::CleanSlateApp::default();
-        picker.queue_stems(paths.clone());
-        let mut drop = super::CleanSlateApp::default();
-        for path in paths {
-            drop.queue_stems([path]);
-        }
-        assert_eq!(picker.pending_stems, drop.pending_stems);
+    fn direct_import_is_deterministic_incremental_and_preserves_valid_session_on_error() {
+        let directory =
+            std::env::temp_dir().join(format!("cleanslate-import-test-{}", std::process::id()));
+        std::fs::create_dir_all(&directory).unwrap();
+        let a = directory.join("a.wav");
+        let b = directory.join("B.wav");
+        let invalid = directory.join("short.wav");
+        write_wav(&a, &[0.0; 16]);
+        write_wav(&b, &[0.0; 16]);
+        write_wav(&invalid, &[0.0; 8]);
+
+        let mut app = super::CleanSlateApp::default();
+        app.add_stems([b.clone(), a.clone(), b]);
         assert_eq!(
-            picker.pending_stems,
-            [PathBuf::from("a.wav"), PathBuf::from("B.wav")]
+            app.project.as_ref().unwrap().source_paths(),
+            [a, directory.join("B.wav")]
         );
+        app.add_stems([invalid]);
+        assert_eq!(app.project.as_ref().unwrap().sources.len(), 2);
+        assert!(app.messages[0].starts_with("Import blocked:"));
+
+        std::fs::remove_dir_all(directory).unwrap();
     }
 
     #[test]
@@ -178,7 +190,6 @@ mod tests {
 
 pub struct CleanSlateApp {
     project: Option<Project>,
-    pending_stems: Vec<PathBuf>,
     messages: Vec<String>,
     processing: Option<Processing>,
     review: Option<ReviewWorkspace>,
@@ -199,7 +210,6 @@ impl Default for CleanSlateApp {
     fn default() -> Self {
         Self {
             project: None,
-            pending_stems: vec![],
             messages: vec![],
             processing: None,
             review: None,
@@ -234,8 +244,6 @@ enum Message {
     ImportStems,
     OpenProject,
     FileDropped(PathBuf),
-    ClearDropped,
-    CreateDroppedProject,
     Relink(usize),
     Validate,
     Process,
@@ -300,12 +308,68 @@ impl CleanSlateApp {
         self.waveforms = waveforms;
     }
 
-    fn queue_stems(&mut self, paths: impl IntoIterator<Item = PathBuf>) {
-        self.pending_stems.extend(paths);
-        self.pending_stems
-            .sort_by_key(|path| path.to_string_lossy().to_lowercase());
-        self.pending_stems.dedup();
-        self.messages.clear();
+    fn add_stems(&mut self, paths: impl IntoIterator<Item = PathBuf>) {
+        let existing = self
+            .project
+            .as_ref()
+            .map_or_else(Vec::new, Project::source_paths);
+        let mut additions: Vec<_> = paths
+            .into_iter()
+            .filter(|path| {
+                path.extension()
+                    .is_some_and(|ext| ext.eq_ignore_ascii_case("wav"))
+            })
+            .filter(|path| {
+                !existing.iter().any(|old| {
+                    old.to_string_lossy()
+                        .eq_ignore_ascii_case(&path.to_string_lossy())
+                })
+            })
+            .collect();
+        additions.sort_by_key(|path| path.to_string_lossy().to_lowercase());
+        additions.dedup_by(|a, b| {
+            a.to_string_lossy()
+                .eq_ignore_ascii_case(&b.to_string_lossy())
+        });
+        if additions.is_empty() {
+            self.messages = vec!["No new WAV stems were selected".into()];
+            return;
+        }
+
+        let combined: Vec<_> = existing.iter().chain(&additions).cloned().collect();
+        let validation = match validate(&combined) {
+            Ok(validation) => validation,
+            Err(blocker) => {
+                self.messages = vec![format!("Import blocked: {blocker}")];
+                return;
+            }
+        };
+
+        let result = if let Some(project) = &mut self.project {
+            project.add_sources(additions)
+        } else {
+            let directory = additions[0]
+                .parent()
+                .unwrap_or_else(|| std::path::Path::new("."));
+            Project::create(available_project_path(directory), additions).and_then(|mut project| {
+                project.set_parameters(self.preview_parameters)?;
+                project.mark_validated()?;
+                self.project = Some(project);
+                Ok(())
+            })
+        };
+        if let Err(error) = result {
+            self.messages = vec![format!("Import failed: {error}")];
+            return;
+        }
+
+        let project = self.project.as_ref().unwrap();
+        self.install_waveforms(
+            waveform::load_or_build(project.path(), &project.source_paths()).unwrap_or_default(),
+        );
+        self.review = None;
+        self.messages = validation.warnings;
+        self.start_preview();
     }
 
     fn import_stems(&mut self) {
@@ -316,7 +380,7 @@ impl CleanSlateApp {
         else {
             return;
         };
-        self.queue_stems(paths);
+        self.add_stems(paths);
     }
 
     fn theme(&self) -> Theme {
@@ -367,42 +431,6 @@ impl CleanSlateApp {
                 None
             }
         });
-    }
-
-    fn create_dropped_project(&mut self) {
-        let Some(directory) = self.pending_stems.first().and_then(|stem| stem.parent()) else {
-            return;
-        };
-        let project_path = available_project_path(directory);
-        let paths = self.pending_stems.clone();
-        let validation = match validate(&paths) {
-            Ok(validation) => validation,
-            Err(blocker) => {
-                self.pending_stems.clear();
-                self.messages = vec![format!("Render blocker: {blocker}")];
-                return;
-            }
-        };
-        match Project::create(&project_path, paths.clone()) {
-            Ok(mut project) => {
-                self.install_waveforms(
-                    waveform::load_or_build(&project_path, &paths).unwrap_or_default(),
-                );
-                if let Err(error) = project.set_parameters(self.preview_parameters) {
-                    self.messages = vec![error.to_string()];
-                    return;
-                }
-                if let Err(error) = project.mark_validated() {
-                    self.messages = vec![error.to_string()];
-                    return;
-                }
-                self.project = Some(project);
-                self.pending_stems.clear();
-                self.messages = validation.warnings;
-                self.start_preview();
-            }
-            Err(error) => self.messages = vec![error.to_string()],
-        }
     }
 
     fn open_project(&mut self) {
@@ -666,13 +694,11 @@ impl CleanSlateApp {
                     .extension()
                     .is_some_and(|extension| extension.eq_ignore_ascii_case("wav"))
                 {
-                    self.queue_stems([path]);
+                    self.add_stems([path]);
                 } else {
                     self.messages = vec![format!("Ignored non-WAV file: {}", path.display())];
                 }
             }
-            Message::ClearDropped => self.pending_stems.clear(),
-            Message::CreateDroppedProject => self.create_dropped_project(),
             Message::Relink(index) => {
                 let start = self
                     .project
@@ -924,7 +950,7 @@ impl CleanSlateApp {
         .align_y(iced::Center);
 
         let mut timeline_content = column![].spacing(10).height(Fill);
-        if self.project.is_none() && self.pending_stems.is_empty() {
+        if self.project.is_none() {
             timeline_content = timeline_content.push(
                 container(
                     column![
@@ -938,22 +964,6 @@ impl CleanSlateApp {
                 .center_x(Fill)
                 .center_y(Fill)
                 .height(Fill),
-            );
-        } else if self.project.is_none() {
-            timeline_content = timeline_content.push(text("STEMS READY TO IMPORT").size(18));
-            for stem in &self.pending_stems {
-                timeline_content = timeline_content.push(text(stem.display().to_string()));
-            }
-            timeline_content = timeline_content.push(
-                row![
-                    button(text(format!(
-                        "Create session from {} stem(s)",
-                        self.pending_stems.len()
-                    )))
-                    .on_press(Message::CreateDroppedProject),
-                    button("Clear selection").on_press(Message::ClearDropped),
-                ]
-                .spacing(8),
             );
         } else if let Some(project) = &self.project {
             timeline_content = timeline_content.push(

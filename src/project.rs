@@ -214,6 +214,21 @@ impl Project {
         self.render = RenderState::Stale;
         self.save()
     }
+
+    pub fn add_sources(&mut self, paths: Vec<PathBuf>) -> io::Result<()> {
+        let mut updated = self.clone();
+        updated.sources.extend(
+            paths
+                .into_iter()
+                .map(SourceIdentity::read)
+                .collect::<io::Result<Vec<_>>>()?,
+        );
+        updated.step = WorkflowStep::Process;
+        updated.render = RenderState::Stale;
+        updated.save()?;
+        *self = updated;
+        Ok(())
+    }
 }
 
 impl SourceIdentity {
