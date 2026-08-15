@@ -4,7 +4,7 @@ use crate::{
     timeline::{TimelineEvent, TimelineViewport},
 };
 use iced::{
-    Color, Point, Rectangle, Renderer, Size, Theme, mouse,
+    Color, Point, Rectangle, Renderer, Size, Theme, keyboard, mouse,
     widget::{Action, canvas},
 };
 use serde::{Deserialize, Serialize};
@@ -184,6 +184,8 @@ impl<'a, Message> TimelineCanvas<'a, Message> {
 pub(crate) struct TimelineCanvasState {
     dragging: bool,
     selection_anchor: Option<usize>,
+    pan_x: Option<f32>,
+    modifiers: keyboard::Modifiers,
 }
 
 impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> {
@@ -198,6 +200,14 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
     ) -> Option<Action<Message>> {
         let position = cursor.position_in(bounds);
         match event {
+            canvas::Event::Keyboard(keyboard::Event::ModifiersChanged(modifiers)) => {
+                state.modifiers = *modifiers;
+                None
+            }
+            canvas::Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Middle)) => {
+                state.pan_x = Some(position?.x);
+                Some(Action::capture())
+            }
             canvas::Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) => {
                 let position = position?;
                 state.dragging = true;
@@ -210,6 +220,17 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
                     );
                 }
                 Some(Action::publish((self.on_event)(TimelineEvent::Seek(sample))).and_capture())
+            }
+            canvas::Event::Mouse(mouse::Event::CursorMoved { .. }) if state.pan_x.is_some() => {
+                let x = cursor.position_from(bounds.position())?.x;
+                let delta_x = x - state.pan_x.replace(x)?;
+                Some(
+                    Action::publish((self.on_event)(TimelineEvent::Pan {
+                        delta_x,
+                        width: bounds.width,
+                    }))
+                    .and_capture(),
+                )
             }
             canvas::Event::Mouse(mouse::Event::CursorMoved { .. }) if state.dragging => {
                 let position = cursor.position_from(bounds.position())?;
@@ -250,6 +271,16 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
                     .and_capture(),
                 )
             }
+            canvas::Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Middle)) => {
+                state.pan_x = None;
+                Some(Action::capture())
+            }
+            canvas::Event::Mouse(mouse::Event::CursorLeft) => {
+                state.dragging = false;
+                state.selection_anchor = None;
+                state.pan_x = None;
+                None
+            }
             canvas::Event::Mouse(mouse::Event::WheelScrolled { delta }) => {
                 let position = position?;
                 let direction = match delta {
@@ -257,14 +288,22 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
                         *y
                     }
                 };
-                Some(
-                    Action::publish((self.on_event)(TimelineEvent::Zoom {
+                let event = if state.modifiers.control() {
+                    TimelineEvent::Pan {
+                        delta_x: match delta {
+                            mouse::ScrollDelta::Lines { .. } => direction * 40.0,
+                            mouse::ScrollDelta::Pixels { .. } => direction,
+                        },
+                        width: bounds.width,
+                    }
+                } else {
+                    TimelineEvent::Zoom {
                         cursor_x: position.x,
                         width: bounds.width,
                         direction,
-                    }))
-                    .and_capture(),
-                )
+                    }
+                };
+                Some(Action::publish((self.on_event)(event)).and_capture())
             }
             _ => None,
         }
@@ -474,7 +513,7 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
         bounds: Rectangle,
         cursor: mouse::Cursor,
     ) -> mouse::Interaction {
-        if state.dragging {
+        if state.dragging || state.pan_x.is_some() {
             mouse::Interaction::Grabbing
         } else if cursor.is_over(bounds) {
             mouse::Interaction::Crosshair

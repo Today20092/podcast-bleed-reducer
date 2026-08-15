@@ -76,6 +76,11 @@ impl TimelineViewport {
         self.start =
             (anchor - fraction * self.visible).clamp(0.0, self.total_samples as f64 - self.visible);
     }
+
+    pub fn pan_by_pixels(&mut self, delta_x: f32, width: f32) {
+        self.start = (self.start - delta_x as f64 / width.max(1.0) as f64 * self.visible)
+            .clamp(0.0, self.total_samples as f64 - self.visible);
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -88,5 +93,9 @@ pub(crate) enum TimelineEvent {
         cursor_x: f32,
         width: f32,
         direction: f32,
+    },
+    Pan {
+        delta_x: f32,
+        width: f32,
     },
 }

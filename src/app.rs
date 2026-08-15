@@ -854,6 +854,9 @@ impl CleanSlateApp {
                     width,
                     direction,
                 } => self.timeline.zoom_at(cursor_x, width, direction),
+                TimelineEvent::Pan { delta_x, width } => {
+                    self.timeline.pan_by_pixels(delta_x, width)
+                }
                 TimelineEvent::Select(start, end) => {
                     self.timeline
                         .set_selection(Some((start.min(end), start.max(end))));

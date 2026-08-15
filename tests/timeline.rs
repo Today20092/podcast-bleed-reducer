@@ -19,6 +19,22 @@ fn wheel_zoom_keeps_the_time_beneath_the_cursor() {
 }
 
 #[test]
+fn horizontal_pan_preserves_zoom_and_clamps_to_session() {
+    let mut viewport = TimelineViewport::new(480_000);
+    viewport.zoom_at(500.0, 1_000.0, 1.0);
+    let visible = viewport.visible_samples();
+
+    viewport.pan_by_pixels(-250.0, 1_000.0);
+    assert_eq!(viewport.visible_samples(), visible);
+    assert_eq!(viewport.start(), visible / 4.0);
+
+    viewport.pan_by_pixels(f32::MAX, 1_000.0);
+    assert_eq!(viewport.start(), 0.0);
+    viewport.pan_by_pixels(-f32::MAX, 1_000.0);
+    assert_eq!(viewport.start(), 480_000.0 - visible);
+}
+
+#[test]
 fn ruler_waveforms_playhead_and_selection_share_one_transform() {
     let mut viewport = TimelineViewport::new(480_000);
     viewport.zoom_at(500.0, 1_000.0, 1.0);
