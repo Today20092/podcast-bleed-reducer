@@ -2,13 +2,14 @@ use crate::{
     audio_io::{AtomicOutput, Stem},
     vad::{self, ENERGY_MARGIN_DB, SPEECH_PROBABILITY},
 };
+use serde::{Deserialize, Serialize};
 use std::{
     collections::HashSet,
     fmt, io,
     path::PathBuf,
     sync::{
         Arc,
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicU8, Ordering},
     },
 };
 
@@ -29,11 +30,16 @@ pub struct Region {
     pub decision: Decision,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Protection {
     pub track: Option<usize>,
     pub start: usize,
     pub end: usize,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Validation {
+    pub warnings: Vec<String>,
 }
 
 pub struct RunRequest {
@@ -71,39 +77,23 @@ impl From<bwavfile::Error> for RenderBlocker {
 }
 
 pub fn run(request: RunRequest) -> Result<RunResult, RenderBlocker> {
-    if request.stems.is_empty() {
-        return Err(RenderBlocker("session requires at least one stem".into()));
-    }
+    run_with_progress(request, None)
+}
+
+pub fn run_with_progress(
+    request: RunRequest,
+    progress: Option<Arc<AtomicU8>>,
+) -> Result<RunResult, RenderBlocker> {
     if request.output_dir.exists() {
         return Err(RenderBlocker("output directory already exists".into()));
     }
-    let stems: Vec<Stem> = request
-        .stems
-        .iter()
-        .map(|path| Stem::read(path))
-        .collect::<Result<_, _>>()?;
+    let (stems, validation) = load_and_validate(&request.stems)?;
     let sample_count = stems[0].samples.len();
-    if sample_count == 0 {
-        return Err(RenderBlocker("stems contain no audio samples".into()));
-    }
-    if stems.iter().any(|stem| stem.samples.len() != sample_count) {
-        return Err(RenderBlocker("stems have unequal sample counts".into()));
-    }
     let references: Vec<Option<u64>> = stems
         .iter()
         .map(|stem| stem.bext.as_ref().map(|bext| bext.time_reference))
         .collect();
-    let mut warnings: Vec<String> = if references.iter().all(Option::is_none) {
-        vec!["alignment could not be verified: no stems contain BEXT".into()]
-    } else if references.iter().any(Option::is_none) {
-        return Err(RenderBlocker(
-            "mixed BEXT presence prevents alignment verification".into(),
-        ));
-    } else if references.iter().collect::<HashSet<_>>().len() != 1 {
-        return Err(RenderBlocker("conflicting BEXT time references".into()));
-    } else {
-        vec![]
-    };
+    let mut warnings = validation.warnings;
     if request
         .regions
         .iter()
@@ -188,6 +178,9 @@ pub fn run(request: RunRequest) -> Result<RunResult, RenderBlocker> {
             );
             stem.write(&output.path(&output_name), &rendered)?;
             names.push(output_name);
+            if let Some(progress) = &progress {
+                progress.store(((track + 1) * 100 / stems.len()) as u8, Ordering::Relaxed);
+            }
         }
         check_cancelled(&request)?;
         let report = format!(
@@ -239,6 +232,43 @@ pub fn run(request: RunRequest) -> Result<RunResult, RenderBlocker> {
             warnings,
         })
     })()
+}
+
+pub fn validate(stems: &[PathBuf]) -> Result<Validation, RenderBlocker> {
+    load_and_validate(stems).map(|(_, validation)| validation)
+}
+
+fn load_and_validate(paths: &[PathBuf]) -> Result<(Vec<Stem>, Validation), RenderBlocker> {
+    if paths.is_empty() {
+        return Err(RenderBlocker("session requires at least one stem".into()));
+    }
+    let stems: Vec<Stem> = paths
+        .iter()
+        .map(|path| Stem::read(path))
+        .collect::<Result<_, _>>()?;
+    let sample_count = stems[0].samples.len();
+    if sample_count == 0 {
+        return Err(RenderBlocker("stems contain no audio samples".into()));
+    }
+    if stems.iter().any(|stem| stem.samples.len() != sample_count) {
+        return Err(RenderBlocker("stems have unequal sample counts".into()));
+    }
+    let references: Vec<Option<u64>> = stems
+        .iter()
+        .map(|stem| stem.bext.as_ref().map(|bext| bext.time_reference))
+        .collect();
+    let warnings = if references.iter().all(Option::is_none) {
+        vec!["alignment could not be verified: no stems contain BEXT".into()]
+    } else if references.iter().any(Option::is_none) {
+        return Err(RenderBlocker(
+            "mixed BEXT presence prevents alignment verification".into(),
+        ));
+    } else if references.iter().collect::<HashSet<_>>().len() != 1 {
+        return Err(RenderBlocker("conflicting BEXT time references".into()));
+    } else {
+        vec![]
+    };
+    Ok((stems, Validation { warnings }))
 }
 
 fn report_regions(region: &Region, track_count: usize) -> Vec<String> {

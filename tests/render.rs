@@ -1,6 +1,9 @@
 use bwavfile::{Bext, WaveFmt, WaveReader, WaveWriter};
-use rust_app::{Decision, Protection, Region, RunRequest, run};
-use std::sync::{Arc, atomic::AtomicBool};
+use rust_app::{Decision, Protection, Region, RunRequest, run, run_with_progress};
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, AtomicU8, Ordering},
+};
 use std::time::{Duration, Instant};
 use std::{fs, path::Path};
 
@@ -65,34 +68,39 @@ fn renders_float_overlap_and_protection_and_round_trips_bext() {
     let b = root.join("b.wav");
     wav(&a, 3, &vec![0.5; 3_000], Some(42));
     wav(&b, 3, &vec![0.5; 3_000], Some(42));
-    let result = run(RunRequest {
-        stems: vec![a, b],
-        output_dir: root.join("rendered"),
-        regions: vec![
-            Region {
-                start: 0,
-                end: 1_000,
-                decision: Decision::Owned(vec![0]),
-            },
-            Region {
-                start: 1_000,
-                end: 2_000,
-                decision: Decision::Uncertain,
-            },
-            Region {
-                start: 2_000,
+    let progress = Arc::new(AtomicU8::new(0));
+    let result = run_with_progress(
+        RunRequest {
+            stems: vec![a, b],
+            output_dir: root.join("rendered"),
+            regions: vec![
+                Region {
+                    start: 0,
+                    end: 1_000,
+                    decision: Decision::Owned(vec![0]),
+                },
+                Region {
+                    start: 1_000,
+                    end: 2_000,
+                    decision: Decision::Uncertain,
+                },
+                Region {
+                    start: 2_000,
+                    end: 3_000,
+                    decision: Decision::NoSpeech,
+                },
+            ],
+            protections: vec![Protection {
+                track: Some(1),
+                start: 2_500,
                 end: 3_000,
-                decision: Decision::NoSpeech,
-            },
-        ],
-        protections: vec![Protection {
-            track: Some(1),
-            start: 2_500,
-            end: 3_000,
-        }],
-        cancelled: None,
-    })
+            }],
+            cancelled: None,
+        },
+        Some(Arc::clone(&progress)),
+    )
     .unwrap();
+    assert_eq!(progress.load(Ordering::Relaxed), 100);
     assert!(result.warnings.is_empty());
     for (track, output) in result.stems.into_iter().enumerate() {
         let mut reader = WaveReader::open(output).unwrap();
