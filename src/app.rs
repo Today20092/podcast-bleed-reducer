@@ -1,12 +1,14 @@
 use crate::{
     AnalysisPreview, Comparison, PreviewParameters, Project, RenderState, ReviewState,
-    ReviewWorkspace, RunRequest, WorkflowStep, analyze_preview, export, run_with_progress,
+    ReviewWorkspace, RunRequest, WorkflowStep, analyze_preview,
+    audition::{AuditionMode, LiveAudition},
+    export, run_with_progress,
     timeline::{TimelineEvent, TimelineViewport},
     validate,
     waveform::{self, TimelineCanvas, WaveformCache},
 };
 use iced::{
-    Element, Fill, Length, Subscription, Task, Theme,
+    Element, Fill, Length, Subscription, Task, Theme, keyboard,
     widget::{
         Space, button, canvas, column, container, progress_bar, responsive, row, scrollable,
         slider, text,
@@ -15,7 +17,6 @@ use iced::{
 };
 use std::{
     path::PathBuf,
-    process::{Child, Command},
     sync::{
         Arc,
         atomic::{AtomicBool, AtomicU8, Ordering},
@@ -98,20 +99,42 @@ mod tests {
     }
 }
 
-#[derive(Default)]
 pub struct CleanSlateApp {
     project: Option<Project>,
     pending_stems: Vec<PathBuf>,
     messages: Vec<String>,
     processing: Option<Processing>,
     review: Option<ReviewWorkspace>,
-    playback: Vec<Child>,
+    audition: Option<LiveAudition>,
+    audition_mode: AuditionMode,
+    monitor_db: f32,
     waveforms: Vec<WaveformCache>,
     timeline: TimelineViewport,
     preview_parameters: PreviewParameters,
     preview: Option<AnalysisPreview>,
     preview_processing: Option<PreviewProcessing>,
     preview_error: Option<String>,
+}
+
+impl Default for CleanSlateApp {
+    fn default() -> Self {
+        Self {
+            project: None,
+            pending_stems: vec![],
+            messages: vec![],
+            processing: None,
+            review: None,
+            audition: None,
+            audition_mode: AuditionMode::Original,
+            monitor_db: -6.0,
+            waveforms: vec![],
+            timeline: TimelineViewport::default(),
+            preview_parameters: PreviewParameters::default(),
+            preview: None,
+            preview_processing: None,
+            preview_error: None,
+        }
+    }
 }
 
 struct Processing {
@@ -147,7 +170,13 @@ enum Message {
     SelectWarning(usize),
     Original,
     Processed,
+    Removed,
     Audition,
+    AuditionSelection,
+    Stop,
+    Previous,
+    MonitorGain(f32),
+    KeyPressed(keyboard::Key),
     ToggleReviewed,
     ProtectRegion,
     ProtectTrack(usize),
@@ -179,6 +208,11 @@ fn compact_workspace(width: f32) -> bool {
 
 impl CleanSlateApp {
     fn install_waveforms(&mut self, waveforms: Vec<WaveformCache>) {
+        if let Some(audition) = self.audition.take() {
+            audition.stop();
+        }
+        self.preview = None;
+        self.preview_processing = None;
         if let Some(cache) = waveforms.first() {
             self.timeline.set_total_samples(cache.sample_count);
         }
@@ -383,52 +417,39 @@ impl CleanSlateApp {
         }
     }
 
-    fn audition(&mut self) {
-        for mut child in self.playback.drain(..) {
-            let _ = child.kill();
+    fn audition(&mut self, selection_only: bool) {
+        let (Some(project), Some(preview)) = (&self.project, &self.preview) else {
+            return;
+        };
+        let selection = if selection_only {
+            self.timeline.selection()
+        } else {
+            None
+        };
+        let start = selection.map_or(self.timeline.playhead(), |range| range.0.min(range.1));
+        let end = selection.map_or_else(
+            || {
+                preview
+                    .envelopes
+                    .iter()
+                    .map(|envelope| envelope.sample_count())
+                    .max()
+                    .unwrap_or(start)
+            },
+            |range| range.0.max(range.1),
+        );
+        self.audition.take().inspect(|playing| playing.stop());
+        match LiveAudition::start(
+            project.source_paths(),
+            preview.envelopes.clone(),
+            self.audition_mode,
+            10.0_f32.powf(self.monitor_db / 20.0),
+            start,
+            end,
+        ) {
+            Ok(audition) => self.audition = Some(audition),
+            Err(error) => self.messages = vec![error.to_string()],
         }
-        let (Some(project), Some(review)) = (&self.project, &self.review) else {
-            return;
-        };
-        let Some((start, end)) = review.selection() else {
-            return;
-        };
-        let paths: Vec<_> = match review.comparison() {
-            Comparison::Original => project
-                .sources
-                .iter()
-                .map(|source| source.path.clone())
-                .collect(),
-            Comparison::Processed => project
-                .review_identity()
-                .map(|report| {
-                    review
-                        .output_stems
-                        .iter()
-                        .map(|stem| report.parent().unwrap().join(stem))
-                        .collect()
-                })
-                .unwrap_or_default(),
-        };
-        let script = "$p=New-Object -ComObject WMPlayer.OCX; $p.URL=$args[0]; $p.controls.currentPosition=[double]$args[1]; $p.controls.play(); Start-Sleep -Milliseconds ([int]$args[2]); $p.controls.stop()";
-        self.playback = paths
-            .into_iter()
-            .filter_map(|path| {
-                Command::new("powershell")
-                    .args([
-                        "-NoProfile",
-                        "-WindowStyle",
-                        "Hidden",
-                        "-Command",
-                        script,
-                        &path.display().to_string(),
-                        &(start as f64 / 48_000.0).to_string(),
-                        &((end - start) * 1000 / 48_000).to_string(),
-                    ])
-                    .spawn()
-                    .ok()
-            })
-            .collect();
     }
 
     fn poll_processing(&mut self) {
@@ -437,7 +458,12 @@ impl CleanSlateApp {
         {
             self.preview_processing = None;
             match result {
-                Ok(preview) => self.preview = Some(preview),
+                Ok(preview) => {
+                    if let Some(audition) = &self.audition {
+                        audition.replace_envelopes(preview.envelopes.clone());
+                    }
+                    self.preview = Some(preview);
+                }
                 Err(error) => self.preview_error = Some(error),
             }
         }
@@ -458,6 +484,40 @@ impl CleanSlateApp {
                 self.load_review();
             }
             Err(error) => self.messages = vec![error],
+        }
+    }
+
+    fn poll_audition(&mut self) {
+        let Some(audition) = &self.audition else {
+            return;
+        };
+        self.timeline.seek(audition.position());
+        if let Some(review) = &mut self.review {
+            review.seek(self.timeline.playhead());
+        }
+        if audition.is_finished() {
+            self.audition = None;
+        }
+    }
+
+    fn set_audition_mode(&mut self, mode: AuditionMode) {
+        self.audition_mode = mode;
+        if let Some(audition) = &self.audition {
+            audition.set_mode(mode);
+        }
+    }
+
+    fn seek_to_selection_start(&mut self) {
+        let start = self
+            .timeline
+            .selection()
+            .map_or(0, |range| range.0.min(range.1));
+        self.timeline.seek(start);
+        if let Some(audition) = &self.audition {
+            audition.seek(start);
+        }
+        if let Some(review) = &mut self.review {
+            review.seek(start);
         }
     }
 }
@@ -511,7 +571,10 @@ impl CleanSlateApp {
                     processing.cancelled.store(true, Ordering::Relaxed);
                 }
             }
-            Message::Tick => self.poll_processing(),
+            Message::Tick => {
+                self.poll_processing();
+                self.poll_audition();
+            }
             Message::SpeechSensitivity(value) => self.preview_parameters.speech_sensitivity = value,
             Message::BleedDiscrimination(value) => {
                 self.preview_parameters.bleed_discrimination_db = value
@@ -540,10 +603,18 @@ impl CleanSlateApp {
                     self.timeline.seek(review.playhead());
                     self.timeline.set_selection(review.selection());
                 }
-                self.audition();
+                self.audition(true);
             }
-            Message::Original | Message::Processed => {
-                if let Some(review) = &mut self.review {
+            Message::Original | Message::Processed | Message::Removed => {
+                let mode = match message {
+                    Message::Original => AuditionMode::Original,
+                    Message::Processed => AuditionMode::Processed,
+                    _ => AuditionMode::Removed,
+                };
+                self.set_audition_mode(mode);
+                if mode != AuditionMode::Removed
+                    && let Some(review) = &mut self.review
+                {
                     review.set_comparison(if matches!(message, Message::Original) {
                         Comparison::Original
                     } else {
@@ -551,7 +622,34 @@ impl CleanSlateApp {
                     });
                 }
             }
-            Message::Audition => self.audition(),
+            Message::Audition => self.audition(false),
+            Message::AuditionSelection => self.audition(true),
+            Message::Stop => {
+                if let Some(audition) = self.audition.take() {
+                    audition.stop();
+                }
+            }
+            Message::Previous => self.seek_to_selection_start(),
+            Message::MonitorGain(value) => {
+                self.monitor_db = value;
+                if let Some(audition) = &self.audition {
+                    audition.set_monitor(10.0_f32.powf(value / 20.0));
+                }
+            }
+            Message::KeyPressed(key) => match key.as_ref() {
+                keyboard::Key::Named(keyboard::key::Named::Space) => {
+                    if let Some(audition) = self.audition.take() {
+                        audition.stop();
+                    } else {
+                        self.audition(false);
+                    }
+                }
+                keyboard::Key::Named(keyboard::key::Named::Home) => self.seek_to_selection_start(),
+                keyboard::Key::Character("1") => self.set_audition_mode(AuditionMode::Original),
+                keyboard::Key::Character("2") => self.set_audition_mode(AuditionMode::Processed),
+                keyboard::Key::Character("3") => self.set_audition_mode(AuditionMode::Removed),
+                _ => {}
+            },
             Message::ToggleReviewed => {
                 if let (Some(project), Some(region)) = (
                     self.project.as_mut(),
@@ -613,6 +711,9 @@ impl CleanSlateApp {
                 | TimelineEvent::Drag(sample)
                 | TimelineEvent::DragEnd(sample) => {
                     self.timeline.seek(sample);
+                    if let Some(audition) = &self.audition {
+                        audition.seek(sample);
+                    }
                     if let Some(review) = &mut self.review {
                         review.seek(sample);
                     }
@@ -632,9 +733,15 @@ impl CleanSlateApp {
             iced::Event::Window(iced::window::Event::FileDropped(path)) => {
                 Some(Message::FileDropped(path))
             }
+            iced::Event::Keyboard(keyboard::Event::KeyPressed { key, .. }) => {
+                Some(Message::KeyPressed(key))
+            }
             _ => None,
         });
-        let processing = if self.processing.is_some() || self.preview_processing.is_some() {
+        let processing = if self.processing.is_some()
+            || self.preview_processing.is_some()
+            || self.audition.is_some()
+        {
             iced::time::every(std::time::Duration::from_millis(100)).map(|_| Message::Tick)
         } else {
             Subscription::none()
@@ -772,9 +879,9 @@ impl CleanSlateApp {
                         timeline_content = timeline_content.push(
                             row![
                                 button("Original").on_press(Message::Original),
-                                button("Processed")
-                                    .on_press_maybe((!stale).then_some(Message::Processed)),
-                                button("Audition selection").on_press(Message::Audition),
+                                button("Processed").on_press(Message::Processed),
+                                button("Removed").on_press(Message::Removed),
+                                button("Audition selection").on_press(Message::AuditionSelection),
                             ]
                             .spacing(8),
                         );
@@ -929,15 +1036,38 @@ impl CleanSlateApp {
                 (self.timeline.playhead() % (48_000 * 60)) as f64 / 48_000.0
             )),
             Space::new().width(Fill),
-            button("Previous").on_press_maybe(None),
-            button("Play").on_press_maybe(None),
-            button("Stop").on_press_maybe(None),
+            button("Previous").on_press(Message::Previous),
+            button(if self.audition.is_some() {
+                "Playing"
+            } else {
+                "Play"
+            })
+            .on_press_maybe(self.preview.is_some().then_some(Message::Audition)),
+            button("Stop").on_press_maybe(self.audition.is_some().then_some(Message::Stop)),
             Space::new().width(Fill),
             text("AUDITION"),
-            button("Original").on_press_maybe(None),
-            button("Processed").on_press_maybe(None),
-            button("Removed").on_press_maybe(None),
-            text("Monitor −6.0 dB"),
+            button(if self.audition_mode == AuditionMode::Original {
+                "Original ✓"
+            } else {
+                "Original"
+            })
+            .on_press(Message::Original),
+            button(if self.audition_mode == AuditionMode::Processed {
+                "Processed ✓"
+            } else {
+                "Processed"
+            })
+            .on_press(Message::Processed),
+            button(if self.audition_mode == AuditionMode::Removed {
+                "Removed ✓"
+            } else {
+                "Removed"
+            })
+            .on_press(Message::Removed),
+            text(format!("Monitor {:+.1} dB", self.monitor_db)),
+            slider(-24.0..=6.0, self.monitor_db, Message::MonitorGain)
+                .step(1.0)
+                .width(120),
         ]
         .spacing(8)
         .align_y(iced::Center);

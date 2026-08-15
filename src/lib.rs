@@ -1,5 +1,6 @@
 pub mod app;
 mod audio_io;
+mod audition;
 mod engine;
 mod export;
 mod project;

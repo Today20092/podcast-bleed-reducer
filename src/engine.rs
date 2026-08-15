@@ -77,6 +77,19 @@ struct GainPoint {
 }
 
 impl GainEnvelope {
+    #[cfg(test)]
+    pub(crate) fn constant(sample_count: usize, gain: f32) -> Self {
+        Self {
+            sample_count,
+            points: vec![GainPoint {
+                sample: 0,
+                gain,
+                step: 0.0,
+                target: gain,
+            }],
+        }
+    }
+
     pub fn gain_at(&self, sample: usize) -> f32 {
         let point = self.points[self
             .points
