@@ -125,11 +125,19 @@ fn renders_float_overlap_and_protection_and_round_trips_bext() {
             .unwrap();
         if track == 0 {
             assert!(samples[1_999] > 0.49); // owned/uncertain overlap remains at unity
-            assert!((samples[2_999] - 0.5 * 0.125_892_53).abs() < 0.000_01); // fixed -18 dB plateau
+            let floor = 0.125_892_53;
+            let expected = 0.5 * (floor + (1.0 - floor) * (-1_000.0_f32 / 24_000.0).exp());
+            assert!((samples[2_999] - expected).abs() < 0.000_01); // one-pole close toward -18 dB
         } else {
             assert!((samples[999] - 0.5 * 0.125_892_53).abs() < 0.000_01); // non-owner -18 dB
-            assert!(samples[1_999] > 0.49); // Uncertain is conservative unity
-            assert!(samples[2_999] > 0.49); // protection overrides NoSpeech
+            let floor = 0.125_892_53;
+            let opening =
+                |elapsed| 0.5 * (1.0 - (1.0 - floor) * (-(elapsed as f32) / 2_400.0).exp());
+            assert!((samples[1_999] - opening(1_000)).abs() < 0.000_01); // uncertain opens toward unity
+            let opened = opening(1_000) / 0.5;
+            let closed = floor + (opened - floor) * (-500.0_f32 / 24_000.0).exp();
+            let protected = 0.5 * (1.0 - (1.0 - closed) * (-500.0_f32 / 2_400.0).exp());
+            assert!((samples[2_999] - protected).abs() < 0.000_01); // protection reverses the close smoothly
         }
     }
     fs::remove_dir_all(root).unwrap();

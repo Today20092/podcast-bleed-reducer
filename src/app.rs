@@ -253,7 +253,8 @@ enum Message {
     BleedDiscrimination(f32),
     Attenuation(f32),
     SpeechPadding(f32),
-    Transition(f32),
+    OpenTime(f32),
+    CloseTime(f32),
     RefreshPreview,
     SelectWarning(usize),
     Original,
@@ -741,7 +742,8 @@ impl CleanSlateApp {
             }
             Message::Attenuation(value) => self.preview_parameters.attenuation_db = value,
             Message::SpeechPadding(value) => self.preview_parameters.speech_padding_ms = value,
-            Message::Transition(value) => self.preview_parameters.transition_ms = value,
+            Message::OpenTime(value) => self.preview_parameters.open_ms = value,
+            Message::CloseTime(value) => self.preview_parameters.close_ms = value,
             Message::RefreshPreview => {
                 if let Some(project) = &mut self.project
                     && let Err(error) = project.set_parameters(self.preview_parameters)
@@ -1215,10 +1217,17 @@ impl CleanSlateApp {
                 .step(16.0)
                 .on_release(Message::RefreshPreview),
                 text(format!(
-                    "Transition time: {:.0} ms",
-                    parameters.transition_ms
+                    "Open time: {:.0} ms",
+                    parameters.open_ms
                 )),
-                slider(1.0..=250.0, parameters.transition_ms, Message::Transition)
+                slider(1.0..=1000.0, parameters.open_ms, Message::OpenTime)
+                    .step(1.0)
+                    .on_release(Message::RefreshPreview),
+                text(format!(
+                    "Close time: {:.0} ms",
+                    parameters.close_ms
+                )),
+                slider(1.0..=2000.0, parameters.close_ms, Message::CloseTime)
                     .step(1.0)
                     .on_release(Message::RefreshPreview),
                 text(

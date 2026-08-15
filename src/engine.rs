@@ -2,7 +2,7 @@ use crate::{
     audio_io::{AtomicOutput, Stem},
     vad::{self, ENERGY_MARGIN_DB, SPEECH_PROBABILITY},
 };
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use std::{
     collections::HashSet,
     fmt, io,
@@ -13,13 +13,55 @@ use std::{
     },
 };
 
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize)]
 pub struct AutomixParameters {
     pub speech_sensitivity: f32,
     pub bleed_discrimination_db: f32,
     pub attenuation_db: f32,
     pub speech_padding_ms: f32,
-    pub transition_ms: f32,
+    pub open_ms: f32,
+    pub close_ms: f32,
+}
+
+impl<'de> Deserialize<'de> for AutomixParameters {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        struct Stored {
+            #[serde(default = "default_speech_sensitivity")]
+            speech_sensitivity: f32,
+            #[serde(default = "default_bleed_discrimination")]
+            bleed_discrimination_db: f32,
+            #[serde(default = "default_attenuation")]
+            attenuation_db: f32,
+            #[serde(default = "default_speech_padding")]
+            speech_padding_ms: f32,
+            open_ms: Option<f32>,
+            close_ms: Option<f32>,
+            transition_ms: Option<f32>,
+        }
+        let stored = Stored::deserialize(deserializer)?;
+        Ok(Self {
+            speech_sensitivity: stored.speech_sensitivity,
+            bleed_discrimination_db: stored.bleed_discrimination_db,
+            attenuation_db: stored.attenuation_db,
+            speech_padding_ms: stored.speech_padding_ms,
+            open_ms: stored.open_ms.or(stored.transition_ms).unwrap_or(50.0),
+            close_ms: stored.close_ms.or(stored.transition_ms).unwrap_or(500.0),
+        })
+    }
+}
+
+fn default_speech_sensitivity() -> f32 {
+    SPEECH_PROBABILITY
+}
+fn default_bleed_discrimination() -> f32 {
+    ENERGY_MARGIN_DB
+}
+fn default_attenuation() -> f32 {
+    -18.0
+}
+fn default_speech_padding() -> f32 {
+    512.0
 }
 
 #[cfg(test)]
@@ -27,31 +69,53 @@ mod preview_tests {
     use super::*;
 
     #[test]
-    fn cached_preview_envelope_matches_engine_transition_and_protection_logic() {
-        let regions = vec![Region {
-            start: 0,
-            end: 16,
-            decision: Decision::NoSpeech,
-        }];
-        let protections = vec![Protection {
-            track: Some(0),
-            start: 6,
-            end: 9,
-        }];
-        let envelope = gain_envelope(0, 16, &regions, &protections, 0.25, 4.0);
-        assert_eq!(envelope.gain_at(0), 0.8125);
-        assert_eq!(envelope.gain_at(3), 0.25);
-        assert!(envelope.gain_at(8) > envelope.gain_at(5));
-        assert!(envelope.gain_at(12) < envelope.gain_at(9));
-        assert!(envelope.points.len() < 16);
-        assert_eq!(
-            target_gain_with_attenuation(0, 7, &regions, &protections, 0.25),
-            1.0
-        );
-        assert_eq!(
-            target_gain_with_attenuation(1, 7, &regions, &protections, 0.25),
-            0.25
-        );
+    fn one_pole_matches_closed_form_and_retargets_from_current_gain() {
+        let floor = 0.25;
+        let regions = vec![
+            Region {
+                start: 0,
+                end: 10,
+                decision: Decision::NoSpeech,
+            },
+            Region {
+                start: 10,
+                end: 30,
+                decision: Decision::Owned(vec![0]),
+            },
+            Region {
+                start: 30,
+                end: 40,
+                decision: Decision::NoSpeech,
+            },
+            Region {
+                start: 40,
+                end: 60,
+                decision: Decision::Owned(vec![0]),
+            },
+        ];
+        let envelope = gain_envelope(0, 60, &regions, &[], floor, 10.0, 20.0);
+
+        assert_eq!(envelope.gain_at(0), floor);
+        for elapsed in [1, 5, 10] {
+            let expected = 1.0 - (1.0 - floor) * (-(elapsed as f32) / 10.0).exp();
+            assert!((envelope.gain_at(10 + elapsed - 1) - expected).abs() < 1e-6);
+        }
+        let before_close = envelope.gain_at(29);
+        assert!(envelope.gain_at(30) < before_close);
+        let expected_close = floor + (before_close - floor) * (-10.0_f32 / 20.0).exp();
+        assert!((envelope.gain_at(39) - expected_close).abs() < 1e-6);
+        assert!(envelope.gain_at(40) > envelope.gain_at(39));
+        assert!(envelope.gain_at(40) < 1.0);
+        assert_eq!(envelope.points.len(), 4);
+    }
+
+    #[test]
+    fn legacy_transition_time_migrates_to_both_time_constants() {
+        let parameters: AutomixParameters = serde_json::from_str(
+            r#"{"speech_sensitivity":0.6,"bleed_discrimination_db":4.0,"attenuation_db":-12.0,"speech_padding_ms":300.0,"transition_ms":75.0}"#,
+        ).unwrap();
+        assert_eq!(parameters.open_ms, 75.0);
+        assert_eq!(parameters.close_ms, 75.0);
     }
 }
 
@@ -62,7 +126,8 @@ impl Default for AutomixParameters {
             bleed_discrimination_db: ENERGY_MARGIN_DB,
             attenuation_db: -18.0,
             speech_padding_ms: 512.0,
-            transition_ms: 10.0,
+            open_ms: 50.0,
+            close_ms: 500.0,
         }
     }
 }
@@ -77,7 +142,7 @@ pub struct GainEnvelope {
 struct GainPoint {
     sample: usize,
     gain: f32,
-    step: f32,
+    alpha: f32,
     target: f32,
 }
 
@@ -89,7 +154,7 @@ impl GainEnvelope {
             points: vec![GainPoint {
                 sample: 0,
                 gain,
-                step: 0.0,
+                alpha: 0.0,
                 target: gain,
             }],
         }
@@ -101,12 +166,7 @@ impl GainEnvelope {
             .partition_point(|point| point.sample <= sample)
             .saturating_sub(1)];
         let elapsed = sample.saturating_sub(point.sample) as f32;
-        let gain = point.gain + point.step * elapsed;
-        if (point.gain - point.target).abs() > point.step.abs() * elapsed {
-            gain
-        } else {
-            point.target
-        }
+        point.target + (point.gain - point.target) * (1.0 - point.alpha).powf(elapsed)
     }
 
     pub fn sample_count(&self) -> usize {
@@ -278,7 +338,8 @@ pub fn run_with_parameters(
                 &regions,
                 &request.protections,
                 10.0_f32.powf(parameters.attenuation_db / 20.0),
-                (parameters.transition_ms * 48_000.0 / 1000.0).max(1.0),
+                (parameters.open_ms * 48_000.0 / 1000.0).max(1.0),
+                (parameters.close_ms * 48_000.0 / 1000.0).max(1.0),
             );
             let mut rendered = Vec::with_capacity(sample_count);
             for (sample, source) in stem.samples.iter().enumerate() {
@@ -301,12 +362,13 @@ pub fn run_with_parameters(
         }
         check_cancelled(&request)?;
         let report = format!(
-            "{{\n  \"detector\": \"silero-vad-v5\",\n  \"model\": {{\"sha256\": \"1A153A22F4509E292A94E67D6F9B85E8DEB25B4988682B7E174C65279D8788E3\", \"license\": \"MIT\"}},\n  \"thresholds\": {{\"speech_probability\": {}, \"energy_margin_db\": {}, \"attenuation_db\": {}, \"speech_padding_ms\": {}, \"transition_ms\": {}}},\n  \"input\": {{\"sample_rate\": 48000, \"sample_count\": {sample_count}, \"channel_count\": 1, \"bext_time_reference\": {}, \"stems\": [{}]}},\n  \"output\": {{\"sample_rate\": 48000, \"sample_count\": {sample_count}, \"channel_count\": 1, \"stems\": [{}], \"invalid_samples\": 0, \"clipping_introduced\": false}},\n  \"regions\": [{}],\n  \"warnings\": [{}],\n  \"protections\": [{}]\n}}\n",
+            "{{\n  \"detector\": \"silero-vad-v5\",\n  \"model\": {{\"sha256\": \"1A153A22F4509E292A94E67D6F9B85E8DEB25B4988682B7E174C65279D8788E3\", \"license\": \"MIT\"}},\n  \"thresholds\": {{\"speech_probability\": {}, \"energy_margin_db\": {}, \"attenuation_db\": {}, \"speech_padding_ms\": {}, \"open_ms\": {}, \"close_ms\": {}}},\n  \"input\": {{\"sample_rate\": 48000, \"sample_count\": {sample_count}, \"channel_count\": 1, \"bext_time_reference\": {}, \"stems\": [{}]}},\n  \"output\": {{\"sample_rate\": 48000, \"sample_count\": {sample_count}, \"channel_count\": 1, \"stems\": [{}], \"invalid_samples\": 0, \"clipping_introduced\": false}},\n  \"regions\": [{}],\n  \"warnings\": [{}],\n  \"protections\": [{}]\n}}\n",
             parameters.speech_sensitivity,
             parameters.bleed_discrimination_db,
             parameters.attenuation_db,
             parameters.speech_padding_ms,
-            parameters.transition_ms,
+            parameters.open_ms,
+            parameters.close_ms,
             references[0].map_or("null".into(), |reference| reference.to_string()),
             request
                 .stems
@@ -381,7 +443,8 @@ pub fn analyze_preview(
     )?;
     progress.store(80, Ordering::Relaxed);
     let attenuation = 10.0_f32.powf(parameters.attenuation_db / 20.0);
-    let transition = (parameters.transition_ms * 48_000.0 / 1000.0).max(1.0);
+    let open = (parameters.open_ms * 48_000.0 / 1000.0).max(1.0);
+    let close = (parameters.close_ms * 48_000.0 / 1000.0).max(1.0);
     let envelopes = (0..stems.len())
         .map(|track| {
             gain_envelope(
@@ -390,7 +453,8 @@ pub fn analyze_preview(
                 &regions,
                 protections,
                 attenuation,
-                transition,
+                open,
+                close,
             )
         })
         .collect();
@@ -410,35 +474,43 @@ fn gain_envelope(
     regions: &[Region],
     protections: &[Protection],
     attenuation: f32,
-    transition_samples: f32,
+    open_samples: f32,
+    close_samples: f32,
 ) -> GainEnvelope {
+    if sample_count == 0 {
+        return GainEnvelope {
+            sample_count,
+            points: vec![],
+        };
+    }
+    let mut target = target_gain_with_attenuation(track, 0, regions, protections, attenuation);
     let mut points = vec![GainPoint {
         sample: 0,
-        gain: 1.0,
-        step: 0.0,
-        target: 1.0,
+        gain: target,
+        alpha: 0.0,
+        target,
     }];
-    let (mut gain, mut target, mut step) = (1.0, 1.0, 0.0);
-    for sample in 0..sample_count {
+    for sample in 1..sample_count {
         let next_target =
             target_gain_with_attenuation(track, sample, regions, protections, attenuation);
         if next_target != target {
+            let previous = points.last().unwrap();
+            let elapsed = (sample - 1 - previous.sample) as f32;
+            let gain = previous.target
+                + (previous.gain - previous.target) * (1.0 - previous.alpha).powf(elapsed);
             target = next_target;
-            step = (target - gain) / transition_samples;
-        }
-        gain = if (gain - target).abs() > step.abs() {
-            gain + step
-        } else {
-            target
-        };
-        if points
-            .last()
-            .is_none_or(|point| point.step != step || point.target != target)
-        {
+            let alpha = 1.0
+                - (-1.0
+                    / if target > gain {
+                        open_samples
+                    } else {
+                        close_samples
+                    })
+                .exp();
             points.push(GainPoint {
                 sample,
-                gain,
-                step,
+                gain: gain + alpha * (target - gain),
+                alpha,
                 target,
             });
         }
