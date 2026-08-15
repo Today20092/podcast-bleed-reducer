@@ -6,6 +6,7 @@ pub(crate) const ENERGY_MARGIN_DB: f32 = 6.0;
 const SOURCE_FRAME: usize = 1_536;
 const MODEL_FRAME: usize = 512;
 const CONTEXT: usize = 64;
+const PRESERVATION_FRAMES: usize = 16;
 const MODEL: &[u8] = include_bytes!("../assets/silero_vad.onnx");
 
 pub(crate) fn analyze(tracks: &[&[f32]]) -> Result<Vec<Region>, RenderBlocker> {
@@ -34,18 +35,30 @@ pub(crate) fn analyze(tracks: &[&[f32]]) -> Result<Vec<Region>, RenderBlocker> {
             sorted[sorted.len() / 5]
         })
         .collect::<Vec<_>>();
+    let active = probabilities
+        .iter()
+        .enumerate()
+        .map(|(track, probability)| {
+            preserve_nearby(
+                &(0..frame_count)
+                    .map(|frame| {
+                        probability[frame] >= SPEECH_PROBABILITY
+                            && energies[track][frame] >= noise_floors[track] + ENERGY_MARGIN_DB
+                    })
+                    .collect::<Vec<_>>(),
+            )
+        })
+        .collect::<Vec<_>>();
 
     let mut regions: Vec<Region> = Vec::new();
     for frame in 0..frame_count {
         let speech = (0..tracks.len())
             .filter(|&track| probabilities[track][frame] >= SPEECH_PROBABILITY)
             .collect::<Vec<_>>();
-        let owners = speech
-            .iter()
-            .copied()
-            .filter(|&track| energies[track][frame] >= noise_floors[track] + ENERGY_MARGIN_DB)
+        let owners = (0..tracks.len())
+            .filter(|&track| active[track][frame])
             .collect::<Vec<_>>();
-        let decision = if !owners.is_empty() && owners.len() == speech.len() {
+        let decision = if !owners.is_empty() {
             Decision::Owned(owners)
         } else if speech.is_empty()
             && energies
@@ -72,6 +85,17 @@ pub(crate) fn analyze(tracks: &[&[f32]]) -> Result<Vec<Region>, RenderBlocker> {
         }
     }
     Ok(regions)
+}
+
+fn preserve_nearby(detected: &[bool]) -> Vec<bool> {
+    (0..detected.len())
+        .map(|frame| {
+            detected[frame.saturating_sub(PRESERVATION_FRAMES)
+                ..(frame + PRESERVATION_FRAMES + 1).min(detected.len())]
+                .iter()
+                .any(|active| *active)
+        })
+        .collect()
 }
 
 fn silero(samples: &[f32], frame_count: usize) -> Result<Vec<f32>, RenderBlocker> {
@@ -106,4 +130,20 @@ fn silero(samples: &[f32], frame_count: usize) -> Result<Vec<f32>, RenderBlocker
 
 fn detector_error(error: ort::Error) -> RenderBlocker {
     RenderBlocker(format!("Silero detector failed: {error}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::preserve_nearby;
+
+    #[test]
+    fn preserves_short_gaps_and_boundaries_around_detected_speech() {
+        let mut detected = vec![false; 40];
+        detected[20] = true;
+        let preserved = preserve_nearby(&detected);
+        assert!(preserved[4]);
+        assert!(preserved[36]);
+        assert!(!preserved[3]);
+        assert!(!preserved[37]);
+    }
 }
