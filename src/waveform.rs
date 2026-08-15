@@ -142,6 +142,7 @@ pub(crate) struct TimelineCanvas<'a, Message> {
     viewport: &'a TimelineViewport,
     ruler: bool,
     preview: Option<(&'a AnalysisPreview, usize)>,
+    selecting: bool,
     on_event: fn(TimelineEvent) -> Message,
 }
 
@@ -151,22 +152,29 @@ impl<'a, Message> TimelineCanvas<'a, Message> {
         viewport: &'a TimelineViewport,
         on_event: fn(TimelineEvent) -> Message,
         preview: Option<(&'a AnalysisPreview, usize)>,
+        selecting: bool,
     ) -> Self {
         Self {
             cache: Some(cache),
             viewport,
             ruler: false,
             preview,
+            selecting,
             on_event,
         }
     }
 
-    pub fn ruler(viewport: &'a TimelineViewport, on_event: fn(TimelineEvent) -> Message) -> Self {
+    pub fn ruler(
+        viewport: &'a TimelineViewport,
+        selecting: bool,
+        on_event: fn(TimelineEvent) -> Message,
+    ) -> Self {
         Self {
             cache: None,
             viewport,
             ruler: true,
             preview: None,
+            selecting,
             on_event,
         }
     }
@@ -175,6 +183,7 @@ impl<'a, Message> TimelineCanvas<'a, Message> {
 #[derive(Default)]
 pub(crate) struct TimelineCanvasState {
     dragging: bool,
+    selection_anchor: Option<usize>,
 }
 
 impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> {
@@ -192,15 +201,27 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
             canvas::Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) => {
                 let position = position?;
                 state.dragging = true;
-                Some(
-                    Action::publish((self.on_event)(TimelineEvent::Seek(
-                        self.viewport.sample_at(position.x, bounds.width),
-                    )))
-                    .and_capture(),
-                )
+                let sample = self.viewport.sample_at(position.x, bounds.width);
+                if self.selecting {
+                    state.selection_anchor = Some(sample);
+                    return Some(
+                        Action::publish((self.on_event)(TimelineEvent::Select(sample, sample)))
+                            .and_capture(),
+                    );
+                }
+                Some(Action::publish((self.on_event)(TimelineEvent::Seek(sample))).and_capture())
             }
             canvas::Event::Mouse(mouse::Event::CursorMoved { .. }) if state.dragging => {
                 let position = cursor.position_from(bounds.position())?;
+                if let Some(anchor) = state.selection_anchor {
+                    return Some(
+                        Action::publish((self.on_event)(TimelineEvent::Select(
+                            anchor,
+                            self.viewport.sample_at(position.x, bounds.width),
+                        )))
+                        .and_capture(),
+                    );
+                }
                 Some(
                     Action::publish((self.on_event)(TimelineEvent::Drag(
                         self.viewport.sample_at(position.x, bounds.width),
@@ -213,6 +234,15 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
             {
                 state.dragging = false;
                 let position = cursor.position_from(bounds.position())?;
+                if let Some(anchor) = state.selection_anchor.take() {
+                    return Some(
+                        Action::publish((self.on_event)(TimelineEvent::Select(
+                            anchor,
+                            self.viewport.sample_at(position.x, bounds.width),
+                        )))
+                        .and_capture(),
+                    );
+                }
                 Some(
                     Action::publish((self.on_event)(TimelineEvent::DragEnd(
                         self.viewport.sample_at(position.x, bounds.width),

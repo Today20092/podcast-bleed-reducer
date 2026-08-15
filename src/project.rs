@@ -143,21 +143,36 @@ impl Project {
     }
 
     pub fn protect_track(&mut self, track: usize) -> io::Result<()> {
-        self.protections.push(Protection {
+        self.add_protections(vec![Protection {
             track: Some(track),
             start: 0,
             end: usize::MAX,
-        });
-        self.render = RenderState::Stale;
-        self.save()
+        }])
     }
 
     pub fn protect_range(&mut self, start: usize, end: usize) -> io::Result<()> {
-        self.protections.push(Protection {
+        self.add_protections(vec![Protection {
             track: None,
             start,
             end,
-        });
+        }])
+    }
+
+    pub fn protect_region(&mut self, tracks: &[usize], start: usize, end: usize) -> io::Result<()> {
+        self.add_protections(
+            tracks
+                .iter()
+                .map(|track| Protection {
+                    track: Some(*track),
+                    start,
+                    end,
+                })
+                .collect(),
+        )
+    }
+
+    fn add_protections(&mut self, protections: Vec<Protection>) -> io::Result<()> {
+        self.protections.extend(protections);
         self.render = RenderState::Stale;
         self.save()
     }

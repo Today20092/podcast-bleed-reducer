@@ -83,6 +83,7 @@ pub(crate) enum TimelineEvent {
     Seek(usize),
     Drag(usize),
     DragEnd(usize),
+    Select(usize, usize),
     Zoom {
         cursor_x: f32,
         width: f32,

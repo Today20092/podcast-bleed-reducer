@@ -1,9 +1,25 @@
 use crate::audio_io::waveform;
 use serde::Deserialize;
 use std::{
+    collections::BTreeMap,
     fs, io,
     path::{Path, PathBuf},
 };
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ReviewWarning {
+    pub start: usize,
+    pub end: usize,
+    pub label: String,
+    pub affected_tracks: Vec<usize>,
+    region: usize,
+}
+
+impl ReviewWarning {
+    pub fn key(&self) -> String {
+        format!("warning:{}:{}:{}", self.start, self.end, self.label)
+    }
+}
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub enum Comparison {
@@ -57,9 +73,11 @@ struct Output {
 #[derive(Default)]
 pub struct ReviewWorkspace {
     pub regions: Vec<ReviewRegion>,
+    pub warnings: Vec<ReviewWarning>,
     pub output_stems: Vec<String>,
     pub waveforms: Vec<Vec<(f32, f32)>>,
     selected: Option<usize>,
+    selected_warning: Option<usize>,
     playhead: usize,
     selection: Option<(usize, usize)>,
     highlighted_tracks: Vec<usize>,
@@ -69,8 +87,34 @@ pub struct ReviewWorkspace {
 impl ReviewWorkspace {
     pub fn open(path: &Path, sources: &[PathBuf]) -> io::Result<Self> {
         let report: Report = serde_json::from_slice(&fs::read(path)?).map_err(io::Error::other)?;
+        let mut warnings = BTreeMap::<(usize, usize, String), (usize, Vec<usize>)>::new();
+        for (index, region) in report.regions.iter().enumerate() {
+            if let Some(label) = &region.review_warning {
+                let (_, tracks) = warnings
+                    .entry((region.start, region.end, label.clone()))
+                    .or_insert((index, vec![]));
+                if let Some(track) = region.affected_track {
+                    tracks.push(track);
+                }
+            }
+        }
+        let warnings = warnings
+            .into_iter()
+            .map(|((start, end, label), (region, mut affected_tracks))| {
+                affected_tracks.sort_unstable();
+                affected_tracks.dedup();
+                ReviewWarning {
+                    start,
+                    end,
+                    label,
+                    affected_tracks,
+                    region,
+                }
+            })
+            .collect();
         Ok(Self {
             regions: report.regions,
+            warnings,
             output_stems: report.output.stems,
             waveforms: sources
                 .iter()
@@ -85,6 +129,7 @@ impl ReviewWorkspace {
             return;
         };
         self.selected = Some(index);
+        self.selected_warning = None;
         self.playhead = region.start;
         self.selection = Some((region.start, region.end));
         self.highlighted_tracks = region.affected_track.into_iter().collect();
@@ -95,6 +140,27 @@ impl ReviewWorkspace {
     }
     pub fn playhead(&self) -> usize {
         self.playhead
+    }
+
+    pub fn select_warning(&mut self, index: usize) {
+        let Some(warning) = self.warnings.get(index) else {
+            return;
+        };
+        self.selected = Some(warning.region);
+        self.selected_warning = Some(index);
+        self.playhead = warning.start;
+        self.selection = Some((warning.start, warning.end));
+        self.highlighted_tracks.clone_from(&warning.affected_tracks);
+    }
+
+    pub fn selected_warning(&self) -> Option<&ReviewWarning> {
+        self.selected_warning
+            .and_then(|index| self.warnings.get(index))
+    }
+    pub fn selected_key(&self) -> Option<String> {
+        self.selected_warning()
+            .map(ReviewWarning::key)
+            .or_else(|| self.selected_region().map(ReviewRegion::key))
     }
     pub fn seek(&mut self, sample: usize) {
         self.playhead = sample;

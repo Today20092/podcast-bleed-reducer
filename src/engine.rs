@@ -47,6 +47,14 @@ mod preview_tests {
         assert!(envelope.gain_at(8) > envelope.gain_at(5));
         assert!(envelope.gain_at(12) < envelope.gain_at(9));
         assert!(envelope.points.len() < 16);
+        assert_eq!(
+            target_gain_with_attenuation(0, 7, &regions, &protections, 0.25),
+            1.0
+        );
+        assert_eq!(
+            target_gain_with_attenuation(1, 7, &regions, &protections, 0.25),
+            0.25
+        );
     }
 }
 

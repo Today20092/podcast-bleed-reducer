@@ -97,6 +97,37 @@ mod tests {
         );
         std::fs::remove_dir_all(directory).unwrap();
     }
+
+    #[test]
+    fn shift_selected_range_protects_all_tracks_at_exact_bounds() {
+        let directory =
+            std::env::temp_dir().join(format!("cleanslate-editor-test-{}", std::process::id()));
+        std::fs::create_dir_all(&directory).unwrap();
+        let source = directory.join("voice.wav");
+        std::fs::write(&source, b"source").unwrap();
+        let mut app = super::CleanSlateApp {
+            project: Some(
+                crate::Project::create(directory.join("episode.cleanslate"), vec![source.clone()])
+                    .unwrap(),
+            ),
+            ..Default::default()
+        };
+        std::fs::remove_file(source).unwrap();
+        let _ = app.update(super::Message::Timeline(
+            crate::timeline::TimelineEvent::Select(40, 10),
+        ));
+        assert!(app.can_protect_selection());
+        let _ = app.update(super::Message::ProtectSelection);
+        assert_eq!(
+            app.project.unwrap().protections(),
+            &[crate::Protection {
+                track: None,
+                start: 10,
+                end: 40
+            }]
+        );
+        std::fs::remove_dir_all(directory).unwrap();
+    }
 }
 
 pub struct CleanSlateApp {
@@ -108,6 +139,7 @@ pub struct CleanSlateApp {
     audition: Option<LiveAudition>,
     audition_mode: AuditionMode,
     monitor_db: f32,
+    selecting_range: bool,
     waveforms: Vec<WaveformCache>,
     timeline: TimelineViewport,
     preview_parameters: PreviewParameters,
@@ -127,6 +159,7 @@ impl Default for CleanSlateApp {
             audition: None,
             audition_mode: AuditionMode::Original,
             monitor_db: -6.0,
+            selecting_range: false,
             waveforms: vec![],
             timeline: TimelineViewport::default(),
             preview_parameters: PreviewParameters::default(),
@@ -166,7 +199,6 @@ enum Message {
     SpeechPadding(f32),
     Transition(f32),
     RefreshPreview,
-    SelectRegion(usize),
     SelectWarning(usize),
     Original,
     Processed,
@@ -177,6 +209,7 @@ enum Message {
     Previous,
     MonitorGain(f32),
     KeyPressed(keyboard::Key),
+    RangeModifier(bool),
     ToggleReviewed,
     ProtectRegion,
     ProtectTrack(usize),
@@ -520,6 +553,10 @@ impl CleanSlateApp {
             review.seek(start);
         }
     }
+
+    fn can_protect_selection(&self) -> bool {
+        self.project.is_some() && self.timeline.selection().is_some()
+    }
 }
 
 impl CleanSlateApp {
@@ -590,16 +627,9 @@ impl CleanSlateApp {
                 }
                 self.start_preview();
             }
-            Message::SelectRegion(index) => {
-                if let Some(review) = &mut self.review {
-                    review.select(index);
-                    self.timeline.seek(review.playhead());
-                    self.timeline.set_selection(review.selection());
-                }
-            }
             Message::SelectWarning(index) => {
                 if let Some(review) = &mut self.review {
-                    review.select(index);
+                    review.select_warning(index);
                     self.timeline.seek(review.playhead());
                     self.timeline.set_selection(review.selection());
                 }
@@ -650,14 +680,12 @@ impl CleanSlateApp {
                 keyboard::Key::Character("3") => self.set_audition_mode(AuditionMode::Removed),
                 _ => {}
             },
+            Message::RangeModifier(selecting) => self.selecting_range = selecting,
             Message::ToggleReviewed => {
-                if let (Some(project), Some(region)) = (
+                if let (Some(project), Some(key)) = (
                     self.project.as_mut(),
-                    self.review
-                        .as_ref()
-                        .and_then(ReviewWorkspace::selected_region),
+                    self.review.as_ref().and_then(ReviewWorkspace::selected_key),
                 ) {
-                    let key = region.key();
                     let state = if project.review_states().get(&key) == Some(&ReviewState::Reviewed)
                     {
                         ReviewState::Unreviewed
@@ -670,14 +698,21 @@ impl CleanSlateApp {
                 }
             }
             Message::ProtectRegion => {
-                if let (Some(project), Some(region)) = (
-                    self.project.as_mut(),
-                    self.review
-                        .as_ref()
-                        .and_then(ReviewWorkspace::selected_region),
-                ) && let Err(error) = project.protect_range(region.start, region.end)
-                {
-                    self.messages.push(error.to_string());
+                if let (Some(project), Some(review)) = (self.project.as_mut(), &self.review) {
+                    let result = if let Some(warning) = review.selected_warning() {
+                        project.protect_region(&warning.affected_tracks, warning.start, warning.end)
+                    } else if let Some(region) = review.selected_region() {
+                        project.protect_region(
+                            &region.affected_track.into_iter().collect::<Vec<_>>(),
+                            region.start,
+                            region.end,
+                        )
+                    } else {
+                        Ok(())
+                    };
+                    if let Err(error) = result {
+                        self.messages.push(error.to_string());
+                    }
                 }
                 if let Some(review) = &mut self.review {
                     review.set_comparison(Comparison::Original);
@@ -696,10 +731,9 @@ impl CleanSlateApp {
                 self.start_preview();
             }
             Message::ProtectSelection => {
-                if let (Some(project), Some((start, end))) = (
-                    self.project.as_mut(),
-                    self.review.as_ref().and_then(ReviewWorkspace::selection),
-                ) && let Err(error) = project.protect_range(start.min(end), start.max(end))
+                if let (Some(project), Some((start, end))) =
+                    (self.project.as_mut(), self.timeline.selection())
+                    && let Err(error) = project.protect_range(start.min(end), start.max(end))
                 {
                     self.messages.push(error.to_string());
                 }
@@ -723,6 +757,13 @@ impl CleanSlateApp {
                     width,
                     direction,
                 } => self.timeline.zoom_at(cursor_x, width, direction),
+                TimelineEvent::Select(start, end) => {
+                    self.timeline
+                        .set_selection(Some((start.min(end), start.max(end))));
+                    if let Some(review) = &mut self.review {
+                        review.set_selection(start, end);
+                    }
+                }
             },
         }
         Task::none()
@@ -735,6 +776,9 @@ impl CleanSlateApp {
             }
             iced::Event::Keyboard(keyboard::Event::KeyPressed { key, .. }) => {
                 Some(Message::KeyPressed(key))
+            }
+            iced::Event::Keyboard(keyboard::Event::ModifiersChanged(modifiers)) => {
+                Some(Message::RangeModifier(modifiers.shift()))
             }
             _ => None,
         });
@@ -814,16 +858,32 @@ impl CleanSlateApp {
         } else if let Some(project) = &self.project {
             timeline_content = timeline_content.push(
                 container(
-                    canvas(TimelineCanvas::ruler(&self.timeline, Message::Timeline))
-                        .width(Fill)
-                        .height(28),
+                    canvas(TimelineCanvas::ruler(
+                        &self.timeline,
+                        self.selecting_range,
+                        Message::Timeline,
+                    ))
+                    .width(Fill)
+                    .height(28),
                 )
                 .padding([0, 12]),
             );
             for (index, source) in project.sources.iter().enumerate() {
                 let mut header = row![text(source.path.display().to_string())];
+                if self
+                    .review
+                    .as_ref()
+                    .is_some_and(|review| review.highlighted_tracks().contains(&index))
+                {
+                    header = header.push(text("REVIEW TARGET"));
+                }
                 if !source.available {
                     header = header.push(button("Relink source").on_press(Message::Relink(index)));
+                }
+                if matches!(current, WorkflowStep::Review | WorkflowStep::Export) {
+                    header = header.push(
+                        button("Protect entire track").on_press(Message::ProtectTrack(index)),
+                    );
                 }
                 let waveform: Element<'_, Message> = self.waveforms.get(index).map_or_else(
                     || {
@@ -838,6 +898,7 @@ impl CleanSlateApp {
                             &self.timeline,
                             Message::Timeline,
                             self.preview.as_ref().map(|preview| (preview, index)),
+                            self.selecting_range,
                         ))
                         .width(Fill)
                         .height(80)
@@ -885,20 +946,32 @@ impl CleanSlateApp {
                             ]
                             .spacing(8),
                         );
-                        for (index, region) in review.regions.iter().enumerate() {
-                            let label = region.review_warning.as_deref().unwrap_or("Review region");
-                            let message = if region.review_warning.is_some() {
-                                Message::SelectWarning(index)
-                            } else {
-                                Message::SelectRegion(index)
-                            };
-                            timeline_content =
-                                timeline_content.push(button(label).on_press(message));
-                        }
-                        if let Some(region) = review.selected_region() {
-                            let reviewed = project.review_states().get(&region.key())
+                        for (index, warning) in review.warnings.iter().enumerate() {
+                            let reviewed = project.review_states().get(&warning.key())
                                 == Some(&ReviewState::Reviewed);
-                            let mut actions = row![
+                            let tracks = warning
+                                .affected_tracks
+                                .iter()
+                                .map(|track| (track + 1).to_string())
+                                .collect::<Vec<_>>()
+                                .join(", ");
+                            timeline_content = timeline_content.push(
+                                button(text(format!(
+                                    "{}{} · tracks {} · {:.2}s–{:.2}s",
+                                    if reviewed { "✓ " } else { "" },
+                                    warning.label,
+                                    tracks,
+                                    warning.start as f64 / 48_000.0,
+                                    warning.end as f64 / 48_000.0,
+                                )))
+                                .on_press(Message::SelectWarning(index)),
+                            );
+                        }
+                        if review.selected_region().is_some() {
+                            let reviewed = review.selected_key().is_some_and(|key| {
+                                project.review_states().get(&key) == Some(&ReviewState::Reviewed)
+                            });
+                            let actions = row![
                                 button(if reviewed {
                                     "Mark unreviewed"
                                 } else {
@@ -906,17 +979,15 @@ impl CleanSlateApp {
                                 })
                                 .on_press(Message::ToggleReviewed),
                                 button("Protect this region").on_press(Message::ProtectRegion),
-                                button("Protect selected range")
-                                    .on_press(Message::ProtectSelection),
                             ]
                             .spacing(8);
-                            if let Some(track) = region.affected_track {
-                                actions = actions.push(
-                                    button(text(format!("Protect track {}", track + 1)))
-                                        .on_press(Message::ProtectTrack(track)),
-                                );
-                            }
                             timeline_content = timeline_content.push(actions);
+                        }
+                        if self.can_protect_selection() {
+                            timeline_content = timeline_content.push(
+                                button("Protect selected range across all tracks")
+                                    .on_press(Message::ProtectSelection),
+                            );
                         }
                     }
                     if matches!(project.render(), RenderState::Current { .. }) {
@@ -935,6 +1006,7 @@ impl CleanSlateApp {
 
         let timeline = column![
             text("SESSION TIMELINE").size(12),
+            text("Shift-drag a waveform to select a protection range.").size(11),
             scrollable(timeline_content).height(Fill),
         ]
         .spacing(10)
