@@ -1209,7 +1209,7 @@ impl CleanSlateApp {
                     .step(1.0)
                     .on_release(Message::RefreshPreview),
                 text(
-                    "Overlay: preserved solid · attenuated hatch · uncertain amber · protected blue"
+                    "Overlay: preserved solid · attenuated diagonal hatch · uncertain dotted · protected outline"
                 ),
             ]
             .spacing(12),
