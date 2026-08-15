@@ -31,17 +31,42 @@ fn dialog_start_directory() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("."))
 }
 
+fn available_project_path(directory: &std::path::Path) -> PathBuf {
+    let mut path = directory.join("CleanSlate.cleanslate");
+    for suffix in 2.. {
+        if !path.exists() {
+            return path;
+        }
+        path = directory.join(format!("CleanSlate-{suffix}.cleanslate"));
+    }
+    unreachable!()
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
     fn file_dialog_starts_in_an_existing_local_directory() {
         assert!(super::dialog_start_directory().is_dir());
     }
+
+    #[test]
+    fn dropped_stems_never_overwrite_an_existing_project() {
+        let directory =
+            std::env::temp_dir().join(format!("cleanslate-path-test-{}", std::process::id()));
+        std::fs::create_dir_all(&directory).unwrap();
+        std::fs::write(directory.join("CleanSlate.cleanslate"), b"existing").unwrap();
+        assert_eq!(
+            super::available_project_path(&directory),
+            directory.join("CleanSlate-2.cleanslate")
+        );
+        std::fs::remove_dir_all(directory).unwrap();
+    }
 }
 
 #[derive(Default)]
 pub struct CleanSlateApp {
     project: Option<Project>,
+    pending_stems: Vec<PathBuf>,
     messages: Vec<String>,
     processing: Option<Processing>,
     review: Option<ReviewWorkspace>,
@@ -56,8 +81,10 @@ struct Processing {
 
 #[derive(Debug, Clone)]
 enum Message {
-    NewProject,
     OpenProject,
+    FileDropped(PathBuf),
+    ClearDropped,
+    CreateDroppedProject,
     Relink(usize),
     Validate,
     Process,
@@ -113,25 +140,12 @@ impl CleanSlateApp {
         }
     }
 
-    fn create_project(&mut self) {
-        let stems = rfd::FileDialog::new()
-            .set_directory(dialog_start_directory())
-            .add_filter("WAV audio", &["wav"])
-            .pick_files();
-        let Some(stems) = stems else { return };
-        let save_directory = stems
-            .first()
-            .and_then(|stem| stem.parent())
-            .unwrap_or_else(|| std::path::Path::new("."));
-        let Some(path) = rfd::FileDialog::new()
-            .set_directory(save_directory)
-            .add_filter("CleanSlate project", &["cleanslate"])
-            .set_file_name("project.cleanslate")
-            .save_file()
-        else {
+    fn create_dropped_project(&mut self) {
+        let Some(directory) = self.pending_stems.first().and_then(|stem| stem.parent()) else {
             return;
         };
-        match Project::create(path, stems) {
+        let project_path = available_project_path(directory);
+        match Project::create(project_path, std::mem::take(&mut self.pending_stems)) {
             Ok(project) => {
                 self.project = Some(project);
                 self.messages.clear();
@@ -296,8 +310,22 @@ impl CleanSlateApp {
 impl CleanSlateApp {
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
-            Message::NewProject => self.create_project(),
             Message::OpenProject => self.open_project(),
+            Message::FileDropped(path) => {
+                if path
+                    .extension()
+                    .is_some_and(|extension| extension.eq_ignore_ascii_case("wav"))
+                {
+                    if !self.pending_stems.contains(&path) {
+                        self.pending_stems.push(path);
+                    }
+                    self.messages.clear();
+                } else {
+                    self.messages = vec![format!("Ignored non-WAV file: {}", path.display())];
+                }
+            }
+            Message::ClearDropped => self.pending_stems.clear(),
+            Message::CreateDroppedProject => self.create_dropped_project(),
             Message::Relink(index) => {
                 let start = self
                     .project
@@ -402,19 +430,22 @@ impl CleanSlateApp {
     }
 
     fn subscription(&self) -> Subscription<Message> {
-        if self.processing.is_some() {
+        let drops = iced::event::listen_with(|event, _status, _window| match event {
+            iced::Event::Window(iced::window::Event::FileDropped(path)) => {
+                Some(Message::FileDropped(path))
+            }
+            _ => None,
+        });
+        let processing = if self.processing.is_some() {
             iced::time::every(std::time::Duration::from_millis(100)).map(|_| Message::Tick)
         } else {
             Subscription::none()
-        }
+        };
+        Subscription::batch([drops, processing])
     }
 
     fn view(&self) -> Element<'_, Message> {
-        let toolbar = row![
-            button("New project").on_press(Message::NewProject),
-            button("Open project").on_press(Message::OpenProject),
-        ]
-        .spacing(10);
+        let toolbar = row![button("Open project").on_press(Message::OpenProject),].spacing(10);
         let current = self
             .project
             .as_ref()
@@ -449,7 +480,23 @@ impl CleanSlateApp {
         }
 
         if self.project.is_none() || current == WorkflowStep::Import {
-            content = content.push(button("Import stems").on_press(Message::NewProject));
+            content = content.push(text("Drag one or more WAV stems onto this window.").size(22));
+            for stem in &self.pending_stems {
+                content = content.push(text(stem.display().to_string()));
+            }
+            if !self.pending_stems.is_empty() {
+                content = content.push(
+                    row![
+                        button(text(format!(
+                            "Create project from {} stem(s)",
+                            self.pending_stems.len()
+                        )))
+                        .on_press(Message::CreateDroppedProject),
+                        button("Clear").on_press(Message::ClearDropped),
+                    ]
+                    .spacing(10),
+                );
+            }
         } else if current == WorkflowStep::Validate {
             content = content.push(button("Validate session").on_press(Message::Validate));
         } else if current == WorkflowStep::Process {
