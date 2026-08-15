@@ -116,7 +116,9 @@ pub fn run_with_progress(
         ));
     }
     if request.protections.iter().any(|p| {
-        p.start > p.end || p.end > sample_count || p.track.is_some_and(|track| track >= stems.len())
+        p.start > p.end
+            || (p.end != usize::MAX && p.end > sample_count)
+            || p.track.is_some_and(|track| track >= stems.len())
     }) {
         return Err(RenderBlocker("protection is outside the session".into()));
     }

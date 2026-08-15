@@ -46,6 +46,8 @@ pub struct Project {
     protections: Vec<Protection>,
     review_states: BTreeMap<String, ReviewState>,
     render: RenderState,
+    #[serde(default)]
+    last_render: Option<PathBuf>,
     step: WorkflowStep,
 }
 
@@ -61,6 +63,7 @@ impl Project {
             protections: vec![],
             review_states: BTreeMap::new(),
             render: RenderState::None,
+            last_render: None,
             step: WorkflowStep::Validate,
         };
         project.save()?;
@@ -72,6 +75,11 @@ impl Project {
         let mut project: Self =
             serde_json::from_slice(&fs::read(&path)?).map_err(io::Error::other)?;
         project.path = path;
+        if project.last_render.is_none()
+            && let RenderState::Current { identity } = &project.render
+        {
+            project.last_render = Some(identity.clone());
+        }
         let mut valid = true;
         for source in &mut project.sources {
             source.available = source.matches_disk();
@@ -114,6 +122,9 @@ impl Project {
     pub fn render(&self) -> &RenderState {
         &self.render
     }
+    pub fn review_identity(&self) -> Option<&Path> {
+        self.last_render.as_deref()
+    }
 
     pub fn mark_validated(&mut self) -> io::Result<()> {
         self.step = WorkflowStep::Process;
@@ -122,6 +133,26 @@ impl Project {
 
     pub fn replace_protections(&mut self, protections: Vec<Protection>) -> io::Result<()> {
         self.protections = protections;
+        self.render = RenderState::Stale;
+        self.save()
+    }
+
+    pub fn protect_track(&mut self, track: usize) -> io::Result<()> {
+        self.protections.push(Protection {
+            track: Some(track),
+            start: 0,
+            end: usize::MAX,
+        });
+        self.render = RenderState::Stale;
+        self.save()
+    }
+
+    pub fn protect_range(&mut self, start: usize, end: usize) -> io::Result<()> {
+        self.protections.push(Protection {
+            track: None,
+            start,
+            end,
+        });
         self.render = RenderState::Stale;
         self.save()
     }
@@ -136,9 +167,9 @@ impl Project {
     }
 
     pub fn mark_render_current(&mut self, identity: impl Into<PathBuf>) -> io::Result<()> {
-        self.render = RenderState::Current {
-            identity: identity.into(),
-        };
+        let identity = identity.into();
+        self.last_render = Some(identity.clone());
+        self.render = RenderState::Current { identity };
         self.step = WorkflowStep::Review;
         self.save()
     }

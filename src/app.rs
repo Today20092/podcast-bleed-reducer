@@ -1,6 +1,10 @@
-use crate::{Project, RenderState, RunRequest, WorkflowStep, run_with_progress, validate};
+use crate::{
+    Comparison, Project, RenderState, ReviewState, ReviewWorkspace, RunRequest, WorkflowStep,
+    run_with_progress, validate,
+};
 use eframe::egui;
 use std::{
+    process::{Child, Command},
     sync::{
         Arc,
         atomic::{AtomicBool, AtomicU8, Ordering},
@@ -14,6 +18,8 @@ pub struct CleanSlateApp {
     project: Option<Project>,
     messages: Vec<String>,
     processing: Option<Processing>,
+    review: Option<ReviewWorkspace>,
+    playback: Vec<Child>,
 }
 
 struct Processing {
@@ -54,6 +60,7 @@ impl CleanSlateApp {
         match Project::open(path) {
             Ok(project) => {
                 self.project = Some(project);
+                self.load_review();
                 self.messages.clear();
             }
             Err(error) => self.messages = vec![error.to_string()],
@@ -118,6 +125,61 @@ impl CleanSlateApp {
         });
     }
 
+    fn load_review(&mut self) {
+        self.review = self.project.as_ref().and_then(|project| {
+            let identity = project.review_identity()?;
+            ReviewWorkspace::open(identity, &project.source_paths()).ok()
+        });
+    }
+
+    fn audition(&mut self) {
+        for mut child in self.playback.drain(..) {
+            let _ = child.kill();
+        }
+        let (Some(project), Some(review)) = (&self.project, &self.review) else {
+            return;
+        };
+        let Some((start, end)) = review.selection() else {
+            return;
+        };
+        let paths: Vec<_> = match review.comparison() {
+            Comparison::Original => project
+                .sources
+                .iter()
+                .map(|source| source.path.clone())
+                .collect(),
+            Comparison::Processed => project
+                .review_identity()
+                .map(|report| {
+                    review
+                        .output_stems
+                        .iter()
+                        .map(|stem| report.parent().unwrap().join(stem))
+                        .collect()
+                })
+                .unwrap_or_default(),
+        };
+        let script = "$p=New-Object -ComObject WMPlayer.OCX; $p.URL=$args[0]; $p.controls.currentPosition=[double]$args[1]; $p.controls.play(); Start-Sleep -Milliseconds ([int]$args[2]); $p.controls.stop()";
+        self.playback = paths
+            .into_iter()
+            .filter_map(|path| {
+                Command::new("powershell")
+                    .args([
+                        "-NoProfile",
+                        "-WindowStyle",
+                        "Hidden",
+                        "-Command",
+                        script,
+                        &path.display().to_string(),
+                        &(start as f64 / 48_000.0).to_string(),
+                        &((end - start) * 1000 / 48_000).to_string(),
+                    ])
+                    .spawn()
+                    .ok()
+            })
+            .collect();
+    }
+
     fn poll_processing(&mut self) {
         let Some(processing) = &self.processing else {
             return;
@@ -133,6 +195,7 @@ impl CleanSlateApp {
                 if let Err(error) = project.mark_render_current(identity) {
                     self.messages.push(error.to_string());
                 }
+                self.load_review();
             }
             Err(error) => self.messages = vec![error],
         }
@@ -224,7 +287,180 @@ impl eframe::App for CleanSlateApp {
                 RenderState::Stale => "Render stale",
                 RenderState::None => "No render",
             });
-            ui.label("Review workspace continues in ticket 05.");
+            let stale = matches!(self.project.as_ref().unwrap().render(), RenderState::Stale);
+            if stale && self.processing.is_none() && ui.button("Rerender protections").clicked() {
+                self.start_processing();
+            }
+            let mut audition = false;
+            if let Some(review) = &mut self.review {
+                ui.heading("Synchronized waveforms");
+                let width = ui.available_width();
+                for (track, source) in self.project.as_ref().unwrap().sources.iter().enumerate() {
+                    let highlighted = review.highlighted_tracks().contains(&track);
+                    let (rect, _) =
+                        ui.allocate_exact_size(egui::vec2(width, 34.0), egui::Sense::hover());
+                    let color = if highlighted {
+                        egui::Color32::LIGHT_BLUE
+                    } else {
+                        egui::Color32::DARK_GRAY
+                    };
+                    ui.painter().rect_filled(rect, 2.0, color);
+                    if let Some(points) = review.waveforms.get(track) {
+                        let center = rect.center().y;
+                        for (index, (min, max)) in points.iter().enumerate() {
+                            let x = rect.left()
+                                + index as f32 * rect.width() / points.len().max(1) as f32;
+                            ui.painter().line_segment(
+                                [
+                                    egui::pos2(x, center - max * 15.0),
+                                    egui::pos2(x, center - min * 15.0),
+                                ],
+                                egui::Stroke::new(1.0, egui::Color32::WHITE),
+                            );
+                        }
+                    }
+                    ui.painter().text(
+                        rect.left_center() + egui::vec2(8.0, 0.0),
+                        egui::Align2::LEFT_CENTER,
+                        source
+                            .path
+                            .file_name()
+                            .unwrap_or_default()
+                            .to_string_lossy(),
+                        egui::FontId::default(),
+                        egui::Color32::WHITE,
+                    );
+                }
+                ui.horizontal(|ui| {
+                    ui.label(format!(
+                        "Playhead {:.2}s",
+                        review.playhead() as f32 / 48_000.0
+                    ));
+                    ui.selectable_value(review.comparison_mut(), Comparison::Original, "Original");
+                    ui.add_enabled_ui(!stale, |ui| {
+                        ui.selectable_value(
+                            review.comparison_mut(),
+                            Comparison::Processed,
+                            "Processed",
+                        );
+                    });
+                });
+                audition = ui.button("Audition selection").clicked();
+                ui.heading("Attenuation regions");
+                ui.label("Review list");
+                let mut warning_select = None;
+                for (index, region) in review
+                    .regions
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, region)| region.review_warning.is_some())
+                {
+                    if ui
+                        .button(region.review_warning.as_deref().unwrap())
+                        .clicked()
+                    {
+                        warning_select = Some(index);
+                    }
+                }
+                if let Some(index) = warning_select {
+                    review.select(index);
+                    audition = true;
+                }
+                let mut select = None;
+                for (index, region) in review.regions.iter().enumerate() {
+                    let title = format!(
+                        "{:.2}–{:.2}s · {} dB · {:?} · {:?} · {}",
+                        region.start as f32 / 48_000.0,
+                        region.end as f32 / 48_000.0,
+                        region.applied_attenuation_db,
+                        region.decision,
+                        region.evidence_reasons,
+                        region.review_warning.as_deref().unwrap_or("")
+                    );
+                    if ui
+                        .selectable_label(review.selected_region() == Some(region), title)
+                        .clicked()
+                    {
+                        select = Some(index);
+                    }
+                }
+                if let Some(index) = select {
+                    review.select(index);
+                }
+                if let Some(region) = review.selected_region().cloned() {
+                    ui.horizontal(|ui| {
+                        let key = region.key();
+                        let state = self
+                            .project
+                            .as_ref()
+                            .unwrap()
+                            .review_states()
+                            .get(&key)
+                            .copied()
+                            .unwrap_or(ReviewState::Unreviewed);
+                        if ui
+                            .button(if state == ReviewState::Reviewed {
+                                "Mark unreviewed"
+                            } else {
+                                "Mark reviewed"
+                            })
+                            .clicked()
+                            && let Err(error) = self.project.as_mut().unwrap().set_review_state(
+                                key,
+                                if state == ReviewState::Reviewed {
+                                    ReviewState::Unreviewed
+                                } else {
+                                    ReviewState::Reviewed
+                                },
+                            )
+                        {
+                            self.messages.push(error.to_string());
+                        }
+                        if ui.button("Protect this region").clicked() {
+                            if let Err(error) = self
+                                .project
+                                .as_mut()
+                                .unwrap()
+                                .protect_range(region.start, region.end)
+                            {
+                                self.messages.push(error.to_string());
+                            }
+                            review.set_comparison(Comparison::Original);
+                        }
+                        if let Some(track) = region.affected_track
+                            && ui.button(format!("Protect track {}", track + 1)).clicked()
+                        {
+                            if let Err(error) = self.project.as_mut().unwrap().protect_track(track)
+                            {
+                                self.messages.push(error.to_string());
+                            }
+                            review.set_comparison(Comparison::Original);
+                        }
+                    });
+                    if let Some((mut start, mut end)) = review.selection() {
+                        ui.horizontal(|ui| {
+                            ui.label("Selected range (samples)");
+                            ui.add(egui::DragValue::new(&mut start));
+                            ui.add(egui::DragValue::new(&mut end));
+                            review.set_selection(start, end);
+                            if ui.button("Protect selected range").clicked() {
+                                if let Err(error) = self
+                                    .project
+                                    .as_mut()
+                                    .unwrap()
+                                    .protect_range(start.min(end), start.max(end))
+                                {
+                                    self.messages.push(error.to_string());
+                                }
+                                review.set_comparison(Comparison::Original);
+                            }
+                        });
+                    }
+                }
+            }
+            if audition {
+                self.audition();
+            }
         } else {
             ui.label("Export continues in ticket 06.");
         }

@@ -114,3 +114,18 @@ impl Stem {
         Ok(())
     }
 }
+
+pub(crate) fn waveform(path: &Path, bins: usize) -> Result<Vec<(f32, f32)>, RenderBlocker> {
+    let samples = Stem::read(path)?.samples;
+    let chunk = samples.len().div_ceil(bins).max(1);
+    Ok(samples
+        .chunks(chunk)
+        .map(|samples| {
+            samples
+                .iter()
+                .fold((0.0_f32, 0.0_f32), |(min, max), sample| {
+                    (min.min(*sample), max.max(*sample))
+                })
+        })
+        .collect())
+}
