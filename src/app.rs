@@ -88,8 +88,17 @@ mod tests {
 
     #[test]
     fn inspector_stacks_only_in_compact_windows() {
-        assert!(super::compact_workspace(1280.0));
+        assert!(!super::compact_workspace(1280.0));
+        assert!(super::compact_workspace(1000.0));
         assert!(!super::compact_workspace(1600.0));
+    }
+
+    #[test]
+    fn waveform_rows_fill_height_without_becoming_unusable() {
+        assert!((super::waveform_height(900.0, 3, false) - 164.67).abs() < 0.01);
+        assert_eq!(super::waveform_height(640.0, 12, false), 80.0);
+        assert_eq!(super::waveform_height(1600.0, 1, false), 240.0);
+        assert_eq!(super::waveform_height(720.0, 3, true), 80.0);
     }
 
     #[test]
@@ -293,7 +302,12 @@ pub fn run() -> iced::Result {
 }
 
 fn compact_workspace(width: f32) -> bool {
-    width < 1400.0
+    width < 1100.0
+}
+
+fn waveform_height(workspace_height: f32, stem_count: usize, compact: bool) -> f32 {
+    let reserved = if compact { 580.0 } else { 220.0 };
+    ((workspace_height - reserved) / stem_count.max(1) as f32 - 62.0).clamp(80.0, 240.0)
 }
 
 impl CleanSlateApp {
@@ -922,10 +936,10 @@ impl CleanSlateApp {
     }
 
     fn view(&self) -> Element<'_, Message> {
-        responsive(|size| self.workspace(compact_workspace(size.width))).into()
+        responsive(|size| self.workspace(compact_workspace(size.width), size.height)).into()
     }
 
-    fn workspace(&self, compact: bool) -> Element<'_, Message> {
+    fn workspace(&self, compact: bool, height: f32) -> Element<'_, Message> {
         let current = self
             .project
             .as_ref()
@@ -968,6 +982,7 @@ impl CleanSlateApp {
                 .height(Fill),
             );
         } else if let Some(project) = &self.project {
+            let waveform_height = waveform_height(height, project.sources.len(), compact);
             timeline_content = timeline_content.push(
                 container(
                     canvas(TimelineCanvas::ruler(
@@ -1000,7 +1015,7 @@ impl CleanSlateApp {
                 let waveform: Element<'_, Message> = self.waveforms.get(index).map_or_else(
                     || {
                         container(text("Waveform loading…"))
-                            .height(80)
+                            .height(waveform_height)
                             .center_y(Fill)
                             .into()
                     },
@@ -1013,7 +1028,7 @@ impl CleanSlateApp {
                             self.selecting_range,
                         ))
                         .width(Fill)
-                        .height(80)
+                        .height(waveform_height)
                         .into()
                     },
                 );
