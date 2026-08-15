@@ -96,6 +96,9 @@ impl ReviewWorkspace {
     pub fn playhead(&self) -> usize {
         self.playhead
     }
+    pub fn seek(&mut self, sample: usize) {
+        self.playhead = sample;
+    }
     pub fn selection(&self) -> Option<(usize, usize)> {
         self.selection
     }

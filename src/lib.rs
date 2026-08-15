@@ -5,6 +5,7 @@ mod export;
 mod project;
 pub mod release_gate;
 mod review;
+pub mod timeline;
 mod vad;
 mod waveform;
 

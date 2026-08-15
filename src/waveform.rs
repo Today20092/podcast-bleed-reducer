@@ -1,5 +1,12 @@
-use crate::{RenderBlocker, audio_io::Stem};
-use iced::{Color, Point, Rectangle, Renderer, Theme, mouse, widget::canvas};
+use crate::{
+    RenderBlocker,
+    audio_io::Stem,
+    timeline::{TimelineEvent, TimelineViewport},
+};
+use iced::{
+    Color, Point, Rectangle, Renderer, Size, Theme, mouse,
+    widget::{Action, canvas},
+};
 use serde::{Deserialize, Serialize};
 use std::{
     fs,
@@ -130,10 +137,104 @@ pub(crate) fn load_or_build(
     Ok(waveforms)
 }
 
-pub(crate) struct Waveform<'a>(pub &'a WaveformCache);
+pub(crate) struct TimelineCanvas<'a, Message> {
+    cache: Option<&'a WaveformCache>,
+    viewport: &'a TimelineViewport,
+    ruler: bool,
+    on_event: fn(TimelineEvent) -> Message,
+}
 
-impl<Message> canvas::Program<Message> for Waveform<'_> {
-    type State = ();
+impl<'a, Message> TimelineCanvas<'a, Message> {
+    pub fn waveform(
+        cache: &'a WaveformCache,
+        viewport: &'a TimelineViewport,
+        on_event: fn(TimelineEvent) -> Message,
+    ) -> Self {
+        Self {
+            cache: Some(cache),
+            viewport,
+            ruler: false,
+            on_event,
+        }
+    }
+
+    pub fn ruler(viewport: &'a TimelineViewport, on_event: fn(TimelineEvent) -> Message) -> Self {
+        Self {
+            cache: None,
+            viewport,
+            ruler: true,
+            on_event,
+        }
+    }
+}
+
+#[derive(Default)]
+pub(crate) struct TimelineCanvasState {
+    dragging: bool,
+}
+
+impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> {
+    type State = TimelineCanvasState;
+
+    fn update(
+        &self,
+        state: &mut Self::State,
+        event: &canvas::Event,
+        bounds: Rectangle,
+        cursor: mouse::Cursor,
+    ) -> Option<Action<Message>> {
+        let position = cursor.position_in(bounds);
+        match event {
+            canvas::Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) => {
+                let position = position?;
+                state.dragging = true;
+                Some(
+                    Action::publish((self.on_event)(TimelineEvent::Seek(
+                        self.viewport.sample_at(position.x, bounds.width),
+                    )))
+                    .and_capture(),
+                )
+            }
+            canvas::Event::Mouse(mouse::Event::CursorMoved { .. }) if state.dragging => {
+                let position = cursor.position_from(bounds.position())?;
+                Some(
+                    Action::publish((self.on_event)(TimelineEvent::Drag(
+                        self.viewport.sample_at(position.x, bounds.width),
+                    )))
+                    .and_capture(),
+                )
+            }
+            canvas::Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left))
+                if state.dragging =>
+            {
+                state.dragging = false;
+                let position = cursor.position_from(bounds.position())?;
+                Some(
+                    Action::publish((self.on_event)(TimelineEvent::DragEnd(
+                        self.viewport.sample_at(position.x, bounds.width),
+                    )))
+                    .and_capture(),
+                )
+            }
+            canvas::Event::Mouse(mouse::Event::WheelScrolled { delta }) => {
+                let position = position?;
+                let direction = match delta {
+                    mouse::ScrollDelta::Lines { y, .. } | mouse::ScrollDelta::Pixels { y, .. } => {
+                        *y
+                    }
+                };
+                Some(
+                    Action::publish((self.on_event)(TimelineEvent::Zoom {
+                        cursor_x: position.x,
+                        width: bounds.width,
+                        direction,
+                    }))
+                    .and_capture(),
+                )
+            }
+            _ => None,
+        }
+    }
 
     fn draw(
         &self,
@@ -144,24 +245,90 @@ impl<Message> canvas::Program<Message> for Waveform<'_> {
         _cursor: mouse::Cursor,
     ) -> Vec<canvas::Geometry> {
         let mut frame = canvas::Frame::new(renderer, bounds.size());
-        let target = (self.0.sample_count as f32 / bounds.width.max(1.0)).ceil() as usize;
-        let level = self.0.level(target);
         let center = bounds.height / 2.0;
-        let scale = center * 0.9;
-        let path = canvas::Path::new(|builder| {
-            for (index, (min, max)) in level.peaks.iter().enumerate() {
-                let x = index as f32 * bounds.width / level.peaks.len().max(1) as f32;
-                builder.move_to(Point::new(x, center - max * scale));
-                builder.line_to(Point::new(x, center - min * scale));
+        if let Some((start, end)) = self.viewport.selection() {
+            let left = self.viewport.x_for_sample(start, bounds.width).max(0.0);
+            let right = self
+                .viewport
+                .x_for_sample(end, bounds.width)
+                .min(bounds.width);
+            if right > left {
+                frame.fill(
+                    &canvas::Path::rectangle(
+                        Point::new(left, 0.0),
+                        Size::new(right - left, bounds.height),
+                    ),
+                    Color::from_rgba8(70, 120, 220, 0.18),
+                );
             }
-        });
-        frame.stroke(
-            &path,
-            canvas::Stroke::default()
-                .with_width(1.0)
-                .with_color(Color::from_rgb8(93, 211, 198)),
-        );
+        }
+        if self.ruler {
+            for tick in 0..=5 {
+                let x = bounds.width * tick as f32 / 5.0;
+                let sample = self.viewport.sample_at(x, bounds.width);
+                frame.fill_text(canvas::Text {
+                    content: format!("{:.1}s", sample as f64 / 48_000.0),
+                    position: Point::new(x + 3.0, center + 4.0),
+                    color: Color::from_rgb8(180, 185, 195),
+                    size: 11.0.into(),
+                    ..canvas::Text::default()
+                });
+            }
+        } else if let Some(cache) = self.cache {
+            let target =
+                (self.viewport.visible_samples() / bounds.width.max(1.0) as f64).ceil() as usize;
+            let level = cache.level(target);
+            let first =
+                (self.viewport.start() as usize / level.samples_per_bucket).min(level.peaks.len());
+            let last = ((self.viewport.start() + self.viewport.visible_samples()) as usize)
+                .div_ceil(level.samples_per_bucket)
+                .min(level.peaks.len());
+            let scale = center * 0.9;
+            let path = canvas::Path::new(|builder| {
+                for (index, (min, max)) in level.peaks[first..last].iter().enumerate() {
+                    let sample = (first + index) * level.samples_per_bucket;
+                    let x = self.viewport.x_for_sample(sample, bounds.width);
+                    builder.move_to(Point::new(x, center - max * scale));
+                    builder.line_to(Point::new(x, center - min * scale));
+                }
+            });
+            frame.stroke(
+                &path,
+                canvas::Stroke::default()
+                    .with_width(1.0)
+                    .with_color(Color::from_rgb8(93, 211, 198)),
+            );
+        }
+        let playhead_x = self
+            .viewport
+            .x_for_sample(self.viewport.playhead(), bounds.width);
+        if (0.0..=bounds.width).contains(&playhead_x) {
+            frame.stroke(
+                &canvas::Path::line(
+                    Point::new(playhead_x, 0.0),
+                    Point::new(playhead_x, bounds.height),
+                ),
+                canvas::Stroke::default()
+                    .with_width(2.0)
+                    .with_color(Color::WHITE),
+            );
+        }
         vec![frame.into_geometry()]
+    }
+
+    fn mouse_interaction(
+        &self,
+        state: &Self::State,
+        bounds: Rectangle,
+        cursor: mouse::Cursor,
+    ) -> mouse::Interaction {
+        if state.dragging {
+            mouse::Interaction::Grabbing
+        } else if cursor.is_over(bounds) {
+            mouse::Interaction::Crosshair
+        } else {
+            mouse::Interaction::default()
+        }
     }
 }
 

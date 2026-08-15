@@ -1,7 +1,9 @@
 use crate::{
     Comparison, Project, RenderState, ReviewState, ReviewWorkspace, RunRequest, WorkflowStep,
-    export, run_with_progress, validate,
-    waveform::{self, Waveform, WaveformCache},
+    export, run_with_progress,
+    timeline::{TimelineEvent, TimelineViewport},
+    validate,
+    waveform::{self, TimelineCanvas, WaveformCache},
 };
 use iced::{
     Element, Fill, Length, Subscription, Task, Theme,
@@ -102,6 +104,7 @@ pub struct CleanSlateApp {
     review: Option<ReviewWorkspace>,
     playback: Vec<Child>,
     waveforms: Vec<WaveformCache>,
+    timeline: TimelineViewport,
 }
 
 struct Processing {
@@ -132,6 +135,7 @@ enum Message {
     ProtectTrack(usize),
     ProtectSelection,
     Export,
+    Timeline(TimelineEvent),
 }
 
 pub fn run() -> iced::Result {
@@ -156,6 +160,13 @@ fn compact_workspace(width: f32) -> bool {
 }
 
 impl CleanSlateApp {
+    fn install_waveforms(&mut self, waveforms: Vec<WaveformCache>) {
+        if let Some(cache) = waveforms.first() {
+            self.timeline.set_total_samples(cache.sample_count);
+        }
+        self.waveforms = waveforms;
+    }
+
     fn queue_stems(&mut self, paths: impl IntoIterator<Item = PathBuf>) {
         self.pending_stems.extend(paths);
         self.pending_stems
@@ -215,7 +226,9 @@ impl CleanSlateApp {
         };
         match Project::create(&project_path, paths.clone()) {
             Ok(mut project) => {
-                self.waveforms = waveform::load_or_build(&project_path, &paths).unwrap_or_default();
+                self.install_waveforms(
+                    waveform::load_or_build(&project_path, &paths).unwrap_or_default(),
+                );
                 if let Err(error) = project.mark_validated() {
                     self.messages = vec![error.to_string()];
                     return;
@@ -238,8 +251,10 @@ impl CleanSlateApp {
         };
         match Project::open(path) {
             Ok(project) => {
-                self.waveforms = waveform::load_or_build(project.path(), &project.source_paths())
-                    .unwrap_or_default();
+                self.install_waveforms(
+                    waveform::load_or_build(project.path(), &project.source_paths())
+                        .unwrap_or_default(),
+                );
                 self.project = Some(project);
                 self.load_review();
                 self.messages.clear();
@@ -311,6 +326,10 @@ impl CleanSlateApp {
             let identity = project.review_identity()?;
             ReviewWorkspace::open(identity, &project.source_paths()).ok()
         });
+        if let Some(review) = &self.review {
+            self.timeline.seek(review.playhead());
+            self.timeline.set_selection(review.selection());
+        }
     }
 
     fn audition(&mut self) {
@@ -416,9 +435,10 @@ impl CleanSlateApp {
                     let project = self.project.as_mut().unwrap();
                     match project.relink(index, path) {
                         Ok(()) => {
-                            self.waveforms =
+                            let waveforms =
                                 waveform::load_or_build(project.path(), &project.source_paths())
                                     .unwrap_or_default();
+                            self.install_waveforms(waveforms);
                         }
                         Err(error) => self.messages = vec![error.to_string()],
                     }
@@ -435,11 +455,15 @@ impl CleanSlateApp {
             Message::SelectRegion(index) => {
                 if let Some(review) = &mut self.review {
                     review.select(index);
+                    self.timeline.seek(review.playhead());
+                    self.timeline.set_selection(review.selection());
                 }
             }
             Message::SelectWarning(index) => {
                 if let Some(review) = &mut self.review {
                     review.select(index);
+                    self.timeline.seek(review.playhead());
+                    self.timeline.set_selection(review.selection());
                 }
                 self.audition();
             }
@@ -506,6 +530,21 @@ impl CleanSlateApp {
                 }
             }
             Message::Export => self.export_current(),
+            Message::Timeline(event) => match event {
+                TimelineEvent::Seek(sample)
+                | TimelineEvent::Drag(sample)
+                | TimelineEvent::DragEnd(sample) => {
+                    self.timeline.seek(sample);
+                    if let Some(review) = &mut self.review {
+                        review.seek(sample);
+                    }
+                }
+                TimelineEvent::Zoom {
+                    cursor_x,
+                    width,
+                    direction,
+                } => self.timeline.zoom_at(cursor_x, width, direction),
+            },
         }
         Task::none()
     }
@@ -588,6 +627,14 @@ impl CleanSlateApp {
                 .spacing(8),
             );
         } else if let Some(project) = &self.project {
+            timeline_content = timeline_content.push(
+                container(
+                    canvas(TimelineCanvas::ruler(&self.timeline, Message::Timeline))
+                        .width(Fill)
+                        .height(28),
+                )
+                .padding([0, 12]),
+            );
             for (index, source) in project.sources.iter().enumerate() {
                 let mut header = row![text(source.path.display().to_string())];
                 if !source.available {
@@ -600,7 +647,16 @@ impl CleanSlateApp {
                             .center_y(Fill)
                             .into()
                     },
-                    |cache| canvas(Waveform(cache)).width(Fill).height(80).into(),
+                    |cache| {
+                        canvas(TimelineCanvas::waveform(
+                            cache,
+                            &self.timeline,
+                            Message::Timeline,
+                        ))
+                        .width(Fill)
+                        .height(80)
+                        .into()
+                    },
                 );
                 timeline_content = timeline_content.push(
                     container(column![header, waveform].spacing(8))
@@ -710,7 +766,11 @@ impl CleanSlateApp {
         .width(if compact { Fill } else { Length::Fixed(280.0) })
         .style(container::bordered_box);
         let transport = row![
-            text("00:00.000"),
+            text(format!(
+                "{:02}:{:06.3}",
+                self.timeline.playhead() / 48_000 / 60,
+                (self.timeline.playhead() % (48_000 * 60)) as f64 / 48_000.0
+            )),
             Space::new().width(Fill),
             button("Previous").on_press_maybe(None),
             button("Play").on_press_maybe(None),
