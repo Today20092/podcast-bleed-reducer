@@ -3,8 +3,9 @@ use crate::{
     export, run_with_progress, validate,
 };
 use iced::{
-    Element, Fill, Subscription, Task, Theme,
-    widget::{button, column, container, row, scrollable, text},
+    Element, Fill, Length, Subscription, Task, Theme,
+    widget::{Space, button, column, container, responsive, row, scrollable, text},
+    window,
 };
 use std::{
     path::PathBuf,
@@ -45,6 +46,12 @@ fn available_project_path(directory: &std::path::Path) -> PathBuf {
 #[cfg(test)]
 mod tests {
     #[test]
+    fn inspector_stacks_only_in_compact_windows() {
+        assert!(super::compact_workspace(1280.0));
+        assert!(!super::compact_workspace(1600.0));
+    }
+
+    #[test]
     fn file_dialog_starts_in_an_existing_local_directory() {
         assert!(super::dialog_start_directory().is_dir());
     }
@@ -81,6 +88,7 @@ struct Processing {
 
 #[derive(Debug, Clone)]
 enum Message {
+    ImportStems,
     OpenProject,
     FileDropped(PathBuf),
     ClearDropped,
@@ -111,11 +119,35 @@ pub fn run() -> iced::Result {
     .title("CleanSlate")
     .theme(CleanSlateApp::theme)
     .subscription(CleanSlateApp::subscription)
-    .window_size([900.0, 680.0])
+    .window(window::Settings {
+        maximized: true,
+        min_size: Some(iced::Size::new(960.0, 640.0)),
+        ..window::Settings::default()
+    })
     .run()
 }
 
+fn compact_workspace(width: f32) -> bool {
+    width < 1400.0
+}
+
 impl CleanSlateApp {
+    fn import_stems(&mut self) {
+        let Some(paths) = rfd::FileDialog::new()
+            .set_directory(dialog_start_directory())
+            .add_filter("WAV audio", &["wav"])
+            .pick_files()
+        else {
+            return;
+        };
+        for path in paths {
+            if !self.pending_stems.contains(&path) {
+                self.pending_stems.push(path);
+            }
+        }
+        self.messages.clear();
+    }
+
     fn theme(&self) -> Theme {
         Theme::Dark
     }
@@ -310,6 +342,7 @@ impl CleanSlateApp {
 impl CleanSlateApp {
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
+            Message::ImportStems => self.import_stems(),
             Message::OpenProject => self.open_project(),
             Message::FileDropped(path) => {
                 if path
@@ -445,182 +478,205 @@ impl CleanSlateApp {
     }
 
     fn view(&self) -> Element<'_, Message> {
-        let toolbar = row![button("Open project").on_press(Message::OpenProject),].spacing(10);
+        responsive(|size| self.workspace(compact_workspace(size.width))).into()
+    }
+
+    fn workspace(&self, compact: bool) -> Element<'_, Message> {
         let current = self
             .project
             .as_ref()
             .map_or(WorkflowStep::Import, Project::step);
-        let rail = row([
-            WorkflowStep::Import,
-            WorkflowStep::Validate,
-            WorkflowStep::Process,
-            WorkflowStep::Review,
-            WorkflowStep::Export,
-        ]
-        .into_iter()
-        .map(|step| {
-            text(if step == current {
-                format!("● {step:?}")
-            } else {
-                format!("○ {step:?}")
+        let header = row![
+            column![
+                text("CLEANSLATE").size(24),
+                text("UNTITLED SESSION").size(12)
+            ]
+            .spacing(2),
+            Space::new().width(Fill),
+            text(match current {
+                WorkflowStep::Import => "READY TO IMPORT",
+                WorkflowStep::Validate => "READY TO VALIDATE",
+                WorkflowStep::Process => "READY TO ANALYZE",
+                WorkflowStep::Review => "ANALYSIS COMPLETE",
+                WorkflowStep::Export => "EXPORT COMPLETE",
             })
-            .into()
-        }))
-        .spacing(16);
+            .size(12),
+            button("Import stems").on_press(Message::ImportStems),
+            button("Open session").on_press(Message::OpenProject),
+        ]
+        .spacing(12)
+        .align_y(iced::Center);
 
-        let mut content = column![].spacing(10);
-        if let Some(project) = &self.project {
-            for (index, source) in project.sources.iter().enumerate() {
-                let mut source_row = row![text(source.path.display().to_string())].spacing(10);
-                if !source.available {
-                    source_row = source_row.push(button("Relink").on_press(Message::Relink(index)));
-                }
-                content = content.push(source_row);
-            }
-        }
-
-        if self.project.is_none() || current == WorkflowStep::Import {
-            content = content.push(text("Drag one or more WAV stems onto this window.").size(22));
+        let mut timeline_content = column![].spacing(10).height(Fill);
+        if self.project.is_none() && self.pending_stems.is_empty() {
+            timeline_content = timeline_content.push(
+                container(
+                    column![
+                        text("NO STEMS IMPORTED").size(22),
+                        text("Import synchronized mono WAV stems or drop them anywhere in this window."),
+                        button("Import WAV stems").on_press(Message::ImportStems),
+                    ]
+                    .spacing(12)
+                    .align_x(iced::Center),
+                )
+                .center_x(Fill)
+                .center_y(Fill)
+                .height(Fill),
+            );
+        } else if self.project.is_none() {
+            timeline_content = timeline_content.push(text("STEMS READY TO IMPORT").size(18));
             for stem in &self.pending_stems {
-                content = content.push(text(stem.display().to_string()));
+                timeline_content = timeline_content.push(text(stem.display().to_string()));
             }
-            if !self.pending_stems.is_empty() {
-                content = content.push(
-                    row![
-                        button(text(format!(
-                            "Create project from {} stem(s)",
-                            self.pending_stems.len()
-                        )))
-                        .on_press(Message::CreateDroppedProject),
-                        button("Clear").on_press(Message::ClearDropped),
-                    ]
-                    .spacing(10),
-                );
-            }
-        } else if current == WorkflowStep::Validate {
-            content = content.push(button("Validate session").on_press(Message::Validate));
-        } else if current == WorkflowStep::Process {
-            if let Some(processing) = &self.processing {
-                content = content
-                    .push(text(format!(
-                        "Processing... {}%",
-                        processing.progress.load(Ordering::Relaxed)
+            timeline_content = timeline_content.push(
+                row![
+                    button(text(format!(
+                        "Create session from {} stem(s)",
+                        self.pending_stems.len()
                     )))
-                    .push(button("Cancel processing").on_press(Message::Cancel));
-            } else {
-                content = content.push(button("Process session").on_press(Message::Process));
-            }
-        } else if current == WorkflowStep::Review {
-            let Some(project) = &self.project else {
-                unreachable!()
-            };
-            let stale = matches!(project.render(), RenderState::Stale);
-            content = content.push(text(match project.render() {
-                RenderState::Current { .. } => "Render current",
-                RenderState::Stale => "Render stale",
-                RenderState::None => "No render",
-            }));
-            if stale && self.processing.is_none() {
-                content = content.push(button("Rerender protections").on_press(Message::Process));
-            }
-            if let Some(review) = &self.review {
-                content = content.push(text("Synchronized waveforms").size(22));
-                for (track, source) in project.sources.iter().enumerate() {
-                    let marker = if review.highlighted_tracks().contains(&track) {
-                        "▶"
-                    } else {
-                        " "
-                    };
-                    content = content.push(
-                        container(text(format!(
-                            "{marker} {}",
-                            source
-                                .path
-                                .file_name()
-                                .unwrap_or_default()
-                                .to_string_lossy()
-                        )))
-                        .padding(10)
+                    .on_press(Message::CreateDroppedProject),
+                    button("Clear selection").on_press(Message::ClearDropped),
+                ]
+                .spacing(8),
+            );
+        } else if let Some(project) = &self.project {
+            for (index, source) in project.sources.iter().enumerate() {
+                let mut track = row![text(source.path.display().to_string())];
+                if !source.available {
+                    track = track.push(button("Relink source").on_press(Message::Relink(index)));
+                }
+                timeline_content = timeline_content.push(
+                    container(track)
+                        .padding(12)
                         .width(Fill)
-                        .style(container::rounded_box),
-                    );
-                }
-                content = content.push(
-                    row![
-                        text(format!(
-                            "Playhead {:.2}s",
-                            review.playhead() as f32 / 48_000.0
-                        )),
-                        button("Original").on_press(Message::Original),
-                        button("Processed").on_press_maybe((!stale).then_some(Message::Processed)),
-                        button("Audition selection").on_press(Message::Audition),
-                    ]
-                    .spacing(10),
+                        .style(container::bordered_box),
                 );
-                content = content.push(text("Attenuation regions").size(22));
-                for (index, region) in review
-                    .regions
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, region)| region.review_warning.is_some())
-                {
-                    content = content.push(
-                        button(region.review_warning.as_deref().unwrap())
-                            .on_press(Message::SelectWarning(index)),
-                    );
+            }
+            match current {
+                WorkflowStep::Import => {}
+                WorkflowStep::Validate => {
+                    timeline_content = timeline_content
+                        .push(button("Validate session").on_press(Message::Validate));
                 }
-                for (index, region) in review.regions.iter().enumerate() {
-                    let title = format!(
-                        "{:.2}-{:.2}s | {} dB | {:?} | {:?} | {}",
-                        region.start as f32 / 48_000.0,
-                        region.end as f32 / 48_000.0,
-                        region.applied_attenuation_db,
-                        region.decision,
-                        region.evidence_reasons,
-                        region.review_warning.as_deref().unwrap_or("")
-                    );
-                    content =
-                        content.push(button(text(title)).on_press(Message::SelectRegion(index)));
+                WorkflowStep::Process => {
+                    timeline_content = if let Some(processing) = &self.processing {
+                        timeline_content
+                            .push(text(format!(
+                                "Analyzing session: {}%",
+                                processing.progress.load(Ordering::Relaxed)
+                            )))
+                            .push(button("Cancel analysis").on_press(Message::Cancel))
+                    } else {
+                        timeline_content.push(button("Analyze session").on_press(Message::Process))
+                    };
                 }
-                if let Some(region) = review.selected_region() {
-                    let reviewed =
-                        project.review_states().get(&region.key()) == Some(&ReviewState::Reviewed);
-                    let mut actions = row![
-                        button(if reviewed {
-                            "Mark unreviewed"
-                        } else {
-                            "Mark reviewed"
-                        })
-                        .on_press(Message::ToggleReviewed),
-                        button("Protect this region").on_press(Message::ProtectRegion),
-                        button("Protect selected range").on_press(Message::ProtectSelection),
-                    ]
-                    .spacing(10);
-                    if let Some(track) = region.affected_track {
-                        actions = actions.push(
-                            button(text(format!("Protect track {}", track + 1)))
-                                .on_press(Message::ProtectTrack(track)),
-                        );
+                WorkflowStep::Review => {
+                    let stale = matches!(project.render(), RenderState::Stale);
+                    if stale && self.processing.is_none() {
+                        timeline_content = timeline_content
+                            .push(button("Rerender protections").on_press(Message::Process));
                     }
-                    content = content.push(actions);
+                    if let Some(review) = &self.review {
+                        timeline_content = timeline_content.push(
+                            row![
+                                button("Original").on_press(Message::Original),
+                                button("Processed")
+                                    .on_press_maybe((!stale).then_some(Message::Processed)),
+                                button("Audition selection").on_press(Message::Audition),
+                            ]
+                            .spacing(8),
+                        );
+                        for (index, region) in review.regions.iter().enumerate() {
+                            let label = region.review_warning.as_deref().unwrap_or("Review region");
+                            let message = if region.review_warning.is_some() {
+                                Message::SelectWarning(index)
+                            } else {
+                                Message::SelectRegion(index)
+                            };
+                            timeline_content =
+                                timeline_content.push(button(label).on_press(message));
+                        }
+                        if let Some(region) = review.selected_region() {
+                            let reviewed = project.review_states().get(&region.key())
+                                == Some(&ReviewState::Reviewed);
+                            let mut actions = row![
+                                button(if reviewed {
+                                    "Mark unreviewed"
+                                } else {
+                                    "Mark reviewed"
+                                })
+                                .on_press(Message::ToggleReviewed),
+                                button("Protect this region").on_press(Message::ProtectRegion),
+                                button("Protect selected range")
+                                    .on_press(Message::ProtectSelection),
+                            ]
+                            .spacing(8);
+                            if let Some(track) = region.affected_track {
+                                actions = actions.push(
+                                    button(text(format!("Protect track {}", track + 1)))
+                                        .on_press(Message::ProtectTrack(track)),
+                                );
+                            }
+                            timeline_content = timeline_content.push(actions);
+                        }
+                    }
+                    if matches!(project.render(), RenderState::Current { .. }) {
+                        timeline_content = timeline_content
+                            .push(button("Export current render").on_press(Message::Export));
+                    }
+                }
+                WorkflowStep::Export => {
+                    timeline_content = timeline_content.push(text("Export complete."));
                 }
             }
-            if matches!(project.render(), RenderState::Current { .. }) {
-                content = content.push(button("Export current render").on_press(Message::Export));
-            }
-        } else {
-            content = content.push(text("Export complete."));
         }
         for message in &self.messages {
-            content = content.push(text(message));
+            timeline_content = timeline_content.push(text(message));
         }
 
-        container(scrollable(
-            column![toolbar, text("CleanSlate").size(34), rail, content,].spacing(14),
-        ))
-        .padding(20)
+        let timeline = column![
+            text("SESSION TIMELINE").size(12),
+            scrollable(timeline_content).height(Fill),
+        ]
+        .spacing(10)
         .width(Fill)
-        .height(Fill)
-        .into()
+        .height(Fill);
+        let inspector = container(
+            column![
+                text("ANALYSIS PREVIEW").size(12),
+                text("Session parameters").size(20),
+                text("Import stems to analyze and adjust the session."),
+            ]
+            .spacing(12),
+        )
+        .padding(18)
+        .width(if compact { Fill } else { Length::Fixed(280.0) })
+        .style(container::bordered_box);
+        let transport = row![
+            text("00:00.000"),
+            Space::new().width(Fill),
+            button("Previous").on_press_maybe(None),
+            button("Play").on_press_maybe(None),
+            button("Stop").on_press_maybe(None),
+            Space::new().width(Fill),
+            text("AUDITION"),
+            button("Original").on_press_maybe(None),
+            button("Processed").on_press_maybe(None),
+            button("Removed").on_press_maybe(None),
+            text("Monitor −6.0 dB"),
+        ]
+        .spacing(8)
+        .align_y(iced::Center);
+        let editor: Element<'_, Message> = if compact {
+            column![timeline, inspector].spacing(12).into()
+        } else {
+            row![timeline, inspector].spacing(12).into()
+        };
+
+        container(column![header, editor, transport].spacing(12))
+            .padding(12)
+            .width(Fill)
+            .height(Fill)
+            .into()
     }
 }
