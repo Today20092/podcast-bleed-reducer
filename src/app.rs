@@ -1,6 +1,6 @@
 use crate::{
     Comparison, Project, RenderState, ReviewState, ReviewWorkspace, RunRequest, WorkflowStep,
-    run_with_progress, validate,
+    export, run_with_progress, validate,
 };
 use eframe::egui;
 use std::{
@@ -29,6 +29,18 @@ struct Processing {
 }
 
 impl CleanSlateApp {
+    fn export_current(&mut self) {
+        let Some(destination) = rfd::FileDialog::new().pick_folder() else {
+            return;
+        };
+        match export(self.project.as_ref().unwrap(), &destination, None) {
+            Ok(()) => {
+                self.messages = vec![format!("Export committed to {}", destination.display())]
+            }
+            Err(error) => self.messages = vec![format!("Export blocked: {error}")],
+        }
+    }
+
     fn create_project(&mut self) {
         let stems = rfd::FileDialog::new()
             .add_filter("WAV audio", &["wav"])
@@ -461,8 +473,15 @@ impl eframe::App for CleanSlateApp {
             if audition {
                 self.audition();
             }
+            if matches!(
+                self.project.as_ref().unwrap().render(),
+                RenderState::Current { .. }
+            ) && ui.button("Export current render").clicked()
+            {
+                self.export_current();
+            }
         } else {
-            ui.label("Export continues in ticket 06.");
+            ui.label("Export complete.");
         }
         for message in &self.messages {
             ui.label(message);

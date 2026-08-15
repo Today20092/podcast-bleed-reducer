@@ -87,6 +87,26 @@ fn read_labels(path: &Path, stems: &[PathBuf]) -> Result<Vec<Label>, Box<dyn std
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<_> = std::env::args_os().skip(1).map(PathBuf::from).collect();
+    if args.first().is_some_and(|arg| arg == "--cancel") {
+        if args.len() < 4 {
+            return Err("usage: release_gate --cancel <output-dir> <stem.wav>...".into());
+        }
+        let output_dir = args[1].clone();
+        return match run(RunRequest {
+            stems: args[2..].to_vec(),
+            output_dir: output_dir.clone(),
+            regions: vec![],
+            protections: vec![],
+            cancelled: Some(Arc::new(AtomicBool::new(true))),
+        }) {
+            Err(error) if error.to_string() == "render cancelled" && !output_dir.exists() => {
+                println!("safe cancellation: pass");
+                Ok(())
+            }
+            Err(error) => Err(error.into()),
+            Ok(_) => Err("safe cancellation check unexpectedly rendered output".into()),
+        };
+    }
     if args.len() < 4 {
         return Err("usage: release_gate <labels.csv|-> <output-dir> <stem.wav>...".into());
     }
