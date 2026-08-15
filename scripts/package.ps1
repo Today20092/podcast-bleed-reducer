@@ -11,7 +11,6 @@ if (Test-Path -LiteralPath $package) {
 }
 New-Item -ItemType Directory -Path $package | Out-Null
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot '..\target\release\rust-app.exe') -Destination (Join-Path $package 'CleanSlate.exe')
-Copy-Item -LiteralPath (Join-Path $PSScriptRoot '..\target\release\release_gate.exe') -Destination $package
 
 $archive = "$package.zip"
 if (Test-Path -LiteralPath $archive) {

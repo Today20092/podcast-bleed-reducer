@@ -2,7 +2,10 @@ use crate::{
     Comparison, Project, RenderState, ReviewState, ReviewWorkspace, RunRequest, WorkflowStep,
     export, run_with_progress, validate,
 };
-use eframe::egui;
+use iced::{
+    Element, Fill, Subscription, Task, Theme,
+    widget::{button, column, container, row, scrollable, text},
+};
 use std::{
     process::{Child, Command},
     sync::{
@@ -28,7 +31,45 @@ struct Processing {
     result: Receiver<Result<String, String>>,
 }
 
+#[derive(Debug, Clone)]
+enum Message {
+    NewProject,
+    OpenProject,
+    Relink(usize),
+    Validate,
+    Process,
+    Cancel,
+    Tick,
+    SelectRegion(usize),
+    SelectWarning(usize),
+    Original,
+    Processed,
+    Audition,
+    ToggleReviewed,
+    ProtectRegion,
+    ProtectTrack(usize),
+    ProtectSelection,
+    Export,
+}
+
+pub fn run() -> iced::Result {
+    iced::application(
+        CleanSlateApp::default,
+        CleanSlateApp::update,
+        CleanSlateApp::view,
+    )
+    .title("CleanSlate")
+    .theme(CleanSlateApp::theme)
+    .subscription(CleanSlateApp::subscription)
+    .window_size([900.0, 680.0])
+    .run()
+}
+
 impl CleanSlateApp {
+    fn theme(&self) -> Theme {
+        Theme::Dark
+    }
+
     fn export_current(&mut self) {
         let Some(destination) = rfd::FileDialog::new().pick_folder() else {
             return;
@@ -214,174 +255,230 @@ impl CleanSlateApp {
     }
 }
 
-impl eframe::App for CleanSlateApp {
-    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        self.poll_processing();
-        if self.processing.is_some() {
-            ui.ctx()
-                .request_repaint_after(std::time::Duration::from_millis(100));
+impl CleanSlateApp {
+    fn update(&mut self, message: Message) -> Task<Message> {
+        match message {
+            Message::NewProject => self.create_project(),
+            Message::OpenProject => self.open_project(),
+            Message::Relink(index) => {
+                if let Some(path) = rfd::FileDialog::new()
+                    .add_filter("WAV audio", &["wav"])
+                    .pick_file()
+                    && let Err(error) = self.project.as_mut().unwrap().relink(index, path)
+                {
+                    self.messages = vec![error.to_string()];
+                }
+            }
+            Message::Validate => self.validate(),
+            Message::Process => self.start_processing(),
+            Message::Cancel => {
+                if let Some(processing) = &self.processing {
+                    processing.cancelled.store(true, Ordering::Relaxed);
+                }
+            }
+            Message::Tick => self.poll_processing(),
+            Message::SelectRegion(index) => {
+                if let Some(review) = &mut self.review {
+                    review.select(index);
+                }
+            }
+            Message::SelectWarning(index) => {
+                if let Some(review) = &mut self.review {
+                    review.select(index);
+                }
+                self.audition();
+            }
+            Message::Original | Message::Processed => {
+                if let Some(review) = &mut self.review {
+                    review.set_comparison(if matches!(message, Message::Original) {
+                        Comparison::Original
+                    } else {
+                        Comparison::Processed
+                    });
+                }
+            }
+            Message::Audition => self.audition(),
+            Message::ToggleReviewed => {
+                if let (Some(project), Some(region)) = (
+                    self.project.as_mut(),
+                    self.review
+                        .as_ref()
+                        .and_then(ReviewWorkspace::selected_region),
+                ) {
+                    let key = region.key();
+                    let state = if project.review_states().get(&key) == Some(&ReviewState::Reviewed)
+                    {
+                        ReviewState::Unreviewed
+                    } else {
+                        ReviewState::Reviewed
+                    };
+                    if let Err(error) = project.set_review_state(key, state) {
+                        self.messages.push(error.to_string());
+                    }
+                }
+            }
+            Message::ProtectRegion => {
+                if let (Some(project), Some(region)) = (
+                    self.project.as_mut(),
+                    self.review
+                        .as_ref()
+                        .and_then(ReviewWorkspace::selected_region),
+                ) && let Err(error) = project.protect_range(region.start, region.end)
+                {
+                    self.messages.push(error.to_string());
+                }
+                if let Some(review) = &mut self.review {
+                    review.set_comparison(Comparison::Original);
+                }
+            }
+            Message::ProtectTrack(track) => {
+                if let Some(project) = &mut self.project
+                    && let Err(error) = project.protect_track(track)
+                {
+                    self.messages.push(error.to_string());
+                }
+                if let Some(review) = &mut self.review {
+                    review.set_comparison(Comparison::Original);
+                }
+            }
+            Message::ProtectSelection => {
+                if let (Some(project), Some((start, end))) = (
+                    self.project.as_mut(),
+                    self.review.as_ref().and_then(ReviewWorkspace::selection),
+                ) && let Err(error) = project.protect_range(start.min(end), start.max(end))
+                {
+                    self.messages.push(error.to_string());
+                }
+            }
+            Message::Export => self.export_current(),
         }
+        Task::none()
+    }
 
-        ui.horizontal(|ui| {
-            if ui.button("New project").clicked() {
-                self.create_project();
-            }
-            if ui.button("Open project").clicked() {
-                self.open_project();
-            }
-        });
-        ui.heading("CleanSlate");
-        let steps = [
+    fn subscription(&self) -> Subscription<Message> {
+        if self.processing.is_some() {
+            iced::time::every(std::time::Duration::from_millis(100)).map(|_| Message::Tick)
+        } else {
+            Subscription::none()
+        }
+    }
+
+    fn view(&self) -> Element<'_, Message> {
+        let toolbar = row![
+            button("New project").on_press(Message::NewProject),
+            button("Open project").on_press(Message::OpenProject),
+        ]
+        .spacing(10);
+        let current = self
+            .project
+            .as_ref()
+            .map_or(WorkflowStep::Import, Project::step);
+        let rail = row([
             WorkflowStep::Import,
             WorkflowStep::Validate,
             WorkflowStep::Process,
             WorkflowStep::Review,
             WorkflowStep::Export,
-        ];
-        let current = self
-            .project
-            .as_ref()
-            .map_or(WorkflowStep::Import, Project::step);
-        ui.horizontal(|ui| {
-            for step in steps {
-                let _ = ui.selectable_label(step == current, format!("{step:?}"));
-            }
-        });
-        ui.separator();
+        ]
+        .into_iter()
+        .map(|step| {
+            text(if step == current {
+                format!("● {step:?}")
+            } else {
+                format!("○ {step:?}")
+            })
+            .into()
+        }))
+        .spacing(16);
 
-        let sources = self
-            .project
-            .as_ref()
-            .map(|project| project.sources.clone())
-            .unwrap_or_default();
-        for (index, source) in sources.iter().enumerate() {
-            ui.horizontal(|ui| {
-                ui.label(source.path.display().to_string());
-                if !source.available && ui.button("Relink").clicked() {
-                    let replacement = rfd::FileDialog::new()
-                        .add_filter("WAV audio", &["wav"])
-                        .pick_file();
-                    if let Some(path) = replacement {
-                        match self.project.as_mut().unwrap().relink(index, path) {
-                            Ok(()) => {}
-                            Err(error) => self.messages = vec![error.to_string()],
-                        }
-                    }
+        let mut content = column![].spacing(10);
+        if let Some(project) = &self.project {
+            for (index, source) in project.sources.iter().enumerate() {
+                let mut source_row = row![text(source.path.display().to_string())].spacing(10);
+                if !source.available {
+                    source_row = source_row.push(button("Relink").on_press(Message::Relink(index)));
                 }
-            });
+                content = content.push(source_row);
+            }
         }
 
-        ui.add_space(12.0);
         if self.project.is_none() || current == WorkflowStep::Import {
-            if ui.button("Import stems").clicked() {
-                self.create_project();
-            }
+            content = content.push(button("Import stems").on_press(Message::NewProject));
         } else if current == WorkflowStep::Validate {
-            if ui.button("Validate session").clicked() {
-                self.validate();
-            }
+            content = content.push(button("Validate session").on_press(Message::Validate));
         } else if current == WorkflowStep::Process {
             if let Some(processing) = &self.processing {
-                ui.spinner();
-                ui.label(format!(
-                    "Processing… {}%",
-                    processing.progress.load(Ordering::Relaxed)
-                ));
-                if ui.button("Cancel processing").clicked() {
-                    processing.cancelled.store(true, Ordering::Relaxed);
-                }
-            } else if ui.button("Process session").clicked() {
-                self.start_processing();
+                content = content
+                    .push(text(format!(
+                        "Processing... {}%",
+                        processing.progress.load(Ordering::Relaxed)
+                    )))
+                    .push(button("Cancel processing").on_press(Message::Cancel));
+            } else {
+                content = content.push(button("Process session").on_press(Message::Process));
             }
         } else if current == WorkflowStep::Review {
-            ui.label(match self.project.as_ref().unwrap().render() {
+            let Some(project) = &self.project else {
+                unreachable!()
+            };
+            let stale = matches!(project.render(), RenderState::Stale);
+            content = content.push(text(match project.render() {
                 RenderState::Current { .. } => "Render current",
                 RenderState::Stale => "Render stale",
                 RenderState::None => "No render",
-            });
-            let stale = matches!(self.project.as_ref().unwrap().render(), RenderState::Stale);
-            if stale && self.processing.is_none() && ui.button("Rerender protections").clicked() {
-                self.start_processing();
+            }));
+            if stale && self.processing.is_none() {
+                content = content.push(button("Rerender protections").on_press(Message::Process));
             }
-            let mut audition = false;
-            if let Some(review) = &mut self.review {
-                ui.heading("Synchronized waveforms");
-                let width = ui.available_width();
-                for (track, source) in self.project.as_ref().unwrap().sources.iter().enumerate() {
-                    let highlighted = review.highlighted_tracks().contains(&track);
-                    let (rect, _) =
-                        ui.allocate_exact_size(egui::vec2(width, 34.0), egui::Sense::hover());
-                    let color = if highlighted {
-                        egui::Color32::LIGHT_BLUE
+            if let Some(review) = &self.review {
+                content = content.push(text("Synchronized waveforms").size(22));
+                for (track, source) in project.sources.iter().enumerate() {
+                    let marker = if review.highlighted_tracks().contains(&track) {
+                        "▶"
                     } else {
-                        egui::Color32::DARK_GRAY
+                        " "
                     };
-                    ui.painter().rect_filled(rect, 2.0, color);
-                    if let Some(points) = review.waveforms.get(track) {
-                        let center = rect.center().y;
-                        for (index, (min, max)) in points.iter().enumerate() {
-                            let x = rect.left()
-                                + index as f32 * rect.width() / points.len().max(1) as f32;
-                            ui.painter().line_segment(
-                                [
-                                    egui::pos2(x, center - max * 15.0),
-                                    egui::pos2(x, center - min * 15.0),
-                                ],
-                                egui::Stroke::new(1.0, egui::Color32::WHITE),
-                            );
-                        }
-                    }
-                    ui.painter().text(
-                        rect.left_center() + egui::vec2(8.0, 0.0),
-                        egui::Align2::LEFT_CENTER,
-                        source
-                            .path
-                            .file_name()
-                            .unwrap_or_default()
-                            .to_string_lossy(),
-                        egui::FontId::default(),
-                        egui::Color32::WHITE,
+                    content = content.push(
+                        container(text(format!(
+                            "{marker} {}",
+                            source
+                                .path
+                                .file_name()
+                                .unwrap_or_default()
+                                .to_string_lossy()
+                        )))
+                        .padding(10)
+                        .width(Fill)
+                        .style(container::rounded_box),
                     );
                 }
-                ui.horizontal(|ui| {
-                    ui.label(format!(
-                        "Playhead {:.2}s",
-                        review.playhead() as f32 / 48_000.0
-                    ));
-                    ui.selectable_value(review.comparison_mut(), Comparison::Original, "Original");
-                    ui.add_enabled_ui(!stale, |ui| {
-                        ui.selectable_value(
-                            review.comparison_mut(),
-                            Comparison::Processed,
-                            "Processed",
-                        );
-                    });
-                });
-                audition = ui.button("Audition selection").clicked();
-                ui.heading("Attenuation regions");
-                ui.label("Review list");
-                let mut warning_select = None;
+                content = content.push(
+                    row![
+                        text(format!(
+                            "Playhead {:.2}s",
+                            review.playhead() as f32 / 48_000.0
+                        )),
+                        button("Original").on_press(Message::Original),
+                        button("Processed").on_press_maybe((!stale).then_some(Message::Processed)),
+                        button("Audition selection").on_press(Message::Audition),
+                    ]
+                    .spacing(10),
+                );
+                content = content.push(text("Attenuation regions").size(22));
                 for (index, region) in review
                     .regions
                     .iter()
                     .enumerate()
                     .filter(|(_, region)| region.review_warning.is_some())
                 {
-                    if ui
-                        .button(region.review_warning.as_deref().unwrap())
-                        .clicked()
-                    {
-                        warning_select = Some(index);
-                    }
+                    content = content.push(
+                        button(region.review_warning.as_deref().unwrap())
+                            .on_press(Message::SelectWarning(index)),
+                    );
                 }
-                if let Some(index) = warning_select {
-                    review.select(index);
-                    audition = true;
-                }
-                let mut select = None;
                 for (index, region) in review.regions.iter().enumerate() {
                     let title = format!(
-                        "{:.2}–{:.2}s · {} dB · {:?} · {:?} · {}",
+                        "{:.2}-{:.2}s | {} dB | {:?} | {:?} | {}",
                         region.start as f32 / 48_000.0,
                         region.end as f32 / 48_000.0,
                         region.applied_attenuation_db,
@@ -389,102 +486,48 @@ impl eframe::App for CleanSlateApp {
                         region.evidence_reasons,
                         region.review_warning.as_deref().unwrap_or("")
                     );
-                    if ui
-                        .selectable_label(review.selected_region() == Some(region), title)
-                        .clicked()
-                    {
-                        select = Some(index);
-                    }
+                    content =
+                        content.push(button(text(title)).on_press(Message::SelectRegion(index)));
                 }
-                if let Some(index) = select {
-                    review.select(index);
-                }
-                if let Some(region) = review.selected_region().cloned() {
-                    ui.horizontal(|ui| {
-                        let key = region.key();
-                        let state = self
-                            .project
-                            .as_ref()
-                            .unwrap()
-                            .review_states()
-                            .get(&key)
-                            .copied()
-                            .unwrap_or(ReviewState::Unreviewed);
-                        if ui
-                            .button(if state == ReviewState::Reviewed {
-                                "Mark unreviewed"
-                            } else {
-                                "Mark reviewed"
-                            })
-                            .clicked()
-                            && let Err(error) = self.project.as_mut().unwrap().set_review_state(
-                                key,
-                                if state == ReviewState::Reviewed {
-                                    ReviewState::Unreviewed
-                                } else {
-                                    ReviewState::Reviewed
-                                },
-                            )
-                        {
-                            self.messages.push(error.to_string());
-                        }
-                        if ui.button("Protect this region").clicked() {
-                            if let Err(error) = self
-                                .project
-                                .as_mut()
-                                .unwrap()
-                                .protect_range(region.start, region.end)
-                            {
-                                self.messages.push(error.to_string());
-                            }
-                            review.set_comparison(Comparison::Original);
-                        }
-                        if let Some(track) = region.affected_track
-                            && ui.button(format!("Protect track {}", track + 1)).clicked()
-                        {
-                            if let Err(error) = self.project.as_mut().unwrap().protect_track(track)
-                            {
-                                self.messages.push(error.to_string());
-                            }
-                            review.set_comparison(Comparison::Original);
-                        }
-                    });
-                    if let Some((mut start, mut end)) = review.selection() {
-                        ui.horizontal(|ui| {
-                            ui.label("Selected range (samples)");
-                            ui.add(egui::DragValue::new(&mut start));
-                            ui.add(egui::DragValue::new(&mut end));
-                            review.set_selection(start, end);
-                            if ui.button("Protect selected range").clicked() {
-                                if let Err(error) = self
-                                    .project
-                                    .as_mut()
-                                    .unwrap()
-                                    .protect_range(start.min(end), start.max(end))
-                                {
-                                    self.messages.push(error.to_string());
-                                }
-                                review.set_comparison(Comparison::Original);
-                            }
-                        });
+                if let Some(region) = review.selected_region() {
+                    let reviewed =
+                        project.review_states().get(&region.key()) == Some(&ReviewState::Reviewed);
+                    let mut actions = row![
+                        button(if reviewed {
+                            "Mark unreviewed"
+                        } else {
+                            "Mark reviewed"
+                        })
+                        .on_press(Message::ToggleReviewed),
+                        button("Protect this region").on_press(Message::ProtectRegion),
+                        button("Protect selected range").on_press(Message::ProtectSelection),
+                    ]
+                    .spacing(10);
+                    if let Some(track) = region.affected_track {
+                        actions = actions.push(
+                            button(text(format!("Protect track {}", track + 1)))
+                                .on_press(Message::ProtectTrack(track)),
+                        );
                     }
+                    content = content.push(actions);
                 }
             }
-            if audition {
-                self.audition();
-            }
-            if matches!(
-                self.project.as_ref().unwrap().render(),
-                RenderState::Current { .. }
-            ) && ui.button("Export current render").clicked()
-            {
-                self.export_current();
+            if matches!(project.render(), RenderState::Current { .. }) {
+                content = content.push(button("Export current render").on_press(Message::Export));
             }
         } else {
-            ui.label("Export complete.");
+            content = content.push(text("Export complete."));
         }
         for message in &self.messages {
-            ui.label(message);
+            content = content.push(text(message));
         }
+
+        container(scrollable(
+            column![toolbar, text("CleanSlate").size(34), rail, content,].spacing(14),
+        ))
+        .padding(20)
+        .width(Fill)
+        .height(Fill)
+        .into()
     }
 }
