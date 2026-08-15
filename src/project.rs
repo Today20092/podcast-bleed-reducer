@@ -137,6 +137,11 @@ impl Project {
         self.save()
     }
 
+    pub fn mark_render_stale(&mut self) -> io::Result<()> {
+        self.render = RenderState::Stale;
+        self.save()
+    }
+
     pub fn protect_track(&mut self, track: usize) -> io::Result<()> {
         self.protections.push(Protection {
             track: Some(track),

@@ -1,5 +1,5 @@
 use crate::{
-    RenderBlocker,
+    AnalysisPreview, Decision, RenderBlocker,
     audio_io::Stem,
     timeline::{TimelineEvent, TimelineViewport},
 };
@@ -141,6 +141,7 @@ pub(crate) struct TimelineCanvas<'a, Message> {
     cache: Option<&'a WaveformCache>,
     viewport: &'a TimelineViewport,
     ruler: bool,
+    preview: Option<(&'a AnalysisPreview, usize)>,
     on_event: fn(TimelineEvent) -> Message,
 }
 
@@ -149,11 +150,13 @@ impl<'a, Message> TimelineCanvas<'a, Message> {
         cache: &'a WaveformCache,
         viewport: &'a TimelineViewport,
         on_event: fn(TimelineEvent) -> Message,
+        preview: Option<(&'a AnalysisPreview, usize)>,
     ) -> Self {
         Self {
             cache: Some(cache),
             viewport,
             ruler: false,
+            preview,
             on_event,
         }
     }
@@ -163,6 +166,7 @@ impl<'a, Message> TimelineCanvas<'a, Message> {
             cache: None,
             viewport,
             ruler: true,
+            preview: None,
             on_event,
         }
     }
@@ -284,7 +288,83 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
                 .div_ceil(level.samples_per_bucket)
                 .min(level.peaks.len());
             let scale = center * 0.9;
-            let path = canvas::Path::new(|builder| {
+            if let Some((preview, track)) = self.preview {
+                for region in &preview.regions {
+                    let left = self
+                        .viewport
+                        .x_for_sample(region.start, bounds.width)
+                        .max(0.0);
+                    let right = self
+                        .viewport
+                        .x_for_sample(region.end, bounds.width)
+                        .min(bounds.width);
+                    if right <= left {
+                        continue;
+                    }
+                    let (color, pattern) = match &region.decision {
+                        Decision::Owned(owners) if owners.contains(&track) => {
+                            (Color::from_rgba8(70, 190, 120, 0.14), 0)
+                        }
+                        Decision::Uncertain => (Color::from_rgba8(235, 180, 55, 0.14), 2),
+                        _ => (Color::from_rgba8(220, 75, 85, 0.14), 1),
+                    };
+                    frame.fill(
+                        &canvas::Path::rectangle(
+                            Point::new(left, 0.0),
+                            Size::new(right - left, bounds.height),
+                        ),
+                        color,
+                    );
+                    if pattern == 1 {
+                        let mut x = left - bounds.height;
+                        while x < right {
+                            frame.stroke(
+                                &canvas::Path::line(
+                                    Point::new(x.max(left), bounds.height),
+                                    Point::new((x + bounds.height).min(right), 0.0),
+                                ),
+                                canvas::Stroke::default()
+                                    .with_width(0.7)
+                                    .with_color(Color::from_rgba8(230, 230, 235, 0.25)),
+                            );
+                            x += 12.0;
+                        }
+                    } else if pattern == 2 {
+                        let mut x = left + 4.0;
+                        while x < right {
+                            frame.fill(
+                                &canvas::Path::circle(Point::new(x, 8.0), 1.5),
+                                Color::from_rgb8(245, 195, 70),
+                            );
+                            x += 10.0;
+                        }
+                    }
+                }
+                for protection in &preview.protections {
+                    if protection.track.is_none_or(|protected| protected == track) {
+                        let left = self
+                            .viewport
+                            .x_for_sample(protection.start, bounds.width)
+                            .max(0.0);
+                        let right = self
+                            .viewport
+                            .x_for_sample(protection.end.min(cache.sample_count), bounds.width)
+                            .min(bounds.width);
+                        if right > left {
+                            frame.stroke(
+                                &canvas::Path::rectangle(
+                                    Point::new(left, 1.0),
+                                    Size::new(right - left, bounds.height - 2.0),
+                                ),
+                                canvas::Stroke::default()
+                                    .with_width(2.0)
+                                    .with_color(Color::from_rgb8(90, 150, 245)),
+                            );
+                        }
+                    }
+                }
+            }
+            let original = canvas::Path::new(|builder| {
                 for (index, (min, max)) in level.peaks[first..last].iter().enumerate() {
                     let sample = (first + index) * level.samples_per_bucket;
                     let x = self.viewport.x_for_sample(sample, bounds.width);
@@ -293,11 +373,53 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
                 }
             });
             frame.stroke(
-                &path,
+                &original,
                 canvas::Stroke::default()
                     .with_width(1.0)
-                    .with_color(Color::from_rgb8(93, 211, 198)),
+                    .with_color(Color::from_rgba8(93, 211, 198, 0.35)),
             );
+            if let Some((preview, track)) = self.preview
+                && let Some(envelope) = preview.envelopes.get(track)
+            {
+                let processed = canvas::Path::new(|builder| {
+                    for (index, (min, max)) in level.peaks[first..last].iter().enumerate() {
+                        let sample = (first + index) * level.samples_per_bucket;
+                        let gain =
+                            envelope.gain_at(sample.min(envelope.sample_count().saturating_sub(1)));
+                        let x = self.viewport.x_for_sample(sample, bounds.width);
+                        builder.move_to(Point::new(x, center - max * gain * scale));
+                        builder.line_to(Point::new(x, center - min * gain * scale));
+                    }
+                });
+                frame.stroke(
+                    &processed,
+                    canvas::Stroke::default()
+                        .with_width(1.4)
+                        .with_color(Color::from_rgb8(93, 211, 198)),
+                );
+                let gain_path = canvas::Path::new(|builder| {
+                    for x in 0..bounds.width as usize {
+                        let sample = self.viewport.sample_at(x as f32, bounds.width);
+                        let y = 4.0
+                            + (1.0
+                                - envelope.gain_at(
+                                    sample.min(envelope.sample_count().saturating_sub(1)),
+                                ))
+                                * 18.0;
+                        if x == 0 {
+                            builder.move_to(Point::new(0.0, y));
+                        } else {
+                            builder.line_to(Point::new(x as f32, y));
+                        }
+                    }
+                });
+                frame.stroke(
+                    &gain_path,
+                    canvas::Stroke::default()
+                        .with_width(1.5)
+                        .with_color(Color::from_rgb8(210, 130, 245)),
+                );
+            }
         }
         let playhead_x = self
             .viewport

@@ -16,6 +16,95 @@ use std::{
 const ATTENUATION: f32 = 0.125_892_53;
 const TRANSITION_SAMPLES: f32 = 480.0;
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PreviewParameters {
+    pub speech_sensitivity: f32,
+    pub bleed_discrimination_db: f32,
+    pub attenuation_db: f32,
+    pub speech_padding_ms: f32,
+    pub transition_ms: f32,
+}
+
+#[cfg(test)]
+mod preview_tests {
+    use super::*;
+
+    #[test]
+    fn cached_preview_envelope_matches_engine_transition_and_protection_logic() {
+        let regions = vec![Region {
+            start: 0,
+            end: 16,
+            decision: Decision::NoSpeech,
+        }];
+        let protections = vec![Protection {
+            track: Some(0),
+            start: 6,
+            end: 9,
+        }];
+        let envelope = gain_envelope(0, 16, &regions, &protections, 0.25, 4.0);
+        assert_eq!(envelope.gain_at(0), 0.8125);
+        assert_eq!(envelope.gain_at(3), 0.25);
+        assert!(envelope.gain_at(8) > envelope.gain_at(5));
+        assert!(envelope.gain_at(12) < envelope.gain_at(9));
+        assert!(envelope.points.len() < 16);
+    }
+}
+
+impl Default for PreviewParameters {
+    fn default() -> Self {
+        Self {
+            speech_sensitivity: SPEECH_PROBABILITY,
+            bleed_discrimination_db: ENERGY_MARGIN_DB,
+            attenuation_db: -18.0,
+            speech_padding_ms: 512.0,
+            transition_ms: 10.0,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct GainEnvelope {
+    sample_count: usize,
+    points: Vec<GainPoint>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct GainPoint {
+    sample: usize,
+    gain: f32,
+    step: f32,
+    target: f32,
+}
+
+impl GainEnvelope {
+    pub fn gain_at(&self, sample: usize) -> f32 {
+        let point = self.points[self
+            .points
+            .partition_point(|point| point.sample <= sample)
+            .saturating_sub(1)];
+        let elapsed = sample.saturating_sub(point.sample) as f32;
+        let gain = point.gain + point.step * elapsed;
+        if (point.gain - point.target).abs() > point.step.abs() * elapsed {
+            gain
+        } else {
+            point.target
+        }
+    }
+
+    pub fn sample_count(&self) -> usize {
+        self.sample_count
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct AnalysisPreview {
+    pub stems: Vec<PathBuf>,
+    pub regions: Vec<Region>,
+    pub envelopes: Vec<GainEnvelope>,
+    pub protections: Vec<Protection>,
+    pub parameters: PreviewParameters,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Decision {
     Owned(Vec<usize>),
@@ -154,21 +243,18 @@ pub fn run_with_progress(
         let mut names = Vec::new();
         for (track, stem) in stems.iter().enumerate() {
             check_cancelled(&request)?;
-            let (mut gain, mut target, mut step) = (1.0, 1.0, 0.0);
+            let envelope = gain_envelope(
+                track,
+                sample_count,
+                &regions,
+                &request.protections,
+                ATTENUATION,
+                TRANSITION_SAMPLES,
+            );
             let mut rendered = Vec::with_capacity(sample_count);
             for (sample, source) in stem.samples.iter().enumerate() {
                 check_cancelled(&request)?;
-                let next_target = target_gain(track, sample, &regions, &request.protections);
-                if next_target != target {
-                    target = next_target;
-                    step = (target - gain) / TRANSITION_SAMPLES;
-                }
-                if (gain - target).abs() > step.abs() {
-                    gain += step;
-                } else {
-                    gain = target;
-                }
-                rendered.push(source * gain);
+                rendered.push(source * envelope.gain_at(sample));
             }
             let output_name = format!(
                 "{:02}-{}",
@@ -238,6 +324,95 @@ pub fn run_with_progress(
 
 pub fn validate(stems: &[PathBuf]) -> Result<Validation, RenderBlocker> {
     load_and_validate(stems).map(|(_, validation)| validation)
+}
+
+pub fn analyze_preview(
+    stems: &[PathBuf],
+    protections: &[Protection],
+    parameters: PreviewParameters,
+    progress: Arc<AtomicU8>,
+) -> Result<AnalysisPreview, RenderBlocker> {
+    progress.store(5, Ordering::Relaxed);
+    let (stems, _) = load_and_validate(stems)?;
+    let samples = stems
+        .iter()
+        .map(|stem| stem.samples.as_slice())
+        .collect::<Vec<_>>();
+    progress.store(20, Ordering::Relaxed);
+    let regions = vad::analyze_with_parameters(
+        &samples,
+        parameters.speech_sensitivity,
+        parameters.bleed_discrimination_db,
+        (parameters.speech_padding_ms * 48_000.0 / 1000.0 / 1_536.0).round() as usize,
+    )?;
+    progress.store(80, Ordering::Relaxed);
+    let attenuation = 10.0_f32.powf(parameters.attenuation_db / 20.0);
+    let transition = (parameters.transition_ms * 48_000.0 / 1000.0).max(1.0);
+    let envelopes = (0..stems.len())
+        .map(|track| {
+            gain_envelope(
+                track,
+                samples[0].len(),
+                &regions,
+                protections,
+                attenuation,
+                transition,
+            )
+        })
+        .collect();
+    progress.store(100, Ordering::Relaxed);
+    Ok(AnalysisPreview {
+        stems: stems.iter().map(|stem| stem.path.clone()).collect(),
+        regions,
+        envelopes,
+        protections: protections.to_vec(),
+        parameters,
+    })
+}
+
+fn gain_envelope(
+    track: usize,
+    sample_count: usize,
+    regions: &[Region],
+    protections: &[Protection],
+    attenuation: f32,
+    transition_samples: f32,
+) -> GainEnvelope {
+    let mut points = vec![GainPoint {
+        sample: 0,
+        gain: 1.0,
+        step: 0.0,
+        target: 1.0,
+    }];
+    let (mut gain, mut target, mut step) = (1.0, 1.0, 0.0);
+    for sample in 0..sample_count {
+        let next_target =
+            target_gain_with_attenuation(track, sample, regions, protections, attenuation);
+        if next_target != target {
+            target = next_target;
+            step = (target - gain) / transition_samples;
+        }
+        gain = if (gain - target).abs() > step.abs() {
+            gain + step
+        } else {
+            target
+        };
+        if points
+            .last()
+            .is_none_or(|point| point.step != step || point.target != target)
+        {
+            points.push(GainPoint {
+                sample,
+                gain,
+                step,
+                target,
+            });
+        }
+    }
+    GainEnvelope {
+        sample_count,
+        points,
+    }
 }
 
 fn load_and_validate(paths: &[PathBuf]) -> Result<(Vec<Stem>, Validation), RenderBlocker> {
@@ -352,19 +527,29 @@ fn check_cancelled(request: &RunRequest) -> Result<(), RenderBlocker> {
     }
 }
 
-fn target_gain(track: usize, sample: usize, regions: &[Region], protections: &[Protection]) -> f32 {
+fn target_gain_with_attenuation(
+    track: usize,
+    sample: usize,
+    regions: &[Region],
+    protections: &[Protection],
+    attenuation: f32,
+) -> f32 {
     if protections.iter().any(|p| {
         p.start <= sample && sample < p.end && p.track.is_none_or(|protected| protected == track)
     }) {
         return 1.0;
     }
     match regions
-        .iter()
-        .find(|region| region.start <= sample && sample < region.end)
+        .get(
+            regions
+                .partition_point(|region| region.start <= sample)
+                .saturating_sub(1),
+        )
+        .filter(|region| sample < region.end)
         .map(|region| &region.decision)
     {
-        Some(Decision::Owned(owners)) if !owners.contains(&track) => ATTENUATION,
-        Some(Decision::NoSpeech) => ATTENUATION,
+        Some(Decision::Owned(owners)) if !owners.contains(&track) => attenuation,
+        Some(Decision::NoSpeech) => attenuation,
         _ => 1.0,
     }
 }

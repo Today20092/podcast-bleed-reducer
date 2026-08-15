@@ -1,13 +1,16 @@
 use crate::{
-    Comparison, Project, RenderState, ReviewState, ReviewWorkspace, RunRequest, WorkflowStep,
-    export, run_with_progress,
+    AnalysisPreview, Comparison, PreviewParameters, Project, RenderState, ReviewState,
+    ReviewWorkspace, RunRequest, WorkflowStep, analyze_preview, export, run_with_progress,
     timeline::{TimelineEvent, TimelineViewport},
     validate,
     waveform::{self, TimelineCanvas, WaveformCache},
 };
 use iced::{
     Element, Fill, Length, Subscription, Task, Theme,
-    widget::{Space, button, canvas, column, container, responsive, row, scrollable, text},
+    widget::{
+        Space, button, canvas, column, container, progress_bar, responsive, row, scrollable,
+        slider, text,
+    },
     window,
 };
 use std::{
@@ -105,12 +108,21 @@ pub struct CleanSlateApp {
     playback: Vec<Child>,
     waveforms: Vec<WaveformCache>,
     timeline: TimelineViewport,
+    preview_parameters: PreviewParameters,
+    preview: Option<AnalysisPreview>,
+    preview_processing: Option<PreviewProcessing>,
+    preview_error: Option<String>,
 }
 
 struct Processing {
     cancelled: Arc<AtomicBool>,
     progress: Arc<AtomicU8>,
     result: Receiver<Result<String, String>>,
+}
+
+struct PreviewProcessing {
+    progress: Arc<AtomicU8>,
+    result: Receiver<Result<AnalysisPreview, String>>,
 }
 
 #[derive(Debug, Clone)]
@@ -125,6 +137,12 @@ enum Message {
     Process,
     Cancel,
     Tick,
+    SpeechSensitivity(f32),
+    BleedDiscrimination(f32),
+    Attenuation(f32),
+    SpeechPadding(f32),
+    Transition(f32),
+    RefreshPreview,
     SelectRegion(usize),
     SelectWarning(usize),
     Original,
@@ -236,6 +254,7 @@ impl CleanSlateApp {
                 self.project = Some(project);
                 self.pending_stems.clear();
                 self.messages = validation.warnings;
+                self.start_preview();
             }
             Err(error) => self.messages = vec![error.to_string()],
         }
@@ -258,6 +277,7 @@ impl CleanSlateApp {
                 self.project = Some(project);
                 self.load_review();
                 self.messages.clear();
+                self.start_preview();
             }
             Err(error) => self.messages = vec![error.to_string()],
         }
@@ -321,6 +341,37 @@ impl CleanSlateApp {
         });
     }
 
+    fn start_preview(&mut self) {
+        let Some(project) = &self.project else { return };
+        let stems = project.source_paths();
+        if stems.iter().any(|path| !path.is_file()) {
+            self.preview_processing = None;
+            self.preview_error = Some("source stem is missing; relink it to analyze".into());
+            return;
+        }
+        let protections = project.protections().to_vec();
+        let parameters = self.preview_parameters;
+        if self.preview.as_ref().is_some_and(|preview| {
+            preview.stems == stems
+                && preview.parameters == parameters
+                && preview.protections == protections
+        }) {
+            self.preview_processing = None;
+            self.preview_error = None;
+            return;
+        }
+        let progress = Arc::new(AtomicU8::new(0));
+        let worker_progress = Arc::clone(&progress);
+        let (sender, result) = mpsc::channel();
+        std::thread::spawn(move || {
+            let result = analyze_preview(&stems, &protections, parameters, worker_progress)
+                .map_err(|error| error.to_string());
+            let _ = sender.send(result);
+        });
+        self.preview_processing = Some(PreviewProcessing { progress, result });
+        self.preview_error = None;
+    }
+
     fn load_review(&mut self) {
         self.review = self.project.as_ref().and_then(|project| {
             let identity = project.review_identity()?;
@@ -381,6 +432,15 @@ impl CleanSlateApp {
     }
 
     fn poll_processing(&mut self) {
+        if let Some(processing) = &self.preview_processing
+            && let Ok(result) = processing.result.try_recv()
+        {
+            self.preview_processing = None;
+            match result {
+                Ok(preview) => self.preview = Some(preview),
+                Err(error) => self.preview_error = Some(error),
+            }
+        }
         let Some(processing) = &self.processing else {
             return;
         };
@@ -452,6 +512,21 @@ impl CleanSlateApp {
                 }
             }
             Message::Tick => self.poll_processing(),
+            Message::SpeechSensitivity(value) => self.preview_parameters.speech_sensitivity = value,
+            Message::BleedDiscrimination(value) => {
+                self.preview_parameters.bleed_discrimination_db = value
+            }
+            Message::Attenuation(value) => self.preview_parameters.attenuation_db = value,
+            Message::SpeechPadding(value) => self.preview_parameters.speech_padding_ms = value,
+            Message::Transition(value) => self.preview_parameters.transition_ms = value,
+            Message::RefreshPreview => {
+                if let Some(project) = &mut self.project
+                    && let Err(error) = project.mark_render_stale()
+                {
+                    self.messages.push(error.to_string());
+                }
+                self.start_preview();
+            }
             Message::SelectRegion(index) => {
                 if let Some(review) = &mut self.review {
                     review.select(index);
@@ -509,6 +584,7 @@ impl CleanSlateApp {
                 if let Some(review) = &mut self.review {
                     review.set_comparison(Comparison::Original);
                 }
+                self.start_preview();
             }
             Message::ProtectTrack(track) => {
                 if let Some(project) = &mut self.project
@@ -519,6 +595,7 @@ impl CleanSlateApp {
                 if let Some(review) = &mut self.review {
                     review.set_comparison(Comparison::Original);
                 }
+                self.start_preview();
             }
             Message::ProtectSelection => {
                 if let (Some(project), Some((start, end))) = (
@@ -528,6 +605,7 @@ impl CleanSlateApp {
                 {
                     self.messages.push(error.to_string());
                 }
+                self.start_preview();
             }
             Message::Export => self.export_current(),
             Message::Timeline(event) => match event {
@@ -556,7 +634,7 @@ impl CleanSlateApp {
             }
             _ => None,
         });
-        let processing = if self.processing.is_some() {
+        let processing = if self.processing.is_some() || self.preview_processing.is_some() {
             iced::time::every(std::time::Duration::from_millis(100)).map(|_| Message::Tick)
         } else {
             Subscription::none()
@@ -652,6 +730,7 @@ impl CleanSlateApp {
                             cache,
                             &self.timeline,
                             Message::Timeline,
+                            self.preview.as_ref().map(|preview| (preview, index)),
                         ))
                         .width(Fill)
                         .height(80)
@@ -754,11 +833,89 @@ impl CleanSlateApp {
         .spacing(10)
         .width(Fill)
         .height(Fill);
+        let preview_state: Element<'_, Message> = if let Some(processing) = &self.preview_processing
+        {
+            let progress = processing.progress.load(Ordering::Relaxed) as f32;
+            column![
+                text(format!("Recalculating preview: {progress:.0}%")),
+                progress_bar(0.0..=100.0, progress),
+                text(if self.preview.is_some() {
+                    "Showing previous completed preview"
+                } else {
+                    "No completed preview yet"
+                }),
+            ]
+            .spacing(6)
+            .into()
+        } else if let Some(error) = &self.preview_error {
+            text(format!("Preview failed: {error}")).into()
+        } else if let Some(preview) = &self.preview {
+            text(format!(
+                "Preview ready · {} ownership regions",
+                preview.regions.len()
+            ))
+            .into()
+        } else {
+            text("Preview not analyzed").into()
+        };
+        let parameters = &self.preview_parameters;
         let inspector = container(
             column![
                 text("ANALYSIS PREVIEW").size(12),
                 text("Session parameters").size(20),
-                text("Import stems to analyze and adjust the session."),
+                text("Live preview only — final render is unchanged."),
+                preview_state,
+                text(format!(
+                    "Speech sensitivity: {:.2}",
+                    parameters.speech_sensitivity
+                )),
+                slider(
+                    0.1..=0.9,
+                    parameters.speech_sensitivity,
+                    Message::SpeechSensitivity
+                )
+                .step(0.01)
+                .on_release(Message::RefreshPreview),
+                text(format!(
+                    "Bleed discrimination: {:.1} dB",
+                    parameters.bleed_discrimination_db
+                )),
+                slider(
+                    0.0..=18.0,
+                    parameters.bleed_discrimination_db,
+                    Message::BleedDiscrimination
+                )
+                .step(0.5)
+                .on_release(Message::RefreshPreview),
+                text(format!("Attenuation: {:.1} dB", parameters.attenuation_db)),
+                slider(
+                    -30.0..=-3.0,
+                    parameters.attenuation_db,
+                    Message::Attenuation
+                )
+                .step(1.0)
+                .on_release(Message::RefreshPreview),
+                text(format!(
+                    "Speech padding: {:.0} ms",
+                    parameters.speech_padding_ms
+                )),
+                slider(
+                    0.0..=1000.0,
+                    parameters.speech_padding_ms,
+                    Message::SpeechPadding
+                )
+                .step(16.0)
+                .on_release(Message::RefreshPreview),
+                text(format!(
+                    "Transition time: {:.0} ms",
+                    parameters.transition_ms
+                )),
+                slider(1.0..=250.0, parameters.transition_ms, Message::Transition)
+                    .step(1.0)
+                    .on_release(Message::RefreshPreview),
+                text(
+                    "Overlay: preserved solid · attenuated hatch · uncertain amber · protected blue"
+                ),
             ]
             .spacing(12),
         )

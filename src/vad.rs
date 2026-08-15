@@ -10,6 +10,20 @@ const PRESERVATION_FRAMES: usize = 16;
 const MODEL: &[u8] = include_bytes!("../assets/silero_vad.onnx");
 
 pub(crate) fn analyze(tracks: &[&[f32]]) -> Result<Vec<Region>, RenderBlocker> {
+    analyze_with_parameters(
+        tracks,
+        SPEECH_PROBABILITY,
+        ENERGY_MARGIN_DB,
+        PRESERVATION_FRAMES,
+    )
+}
+
+pub(crate) fn analyze_with_parameters(
+    tracks: &[&[f32]],
+    speech_probability: f32,
+    energy_margin_db: f32,
+    preservation_frames: usize,
+) -> Result<Vec<Region>, RenderBlocker> {
     let frame_count = tracks[0].len().div_ceil(SOURCE_FRAME);
     let mut probabilities = Vec::with_capacity(tracks.len());
     let mut energies = Vec::with_capacity(tracks.len());
@@ -42,10 +56,11 @@ pub(crate) fn analyze(tracks: &[&[f32]]) -> Result<Vec<Region>, RenderBlocker> {
             preserve_nearby(
                 &(0..frame_count)
                     .map(|frame| {
-                        probability[frame] >= SPEECH_PROBABILITY
-                            && energies[track][frame] >= noise_floors[track] + ENERGY_MARGIN_DB
+                        probability[frame] >= speech_probability
+                            && energies[track][frame] >= noise_floors[track] + energy_margin_db
                     })
                     .collect::<Vec<_>>(),
+                preservation_frames,
             )
         })
         .collect::<Vec<_>>();
@@ -53,7 +68,7 @@ pub(crate) fn analyze(tracks: &[&[f32]]) -> Result<Vec<Region>, RenderBlocker> {
     let mut regions: Vec<Region> = Vec::new();
     for frame in 0..frame_count {
         let speech = (0..tracks.len())
-            .filter(|&track| probabilities[track][frame] >= SPEECH_PROBABILITY)
+            .filter(|&track| probabilities[track][frame] >= speech_probability)
             .collect::<Vec<_>>();
         let owners = (0..tracks.len())
             .filter(|&track| active[track][frame])
@@ -64,7 +79,7 @@ pub(crate) fn analyze(tracks: &[&[f32]]) -> Result<Vec<Region>, RenderBlocker> {
             && energies
                 .iter()
                 .enumerate()
-                .all(|(track, energy)| energy[frame] < noise_floors[track] + ENERGY_MARGIN_DB)
+                .all(|(track, energy)| energy[frame] < noise_floors[track] + energy_margin_db)
         {
             Decision::NoSpeech
         } else {
@@ -87,11 +102,11 @@ pub(crate) fn analyze(tracks: &[&[f32]]) -> Result<Vec<Region>, RenderBlocker> {
     Ok(regions)
 }
 
-fn preserve_nearby(detected: &[bool]) -> Vec<bool> {
+fn preserve_nearby(detected: &[bool], preservation_frames: usize) -> Vec<bool> {
     (0..detected.len())
         .map(|frame| {
-            detected[frame.saturating_sub(PRESERVATION_FRAMES)
-                ..(frame + PRESERVATION_FRAMES + 1).min(detected.len())]
+            detected[frame.saturating_sub(preservation_frames)
+                ..(frame + preservation_frames + 1).min(detected.len())]
                 .iter()
                 .any(|active| *active)
         })
@@ -134,13 +149,13 @@ fn detector_error(error: ort::Error) -> RenderBlocker {
 
 #[cfg(test)]
 mod tests {
-    use super::preserve_nearby;
+    use super::{PRESERVATION_FRAMES, preserve_nearby};
 
     #[test]
     fn preserves_short_gaps_and_boundaries_around_detected_speech() {
         let mut detected = vec![false; 40];
         detected[20] = true;
-        let preserved = preserve_nearby(&detected);
+        let preserved = preserve_nearby(&detected, PRESERVATION_FRAMES);
         assert!(preserved[4]);
         assert!(preserved[36]);
         assert!(!preserved[3]);
