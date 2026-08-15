@@ -13,11 +13,8 @@ use std::{
     },
 };
 
-const ATTENUATION: f32 = 0.125_892_53;
-const TRANSITION_SAMPLES: f32 = 480.0;
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct PreviewParameters {
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct AutomixParameters {
     pub speech_sensitivity: f32,
     pub bleed_discrimination_db: f32,
     pub attenuation_db: f32,
@@ -58,7 +55,7 @@ mod preview_tests {
     }
 }
 
-impl Default for PreviewParameters {
+impl Default for AutomixParameters {
     fn default() -> Self {
         Self {
             speech_sensitivity: SPEECH_PROBABILITY,
@@ -123,7 +120,7 @@ pub struct AnalysisPreview {
     pub regions: Vec<Region>,
     pub envelopes: Vec<GainEnvelope>,
     pub protections: Vec<Protection>,
-    pub parameters: PreviewParameters,
+    pub parameters: AutomixParameters,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -194,6 +191,14 @@ pub fn run_with_progress(
     request: RunRequest,
     progress: Option<Arc<AtomicU8>>,
 ) -> Result<RunResult, RenderBlocker> {
+    run_with_parameters(request, progress, AutomixParameters::default())
+}
+
+pub fn run_with_parameters(
+    request: RunRequest,
+    progress: Option<Arc<AtomicU8>>,
+    parameters: AutomixParameters,
+) -> Result<RunResult, RenderBlocker> {
     if request.output_dir.exists() {
         return Err(RenderBlocker("output directory already exists".into()));
     }
@@ -234,11 +239,14 @@ pub fn run_with_progress(
     }
     let automated = request.regions.is_empty();
     let regions = if automated {
-        vad::analyze(
+        vad::analyze_with_parameters(
             &stems
                 .iter()
                 .map(|stem| stem.samples.as_slice())
                 .collect::<Vec<_>>(),
+            parameters.speech_sensitivity,
+            parameters.bleed_discrimination_db,
+            (parameters.speech_padding_ms * 48_000.0 / 1000.0 / 1_536.0).round() as usize,
         )?
     } else {
         request.regions.clone()
@@ -269,8 +277,8 @@ pub fn run_with_progress(
                 sample_count,
                 &regions,
                 &request.protections,
-                ATTENUATION,
-                TRANSITION_SAMPLES,
+                10.0_f32.powf(parameters.attenuation_db / 20.0),
+                (parameters.transition_ms * 48_000.0 / 1000.0).max(1.0),
             );
             let mut rendered = Vec::with_capacity(sample_count);
             for (sample, source) in stem.samples.iter().enumerate() {
@@ -293,7 +301,12 @@ pub fn run_with_progress(
         }
         check_cancelled(&request)?;
         let report = format!(
-            "{{\n  \"detector\": \"silero-vad-v5\",\n  \"model\": {{\"sha256\": \"1A153A22F4509E292A94E67D6F9B85E8DEB25B4988682B7E174C65279D8788E3\", \"license\": \"MIT\"}},\n  \"thresholds\": {{\"speech_probability\": {SPEECH_PROBABILITY}, \"energy_margin_db\": {ENERGY_MARGIN_DB}, \"attenuation_db\": -18, \"transition_samples\": 480}},\n  \"input\": {{\"sample_rate\": 48000, \"sample_count\": {sample_count}, \"channel_count\": 1, \"bext_time_reference\": {}, \"stems\": [{}]}},\n  \"output\": {{\"sample_rate\": 48000, \"sample_count\": {sample_count}, \"channel_count\": 1, \"stems\": [{}], \"invalid_samples\": 0, \"clipping_introduced\": false}},\n  \"regions\": [{}],\n  \"warnings\": [{}],\n  \"protections\": [{}]\n}}\n",
+            "{{\n  \"detector\": \"silero-vad-v5\",\n  \"model\": {{\"sha256\": \"1A153A22F4509E292A94E67D6F9B85E8DEB25B4988682B7E174C65279D8788E3\", \"license\": \"MIT\"}},\n  \"thresholds\": {{\"speech_probability\": {}, \"energy_margin_db\": {}, \"attenuation_db\": {}, \"speech_padding_ms\": {}, \"transition_ms\": {}}},\n  \"input\": {{\"sample_rate\": 48000, \"sample_count\": {sample_count}, \"channel_count\": 1, \"bext_time_reference\": {}, \"stems\": [{}]}},\n  \"output\": {{\"sample_rate\": 48000, \"sample_count\": {sample_count}, \"channel_count\": 1, \"stems\": [{}], \"invalid_samples\": 0, \"clipping_introduced\": false}},\n  \"regions\": [{}],\n  \"warnings\": [{}],\n  \"protections\": [{}]\n}}\n",
+            parameters.speech_sensitivity,
+            parameters.bleed_discrimination_db,
+            parameters.attenuation_db,
+            parameters.speech_padding_ms,
+            parameters.transition_ms,
             references[0].map_or("null".into(), |reference| reference.to_string()),
             request
                 .stems
@@ -350,7 +363,7 @@ pub fn validate(stems: &[PathBuf]) -> Result<Validation, RenderBlocker> {
 pub fn analyze_preview(
     stems: &[PathBuf],
     protections: &[Protection],
-    parameters: PreviewParameters,
+    parameters: AutomixParameters,
     progress: Arc<AtomicU8>,
 ) -> Result<AnalysisPreview, RenderBlocker> {
     progress.store(5, Ordering::Relaxed);

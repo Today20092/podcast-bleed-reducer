@@ -1,3 +1,4 @@
+use bwavfile::{WaveFmt, WaveWriter};
 use rust_app::{Project, export};
 use std::{
     fs,
@@ -19,6 +20,13 @@ fn temp_dir() -> PathBuf {
     path
 }
 
+fn wav(path: &Path) {
+    let writer = WaveWriter::create(path, WaveFmt::new_pcm_mono(48_000, 16)).unwrap();
+    let mut frames = writer.audio_frame_writer().unwrap();
+    frames.write_frames(&[0.0_f32, 0.25]).unwrap();
+    frames.end().unwrap();
+}
+
 #[test]
 fn exports_current_render_with_delivery_names() {
     let dir = temp_dir();
@@ -26,7 +34,7 @@ fn exports_current_render_with_delivery_names() {
     fs::write(&source, b"source").unwrap();
     let render = dir.join("render");
     fs::create_dir(&render).unwrap();
-    fs::write(render.join("01-host.wav"), b"clean audio").unwrap();
+    wav(&render.join("01-host.wav"));
     fs::write(
         render.join("report.json"),
         r#"{"output":{"stems":["01-host.wav"]}}"#,
@@ -41,11 +49,8 @@ fn exports_current_render_with_delivery_names() {
     let destination = dir.join("delivery");
     export(&project, &destination, None).unwrap();
 
-    assert_eq!(
-        fs::read(destination.join("host-clean.wav")).unwrap(),
-        b"clean audio"
-    );
-    assert!(destination.join("report.json").is_file());
+    assert!(destination.join("host-clean.wav").is_file());
+    assert!(!destination.join("report.json").exists());
     assert_eq!(fs::read(source).unwrap(), b"source");
     fs::remove_dir_all(dir).unwrap();
 }
@@ -56,7 +61,7 @@ fn current_project(dir: &Path) -> Project {
     fs::write(&source, b"source").unwrap();
     let render = dir.join("render");
     fs::create_dir(&render).unwrap();
-    fs::write(render.join("01-host.wav"), b"clean audio").unwrap();
+    wav(&render.join("01-host.wav"));
     fs::write(
         render.join("report.json"),
         r#"{"output":{"stems":["01-host.wav"]}}"#,

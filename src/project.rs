@@ -1,4 +1,4 @@
-use crate::Protection;
+use crate::{AutomixParameters, Protection};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
@@ -44,6 +44,8 @@ pub struct Project {
     path: PathBuf,
     pub sources: Vec<SourceIdentity>,
     protections: Vec<Protection>,
+    #[serde(default)]
+    parameters: AutomixParameters,
     review_states: BTreeMap<String, ReviewState>,
     render: RenderState,
     #[serde(default)]
@@ -61,6 +63,7 @@ impl Project {
             path: path.into(),
             sources,
             protections: vec![],
+            parameters: AutomixParameters::default(),
             review_states: BTreeMap::new(),
             render: RenderState::None,
             last_render: None,
@@ -116,6 +119,9 @@ impl Project {
     pub fn protections(&self) -> &[Protection] {
         &self.protections
     }
+    pub fn parameters(&self) -> AutomixParameters {
+        self.parameters
+    }
     pub fn review_states(&self) -> &BTreeMap<String, ReviewState> {
         &self.review_states
     }
@@ -134,6 +140,14 @@ impl Project {
     pub fn replace_protections(&mut self, protections: Vec<Protection>) -> io::Result<()> {
         self.protections = protections;
         self.render = RenderState::Stale;
+        self.save()
+    }
+
+    pub fn set_parameters(&mut self, parameters: AutomixParameters) -> io::Result<()> {
+        self.parameters = parameters;
+        if matches!(self.render, RenderState::Current { .. }) {
+            self.render = RenderState::Stale;
+        }
         self.save()
     }
 

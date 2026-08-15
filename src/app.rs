@@ -1,10 +1,10 @@
 use crate::{
-    AnalysisPreview, Comparison, PreviewParameters, Project, RenderState, ReviewState,
+    AnalysisPreview, AutomixParameters, Comparison, Project, RenderState, ReviewState,
     ReviewWorkspace, RunRequest, WorkflowStep, analyze_preview,
     audition::{AuditionMode, LiveAudition},
-    export, run_with_progress,
+    export, run_with_parameters,
     timeline::{TimelineEvent, TimelineViewport},
-    validate,
+    validate, validate_export,
     waveform::{self, TimelineCanvas, WaveformCache},
 };
 use iced::{
@@ -128,6 +128,52 @@ mod tests {
         );
         std::fs::remove_dir_all(directory).unwrap();
     }
+
+    #[test]
+    fn current_render_export_readiness_tracks_parameter_staleness() {
+        let directory = std::env::temp_dir().join(format!(
+            "cleanslate-export-state-test-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&directory).unwrap();
+        let source = directory.join("voice.wav");
+        let rendered = directory.join("render/01-voice.wav");
+        let report = directory.join("render/report.json");
+        std::fs::write(&source, b"source").unwrap();
+        std::fs::create_dir_all(report.parent().unwrap()).unwrap();
+        let writer =
+            bwavfile::WaveWriter::create(&rendered, bwavfile::WaveFmt::new_pcm_mono(48_000, 16))
+                .unwrap();
+        let mut frames = writer.audio_frame_writer().unwrap();
+        frames.write_frames(&[0.0_f32, 0.25]).unwrap();
+        frames.end().unwrap();
+        std::fs::write(&report, br#"{"output":{"stems":["01-voice.wav"]}}"#).unwrap();
+        let mut project =
+            crate::Project::create(directory.join("episode.cleanslate"), vec![source.clone()])
+                .unwrap();
+        project.mark_render_current(&report).unwrap();
+        let mut app = super::CleanSlateApp {
+            project: Some(project),
+            ..Default::default()
+        };
+        app.refresh_export_readiness();
+        assert!(app.export_ready());
+        let delivery = directory.join("delivery");
+        app.export_to(delivery.clone());
+        assert!(delivery.join("voice-clean.wav").is_file());
+        assert!(!delivery.join("report.json").exists());
+        assert!(app.messages[0].starts_with("Export committed"));
+        std::fs::remove_file(rendered).unwrap();
+        app.refresh_export_readiness();
+        assert!(!app.export_ready());
+        assert!(app.export_error.is_some());
+        std::fs::remove_file(source).unwrap();
+        app.preview_parameters.attenuation_db = -12.0;
+        let _ = app.update(super::Message::RefreshPreview);
+        assert!(!app.export_ready());
+        assert_eq!(app.project.unwrap().render(), &crate::RenderState::Stale);
+        std::fs::remove_dir_all(directory).unwrap();
+    }
 }
 
 pub struct CleanSlateApp {
@@ -142,10 +188,11 @@ pub struct CleanSlateApp {
     selecting_range: bool,
     waveforms: Vec<WaveformCache>,
     timeline: TimelineViewport,
-    preview_parameters: PreviewParameters,
+    preview_parameters: AutomixParameters,
     preview: Option<AnalysisPreview>,
     preview_processing: Option<PreviewProcessing>,
     preview_error: Option<String>,
+    export_error: Option<String>,
 }
 
 impl Default for CleanSlateApp {
@@ -162,10 +209,11 @@ impl Default for CleanSlateApp {
             selecting_range: false,
             waveforms: vec![],
             timeline: TimelineViewport::default(),
-            preview_parameters: PreviewParameters::default(),
+            preview_parameters: AutomixParameters::default(),
             preview: None,
             preview_processing: None,
             preview_error: None,
+            export_error: None,
         }
     }
 }
@@ -287,12 +335,38 @@ impl CleanSlateApp {
         else {
             return;
         };
-        match export(self.project.as_ref().unwrap(), &destination, None) {
+        self.export_to(destination);
+    }
+
+    fn export_to(&mut self, destination: PathBuf) {
+        let Some(project) = &self.project else { return };
+        match export(project, &destination, None) {
             Ok(()) => {
                 self.messages = vec![format!("Export committed to {}", destination.display())]
             }
             Err(error) => self.messages = vec![format!("Export blocked: {error}")],
         }
+    }
+
+    fn export_ready(&self) -> bool {
+        self.processing.is_none()
+            && self.export_error.is_none()
+            && self.project.as_ref().is_some_and(|project| {
+                project.sources.iter().all(|source| source.available)
+                    && matches!(project.render(), RenderState::Current { identity } if identity.is_file())
+            })
+    }
+
+    fn refresh_export_readiness(&mut self) {
+        self.export_error = self.project.as_ref().and_then(|project| {
+            if matches!(project.render(), RenderState::Current { .. }) {
+                validate_export(project)
+                    .err()
+                    .map(|error| error.to_string())
+            } else {
+                None
+            }
+        });
     }
 
     fn create_dropped_project(&mut self) {
@@ -314,6 +388,10 @@ impl CleanSlateApp {
                 self.install_waveforms(
                     waveform::load_or_build(&project_path, &paths).unwrap_or_default(),
                 );
+                if let Err(error) = project.set_parameters(self.preview_parameters) {
+                    self.messages = vec![error.to_string()];
+                    return;
+                }
                 if let Err(error) = project.mark_validated() {
                     self.messages = vec![error.to_string()];
                     return;
@@ -337,11 +415,13 @@ impl CleanSlateApp {
         };
         match Project::open(path) {
             Ok(project) => {
+                self.preview_parameters = project.parameters();
                 self.install_waveforms(
                     waveform::load_or_build(project.path(), &project.source_paths())
                         .unwrap_or_default(),
                 );
                 self.project = Some(project);
+                self.refresh_export_readiness();
                 self.load_review();
                 self.messages.clear();
                 self.start_preview();
@@ -366,9 +446,13 @@ impl CleanSlateApp {
     }
 
     fn start_processing(&mut self) {
+        if self.processing.is_some() {
+            return;
+        }
         let Some(project) = &self.project else { return };
         let stems = project.source_paths();
         let protections = project.protections().to_vec();
+        let parameters = project.parameters();
         let parent = project
             .path()
             .parent()
@@ -386,7 +470,7 @@ impl CleanSlateApp {
         let request_progress = Arc::clone(&progress);
         let (sender, result) = mpsc::channel();
         std::thread::spawn(move || {
-            let outcome = run_with_progress(
+            let outcome = run_with_parameters(
                 RunRequest {
                     stems,
                     output_dir,
@@ -395,12 +479,13 @@ impl CleanSlateApp {
                     cancelled: Some(request_cancelled),
                 },
                 Some(request_progress),
+                parameters,
             )
             .map(|_| report.display().to_string())
             .map_err(|error| error.to_string());
             let _ = sender.send(outcome);
         });
-        self.messages = vec!["Processing started".into()];
+        self.messages = vec!["Final render started".into()];
         self.processing = Some(Processing {
             cancelled,
             progress,
@@ -506,17 +591,29 @@ impl CleanSlateApp {
         let Ok(result) = processing.result.try_recv() else {
             return;
         };
+        let cancelled = processing.cancelled.load(Ordering::Relaxed);
         self.processing = None;
         match result {
             Ok(identity) => {
                 let project = self.project.as_mut().unwrap();
-                self.messages = vec!["Render committed; ready for Review".into()];
+                self.messages = vec!["Final render current; ready to export WAVs".into()];
                 if let Err(error) = project.mark_render_current(identity) {
                     self.messages.push(error.to_string());
                 }
+                self.refresh_export_readiness();
+                if let Some(error) = &self.export_error {
+                    self.messages =
+                        vec![format!("Final render completed; export blocked: {error}")];
+                }
                 self.load_review();
             }
-            Err(error) => self.messages = vec![error],
+            Err(error) => {
+                self.messages = vec![if cancelled {
+                    "Final render cancelled; no output committed".into()
+                } else {
+                    format!("Final render failed: {error}")
+                }]
+            }
         }
     }
 
@@ -621,7 +718,7 @@ impl CleanSlateApp {
             Message::Transition(value) => self.preview_parameters.transition_ms = value,
             Message::RefreshPreview => {
                 if let Some(project) = &mut self.project
-                    && let Err(error) = project.mark_render_stale()
+                    && let Err(error) = project.set_parameters(self.preview_parameters)
                 {
                     self.messages.push(error.to_string());
                 }
@@ -922,19 +1019,38 @@ impl CleanSlateApp {
                     timeline_content = if let Some(processing) = &self.processing {
                         timeline_content
                             .push(text(format!(
-                                "Analyzing session: {}%",
+                                "Final render: {}%",
                                 processing.progress.load(Ordering::Relaxed)
                             )))
-                            .push(button("Cancel analysis").on_press(Message::Cancel))
+                            .push(button("Cancel final render").on_press(Message::Cancel))
                     } else {
-                        timeline_content.push(button("Analyze session").on_press(Message::Process))
+                        timeline_content
+                            .push(button("Create final WAV render").on_press(Message::Process))
                     };
                 }
                 WorkflowStep::Review => {
                     let stale = matches!(project.render(), RenderState::Stale);
-                    if stale && self.processing.is_none() {
+                    if let Some(processing) = &self.processing {
                         timeline_content = timeline_content
-                            .push(button("Rerender protections").on_press(Message::Process));
+                            .push(text(format!(
+                                "Final render: {}%",
+                                processing.progress.load(Ordering::Relaxed)
+                            )))
+                            .push(button("Cancel final render").on_press(Message::Cancel));
+                    } else if stale {
+                        timeline_content = timeline_content
+                            .push(text("Final render stale · live audition remains available"))
+                            .push(
+                                button("Create current final WAV render")
+                                    .on_press(Message::Process),
+                            );
+                    } else if let Some(error) = &self.export_error {
+                        timeline_content = timeline_content.push(text(format!(
+                            "Final render current · Export blocked: {error}"
+                        )));
+                    } else {
+                        timeline_content =
+                            timeline_content.push(text("Final render current · WAV export ready"));
                     }
                     if let Some(review) = &self.review {
                         timeline_content = timeline_content.push(
@@ -990,7 +1106,7 @@ impl CleanSlateApp {
                             );
                         }
                     }
-                    if matches!(project.render(), RenderState::Current { .. }) {
+                    if self.export_ready() {
                         timeline_content = timeline_content
                             .push(button("Export current render").on_press(Message::Export));
                     }

@@ -1,5 +1,8 @@
 use bwavfile::{Bext, WaveFmt, WaveReader, WaveWriter};
-use rust_app::{Decision, Protection, Region, RunRequest, run, run_with_progress};
+use rust_app::{
+    AutomixParameters, Decision, Protection, Region, RunRequest, run, run_with_parameters,
+    run_with_progress,
+};
 use std::sync::{
     Arc,
     atomic::{AtomicBool, AtomicU8, Ordering},
@@ -169,19 +172,28 @@ fn automixes_silence_and_records_inspectable_evidence() {
     fs::create_dir_all(&root).unwrap();
     let source = root.join("silence.wav");
     wav(&source, 3, &vec![0.000_01; 48_000], Some(42));
-    let result = run(RunRequest {
-        stems: vec![source],
-        output_dir: root.join("rendered"),
-        regions: vec![],
-        protections: vec![],
-        cancelled: None,
-    })
+    let parameters = AutomixParameters {
+        attenuation_db: -12.0,
+        ..AutomixParameters::default()
+    };
+    let result = run_with_parameters(
+        RunRequest {
+            stems: vec![source],
+            output_dir: root.join("rendered"),
+            regions: vec![],
+            protections: vec![],
+            cancelled: None,
+        },
+        None,
+        parameters,
+    )
     .unwrap();
 
     let report = fs::read_to_string(result.report).unwrap();
     assert!(report.contains("\"detector\": \"silero-vad-v5\""));
     assert!(report.contains("\"speech_probability\": 0.5"));
     assert!(report.contains("\"energy_margin_db\": 6"));
+    assert!(report.contains("\"attenuation_db\": -12"));
     assert!(report.contains("\"decision\": \"NoSpeech\""));
     assert!(report.contains("\"affected_track\": 0"));
     assert!(report.contains("\"evidence_reasons\""));
@@ -194,7 +206,7 @@ fn automixes_silence_and_records_inspectable_evidence() {
         .unwrap()
         .read_frames(&mut samples)
         .unwrap();
-    assert!((samples[47_999] - 0.000_01 * 0.125_892_53).abs() < 0.000_000_01);
+    assert!((samples[47_999] - 0.000_01 * 10.0_f32.powf(-12.0 / 20.0)).abs() < 0.000_000_01);
     fs::remove_dir_all(root).unwrap();
 }
 

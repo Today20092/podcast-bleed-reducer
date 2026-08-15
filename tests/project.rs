@@ -1,4 +1,4 @@
-use rust_app::{Project, RenderState, ReviewState, WorkflowStep};
+use rust_app::{AutomixParameters, Project, RenderState, ReviewState, WorkflowStep};
 use std::{
     fs,
     path::PathBuf,
@@ -39,11 +39,17 @@ fn project_reopens_with_workflow_and_review_state() {
     project
         .set_review_state("broad-attenuation", ReviewState::Reviewed)
         .unwrap();
+    let parameters = AutomixParameters {
+        attenuation_db: -12.0,
+        ..AutomixParameters::default()
+    };
+    project.set_parameters(parameters).unwrap();
     project.mark_render_current(&render_report).unwrap();
 
     let reopened = Project::open(&project_path).unwrap();
     assert_eq!(reopened.step(), WorkflowStep::Review);
     assert_eq!(reopened.protections().len(), 1);
+    assert_eq!(reopened.parameters(), parameters);
     assert_eq!(
         reopened.review_states()["broad-attenuation"],
         ReviewState::Reviewed

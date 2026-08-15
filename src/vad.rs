@@ -6,17 +6,9 @@ pub(crate) const ENERGY_MARGIN_DB: f32 = 6.0;
 const SOURCE_FRAME: usize = 1_536;
 const MODEL_FRAME: usize = 512;
 const CONTEXT: usize = 64;
+#[cfg(test)]
 const PRESERVATION_FRAMES: usize = 16;
 const MODEL: &[u8] = include_bytes!("../assets/silero_vad.onnx");
-
-pub(crate) fn analyze(tracks: &[&[f32]]) -> Result<Vec<Region>, RenderBlocker> {
-    analyze_with_parameters(
-        tracks,
-        SPEECH_PROBABILITY,
-        ENERGY_MARGIN_DB,
-        PRESERVATION_FRAMES,
-    )
-}
 
 pub(crate) fn analyze_with_parameters(
     tracks: &[&[f32]],

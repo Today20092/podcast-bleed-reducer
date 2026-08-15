@@ -1,4 +1,4 @@
-use crate::{Project, RenderBlocker, RenderState, audio_io::AtomicOutput};
+use crate::{Project, RenderBlocker, RenderState, audio_io::AtomicOutput, validate};
 use serde::Deserialize;
 use std::{
     collections::HashSet,
@@ -22,6 +22,28 @@ pub fn export(
     destination: &Path,
     cancelled: Option<&AtomicBool>,
 ) -> Result<(), RenderBlocker> {
+    let plan = delivery_plan(project)?;
+    if destination.exists() && fs::read_dir(destination)?.next().is_some() {
+        return Err(RenderBlocker("export destination is not empty".into()));
+    }
+    let output = AtomicOutput::new(destination)?;
+    for (name, rendered) in plan {
+        if cancelled.is_some_and(|flag| flag.load(Ordering::Relaxed)) {
+            return Err(RenderBlocker("cancelled".into()));
+        }
+        fs::copy(rendered, output.path(&name))?;
+    }
+    if cancelled.is_some_and(|flag| flag.load(Ordering::Relaxed)) {
+        return Err(RenderBlocker("cancelled".into()));
+    }
+    output.commit()
+}
+
+pub fn validate_export(project: &Project) -> Result<(), RenderBlocker> {
+    delivery_plan(project).map(|_| ())
+}
+
+fn delivery_plan(project: &Project) -> Result<Vec<(String, std::path::PathBuf)>, RenderBlocker> {
     let RenderState::Current { identity } = project.render() else {
         return Err(RenderBlocker(
             "only a current render can be exported".into(),
@@ -33,9 +55,6 @@ pub fn export(
         return Err(RenderBlocker(
             "render report does not match the project".into(),
         ));
-    }
-    if destination.exists() && fs::read_dir(destination)?.next().is_some() {
-        return Err(RenderBlocker("export destination is not empty".into()));
     }
     let names = project
         .sources
@@ -52,25 +71,24 @@ pub fn export(
     if names.iter().collect::<HashSet<_>>().len() != names.len() {
         return Err(RenderBlocker("source names collide at export".into()));
     }
-    let output = AtomicOutput::new(destination)?;
-    for (name, rendered) in names.into_iter().zip(report.output.stems) {
-        if cancelled.is_some_and(|flag| flag.load(Ordering::Relaxed)) {
-            return Err(RenderBlocker("cancelled".into()));
-        }
-        let rendered = Path::new(&rendered);
-        if rendered.file_name() != Some(rendered.as_os_str()) {
-            return Err(RenderBlocker(
-                "render report contains an unsafe path".into(),
-            ));
-        }
-        fs::copy(
-            identity.parent().unwrap_or(Path::new(".")).join(rendered),
-            output.path(&name),
-        )?;
-    }
-    if cancelled.is_some_and(|flag| flag.load(Ordering::Relaxed)) {
-        return Err(RenderBlocker("cancelled".into()));
-    }
-    fs::copy(identity, output.path("report.json"))?;
-    output.commit()
+    let rendered = report
+        .output
+        .stems
+        .into_iter()
+        .map(|rendered| {
+            let rendered = Path::new(&rendered);
+            if rendered.file_name() != Some(rendered.as_os_str())
+                || !rendered
+                    .extension()
+                    .is_some_and(|extension| extension.eq_ignore_ascii_case("wav"))
+            {
+                return Err(RenderBlocker(
+                    "render report contains a non-WAV or unsafe path".into(),
+                ));
+            }
+            Ok(identity.parent().unwrap_or(Path::new(".")).join(rendered))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    validate(&rendered)?;
+    Ok(names.into_iter().zip(rendered).collect())
 }
