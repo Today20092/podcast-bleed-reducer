@@ -5,3 +5,4 @@ edition = "2024"
 
 [dependencies]
 bwavfile = "2.0.1"
+ort = "=2.0.0-rc.10"

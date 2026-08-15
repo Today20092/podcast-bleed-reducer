@@ -155,6 +155,84 @@ fn renders_one_pcm_stem_and_report_without_touching_source() {
 }
 
 #[test]
+fn automixes_silence_and_records_inspectable_evidence() {
+    let root = std::env::temp_dir().join(format!("cleanslate-automix-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root).unwrap();
+    let source = root.join("silence.wav");
+    wav(&source, 3, &vec![0.000_01; 48_000], Some(42));
+    let result = run(RunRequest {
+        stems: vec![source],
+        output_dir: root.join("rendered"),
+        regions: vec![],
+        protections: vec![],
+        cancelled: None,
+    })
+    .unwrap();
+
+    let report = fs::read_to_string(result.report).unwrap();
+    assert!(report.contains("\"detector\": \"silero-vad-v5\""));
+    assert!(report.contains("\"speech_probability\": 0.5"));
+    assert!(report.contains("\"energy_margin_db\": 6"));
+    assert!(report.contains("\"decision\": \"NoSpeech\""));
+    assert!(report.contains("\"affected_track\": 0"));
+    assert!(report.contains("\"evidence_reasons\""));
+    assert!(report.contains("\"protections\": []"));
+
+    let reader = WaveReader::open(&result.stems[0]).unwrap();
+    let mut samples = vec![0.0_f32; 48_000];
+    reader
+        .audio_frame_reader()
+        .unwrap()
+        .read_frames(&mut samples)
+        .unwrap();
+    assert!((samples[47_999] - 0.000_01 * 0.125_892_53).abs() < 0.000_000_01);
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn blocks_empty_stems_instead_of_panicking() {
+    let root = std::env::temp_dir().join(format!("cleanslate-empty-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root).unwrap();
+    let source = root.join("empty.wav");
+    wav(&source, 3, &[], Some(42));
+    let error = run(RunRequest {
+        stems: vec![source],
+        output_dir: root.join("rendered"),
+        regions: vec![],
+        protections: vec![],
+        cancelled: None,
+    })
+    .unwrap_err();
+    assert!(error.to_string().contains("no audio samples"));
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn blocks_invalid_owner_sets() {
+    let root = std::env::temp_dir().join(format!("cleanslate-owners-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root).unwrap();
+    let source = root.join("voice.wav");
+    wav(&source, 3, &[0.25; 10], Some(42));
+    let error = run(RunRequest {
+        stems: vec![source],
+        output_dir: root.join("rendered"),
+        regions: vec![Region {
+            start: 0,
+            end: 10,
+            decision: Decision::Owned(vec![1]),
+        }],
+        protections: vec![],
+        cancelled: None,
+    })
+    .unwrap_err();
+    assert!(error.to_string().contains("invalid owner set"));
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn blocks_bad_alignment_and_cleans_up_failure_and_cancellation() {
     let root = std::env::temp_dir().join(format!("cleanslate-errors-{}", std::process::id()));
     let _ = fs::remove_dir_all(&root);
