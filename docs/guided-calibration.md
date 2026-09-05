@@ -1,0 +1,15 @@
+# Calibrating microphone bleed
+
+New sessions use joint ownership. For a saved session from an older build, choose **Enable joint ownership** in the calibration controls.
+
+1. Choose **Select calibration range** and drag across a useful part of the waveform. You can also enter start/end seconds, capture the playhead, or use the current timeline selection.
+2. For **room tone**, select a section where nobody is speaking, then choose **Save room tone** under the intended microphone. This teaches its background level.
+3. For **solo speech**, select a section where only that microphone's participant speaks, then choose **Save solo speech** under that track. Other microphones may contain copies of that voice; the comparison uses them together.
+4. Add solo examples for other participants. Examples must span at least 0.25 seconds; choose a few seconds of representative speech when available. Avoid overlapping speakers in solo examples.
+5. Compare **Original**, **Processed**, and **Removed** audition modes. Wanted words or laughter in Removed indicate a mistake: check your examples, remove misleading ones, and protect wanted speech where necessary.
+
+Room tone alone cannot identify which participant is speaking. Solo examples provide the microphone relationship; they do not train a voice identity model. Very quiet independent speech mixed with reverberant bleed remains a difficult case and needs listening.
+
+Examples are optional, saved with the session, and separate from protection ranges. Removing an example updates the preview. Replacing or reordering source recordings invalidates old examples. Changing settings requires a new final render before exporting updated audio.
+
+Use the three original `chopshow podcast 155_A01.wav`, `_A02.wav`, and `_A03.wav` tracks together. These controls do not modify the original recordings.
