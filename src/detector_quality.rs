@@ -91,28 +91,8 @@ fn measure(samples: &[&[f32]], envelopes: &[GainEnvelope], labels: &[Label]) -> 
             "minimum_gain": minimum_gain, "attenuation_db": attenuation(input, output)})
         })
         .collect();
-    let preserved: Vec<_> = labels
-        .iter()
-        .filter(|label| label.kind == LabelKind::Preserve)
-        .collect();
-    let mut edges: Vec<_> = preserved
-        .iter()
-        .flat_map(|label| [label.start, label.end])
-        .collect();
-    edges.sort_unstable();
-    edges.dedup();
     let (mut overlap_samples, mut changed_overlap_samples) = (0, 0);
-    for span in edges.windows(2) {
-        let mut tracks: Vec<_> = preserved
-            .iter()
-            .filter(|label| label.start <= span[0] && label.end >= span[1])
-            .map(|label| label.track)
-            .collect();
-        tracks.sort_unstable();
-        tracks.dedup();
-        if tracks.len() < 2 {
-            continue;
-        }
+    for (span, tracks) in overlap_spans(labels) {
         overlap_samples += span[1] - span[0];
         changed_overlap_samples += (span[0]..span[1])
             .filter(|&sample| {
@@ -130,6 +110,29 @@ fn measure(samples: &[&[f32]], envelopes: &[GainEnvelope], labels: &[Label]) -> 
 
 fn attenuation(input: f64, output: f64) -> Option<f64> {
     (input > 0.0 && output > 0.0).then(|| 10.0 * (output / input).log10())
+}
+
+fn overlap_spans(labels: &[Label]) -> Vec<([usize; 2], Vec<usize>)> {
+    let preserved: Vec<_> = labels
+        .iter()
+        .filter(|l| l.kind == LabelKind::Preserve)
+        .collect();
+    let mut edges: Vec<_> = preserved.iter().flat_map(|l| [l.start, l.end]).collect();
+    edges.sort_unstable();
+    edges.dedup();
+    edges
+        .windows(2)
+        .filter_map(|span| {
+            let mut tracks: Vec<_> = preserved
+                .iter()
+                .filter(|l| l.start <= span[0] && l.end >= span[1])
+                .map(|l| l.track)
+                .collect();
+            tracks.sort_unstable();
+            tracks.dedup();
+            (tracks.len() >= 2).then_some(([span[0], span[1]], tracks))
+        })
+        .collect()
 }
 
 /// Evaluate supplied aligned WAVs without rendering, modifying, or copying files.
@@ -371,25 +374,8 @@ pub fn compare_ownership(
         }
         summaries.insert((*name).into(), json!(groups));
     }
-    let mut edges: Vec<_> = labels
-        .iter()
-        .filter(|l| l.kind == LabelKind::Preserve)
-        .flat_map(|l| [l.start, l.end])
-        .collect();
-    edges.sort_unstable();
-    edges.dedup();
     let mut overlap = Vec::new();
-    for span in edges.windows(2) {
-        let mut tracks: Vec<_> = labels
-            .iter()
-            .filter(|l| l.kind == LabelKind::Preserve && l.start <= span[0] && l.end >= span[1])
-            .map(|l| l.track)
-            .collect();
-        tracks.sort_unstable();
-        tracks.dedup();
-        if tracks.len() < 2 {
-            continue;
-        }
+    for (span, tracks) in overlap_spans(&labels) {
         let changed = previews
             .iter()
             .map(|(name, p)| {

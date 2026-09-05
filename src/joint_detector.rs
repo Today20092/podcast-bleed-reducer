@@ -268,12 +268,12 @@ impl JointFacts {
                             >= parameters.speech_sensitivity
                             && self.levels[source][frame]
                                 > floors[source] + parameters.bleed_discrimination_db;
-                        if source_has_voice && pair.explained[frame] >= 0.25
+                        if source_has_voice
                             && self.levels[source][frame] + residual > floors[target] + parameters.bleed_discrimination_db
                             // A rough acoustic fit cannot distinguish room variation
                             // from a new voice below VAD. Require a well-fit example.
-                            && (solo[source].is_empty() || model.residual_db <= model.level_db - 10.0
-                                && residual > model.residual_db + 3.0)
+                            && model.residual_db <= model.level_db - 10.0
+                            && residual > model.residual_db + 3.0
                         {
                             active[target][frame] = true;
                         }
@@ -681,18 +681,24 @@ mod tests {
     #[test]
     fn quiet_voice_shaped_overlap_survives_gain_polarity_delay_and_room_noise() {
         use crate::{CalibrationExample, CalibrationKind};
-        let direct = signal(192_000, 0.0);
-        for (scale, delay) in [(0.15, 48usize), (-0.4, 156), (1.6, 480)] {
+        let direct = signal(240_000, 0.0);
+        for (scale, delay, voice_level) in [
+            (0.15, 48usize, 0.006),
+            (-0.4, 156, 0.006),
+            (1.6, 480, 0.006),
+            (0.15, 120, 0.12),
+        ] {
             let mut seed = 17u32;
             let mixed: Vec<_> = (0..direct.len())
                 .map(|i| {
                     seed = seed.wrapping_mul(1664525).wrapping_add(1013904223);
                     let noise = (seed as f64 / u32::MAX as f64 - 0.5) as f32 * 0.000002;
-                    let voice = if (96_000..120_000).contains(&i) {
+                    let end = if voice_level > 0.1 { 168_000 } else { 120_000 };
+                    let voice = if (96_000..end).contains(&i) {
                         let t = i as f32 / 48_000.0;
                         // Harmonics with a pulsing envelope stand in for a quiet laugh/voice.
-                        0.006
-                            * (1.0 + (t * 27.0).sin())
+                        voice_level
+                            * (1.0 + 0.1 * (t * 27.0).sin())
                             * ((t * 1297.0).sin() + 0.3 * (t * 2594.0).sin())
                     } else {
                         0.0
@@ -733,12 +739,12 @@ mod tests {
                 "scale={scale} delay={delay}"
             );
             assert_eq!(
-                at(108_000),
+                at(if voice_level > 0.1 { 144_000 } else { 108_000 }),
                 &Decision::Owned(vec![0, 1]),
                 "scale={scale} delay={delay}"
             );
             assert_eq!(
-                at(180_000),
+                at(228_000),
                 &Decision::Owned(vec![0]),
                 "scale={scale} delay={delay}"
             );
