@@ -36,3 +36,11 @@ Automatic mode intentionally preserves filtered/reverberant copies whose unexpla
 ## Verification
 
 Red/green tests reproduced legacy double ownership, missing public APIs, and the automatic persistent-overlap flaw before their fixes. Synthetic checks cover delayed/inverted copies, guided filtered copies, reversed gain, independent quiet overlap, a quiet third speaker, meaningful room tone, and cancellation. Public API checks cover cold/warm equality without re-preparation, invalid calibration/parameters, and rendered samples matching preview gains. Full checks and bounded timing results follow below. Actual labelled recordings and the provisional screenshot interval remain for parent task03; they were not used to tune these thresholds.
+
+- `CARGO_BUILD_JOBS=1 cargo test`: 66 passed, zero failed, four intentionally ignored checks. The ignored checks are the gain benchmark, bounded joint benchmark, reference waveform visual evidence, and reference timeline responsiveness.
+- `cargo clippy --all-targets -- -D warnings` and `cargo fmt --check`: passed after the review correction.
+- `cargo test --lib bounded_joint_feature_benchmark -- --ignored --nocapture`: passed. On 30 seconds of deterministic three-track synthetic audio in the unoptimized test build, feature preparation was 361.04 ms, numeric feature payload was 23,320 bytes, and p95 of 20 warm ownership derivations was 1.50 ms. This excludes PCM I/O, Silero inference and gain construction. It is not a full-session or release-build benchmark.
+- Three full 239,660,221-sample stems require 156,029 analysis frames. The numeric feature count is six floats/frame, or 3,744,696 bytes before Vec spare capacity, floor values and small calibration summaries. `PreviewCache::joint_diagnostics()` reports measured payload capacity and feature preparation time for the parent benchmark.
+- Standards re-review and Spec re-review at ae33bc3: zero remaining actionable findings. The original automatic-overlap P1 was reproduced, fixed, and re-reviewed.
+
+No source WAV was copied or modified. No application was launched. Parent integration must replace editor worker/render calls with the named ownership APIs and may consolidate the engine's source/range validator with ticket01's matching calibration validator. Real-session quality and listening acceptance remain pending.
