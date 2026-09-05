@@ -27,3 +27,11 @@ These checks do not constitute real-recording quality acceptance or a listening 
 The prior engine only set a unity target inside protection ranges, so samples remained attenuated during recovery. A targeted test reproduced gain 0.20826721 at the first protected sample, where the domain contract requires 1.0. The shared envelope now pins gain to 1.0 for the half-open protection interval, including entry during an existing unity-target recovery. Overlapping/session protections and sequential/random access agree. Ordinary unprotected one-pole behavior is unchanged. The rendered-float regression now requires every protected sample to equal its original value, replacing the old test that explicitly expected a recovery ramp within protection. Entry is immediate; the guide explains boundary placement.
 
 Commit `003d372`: six engine tests passed (one optional benchmark ignored), all six public render tests passed, and formatting passed. Independent Standards and Spec reviews reported no actionable findings for this delta.
+
+## Final integration
+
+- Final quality test/evidence commit `67f8643` integrated as `17a8805`. The conservative production classifier remains the reviewed `1dc1f2a`; experimental suppression changes were rejected.
+- Integrated all-target locked tests: **82 passed, five ignored, zero failed**. Formatting and strict all-target locked Clippy passed. This resolves the quality branch's older editor warning through the already integrated editor changes.
+- Independent final Standards and Spec delta reviews both clean. They explicitly distinguish clean code review from unmet screenshot suppression and exact-unity unprotected wanted-speech criteria.
+- Optimized full-session benchmark: one preparation, unchanged restored preview, joint-control p95 below 49 ms. See `performance-results.md` and raw results for memory and measurement scope.
+- The screenshot's A02/A03 bleed at inferred 828–831 seconds remains open. Guided classification modestly improves aggregate labeled bleed. This is a testable implementation with documented limits, not full quality acceptance or a listening sign-off.

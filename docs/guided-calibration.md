@@ -17,3 +17,5 @@ Examples are optional, saved with the session, and separate from protection rang
 Protection forces unity immediately at its start and keeps every protected sample unchanged. Include a little lead-in and place protection edges in quiet audio to avoid an abrupt gain change; ordinary closing resumes after the range ends.
 
 Use the three original `chopshow podcast 155_A01.wav`, `_A02.wav`, and `_A03.wav` tracks together. These controls do not modify the original recordings.
+
+Known limit in this build: the screenshot interval around 828–831 seconds still preserves the A02/A03 bleed. Guided calibration modestly improves other labeled bleed sections, but does not solve every copied-speech case. More aggressive padding changes were rejected because they could damage short independent speech. See `.scratch/guided-ownership/evidence/quality-results.md` for the measurements and remaining cases; the recordings still need your listening review.
