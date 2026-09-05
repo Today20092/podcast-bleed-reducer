@@ -60,6 +60,58 @@ fn available_project_path(directory: &std::path::Path) -> PathBuf {
 #[cfg(test)]
 mod tests {
     #[test]
+    fn completed_render_cannot_replace_changed_session() {
+        for change in 0..4 {
+            let directory = std::env::temp_dir().join(format!(
+                "cleanslate-render-snapshot-{}-{change}",
+                std::process::id()
+            ));
+            std::fs::create_dir_all(&directory).unwrap();
+            let source = directory.join("voice.wav");
+            write_wav(&source, &[0.0; 1537]);
+            let project =
+                crate::Project::create(directory.join("episode.cleanslate"), vec![source.clone()])
+                    .unwrap();
+            let snapshot = super::RenderSnapshot::read(&project).unwrap();
+            assert!(super::RenderSnapshot::read(&project).unwrap() == snapshot);
+            let (sender, result) = super::mpsc::channel();
+            let mut app = super::CleanSlateApp {
+                project: Some(project),
+                processing: Some(super::Processing {
+                    cancelled: super::Arc::new(super::AtomicBool::new(false)),
+                    progress: super::Arc::new(super::AtomicU8::new(100)),
+                    result,
+                    snapshot,
+                }),
+                ..Default::default()
+            };
+            match change {
+                0 => {
+                    let project = app.project.as_mut().unwrap();
+                    let mut parameters = project.parameters();
+                    parameters.attenuation_db = -12.0;
+                    project.set_parameters(parameters).unwrap();
+                }
+                1 => app.project.as_mut().unwrap().protect_range(0, 100).unwrap(),
+                2 => write_wav(&source, &[0.0; 3073]),
+                _ => app.project = None,
+            }
+            sender
+                .send(Ok(directory.join("old-report.json").display().to_string()))
+                .unwrap();
+            app.poll_processing();
+            assert!(app.processing.is_none());
+            assert!(app.messages[0].contains("earlier settings or sources"));
+            assert!(!app.export_ready());
+            if let Some(project) = app.project {
+                assert_eq!(project.render(), &crate::RenderState::Stale);
+                assert!(project.review_identity().is_none());
+            }
+            std::fs::remove_dir_all(directory).unwrap();
+        }
+    }
+
+    #[test]
     fn failed_derivation_keeps_completed_preview_source_identity() {
         let directory =
             std::env::temp_dir().join(format!("preview-identity-{}", std::process::id()));
@@ -634,6 +686,26 @@ struct Processing {
     cancelled: Arc<AtomicBool>,
     progress: Arc<AtomicU8>,
     result: Receiver<Result<String, String>>,
+    snapshot: RenderSnapshot,
+}
+
+#[derive(PartialEq)]
+struct RenderSnapshot {
+    project: PathBuf,
+    sources: Vec<waveform::SourceStamp>,
+    parameters: AutomixParameters,
+    protections: Vec<crate::Protection>,
+}
+
+impl RenderSnapshot {
+    fn read(project: &Project) -> Result<Self, String> {
+        Ok(Self {
+            project: project.path().to_owned(),
+            sources: source_stamps(&project.source_paths()).map_err(|error| error.to_string())?,
+            parameters: project.parameters(),
+            protections: project.protections().to_vec(),
+        })
+    }
 }
 
 struct PreviewProcessing {
@@ -905,6 +977,13 @@ impl CleanSlateApp {
             return;
         }
         let Some(project) = &self.project else { return };
+        let snapshot = match RenderSnapshot::read(project) {
+            Ok(snapshot) => snapshot,
+            Err(error) => {
+                self.messages = vec![format!("Final render blocked: {error}")];
+                return;
+            }
+        };
         let stems = project.source_paths();
         let protections = project.protections().to_vec();
         let parameters = project.parameters();
@@ -945,6 +1024,7 @@ impl CleanSlateApp {
             cancelled,
             progress,
             result,
+            snapshot,
         });
     }
 
@@ -1129,8 +1209,22 @@ impl CleanSlateApp {
             return;
         };
         let cancelled = processing.cancelled.load(Ordering::Relaxed);
+        let current = self
+            .project
+            .as_ref()
+            .and_then(|project| RenderSnapshot::read(project).ok());
+        let current = current.as_ref() == Some(&processing.snapshot);
         self.processing = None;
         match result {
+            Ok(_) if !current => {
+                self.messages = vec!["Final render completed for earlier settings or sources; render again before exporting".into()];
+                if let Some(project) = &mut self.project {
+                    if let Err(error) = project.mark_render_stale() {
+                        self.messages.push(error.to_string());
+                    }
+                }
+                self.refresh_export_readiness();
+            }
             Ok(identity) => {
                 let project = self.project.as_mut().unwrap();
                 self.messages = vec!["Final render current; ready to export WAVs".into()];
