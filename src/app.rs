@@ -107,6 +107,27 @@ mod tests {
         assert_eq!(app.calibration_start, "0.00208333");
         assert_eq!(app.calibration_end, "0.62500000");
         assert!(app.project.as_ref().unwrap().protections().is_empty());
+        let source = app.project.as_ref().unwrap().source_paths()[0].clone();
+        write_wav(&source, &vec![0.0; 96_000]);
+        let _ = app.update(super::Message::SaveCalibration(
+            crate::CalibrationKind::RoomTone,
+            0,
+        ));
+        assert!(
+            app.calibration_error
+                .as_deref()
+                .unwrap()
+                .contains("changed")
+        );
+        assert!(
+            app.project
+                .as_ref()
+                .unwrap()
+                .ownership_settings()
+                .examples
+                .is_empty()
+        );
+        assert!(app.preview_processing.is_none());
         std::fs::remove_dir_all(directory).unwrap();
     }
 

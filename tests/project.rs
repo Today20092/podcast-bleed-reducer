@@ -270,3 +270,21 @@ fn calibration_is_bound_to_ordered_sources_even_when_mode_is_disabled() {
     drop(project);
     fs::remove_dir_all(dir).unwrap();
 }
+
+#[test]
+fn first_example_rejects_a_recording_changed_after_project_load() {
+    let dir = temp_dir();
+    let (mut project, mut settings) = calibration_project(&dir);
+    let source = project.source_paths()[0].clone();
+    let writer =
+        bwavfile::WaveWriter::create(&source, bwavfile::WaveFmt::new_pcm_mono(48_000, 16)).unwrap();
+    let mut frames = writer.audio_frame_writer().unwrap();
+    frames.write_frames(&vec![0.0_f32; 96_000]).unwrap();
+    frames.end().unwrap();
+    settings.sources = vec![rust_app::SourceStamp::read(&source).unwrap()];
+    assert!(project.set_ownership_settings(settings.clone()).is_err());
+    assert!(project.ownership_settings().examples.is_empty());
+    project.relink(0, source).unwrap();
+    project.set_ownership_settings(settings).unwrap();
+    fs::remove_dir_all(dir).unwrap();
+}

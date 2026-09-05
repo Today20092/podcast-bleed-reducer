@@ -36,6 +36,8 @@ pub struct SourceIdentity {
     pub fingerprint: String,
     #[serde(skip, default)]
     pub available: bool,
+    #[serde(skip)]
+    loaded_stamp: Option<SourceStamp>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -94,6 +96,7 @@ impl Project {
         }
         let mut valid = true;
         for source in &mut project.sources {
+            source.loaded_stamp = SourceStamp::read(&source.path).ok();
             source.available = source.matches_disk();
             valid &= source.available;
         }
@@ -170,6 +173,16 @@ impl Project {
             .iter()
             .map(|source| SourceStamp::read(&source.path).map_err(io::Error::other))
             .collect::<io::Result<Vec<_>>>()?;
+        if self
+            .sources
+            .iter()
+            .zip(&stamps)
+            .any(|(source, stamp)| source.loaded_stamp.as_ref() != Some(stamp))
+        {
+            return Err(io::Error::other(
+                "Source recordings changed since the session was loaded. Relink them before adding calibration examples.",
+            ));
+        }
         // Header-only reads keep calibration edits independent of PCM size and inference.
         let counts = self
             .sources
@@ -322,11 +335,13 @@ impl Project {
 
 impl SourceIdentity {
     fn read(path: PathBuf) -> io::Result<Self> {
+        let loaded_stamp = Some(SourceStamp::read(&path).map_err(io::Error::other)?);
         let fingerprint = fingerprint(&path)?;
         Ok(Self {
             path,
             fingerprint,
             available: true,
+            loaded_stamp,
         })
     }
 
