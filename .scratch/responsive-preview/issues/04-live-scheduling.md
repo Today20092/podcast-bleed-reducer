@@ -2,7 +2,8 @@
 
 **Working branch:** codex/responsive-scheduling
 **Blocked by:** 01, 02, 03
-**Status:** resolved
+**Status:** ready-for-agent
+**Completion:** implemented, tested, reviewed, and integrated
 **What to build:** Responsive live adjustments with bounded work and current-generation installation.
 
 - [x] One active computation and newest pending request; superseded work cooperatively stops.

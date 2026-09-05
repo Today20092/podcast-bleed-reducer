@@ -1,4 +1,7 @@
-use crate::{GainEnvelope, RenderBlocker, audio_io::Stem, waveform::SourceStamp};
+use crate::{
+    GainEnvelope, RenderBlocker, audio_io::Stem, prepared_analysis::source_stamps,
+    waveform::SourceStamp,
+};
 use rodio::{OutputStream, OutputStreamBuilder, Sink, Source};
 use std::{
     path::PathBuf,
@@ -21,8 +24,8 @@ pub(crate) struct PreparedAudio {
 }
 
 impl PreparedAudio {
-    pub(crate) fn matches_preview(&self, cache: &crate::PreviewCache) -> bool {
-        cache.matches_sources(&self.stamps)
+    pub(crate) fn matches_sources(&self, sources: &[SourceStamp]) -> bool {
+        self.stamps == sources
     }
 
     fn prepare(
@@ -38,10 +41,7 @@ impl PreparedAudio {
             }
         };
         check_cancelled()?;
-        let stamps = paths
-            .iter()
-            .map(|path| SourceStamp::read(path))
-            .collect::<Result<Vec<_>, _>>()?;
+        let stamps = source_stamps(paths)?;
         if let Some(cached) = cached
             && cached.stamps == stamps
         {
@@ -68,11 +68,7 @@ impl PreparedAudio {
     }
 
     pub(crate) fn is_current(&self, paths: &[PathBuf]) -> bool {
-        paths
-            .iter()
-            .map(|path| SourceStamp::read(path))
-            .collect::<Result<Vec<_>, _>>()
-            .is_ok_and(|stamps| stamps == self.stamps)
+        source_stamps(paths).is_ok_and(|stamps| stamps == self.stamps)
     }
 }
 
@@ -394,24 +390,15 @@ mod tests {
         let paths = vec![path.clone()];
         let cancelled = AtomicBool::new(false);
         let first = PreparedAudio::prepare(&paths, None, &cancelled).unwrap();
-        let mut preview_cache = crate::PreviewCache::default();
-        preview_cache
-            .analyze(
-                &paths,
-                &[],
-                crate::AutomixParameters::default(),
-                &std::sync::atomic::AtomicU8::new(0),
-                None,
-            )
-            .unwrap();
-        assert!(first.matches_preview(&preview_cache));
+        let preview_sources = source_stamps(&paths).unwrap();
+        assert!(first.matches_sources(&preview_sources));
         let second = PreparedAudio::prepare(&paths, Some(first.clone()), &cancelled).unwrap();
         assert!(Arc::ptr_eq(&first.stems, &second.stems));
         write(&[0.5; 1024]);
         assert!(!first.is_current(&paths));
         let changed = PreparedAudio::prepare(&paths, Some(second), &cancelled).unwrap();
         assert_eq!(changed.stems[0].len(), 1024);
-        assert!(!changed.matches_preview(&preview_cache));
+        assert!(!changed.matches_sources(&preview_sources));
         assert!(!Arc::ptr_eq(&first.stems, &changed.stems));
         cancelled.store(true, Ordering::Relaxed);
         assert!(PreparedAudio::prepare(&paths, Some(changed), &cancelled).is_err());

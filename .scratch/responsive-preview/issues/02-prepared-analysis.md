@@ -2,7 +2,8 @@
 
 **Working branch:** codex/responsive-analysis
 **Blocked by:** None
-**Status:** resolved
+**Status:** ready-for-agent
+**Completion:** implemented, tested, reviewed, and integrated
 **What to build:** Retained detector facts, validated source identity and cache-aware preview derivation wired into the editor.
 
 - [x] Cache probabilities, energies and noise floors before thresholding; sensitivity/bleed/padding use those facts.

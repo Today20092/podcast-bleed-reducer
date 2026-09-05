@@ -2,7 +2,9 @@ use crate::{
     AnalysisPreview, AutomixParameters, Comparison, PreviewCache, Project, RenderState,
     ReviewState, ReviewWorkspace, RunRequest, WorkflowStep,
     audition::{AuditionMode, AuditionPreparation, LiveAudition},
-    export, preview_stage, run_with_parameters,
+    export,
+    prepared_analysis::source_stamps,
+    preview_stage, run_with_parameters,
     timeline::{TimelineEvent, TimelineViewport},
     validate, validate_export,
     waveform::{self, TimelineCanvas, WaveformCache},
@@ -57,6 +59,64 @@ fn available_project_path(directory: &std::path::Path) -> PathBuf {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn failed_derivation_keeps_completed_preview_source_identity() {
+        let directory =
+            std::env::temp_dir().join(format!("preview-identity-{}", std::process::id()));
+        std::fs::create_dir_all(&directory).unwrap();
+        let path = directory.join("voice.wav");
+        write_wav(&path, &[0.0; 3073]);
+        let mut project =
+            crate::Project::create(directory.join("episode.cleanslate"), vec![path.clone()])
+                .unwrap();
+        project.protect_range(1600, 3000).unwrap();
+        let mut app = super::CleanSlateApp {
+            project: Some(project),
+            ..Default::default()
+        };
+        let drain = |app: &mut super::CleanSlateApp| {
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+            while app.preview_processing.is_some() || app.preview_pending.is_some() {
+                app.poll_processing();
+                assert!(std::time::Instant::now() < deadline);
+                std::thread::sleep(std::time::Duration::from_millis(1));
+            }
+        };
+        app.start_preview();
+        drain(&mut app);
+        let original = vec![super::waveform::SourceStamp::read(&path).unwrap()];
+        assert_eq!(app.preview_sources, original);
+        write_wav(&path, &[0.0; 1537]);
+        app.start_preview();
+        drain(&mut app);
+        assert!(app.preview_error.as_deref().unwrap().contains("protection"));
+        assert_eq!(app.preview_cache.stats().preparations, 2);
+        assert_eq!(
+            app.preview.as_ref().unwrap().envelopes[0].sample_count(),
+            3073
+        );
+        assert_eq!(app.preview_sources, original);
+        assert_ne!(
+            app.preview_sources,
+            vec![super::waveform::SourceStamp::read(&path).unwrap()]
+        );
+        app.timeline.set_total_samples(3073);
+        app.audition(false);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while app.audition_preparation.is_busy() {
+            app.poll_audition();
+            assert!(std::time::Instant::now() < deadline);
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+        assert!(app.audition.is_none());
+        assert!(
+            app.messages
+                .iter()
+                .any(|message| message.contains("Sources changed"))
+        );
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
     #[test]
     fn dragging_coalesces_and_finishes_with_latest_parameters() {
         let directory =
@@ -531,6 +591,7 @@ pub struct CleanSlateApp {
     timeline: TimelineViewport,
     preview_parameters: AutomixParameters,
     preview: Option<AnalysisPreview>,
+    preview_sources: Vec<waveform::SourceStamp>,
     preview_cache: PreviewCache,
     preview_processing: Option<PreviewProcessing>,
     preview_pending: Option<Instant>,
@@ -557,6 +618,7 @@ impl Default for CleanSlateApp {
             timeline: TimelineViewport::default(),
             preview_parameters: AutomixParameters::default(),
             preview: None,
+            preview_sources: vec![],
             preview_cache: PreviewCache::default(),
             preview_processing: None,
             preview_pending: None,
@@ -659,6 +721,7 @@ impl CleanSlateApp {
             audition.stop();
         }
         self.preview = None;
+        self.preview_sources.clear();
         self.preview_cache = PreviewCache::default();
         self.source_generation += 1;
         self.preview_generation += 1;
@@ -903,14 +966,7 @@ impl CleanSlateApp {
         self.preview_pending = Some(self.preview_pending.map_or(due, |old| old.min(due)));
         self.preview_error = None;
         if let Some(processing) = &self.preview_processing {
-            let sources = self
-                .project
-                .as_ref()
-                .unwrap()
-                .source_paths()
-                .iter()
-                .map(|path| waveform::SourceStamp::read(path))
-                .collect::<Result<Vec<_>, _>>();
+            let sources = source_stamps(&self.project.as_ref().unwrap().source_paths());
             // Parameter edits must not cancel initial source inference. At 70,
             // analyze has retained its facts and cancellation can preserve them.
             if sources.as_ref().ok() != Some(&processing.sources)
@@ -931,11 +987,7 @@ impl CleanSlateApp {
         self.preview_generation += 1;
         let Some(project) = &self.project else { return };
         let stems = project.source_paths();
-        let sources = match stems
-            .iter()
-            .map(|path| waveform::SourceStamp::read(path))
-            .collect::<Result<Vec<_>, _>>()
-        {
+        let sources = match source_stamps(&stems) {
             Ok(sources) => sources,
             Err(error) => {
                 self.preview_error = Some(error.to_string());
@@ -1037,14 +1089,7 @@ impl CleanSlateApp {
                 )
             });
             let sources_match = self.project.as_ref().is_some_and(|project| {
-                project
-                    .source_paths()
-                    .iter()
-                    .map(|path| waveform::SourceStamp::read(path))
-                    .collect::<Result<Vec<_>, _>>()
-                    .as_ref()
-                    .ok()
-                    == Some(&processing.sources)
+                source_stamps(&project.source_paths()).as_ref().ok() == Some(&processing.sources)
             });
             if processing.source_generation == self.source_generation && sources_match {
                 self.preview_cache = cache;
@@ -1059,9 +1104,17 @@ impl CleanSlateApp {
                 });
                 match result {
                     Ok(preview) => {
+                        if self.preview_sources != processing.sources {
+                            self.audition_preparation.invalidate();
+                            self.audition_range = None;
+                            if let Some(audition) = self.audition.take() {
+                                audition.stop();
+                            }
+                        }
                         if let Some(audition) = &self.audition {
                             audition.replace_envelopes(preview.envelopes.clone());
                         }
+                        self.preview_sources = processing.sources.clone();
                         self.preview = Some(preview);
                     }
                     Err(error) => self.preview_error = Some(error),
@@ -1109,7 +1162,7 @@ impl CleanSlateApp {
                 Ok(prepared) => {
                     if let (Some(project), Some(preview)) = (&self.project, &self.preview) {
                         if prepared.is_current(&project.source_paths())
-                            && prepared.matches_preview(&self.preview_cache)
+                            && prepared.matches_sources(&self.preview_sources)
                         {
                             match LiveAudition::start(
                                 prepared,

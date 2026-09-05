@@ -45,12 +45,6 @@ pub struct PreviewCache {
 }
 
 impl PreviewCache {
-    pub(crate) fn matches_sources(&self, sources: &[SourceStamp]) -> bool {
-        self.prepared
-            .as_ref()
-            .is_some_and(|prepared| prepared.sources == sources)
-    }
-
     pub fn stats(&self) -> PreviewCacheStats {
         self.stats
     }
@@ -158,7 +152,7 @@ impl PreviewCache {
     }
 }
 
-fn source_stamps(paths: &[PathBuf]) -> Result<Vec<SourceStamp>, RenderBlocker> {
+pub(crate) fn source_stamps(paths: &[PathBuf]) -> Result<Vec<SourceStamp>, RenderBlocker> {
     paths.iter().map(|path| SourceStamp::read(path)).collect()
 }
 

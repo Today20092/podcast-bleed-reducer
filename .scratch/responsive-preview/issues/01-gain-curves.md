@@ -2,7 +2,8 @@
 
 **Working branch:** codex/responsive-gain
 **Blocked by:** None
-**Status:** resolved
+**Status:** ready-for-agent
+**Completion:** implemented, tested, reviewed, and integrated
 **What to build:** Fast exact envelope construction for preview and final render.
 
 - [x] Sweep region/protection target changes rather than every PCM sample.

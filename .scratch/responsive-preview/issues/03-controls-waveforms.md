@@ -2,7 +2,8 @@
 
 **Working branch:** codex/responsive-controls
 **Blocked by:** None
-**Status:** resolved
+**Status:** ready-for-agent
+**Completion:** implemented, tested, reviewed, and integrated
 **What to build:** Correct sensitivity presentation, actual padding increments, accurate bleed explanation and gain-aware waveform summaries.
 
 - [x] Higher displayed sensitivity admits weaker speech; old stored thresholds retain their meaning and sound.

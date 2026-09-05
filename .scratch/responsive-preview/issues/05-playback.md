@@ -2,7 +2,8 @@
 
 **Working branch:** codex/responsive-playback
 **Blocked by:** 01, 02, 03
-**Status:** resolved
+**Status:** ready-for-agent
+**Completion:** implemented, tested, reviewed, and integrated
 **What to build:** Background audio preparation and efficient equivalent playback of shared envelopes.
 
 - [x] Starting audition does not read all stems synchronously on the UI thread.
