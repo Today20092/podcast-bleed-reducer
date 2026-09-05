@@ -22,7 +22,7 @@ use std::{
         atomic::{AtomicBool, AtomicU8, Ordering},
         mpsc::{self, Receiver},
     },
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 // Match the detector's rounding of 1536-sample frames at 48 kHz.
@@ -57,6 +57,179 @@ fn available_project_path(directory: &std::path::Path) -> PathBuf {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn dragging_coalesces_and_finishes_with_latest_parameters() {
+        let directory =
+            std::env::temp_dir().join(format!("cleanslate-drag-{}", std::process::id()));
+        std::fs::create_dir_all(&directory).unwrap();
+        let path = directory.join("voice.wav");
+        write_wav(&path, &[0.0; 1537]);
+        let mut app = super::CleanSlateApp {
+            project: Some(
+                crate::Project::create(directory.join("episode.cleanslate"), vec![path]).unwrap(),
+            ),
+            ..Default::default()
+        };
+        app.start_preview();
+        let active = app.preview_processing.as_ref().unwrap().cancelled.clone();
+        for value in [-6.0, -12.0, -17.0] {
+            let _ = app.update(super::Message::Attenuation(value));
+        }
+        assert!(std::sync::Arc::ptr_eq(
+            &active,
+            &app.preview_processing.as_ref().unwrap().cancelled
+        ));
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+        loop {
+            app.poll_processing();
+            if app
+                .preview
+                .as_ref()
+                .is_some_and(|p| p.parameters.attenuation_db == -17.0)
+            {
+                break;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "latest drag value never installed"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+        assert_eq!(app.preview_cache.stats().preparations, 1);
+        // Control worker delivery and the clock boundary: two drag inputs occur
+        // before completion (e.g. 0/16 ms input, 30 ms result, 40 ms boundary).
+        // Repeating this proves intermediate snapshots survive sustained input.
+        for snapshot in [-11.0, -10.0, -9.0] {
+            app.preview_parameters.attenuation_db = snapshot;
+            app.start_preview();
+            let processing = app.preview_processing.as_mut().unwrap();
+            let completed = processing
+                .result
+                .recv_timeout(std::time::Duration::from_secs(20))
+                .unwrap();
+            let (sender, receiver) = super::mpsc::channel();
+            processing.result = receiver;
+            for value in [snapshot - 1.0, -17.0] {
+                let _ = app.update(super::Message::Attenuation(value));
+                // Freeze the coalescing deadline ahead of the simulated inputs.
+                app.preview_pending =
+                    Some(std::time::Instant::now() + std::time::Duration::from_secs(1));
+                app.poll_processing();
+                assert!(
+                    !app.preview_processing
+                        .as_ref()
+                        .unwrap()
+                        .cancelled
+                        .load(super::Ordering::Relaxed)
+                );
+            }
+            sender.send(completed).unwrap();
+            app.poll_processing();
+            assert_eq!(
+                app.preview.as_ref().unwrap().parameters.attenuation_db,
+                snapshot
+            );
+        }
+        let _ = app.update(super::Message::RefreshPreview);
+        assert_eq!(
+            app.project.as_ref().unwrap().parameters().attenuation_db,
+            -17.0
+        );
+        let _ = app.update(super::Message::ProtectTrack(0));
+        while app.preview_processing.is_some() || app.preview_pending.is_some() {
+            app.poll_processing();
+            assert!(std::time::Instant::now() < deadline);
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+        assert_eq!(
+            app.preview.as_ref().unwrap().protections,
+            app.project.as_ref().unwrap().protections()
+        );
+        assert_eq!(app.preview_cache.stats().preparations, 1);
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn completed_obsolete_work_cannot_replace_preview_after_source_change() {
+        let directory =
+            std::env::temp_dir().join(format!("cleanslate-obsolete-{}", std::process::id()));
+        std::fs::create_dir_all(&directory).unwrap();
+        let path = directory.join("voice.wav");
+        write_wav(&path, &[0.0; 1537]);
+        let mut app = super::CleanSlateApp {
+            project: Some(
+                crate::Project::create(directory.join("episode.cleanslate"), vec![path.clone()])
+                    .unwrap(),
+            ),
+            ..Default::default()
+        };
+        app.start_preview();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+        while app
+            .preview_processing
+            .as_ref()
+            .unwrap()
+            .progress
+            .load(super::Ordering::Relaxed)
+            != 100
+        {
+            assert!(std::time::Instant::now() < deadline);
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+        write_wav(&path, &[0.0; 3073]);
+        app.poll_processing();
+        assert!(
+            app.preview.is_none(),
+            "changed source accepted a completed obsolete preview"
+        );
+        app.install_waveforms(vec![]);
+        app.start_preview();
+        while app.preview_processing.is_some() || app.preview_pending.is_some() {
+            app.poll_processing();
+            assert!(std::time::Instant::now() < deadline);
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+        assert_eq!(
+            app.preview.as_ref().unwrap().envelopes[0].sample_count(),
+            3073
+        );
+        app.start_preview();
+        let obsolete = app.preview_processing.as_ref().unwrap().cancelled.clone();
+        app.install_waveforms(vec![]);
+        app.start_preview();
+        assert!(obsolete.load(super::Ordering::Relaxed));
+        assert!(std::sync::Arc::ptr_eq(
+            &obsolete,
+            &app.preview_processing.as_ref().unwrap().cancelled
+        ));
+        while app.preview_processing.is_some() || app.preview_pending.is_some() {
+            app.poll_processing();
+            assert!(std::time::Instant::now() < deadline);
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+        assert!(app.preview_error.is_none());
+        std::fs::write(&path, b"invalid WAV").unwrap();
+        app.start_preview();
+        while app.preview_processing.is_some() {
+            app.poll_processing();
+            assert!(std::time::Instant::now() < deadline);
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+        assert!(app.preview_error.is_some());
+        assert_eq!(
+            app.preview.as_ref().unwrap().envelopes[0].sample_count(),
+            3073
+        );
+        std::fs::remove_file(&path).unwrap();
+        app.start_preview();
+        assert!(app.preview_error.is_some());
+        assert_eq!(
+            app.preview.as_ref().unwrap().envelopes[0].sample_count(),
+            3073
+        );
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
     #[test]
     fn padding_control_shows_effective_steps_and_keeps_legacy_value_until_edited() {
         let mut app = super::CleanSlateApp::default();
@@ -303,6 +476,9 @@ pub struct CleanSlateApp {
     preview: Option<AnalysisPreview>,
     preview_cache: PreviewCache,
     preview_processing: Option<PreviewProcessing>,
+    preview_pending: Option<Instant>,
+    preview_generation: u64,
+    source_generation: u64,
     preview_error: Option<String>,
     export_error: Option<String>,
 }
@@ -324,6 +500,9 @@ impl Default for CleanSlateApp {
             preview: None,
             preview_cache: PreviewCache::default(),
             preview_processing: None,
+            preview_pending: None,
+            preview_generation: 0,
+            source_generation: 0,
             preview_error: None,
             export_error: None,
         }
@@ -338,7 +517,17 @@ struct Processing {
 
 struct PreviewProcessing {
     progress: Arc<AtomicU8>,
-    result: Receiver<Result<(AnalysisPreview, PreviewCache), String>>,
+    cancelled: Arc<AtomicBool>,
+    generation: u64,
+    source_generation: u64,
+    sources: Vec<waveform::SourceStamp>,
+    result: Receiver<(Result<AnalysisPreview, String>, PreviewCache)>,
+}
+
+impl Drop for PreviewProcessing {
+    fn drop(&mut self) {
+        self.cancelled.store(true, Ordering::Relaxed);
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -410,7 +599,12 @@ impl CleanSlateApp {
         }
         self.preview = None;
         self.preview_cache = PreviewCache::default();
-        self.preview_processing = None;
+        self.source_generation += 1;
+        self.preview_generation += 1;
+        self.preview_pending = None;
+        if let Some(processing) = &self.preview_processing {
+            processing.cancelled.store(true, Ordering::Relaxed);
+        }
         if let Some(cache) = waveforms.first() {
             self.timeline.set_total_samples(cache.sample_count);
         }
@@ -631,27 +825,90 @@ impl CleanSlateApp {
     }
 
     fn start_preview(&mut self) {
-        let Some(project) = &self.project else { return };
-        let stems = project.source_paths();
-        if stems.iter().any(|path| !path.is_file()) {
-            self.preview_processing = None;
-            self.preview_error = Some("source stem is missing; relink it to analyze".into());
+        self.queue_preview(Duration::ZERO);
+        self.launch_preview();
+    }
+
+    fn queue_preview(&mut self, delay: Duration) {
+        if self.project.is_none() {
             return;
         }
+        // Drag events belong to the next coalesced snapshot. Keep the current
+        // snapshot installable until that boundary, even under continuous input.
+        if delay.is_zero() {
+            self.preview_generation += 1;
+        }
+        let due = Instant::now() + delay;
+        self.preview_pending = Some(self.preview_pending.map_or(due, |old| old.min(due)));
+        self.preview_error = None;
+        if let Some(processing) = &self.preview_processing {
+            let sources = self
+                .project
+                .as_ref()
+                .unwrap()
+                .source_paths()
+                .iter()
+                .map(|path| waveform::SourceStamp::read(path))
+                .collect::<Result<Vec<_>, _>>();
+            // Parameter edits must not cancel initial source inference. At 70,
+            // analyze has retained its facts and cancellation can preserve them.
+            if sources.as_ref().ok() != Some(&processing.sources)
+                || (delay.is_zero() && processing.progress.load(Ordering::Relaxed) >= 70)
+            {
+                processing.cancelled.store(true, Ordering::Relaxed);
+            }
+        }
+    }
+
+    fn launch_preview(&mut self) {
+        if self.preview_processing.is_some()
+            || self.preview_pending.is_none_or(|due| Instant::now() < due)
+        {
+            return;
+        }
+        self.preview_pending = None;
+        self.preview_generation += 1;
+        let Some(project) = &self.project else { return };
+        let stems = project.source_paths();
+        let sources = match stems
+            .iter()
+            .map(|path| waveform::SourceStamp::read(path))
+            .collect::<Result<Vec<_>, _>>()
+        {
+            Ok(sources) => sources,
+            Err(error) => {
+                self.preview_error = Some(error.to_string());
+                return;
+            }
+        };
         let protections = project.protections().to_vec();
         let parameters = self.preview_parameters;
         let progress = Arc::new(AtomicU8::new(0));
         let worker_progress = Arc::clone(&progress);
+        let cancelled = Arc::new(AtomicBool::new(false));
+        let worker_cancelled = Arc::clone(&cancelled);
         let mut cache = self.preview_cache.clone();
         let (sender, result) = mpsc::channel();
         std::thread::spawn(move || {
             let result = cache
-                .analyze(&stems, &protections, parameters, &worker_progress, None)
-                .map(|preview| (preview, cache))
+                .analyze(
+                    &stems,
+                    &protections,
+                    parameters,
+                    &worker_progress,
+                    Some(&worker_cancelled),
+                )
                 .map_err(|error| error.to_string());
-            let _ = sender.send(result);
+            let _ = sender.send((result, cache));
         });
-        self.preview_processing = Some(PreviewProcessing { progress, result });
+        self.preview_processing = Some(PreviewProcessing {
+            progress,
+            cancelled,
+            result,
+            sources,
+            generation: self.preview_generation,
+            source_generation: self.source_generation,
+        });
         self.preview_error = None;
     }
 
@@ -703,20 +960,63 @@ impl CleanSlateApp {
 
     fn poll_processing(&mut self) {
         if let Some(processing) = &self.preview_processing
-            && let Ok(result) = processing.result.try_recv()
+            && self
+                .preview_pending
+                .is_some_and(|due| Instant::now() >= due)
+            && processing.generation == self.preview_generation
         {
-            self.preview_processing = None;
-            match result {
-                Ok((preview, cache)) => {
-                    self.preview_cache = cache;
-                    if let Some(audition) = &self.audition {
-                        audition.replace_envelopes(preview.envelopes.clone());
+            self.preview_generation += 1;
+        }
+        if let Some(processing) = &self.preview_processing
+            && processing.generation != self.preview_generation
+            && processing.progress.load(Ordering::Relaxed) >= 70
+        {
+            processing.cancelled.store(true, Ordering::Relaxed);
+        }
+        if let Some(processing) = &self.preview_processing
+            && let result = processing.result.try_recv()
+            && !matches!(result, Err(mpsc::TryRecvError::Empty))
+        {
+            let processing = self.preview_processing.take().unwrap();
+            let (result, cache) = result.unwrap_or_else(|_| {
+                (
+                    Err("preview worker stopped unexpectedly".into()),
+                    self.preview_cache.clone(),
+                )
+            });
+            let sources_match = self.project.as_ref().is_some_and(|project| {
+                project
+                    .source_paths()
+                    .iter()
+                    .map(|path| waveform::SourceStamp::read(path))
+                    .collect::<Result<Vec<_>, _>>()
+                    .as_ref()
+                    .ok()
+                    == Some(&processing.sources)
+            });
+            if processing.source_generation == self.source_generation && sources_match {
+                self.preview_cache = cache;
+            }
+            if processing.generation == self.preview_generation {
+                let result = result.and_then(|preview| {
+                    if sources_match {
+                        Ok(preview)
+                    } else {
+                        Err("source changed before preview installation; retry".into())
                     }
-                    self.preview = Some(preview);
+                });
+                match result {
+                    Ok(preview) => {
+                        if let Some(audition) = &self.audition {
+                            audition.replace_envelopes(preview.envelopes.clone());
+                        }
+                        self.preview = Some(preview);
+                    }
+                    Err(error) => self.preview_error = Some(error),
                 }
-                Err(error) => self.preview_error = Some(error),
             }
         }
+        self.launch_preview();
         let Some(processing) = &self.processing else {
             return;
         };
@@ -790,6 +1090,7 @@ impl CleanSlateApp {
 
 impl CleanSlateApp {
     fn update(&mut self, message: Message) -> Task<Message> {
+        let previous_parameters = self.preview_parameters;
         match message {
             Message::ImportStems => self.import_stems(),
             Message::OpenProject => self.open_project(),
@@ -823,6 +1124,7 @@ impl CleanSlateApp {
                                 waveform::load_or_build(project.path(), &project.source_paths())
                                     .unwrap_or_default();
                             self.install_waveforms(waveforms);
+                            self.start_preview();
                         }
                         Err(error) => self.messages = vec![error.to_string()],
                     }
@@ -1001,6 +1303,9 @@ impl CleanSlateApp {
                 }
             },
         }
+        if previous_parameters != self.preview_parameters {
+            self.queue_preview(Duration::from_millis(40));
+        }
         Task::none()
     }
 
@@ -1019,9 +1324,15 @@ impl CleanSlateApp {
         });
         let processing = if self.processing.is_some()
             || self.preview_processing.is_some()
+            || self.preview_pending.is_some()
             || self.audition.is_some()
         {
-            iced::time::every(std::time::Duration::from_millis(100)).map(|_| Message::Tick)
+            let interval = if self.preview_processing.is_some() || self.preview_pending.is_some() {
+                10
+            } else {
+                100
+            };
+            iced::time::every(Duration::from_millis(interval)).map(|_| Message::Tick)
         } else {
             Subscription::none()
         };
@@ -1254,17 +1565,21 @@ impl CleanSlateApp {
         let preview_state: Element<'_, Message> = if let Some(processing) = &self.preview_processing
         {
             let progress = processing.progress.load(Ordering::Relaxed) as f32;
-            column![
-                text(format!("{}: {progress:.0}%", preview_stage(progress as u8))),
-                progress_bar(0.0..=100.0, progress),
-                text(if self.preview.is_some() {
-                    "Showing previous completed preview"
-                } else {
-                    "No completed preview yet"
-                }),
-            ]
-            .spacing(6)
-            .into()
+            if self.preview_cache.stats().preparations > 0 && !(20.0..70.0).contains(&progress) {
+                text("Updating preview · showing previous completed preview").into()
+            } else {
+                column![
+                    text(format!("{}: {progress:.0}%", preview_stage(progress as u8))),
+                    progress_bar(0.0..=100.0, progress),
+                    text(if self.preview.is_some() {
+                        "Showing previous completed preview"
+                    } else {
+                        "No completed preview yet"
+                    }),
+                ]
+                .spacing(6)
+                .into()
+            }
         } else if let Some(error) = &self.preview_error {
             text(format!("Preview failed: {error}")).into()
         } else if let Some(preview) = &self.preview {

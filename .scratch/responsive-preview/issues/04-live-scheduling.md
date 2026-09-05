@@ -2,11 +2,15 @@
 
 **Working branch:** codex/responsive-scheduling
 **Blocked by:** 01, 02, 03
-**Status:** ready-for-agent
+**Status:** resolved
 **What to build:** Responsive live adjustments with bounded work and current-generation installation.
 
-- [ ] One active computation and newest pending request; superseded work cooperatively stops.
-- [ ] Coalesced drag changes update preview, initially targeting 30–50 ms cadence; release persists final state.
-- [ ] Current result arrives promptly without 100 ms polling penalty; previous completed preview remains usable.
-- [ ] A→B→C, source relink/import, protection updates, failures, and close/reopen never install obsolete work.
-- [ ] No full detector restart on warm parameters; benchmark actual session warm median/p95.
+- [x] One active computation and newest pending request; superseded work cooperatively stops.
+- [x] Coalesced drag changes update preview at a 40 ms request boundary; release persists final state.
+- [x] Active preview polling uses 10 ms; previous completed preview remains usable.
+- [x] A→B→C, source relink/import, protection updates, failures, and close/reopen reject obsolete work.
+- [x] No full detector restart on warm parameters; parent measured actual session warm median/p95.
+
+## Evidence
+
+See [scheduling.md](../evidence/scheduling.md). App lifecycle tests cover initial preparation retention, controlled sustained input, source replacement, protections, and failure recovery. Parent owns integrated UI cadence and full-session acceptance.
