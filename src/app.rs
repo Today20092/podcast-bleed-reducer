@@ -96,6 +96,40 @@ mod tests {
             std::thread::sleep(std::time::Duration::from_millis(1));
         }
         assert_eq!(app.preview_cache.stats().preparations, 1);
+        // Control worker delivery and the clock boundary: two drag inputs occur
+        // before completion (e.g. 0/16 ms input, 30 ms result, 40 ms boundary).
+        // Repeating this proves intermediate snapshots survive sustained input.
+        for snapshot in [-11.0, -10.0, -9.0] {
+            app.preview_parameters.attenuation_db = snapshot;
+            app.start_preview();
+            let processing = app.preview_processing.as_mut().unwrap();
+            let completed = processing
+                .result
+                .recv_timeout(std::time::Duration::from_secs(20))
+                .unwrap();
+            let (sender, receiver) = super::mpsc::channel();
+            processing.result = receiver;
+            for value in [snapshot - 1.0, -17.0] {
+                let _ = app.update(super::Message::Attenuation(value));
+                // Freeze the coalescing deadline ahead of the simulated inputs.
+                app.preview_pending =
+                    Some(std::time::Instant::now() + std::time::Duration::from_secs(1));
+                app.poll_processing();
+                assert!(
+                    !app.preview_processing
+                        .as_ref()
+                        .unwrap()
+                        .cancelled
+                        .load(super::Ordering::Relaxed)
+                );
+            }
+            sender.send(completed).unwrap();
+            app.poll_processing();
+            assert_eq!(
+                app.preview.as_ref().unwrap().parameters.attenuation_db,
+                snapshot
+            );
+        }
         let _ = app.update(super::Message::RefreshPreview);
         assert_eq!(
             app.project.as_ref().unwrap().parameters().attenuation_db,
@@ -174,6 +208,18 @@ mod tests {
             std::thread::sleep(std::time::Duration::from_millis(1));
         }
         assert!(app.preview_error.is_none());
+        std::fs::write(&path, b"invalid WAV").unwrap();
+        app.start_preview();
+        while app.preview_processing.is_some() {
+            app.poll_processing();
+            assert!(std::time::Instant::now() < deadline);
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+        assert!(app.preview_error.is_some());
+        assert_eq!(
+            app.preview.as_ref().unwrap().envelopes[0].sample_count(),
+            3073
+        );
         std::fs::remove_file(&path).unwrap();
         app.start_preview();
         assert!(app.preview_error.is_some());
@@ -787,7 +833,11 @@ impl CleanSlateApp {
         if self.project.is_none() {
             return;
         }
-        self.preview_generation += 1;
+        // Drag events belong to the next coalesced snapshot. Keep the current
+        // snapshot installable until that boundary, even under continuous input.
+        if delay.is_zero() {
+            self.preview_generation += 1;
+        }
         let due = Instant::now() + delay;
         self.preview_pending = Some(self.preview_pending.map_or(due, |old| old.min(due)));
         self.preview_error = None;
@@ -803,7 +853,7 @@ impl CleanSlateApp {
             // Parameter edits must not cancel initial source inference. At 70,
             // analyze has retained its facts and cancellation can preserve them.
             if sources.as_ref().ok() != Some(&processing.sources)
-                || processing.progress.load(Ordering::Relaxed) >= 70
+                || (delay.is_zero() && processing.progress.load(Ordering::Relaxed) >= 70)
             {
                 processing.cancelled.store(true, Ordering::Relaxed);
             }
@@ -817,6 +867,7 @@ impl CleanSlateApp {
             return;
         }
         self.preview_pending = None;
+        self.preview_generation += 1;
         let Some(project) = &self.project else { return };
         let stems = project.source_paths();
         let sources = match stems
@@ -909,7 +960,15 @@ impl CleanSlateApp {
 
     fn poll_processing(&mut self) {
         if let Some(processing) = &self.preview_processing
-            && self.preview_pending.is_some()
+            && self
+                .preview_pending
+                .is_some_and(|due| Instant::now() >= due)
+            && processing.generation == self.preview_generation
+        {
+            self.preview_generation += 1;
+        }
+        if let Some(processing) = &self.preview_processing
+            && processing.generation != self.preview_generation
             && processing.progress.load(Ordering::Relaxed) >= 70
         {
             processing.cancelled.store(true, Ordering::Relaxed);
@@ -1065,6 +1124,7 @@ impl CleanSlateApp {
                                 waveform::load_or_build(project.path(), &project.source_paths())
                                     .unwrap_or_default();
                             self.install_waveforms(waveforms);
+                            self.start_preview();
                         }
                         Err(error) => self.messages = vec![error.to_string()],
                     }
