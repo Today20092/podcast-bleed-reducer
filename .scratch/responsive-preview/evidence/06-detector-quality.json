@@ -1,0 +1,1844 @@
+{
+  "comparisons": [
+    {
+      "evidence": {
+        "bleed_attenuation_db": -0.6602566489179671,
+        "changed_overlap_samples": 0,
+        "changed_preservation_samples": 57841,
+        "labels": [
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 67296,
+            "kind": "Preserve",
+            "minimum_gain": 1.0,
+            "start_sample": 0,
+            "track": 2
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 98064,
+            "kind": "Preserve",
+            "minimum_gain": 1.0,
+            "start_sample": 10080,
+            "track": 0
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 158880,
+            "kind": "Preserve",
+            "minimum_gain": 1.0,
+            "start_sample": 118224,
+            "track": 0
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 186144,
+            "kind": "Ignore",
+            "minimum_gain": 1.0,
+            "start_sample": 160560,
+            "track": 2
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 209616,
+            "kind": "Preserve",
+            "minimum_gain": 1.0,
+            "start_sample": 186480,
+            "track": 0
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 329520,
+            "kind": "Bleed",
+            "minimum_gain": 1.0,
+            "start_sample": 223248,
+            "track": 0
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 332112,
+            "kind": "Preserve",
+            "minimum_gain": 1.0,
+            "start_sample": 227808,
+            "track": 2
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 441552,
+            "kind": "Preserve",
+            "minimum_gain": 1.0,
+            "start_sample": 354528,
+            "track": 0
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 550080,
+            "kind": "Preserve",
+            "minimum_gain": 1.0,
+            "start_sample": 460416,
+            "track": 0
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 670704,
+            "kind": "Preserve",
+            "minimum_gain": 1.0,
+            "start_sample": 523632,
+            "track": 2
+          },
+          {
+            "attenuation_db": -1.047347354456414,
+            "changed_samples": 56496,
+            "end_sample": 664752,
+            "kind": "Bleed",
+            "minimum_gain": 0.21319007873535156,
+            "start_sample": 552336,
+            "track": 0
+          },
+          {
+            "attenuation_db": -0.00004492385405332645,
+            "changed_samples": 13536,
+            "end_sample": 701520,
+            "kind": "Preserve",
+            "minimum_gain": 0.9999701976776123,
+            "start_sample": 687984,
+            "track": 0
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 789984,
+            "kind": "Preserve",
+            "minimum_gain": 1.0,
+            "start_sample": 710880,
+            "track": 2
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 833664,
+            "kind": "Bleed",
+            "minimum_gain": 1.0,
+            "start_sample": 712512,
+            "track": 0
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 981600,
+            "kind": "Preserve",
+            "minimum_gain": 1.0,
+            "start_sample": 833280,
+            "track": 0
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 914544,
+            "kind": "Preserve",
+            "minimum_gain": 1.0,
+            "start_sample": 866832,
+            "track": 2
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 1931520,
+            "kind": "Bleed",
+            "minimum_gain": 1.0,
+            "start_sample": 1734096,
+            "track": 2
+          },
+          {
+            "attenuation_db": -4.449838308114598e-6,
+            "changed_samples": 30166,
+            "end_sample": 2141424,
+            "kind": "Bleed",
+            "minimum_gain": 0.9914320111274719,
+            "start_sample": 1969920,
+            "track": 2
+          },
+          {
+            "attenuation_db": -0.055536039193699836,
+            "changed_samples": 13296,
+            "end_sample": 2174448,
+            "kind": "Ignore",
+            "minimum_gain": 0.9458123445510864,
+            "start_sample": 2149152,
+            "track": 2
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 2486880,
+            "kind": "Preserve",
+            "minimum_gain": 1.0,
+            "start_sample": 2297664,
+            "track": 1
+          },
+          {
+            "attenuation_db": -0.001656608604153995,
+            "changed_samples": 18528,
+            "end_sample": 2654304,
+            "kind": "Bleed",
+            "minimum_gain": 0.8025847673416138,
+            "start_sample": 2500704,
+            "track": 1
+          },
+          {
+            "attenuation_db": -1.2652866330448725e-7,
+            "changed_samples": 16815,
+            "end_sample": 3382848,
+            "kind": "Preserve",
+            "minimum_gain": 0.999967098236084,
+            "start_sample": 2662800,
+            "track": 1
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 5280576,
+            "kind": "Preserve",
+            "minimum_gain": 1.0,
+            "start_sample": 5086128,
+            "track": 2
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 5508336,
+            "kind": "Preserve",
+            "minimum_gain": 1.0,
+            "start_sample": 5344176,
+            "track": 2
+          },
+          {
+            "attenuation_db": -17.97523331947438,
+            "changed_samples": 117792,
+            "end_sample": 5935728,
+            "kind": "Bleed",
+            "minimum_gain": 0.12590497732162476,
+            "start_sample": 5817936,
+            "track": 2
+          },
+          {
+            "attenuation_db": -0.002320920669987369,
+            "changed_samples": 34738,
+            "end_sample": 6242112,
+            "kind": "Bleed",
+            "minimum_gain": 0.9424413442611694,
+            "start_sample": 5989248,
+            "track": 2
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 7088832,
+            "kind": "Preserve",
+            "minimum_gain": 1.0,
+            "start_sample": 6970992,
+            "track": 2
+          },
+          {
+            "attenuation_db": -1.7964470611250198,
+            "changed_samples": 1671739,
+            "end_sample": 10968528,
+            "kind": "Bleed",
+            "minimum_gain": 0.1258925497531891,
+            "start_sample": 8922336,
+            "track": 0
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 10815792,
+            "kind": "Preserve",
+            "minimum_gain": 1.0,
+            "start_sample": 10676496,
+            "track": 1
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 10897824,
+            "kind": "Preserve",
+            "minimum_gain": 1.0,
+            "start_sample": 10822848,
+            "track": 1
+          },
+          {
+            "attenuation_db": -0.00008676237729809678,
+            "changed_samples": 27490,
+            "end_sample": 10998480,
+            "kind": "Preserve",
+            "minimum_gain": 0.9971910119056702,
+            "start_sample": 10968528,
+            "track": 0
+          },
+          {
+            "attenuation_db": -13.74599988425344,
+            "changed_samples": 1077024,
+            "end_sample": 12096288,
+            "kind": "Bleed",
+            "minimum_gain": 0.1258925497531891,
+            "start_sample": 10998480,
+            "track": 0
+          },
+          {
+            "attenuation_db": -6.425162916737755,
+            "changed_samples": 966854,
+            "end_sample": 12107232,
+            "kind": "Bleed",
+            "minimum_gain": 0.1258925497531891,
+            "start_sample": 11096688,
+            "track": 2
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 11682336,
+            "kind": "Ignore",
+            "minimum_gain": 1.0,
+            "start_sample": 11667936,
+            "track": 1
+          },
+          {
+            "attenuation_db": -0.00008331863399864406,
+            "changed_samples": 39252,
+            "end_sample": 12996240,
+            "kind": "Bleed",
+            "minimum_gain": 0.8949840068817139,
+            "start_sample": 12228864,
+            "track": 1
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 14550528,
+            "kind": "Bleed",
+            "minimum_gain": 1.0,
+            "start_sample": 13861104,
+            "track": 1
+          }
+        ],
+        "overlap_samples": 131376,
+        "preservation_samples": 2565744
+      },
+      "parameters": {
+        "attenuation_db": -18.0,
+        "bleed_discrimination_db": 6.0,
+        "close_ms": 500.0,
+        "open_ms": 50.0,
+        "speech_padding_ms": 512.0,
+        "speech_sensitivity": 0.20000000298023224
+      },
+      "preparation_id": "silero-v5-1A153A22/stride3-rms1536-v1",
+      "region_count": 163
+    },
+    {
+      "evidence": {
+        "bleed_attenuation_db": -1.660170803527734,
+        "changed_overlap_samples": 0,
+        "changed_preservation_samples": 100693,
+        "labels": [
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 67296,
+            "kind": "Preserve",
+            "minimum_gain": 1.0,
+            "start_sample": 0,
+            "track": 2
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 98064,
+            "kind": "Preserve",
+            "minimum_gain": 1.0,
+            "start_sample": 10080,
+            "track": 0
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 158880,
+            "kind": "Preserve",
+            "minimum_gain": 1.0,
+            "start_sample": 118224,
+            "track": 0
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 186144,
+            "kind": "Ignore",
+            "minimum_gain": 1.0,
+            "start_sample": 160560,
+            "track": 2
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 209616,
+            "kind": "Preserve",
+            "minimum_gain": 1.0,
+            "start_sample": 186480,
+            "track": 0
+          },
+          {
+            "attenuation_db": -0.19069287043581695,
+            "changed_samples": 20784,
+            "end_sample": 329520,
+            "kind": "Bleed",
+            "minimum_gain": 0.49358540773391724,
+            "start_sample": 223248,
+            "track": 0
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 332112,
+            "kind": "Preserve",
+            "minimum_gain": 1.0,
+            "start_sample": 227808,
+            "track": 2
+          },
+          {
+            "attenuation_db": -4.965957791817707e-6,
+            "changed_samples": 20600,
+            "end_sample": 441552,
+            "kind": "Preserve",
+            "minimum_gain": 0.9998408555984497,
+            "start_sample": 354528,
+            "track": 0
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 550080,
+            "kind": "Preserve",
+            "minimum_gain": 1.0,
+            "start_sample": 460416,
+            "track": 0
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 670704,
+            "kind": "Preserve",
+            "minimum_gain": 1.0,
+            "start_sample": 523632,
+            "track": 2
+          },
+          {
+            "attenuation_db": -2.3109320861403697,
+            "changed_samples": 82608,
+            "end_sample": 664752,
+            "kind": "Bleed",
+            "minimum_gain": 0.15530383586883545,
+            "start_sample": 552336,
+            "track": 0
+          },
+          {
+            "attenuation_db": -0.00004821243890914636,
+            "changed_samples": 13536,
+            "end_sample": 701520,
+            "kind": "Preserve",
+            "minimum_gain": 0.9999679923057556,
+            "start_sample": 687984,
+            "track": 0
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 789984,
+            "kind": "Preserve",
+            "minimum_gain": 1.0,
+            "start_sample": 710880,
+            "track": 2
+          },
+          {
+            "attenuation_db": -3.8205220776876514,
+            "changed_samples": 107136,
+            "end_sample": 833664,
+            "kind": "Bleed",
+            "minimum_gain": 0.14866136014461517,
+            "start_sample": 712512,
+            "track": 0
+          },
+          {
+            "attenuation_db": -7.076427101416009e-6,
+            "changed_samples": 22002,
+            "end_sample": 981600,
+            "kind": "Preserve",
+            "minimum_gain": 0.9997144937515259,
+            "start_sample": 833280,
+            "track": 0
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 914544,
+            "kind": "Preserve",
+            "minimum_gain": 1.0,
+            "start_sample": 866832,
+            "track": 2
+          },
+          {
+            "attenuation_db": -0.25918239301977875,
+            "changed_samples": 55138,
+            "end_sample": 1931520,
+            "kind": "Bleed",
+            "minimum_gain": 0.1258925497531891,
+            "start_sample": 1734096,
+            "track": 2
+          },
+          {
+            "attenuation_db": -4.449838308114598e-6,
+            "changed_samples": 30166,
+            "end_sample": 2141424,
+            "kind": "Bleed",
+            "minimum_gain": 0.9914320111274719,
+            "start_sample": 1969920,
+            "track": 2
+          },
+          {
+            "attenuation_db": -0.055536039193699836,
+            "changed_samples": 13296,
+            "end_sample": 2174448,
+            "kind": "Ignore",
+            "minimum_gain": 0.9458123445510864,
+            "start_sample": 2149152,
+            "track": 2
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 2486880,
+            "kind": "Preserve",
+            "minimum_gain": 1.0,
+            "start_sample": 2297664,
+            "track": 1
+          },
+          {
+            "attenuation_db": -0.0021373088803561227,
+            "changed_samples": 23136,
+            "end_sample": 2654304,
+            "kind": "Bleed",
+            "minimum_gain": 0.780856728553772,
+            "start_sample": 2500704,
+            "track": 1
+          },
+          {
+            "attenuation_db": -1.4046563055144168e-7,
+            "changed_samples": 17065,
+            "end_sample": 3382848,
+            "kind": "Preserve",
+            "minimum_gain": 0.9999635219573975,
+            "start_sample": 2662800,
+            "track": 1
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 5280576,
+            "kind": "Preserve",
+            "minimum_gain": 1.0,
+            "start_sample": 5086128,
+            "track": 2
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 5508336,
+            "kind": "Preserve",
+            "minimum_gain": 1.0,
+            "start_sample": 5344176,
+            "track": 2
+          },
+          {
+            "attenuation_db": -17.99659596412282,
+            "changed_samples": 117792,
+            "end_sample": 5935728,
+            "kind": "Bleed",
+            "minimum_gain": 0.12589426338672638,
+            "start_sample": 5817936,
+            "track": 2
+          },
+          {
+            "attenuation_db": -5.214731223192237,
+            "changed_samples": 237298,
+            "end_sample": 6242112,
+            "kind": "Bleed",
+            "minimum_gain": 0.12589265406131744,
+            "start_sample": 5989248,
+            "track": 2
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 7088832,
+            "kind": "Preserve",
+            "minimum_gain": 1.0,
+            "start_sample": 6970992,
+            "track": 2
+          },
+          {
+            "attenuation_db": -6.604493217894501,
+            "changed_samples": 2023781,
+            "end_sample": 10968528,
+            "kind": "Bleed",
+            "minimum_gain": 0.1258925497531891,
+            "start_sample": 8922336,
+            "track": 0
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 10815792,
+            "kind": "Preserve",
+            "minimum_gain": 1.0,
+            "start_sample": 10676496,
+            "track": 1
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 10897824,
+            "kind": "Preserve",
+            "minimum_gain": 1.0,
+            "start_sample": 10822848,
+            "track": 1
+          },
+          {
+            "attenuation_db": -0.00008676237729809678,
+            "changed_samples": 27490,
+            "end_sample": 10998480,
+            "kind": "Preserve",
+            "minimum_gain": 0.9971910119056702,
+            "start_sample": 10968528,
+            "track": 0
+          },
+          {
+            "attenuation_db": -13.880619788213851,
+            "changed_samples": 1078560,
+            "end_sample": 12096288,
+            "kind": "Bleed",
+            "minimum_gain": 0.1258925497531891,
+            "start_sample": 10998480,
+            "track": 0
+          },
+          {
+            "attenuation_db": -17.97667985599796,
+            "changed_samples": 1010544,
+            "end_sample": 12107232,
+            "kind": "Bleed",
+            "minimum_gain": 0.1258925497531891,
+            "start_sample": 11096688,
+            "track": 2
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 11682336,
+            "kind": "Ignore",
+            "minimum_gain": 1.0,
+            "start_sample": 11667936,
+            "track": 1
+          },
+          {
+            "attenuation_db": -0.00213990808709414,
+            "changed_samples": 97453,
+            "end_sample": 12996240,
+            "kind": "Bleed",
+            "minimum_gain": 0.5314420461654663,
+            "start_sample": 12228864,
+            "track": 1
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 14550528,
+            "kind": "Bleed",
+            "minimum_gain": 1.0,
+            "start_sample": 13861104,
+            "track": 1
+          }
+        ],
+        "overlap_samples": 131376,
+        "preservation_samples": 2565744
+      },
+      "parameters": {
+        "attenuation_db": -18.0,
+        "bleed_discrimination_db": 6.0,
+        "close_ms": 500.0,
+        "open_ms": 50.0,
+        "speech_padding_ms": 512.0,
+        "speech_sensitivity": 0.5
+      },
+      "preparation_id": "silero-v5-1A153A22/stride3-rms1536-v1",
+      "region_count": 168
+    },
+    {
+      "evidence": {
+        "bleed_attenuation_db": -0.43977297904746593,
+        "changed_overlap_samples": 0,
+        "changed_preservation_samples": 79427,
+        "labels": [
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 67296,
+            "kind": "Preserve",
+            "minimum_gain": 1.0,
+            "start_sample": 0,
+            "track": 2
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 98064,
+            "kind": "Preserve",
+            "minimum_gain": 1.0,
+            "start_sample": 10080,
+            "track": 0
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 158880,
+            "kind": "Preserve",
+            "minimum_gain": 1.0,
+            "start_sample": 118224,
+            "track": 0
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 186144,
+            "kind": "Ignore",
+            "minimum_gain": 1.0,
+            "start_sample": 160560,
+            "track": 2
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 209616,
+            "kind": "Preserve",
+            "minimum_gain": 1.0,
+            "start_sample": 186480,
+            "track": 0
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 329520,
+            "kind": "Bleed",
+            "minimum_gain": 1.0,
+            "start_sample": 223248,
+            "track": 0
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 332112,
+            "kind": "Preserve",
+            "minimum_gain": 1.0,
+            "start_sample": 227808,
+            "track": 2
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 441552,
+            "kind": "Preserve",
+            "minimum_gain": 1.0,
+            "start_sample": 354528,
+            "track": 0
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 550080,
+            "kind": "Preserve",
+            "minimum_gain": 1.0,
+            "start_sample": 460416,
+            "track": 0
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 670704,
+            "kind": "Preserve",
+            "minimum_gain": 1.0,
+            "start_sample": 523632,
+            "track": 2
+          },
+          {
+            "attenuation_db": -1.047347354456414,
+            "changed_samples": 56496,
+            "end_sample": 664752,
+            "kind": "Bleed",
+            "minimum_gain": 0.21319007873535156,
+            "start_sample": 552336,
+            "track": 0
+          },
+          {
+            "attenuation_db": -0.00004492385405332645,
+            "changed_samples": 13536,
+            "end_sample": 701520,
+            "kind": "Preserve",
+            "minimum_gain": 0.9999701976776123,
+            "start_sample": 687984,
+            "track": 0
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 789984,
+            "kind": "Preserve",
+            "minimum_gain": 1.0,
+            "start_sample": 710880,
+            "track": 2
+          },
+          {
+            "attenuation_db": -0.9234175998034013,
+            "changed_samples": 64128,
+            "end_sample": 833664,
+            "kind": "Bleed",
+            "minimum_gain": 0.26252564787864685,
+            "start_sample": 712512,
+            "track": 0
+          },
+          {
+            "attenuation_db": -6.130527920743754e-6,
+            "changed_samples": 21658,
+            "end_sample": 981600,
+            "kind": "Preserve",
+            "minimum_gain": 0.9997527003288269,
+            "start_sample": 833280,
+            "track": 0
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 914544,
+            "kind": "Preserve",
+            "minimum_gain": 1.0,
+            "start_sample": 866832,
+            "track": 2
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 1931520,
+            "kind": "Bleed",
+            "minimum_gain": 1.0,
+            "start_sample": 1734096,
+            "track": 2
+          },
+          {
+            "attenuation_db": -4.449838308114598e-6,
+            "changed_samples": 30166,
+            "end_sample": 2141424,
+            "kind": "Bleed",
+            "minimum_gain": 0.9914320111274719,
+            "start_sample": 1969920,
+            "track": 2
+          },
+          {
+            "attenuation_db": -0.055536039193699836,
+            "changed_samples": 13296,
+            "end_sample": 2174448,
+            "kind": "Ignore",
+            "minimum_gain": 0.9458123445510864,
+            "start_sample": 2149152,
+            "track": 2
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 2486880,
+            "kind": "Preserve",
+            "minimum_gain": 1.0,
+            "start_sample": 2297664,
+            "track": 1
+          },
+          {
+            "attenuation_db": -0.001656608604153995,
+            "changed_samples": 18528,
+            "end_sample": 2654304,
+            "kind": "Bleed",
+            "minimum_gain": 0.8025847673416138,
+            "start_sample": 2500704,
+            "track": 1
+          },
+          {
+            "attenuation_db": -1.2652866330448725e-7,
+            "changed_samples": 16815,
+            "end_sample": 3382848,
+            "kind": "Preserve",
+            "minimum_gain": 0.999967098236084,
+            "start_sample": 2662800,
+            "track": 1
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 5280576,
+            "kind": "Preserve",
+            "minimum_gain": 1.0,
+            "start_sample": 5086128,
+            "track": 2
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 5508336,
+            "kind": "Preserve",
+            "minimum_gain": 1.0,
+            "start_sample": 5344176,
+            "track": 2
+          },
+          {
+            "attenuation_db": -17.93093731055254,
+            "changed_samples": 117792,
+            "end_sample": 5935728,
+            "kind": "Bleed",
+            "minimum_gain": 0.12592713534832,
+            "start_sample": 5817936,
+            "track": 2
+          },
+          {
+            "attenuation_db": -7.371679398863676e-6,
+            "changed_samples": 20914,
+            "end_sample": 6242112,
+            "kind": "Bleed",
+            "minimum_gain": 0.9998186230659485,
+            "start_sample": 5989248,
+            "track": 2
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 7088832,
+            "kind": "Preserve",
+            "minimum_gain": 1.0,
+            "start_sample": 6970992,
+            "track": 2
+          },
+          {
+            "attenuation_db": -0.4876026112689463,
+            "changed_samples": 1049275,
+            "end_sample": 10968528,
+            "kind": "Bleed",
+            "minimum_gain": 0.1258946806192398,
+            "start_sample": 8922336,
+            "track": 0
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 10815792,
+            "kind": "Preserve",
+            "minimum_gain": 1.0,
+            "start_sample": 10676496,
+            "track": 1
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 10897824,
+            "kind": "Preserve",
+            "minimum_gain": 1.0,
+            "start_sample": 10822848,
+            "track": 1
+          },
+          {
+            "attenuation_db": -0.00008420472958607063,
+            "changed_samples": 27418,
+            "end_sample": 10998480,
+            "kind": "Preserve",
+            "minimum_gain": 0.9972741603851318,
+            "start_sample": 10968528,
+            "track": 0
+          },
+          {
+            "attenuation_db": -13.74599988425344,
+            "changed_samples": 1077024,
+            "end_sample": 12096288,
+            "kind": "Bleed",
+            "minimum_gain": 0.1258925497531891,
+            "start_sample": 10998480,
+            "track": 0
+          },
+          {
+            "attenuation_db": -4.191846909922563,
+            "changed_samples": 881235,
+            "end_sample": 12107232,
+            "kind": "Bleed",
+            "minimum_gain": 0.12589477002620697,
+            "start_sample": 11096688,
+            "track": 2
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 11682336,
+            "kind": "Ignore",
+            "minimum_gain": 1.0,
+            "start_sample": 11667936,
+            "track": 1
+          },
+          {
+            "attenuation_db": -0.00008331863399864406,
+            "changed_samples": 39252,
+            "end_sample": 12996240,
+            "kind": "Bleed",
+            "minimum_gain": 0.8949840068817139,
+            "start_sample": 12228864,
+            "track": 1
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 14550528,
+            "kind": "Bleed",
+            "minimum_gain": 1.0,
+            "start_sample": 13861104,
+            "track": 1
+          }
+        ],
+        "overlap_samples": 131376,
+        "preservation_samples": 2565744
+      },
+      "parameters": {
+        "attenuation_db": -18.0,
+        "bleed_discrimination_db": 6.0,
+        "close_ms": 500.0,
+        "open_ms": 50.0,
+        "speech_padding_ms": 512.0,
+        "speech_sensitivity": 0.20000000298023224
+      },
+      "preparation_id": "silero-v5-1A153A22/blackman127-fc7000-centered-zero-rms1536-v1",
+      "region_count": 176
+    },
+    {
+      "evidence": {
+        "bleed_attenuation_db": -1.1326103536876422,
+        "changed_overlap_samples": 0,
+        "changed_preservation_samples": 100693,
+        "labels": [
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 67296,
+            "kind": "Preserve",
+            "minimum_gain": 1.0,
+            "start_sample": 0,
+            "track": 2
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 98064,
+            "kind": "Preserve",
+            "minimum_gain": 1.0,
+            "start_sample": 10080,
+            "track": 0
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 158880,
+            "kind": "Preserve",
+            "minimum_gain": 1.0,
+            "start_sample": 118224,
+            "track": 0
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 186144,
+            "kind": "Ignore",
+            "minimum_gain": 1.0,
+            "start_sample": 160560,
+            "track": 2
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 209616,
+            "kind": "Preserve",
+            "minimum_gain": 1.0,
+            "start_sample": 186480,
+            "track": 0
+          },
+          {
+            "attenuation_db": -0.19069287043581695,
+            "changed_samples": 20784,
+            "end_sample": 329520,
+            "kind": "Bleed",
+            "minimum_gain": 0.49358540773391724,
+            "start_sample": 223248,
+            "track": 0
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 332112,
+            "kind": "Preserve",
+            "minimum_gain": 1.0,
+            "start_sample": 227808,
+            "track": 2
+          },
+          {
+            "attenuation_db": -4.965957791817707e-6,
+            "changed_samples": 20600,
+            "end_sample": 441552,
+            "kind": "Preserve",
+            "minimum_gain": 0.9998408555984497,
+            "start_sample": 354528,
+            "track": 0
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 550080,
+            "kind": "Preserve",
+            "minimum_gain": 1.0,
+            "start_sample": 460416,
+            "track": 0
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 670704,
+            "kind": "Preserve",
+            "minimum_gain": 1.0,
+            "start_sample": 523632,
+            "track": 2
+          },
+          {
+            "attenuation_db": -2.1614917750451794,
+            "changed_samples": 81072,
+            "end_sample": 664752,
+            "kind": "Bleed",
+            "minimum_gain": 0.1572476029396057,
+            "start_sample": 552336,
+            "track": 0
+          },
+          {
+            "attenuation_db": -0.000048108540866946744,
+            "changed_samples": 13536,
+            "end_sample": 701520,
+            "kind": "Preserve",
+            "minimum_gain": 0.9999680519104004,
+            "start_sample": 687984,
+            "track": 0
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 789984,
+            "kind": "Preserve",
+            "minimum_gain": 1.0,
+            "start_sample": 710880,
+            "track": 2
+          },
+          {
+            "attenuation_db": -3.8205220776876514,
+            "changed_samples": 107136,
+            "end_sample": 833664,
+            "kind": "Bleed",
+            "minimum_gain": 0.14866136014461517,
+            "start_sample": 712512,
+            "track": 0
+          },
+          {
+            "attenuation_db": -7.076427101416009e-6,
+            "changed_samples": 22002,
+            "end_sample": 981600,
+            "kind": "Preserve",
+            "minimum_gain": 0.9997144937515259,
+            "start_sample": 833280,
+            "track": 0
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 914544,
+            "kind": "Preserve",
+            "minimum_gain": 1.0,
+            "start_sample": 866832,
+            "track": 2
+          },
+          {
+            "attenuation_db": -8.930461986168152e-6,
+            "changed_samples": 27490,
+            "end_sample": 1931520,
+            "kind": "Bleed",
+            "minimum_gain": 0.9971910119056702,
+            "start_sample": 1734096,
+            "track": 2
+          },
+          {
+            "attenuation_db": -4.449838308114598e-6,
+            "changed_samples": 30166,
+            "end_sample": 2141424,
+            "kind": "Bleed",
+            "minimum_gain": 0.9914320111274719,
+            "start_sample": 1969920,
+            "track": 2
+          },
+          {
+            "attenuation_db": -0.055536039193699836,
+            "changed_samples": 13296,
+            "end_sample": 2174448,
+            "kind": "Ignore",
+            "minimum_gain": 0.9458123445510864,
+            "start_sample": 2149152,
+            "track": 2
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 2486880,
+            "kind": "Preserve",
+            "minimum_gain": 1.0,
+            "start_sample": 2297664,
+            "track": 1
+          },
+          {
+            "attenuation_db": -0.0021373088803561227,
+            "changed_samples": 23136,
+            "end_sample": 2654304,
+            "kind": "Bleed",
+            "minimum_gain": 0.780856728553772,
+            "start_sample": 2500704,
+            "track": 1
+          },
+          {
+            "attenuation_db": -1.4046563055144168e-7,
+            "changed_samples": 17065,
+            "end_sample": 3382848,
+            "kind": "Preserve",
+            "minimum_gain": 0.9999635219573975,
+            "start_sample": 2662800,
+            "track": 1
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 5280576,
+            "kind": "Preserve",
+            "minimum_gain": 1.0,
+            "start_sample": 5086128,
+            "track": 2
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 5508336,
+            "kind": "Preserve",
+            "minimum_gain": 1.0,
+            "start_sample": 5344176,
+            "track": 2
+          },
+          {
+            "attenuation_db": -17.995875491557133,
+            "changed_samples": 117792,
+            "end_sample": 5935728,
+            "kind": "Bleed",
+            "minimum_gain": 0.12589462101459503,
+            "start_sample": 5817936,
+            "track": 2
+          },
+          {
+            "attenuation_db": -0.6915569063072056,
+            "changed_samples": 171341,
+            "end_sample": 6242112,
+            "kind": "Bleed",
+            "minimum_gain": 0.12589268386363983,
+            "start_sample": 5989248,
+            "track": 2
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 7088832,
+            "kind": "Preserve",
+            "minimum_gain": 1.0,
+            "start_sample": 6970992,
+            "track": 2
+          },
+          {
+            "attenuation_db": -4.0167290784322915,
+            "changed_samples": 1940815,
+            "end_sample": 10968528,
+            "kind": "Bleed",
+            "minimum_gain": 0.1258925497531891,
+            "start_sample": 8922336,
+            "track": 0
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 10815792,
+            "kind": "Preserve",
+            "minimum_gain": 1.0,
+            "start_sample": 10676496,
+            "track": 1
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 10897824,
+            "kind": "Preserve",
+            "minimum_gain": 1.0,
+            "start_sample": 10822848,
+            "track": 1
+          },
+          {
+            "attenuation_db": -0.00008676237729809678,
+            "changed_samples": 27490,
+            "end_sample": 10998480,
+            "kind": "Preserve",
+            "minimum_gain": 0.9971910119056702,
+            "start_sample": 10968528,
+            "track": 0
+          },
+          {
+            "attenuation_db": -13.880619788213851,
+            "changed_samples": 1078560,
+            "end_sample": 12096288,
+            "kind": "Bleed",
+            "minimum_gain": 0.1258925497531891,
+            "start_sample": 10998480,
+            "track": 0
+          },
+          {
+            "attenuation_db": -7.687412827576857,
+            "changed_samples": 999585,
+            "end_sample": 12107232,
+            "kind": "Bleed",
+            "minimum_gain": 0.1258925497531891,
+            "start_sample": 11096688,
+            "track": 2
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 11682336,
+            "kind": "Ignore",
+            "minimum_gain": 1.0,
+            "start_sample": 11667936,
+            "track": 1
+          },
+          {
+            "attenuation_db": -0.00008331863399864406,
+            "changed_samples": 39252,
+            "end_sample": 12996240,
+            "kind": "Bleed",
+            "minimum_gain": 0.8949840068817139,
+            "start_sample": 12228864,
+            "track": 1
+          },
+          {
+            "attenuation_db": 0.0,
+            "changed_samples": 0,
+            "end_sample": 14550528,
+            "kind": "Bleed",
+            "minimum_gain": 1.0,
+            "start_sample": 13861104,
+            "track": 1
+          }
+        ],
+        "overlap_samples": 131376,
+        "preservation_samples": 2565744
+      },
+      "parameters": {
+        "attenuation_db": -18.0,
+        "bleed_discrimination_db": 6.0,
+        "close_ms": 500.0,
+        "open_ms": 50.0,
+        "speech_padding_ms": 512.0,
+        "speech_sensitivity": 0.5
+      },
+      "preparation_id": "silero-v5-1A153A22/blackman127-fc7000-centered-zero-rms1536-v1",
+      "region_count": 172
+    }
+  ],
+  "cross_microphone": [
+    {
+      "end_sample": 67296,
+      "kind": "Preserve",
+      "loudest_track": 0,
+      "rms_by_track": [
+        0.03814252315563587,
+        0.007250040886715987,
+        0.03354843404404257
+      ],
+      "start_sample": 0,
+      "track": 2
+    },
+    {
+      "end_sample": 98064,
+      "kind": "Preserve",
+      "loudest_track": 0,
+      "rms_by_track": [
+        0.035539849727273545,
+        0.0068011241883617025,
+        0.02823511119100312
+      ],
+      "start_sample": 10080,
+      "track": 0
+    },
+    {
+      "end_sample": 158880,
+      "kind": "Preserve",
+      "loudest_track": 0,
+      "rms_by_track": [
+        0.03156461388306007,
+        0.005198722208470219,
+        0.006820804333639912
+      ],
+      "start_sample": 118224,
+      "track": 0
+    },
+    {
+      "end_sample": 186144,
+      "kind": "Ignore",
+      "loudest_track": 0,
+      "rms_by_track": [
+        0.0008466939776362188,
+        0.0007392097914836202,
+        0.0006565071780837055
+      ],
+      "start_sample": 160560,
+      "track": 2
+    },
+    {
+      "end_sample": 209616,
+      "kind": "Preserve",
+      "loudest_track": 0,
+      "rms_by_track": [
+        0.0259676807637666,
+        0.00502698176364833,
+        0.007445927792190193
+      ],
+      "start_sample": 186480,
+      "track": 0
+    },
+    {
+      "end_sample": 329520,
+      "kind": "Bleed",
+      "loudest_track": 2,
+      "rms_by_track": [
+        0.005236821695213722,
+        0.004390369584551931,
+        0.045664540633060906
+      ],
+      "start_sample": 223248,
+      "track": 0
+    },
+    {
+      "end_sample": 332112,
+      "kind": "Preserve",
+      "loudest_track": 2,
+      "rms_by_track": [
+        0.005287638843884373,
+        0.004433559130894603,
+        0.04609486371308563
+      ],
+      "start_sample": 227808,
+      "track": 2
+    },
+    {
+      "end_sample": 441552,
+      "kind": "Preserve",
+      "loudest_track": 0,
+      "rms_by_track": [
+        0.028912265730383347,
+        0.006142122386771753,
+        0.022723863109688273
+      ],
+      "start_sample": 354528,
+      "track": 0
+    },
+    {
+      "end_sample": 550080,
+      "kind": "Preserve",
+      "loudest_track": 0,
+      "rms_by_track": [
+        0.028274882992004466,
+        0.006387847607187389,
+        0.027897889313051847
+      ],
+      "start_sample": 460416,
+      "track": 0
+    },
+    {
+      "end_sample": 670704,
+      "kind": "Preserve",
+      "loudest_track": 2,
+      "rms_by_track": [
+        0.01062563046785309,
+        0.005724631167402312,
+        0.04557821892093775
+      ],
+      "start_sample": 523632,
+      "track": 2
+    },
+    {
+      "end_sample": 664752,
+      "kind": "Bleed",
+      "loudest_track": 2,
+      "rms_by_track": [
+        0.005824020670093281,
+        0.0053569115915511455,
+        0.04639700715411276
+      ],
+      "start_sample": 552336,
+      "track": 0
+    },
+    {
+      "end_sample": 701520,
+      "kind": "Preserve",
+      "loudest_track": 0,
+      "rms_by_track": [
+        0.02414199611081532,
+        0.003966308238677633,
+        0.006199241796841577
+      ],
+      "start_sample": 687984,
+      "track": 0
+    },
+    {
+      "end_sample": 789984,
+      "kind": "Preserve",
+      "loudest_track": 2,
+      "rms_by_track": [
+        0.006756305862085356,
+        0.005175344983638969,
+        0.04948473982293912
+      ],
+      "start_sample": 710880,
+      "track": 2
+    },
+    {
+      "end_sample": 833664,
+      "kind": "Bleed",
+      "loudest_track": 2,
+      "rms_by_track": [
+        0.0060603206443897205,
+        0.004736800159991392,
+        0.04348744897572652
+      ],
+      "start_sample": 712512,
+      "track": 0
+    },
+    {
+      "end_sample": 981600,
+      "kind": "Preserve",
+      "loudest_track": 2,
+      "rms_by_track": [
+        0.03296621513301341,
+        0.017747051062693368,
+        0.03557919016947952
+      ],
+      "start_sample": 833280,
+      "track": 0
+    },
+    {
+      "end_sample": 914544,
+      "kind": "Preserve",
+      "loudest_track": 2,
+      "rms_by_track": [
+        0.022255919206872164,
+        0.009514371694484184,
+        0.06108551178848588
+      ],
+      "start_sample": 866832,
+      "track": 2
+    },
+    {
+      "end_sample": 1931520,
+      "kind": "Bleed",
+      "loudest_track": 0,
+      "rms_by_track": [
+        0.036631624000078605,
+        0.0061790978183787326,
+        0.008847790744712373
+      ],
+      "start_sample": 1734096,
+      "track": 2
+    },
+    {
+      "end_sample": 2141424,
+      "kind": "Bleed",
+      "loudest_track": 0,
+      "rms_by_track": [
+        0.04173977915112971,
+        0.009696393522756757,
+        0.010991457611163845
+      ],
+      "start_sample": 1969920,
+      "track": 2
+    },
+    {
+      "end_sample": 2174448,
+      "kind": "Ignore",
+      "loudest_track": 0,
+      "rms_by_track": [
+        0.0007497850034814678,
+        0.000723815500916691,
+        0.0006046102671245165
+      ],
+      "start_sample": 2149152,
+      "track": 2
+    },
+    {
+      "end_sample": 2486880,
+      "kind": "Preserve",
+      "loudest_track": 1,
+      "rms_by_track": [
+        0.02915563519180473,
+        0.049262039397539634,
+        0.04805554889207828
+      ],
+      "start_sample": 2297664,
+      "track": 1
+    },
+    {
+      "end_sample": 2654304,
+      "kind": "Bleed",
+      "loudest_track": 0,
+      "rms_by_track": [
+        0.02665809937363745,
+        0.006358141498845628,
+        0.006979218000197634
+      ],
+      "start_sample": 2500704,
+      "track": 1
+    },
+    {
+      "end_sample": 3382848,
+      "kind": "Preserve",
+      "loudest_track": 1,
+      "rms_by_track": [
+        0.014948892737065,
+        0.04199494339206436,
+        0.02013211359940424
+      ],
+      "start_sample": 2662800,
+      "track": 1
+    },
+    {
+      "end_sample": 5280576,
+      "kind": "Preserve",
+      "loudest_track": 1,
+      "rms_by_track": [
+        0.022867144449780375,
+        0.05735010670413281,
+        0.040082105377275294
+      ],
+      "start_sample": 5086128,
+      "track": 2
+    },
+    {
+      "end_sample": 5508336,
+      "kind": "Preserve",
+      "loudest_track": 0,
+      "rms_by_track": [
+        0.03977592196819767,
+        0.009422835189016166,
+        0.03772719662222414
+      ],
+      "start_sample": 5344176,
+      "track": 2
+    },
+    {
+      "end_sample": 5935728,
+      "kind": "Bleed",
+      "loudest_track": 1,
+      "rms_by_track": [
+        0.0019309254680447878,
+        0.01843294898986325,
+        0.0016351798192638435
+      ],
+      "start_sample": 5817936,
+      "track": 2
+    },
+    {
+      "end_sample": 6242112,
+      "kind": "Bleed",
+      "loudest_track": 0,
+      "rms_by_track": [
+        0.02775127040528522,
+        0.01612333363958954,
+        0.006445076332629426
+      ],
+      "start_sample": 5989248,
+      "track": 2
+    },
+    {
+      "end_sample": 7088832,
+      "kind": "Preserve",
+      "loudest_track": 2,
+      "rms_by_track": [
+        0.011187400345603365,
+        0.0036583060613091076,
+        0.027793429910920642
+      ],
+      "start_sample": 6970992,
+      "track": 2
+    },
+    {
+      "end_sample": 10968528,
+      "kind": "Bleed",
+      "loudest_track": 2,
+      "rms_by_track": [
+        0.0036621435320541526,
+        0.015407351568180794,
+        0.027136078277539916
+      ],
+      "start_sample": 8922336,
+      "track": 0
+    },
+    {
+      "end_sample": 10815792,
+      "kind": "Preserve",
+      "loudest_track": 1,
+      "rms_by_track": [
+        0.0021848358077198797,
+        0.032228306552022,
+        0.002162693717814569
+      ],
+      "start_sample": 10676496,
+      "track": 1
+    },
+    {
+      "end_sample": 10897824,
+      "kind": "Preserve",
+      "loudest_track": 1,
+      "rms_by_track": [
+        0.0018816586189460156,
+        0.02179755500483604,
+        0.0017726033114779645
+      ],
+      "start_sample": 10822848,
+      "track": 1
+    },
+    {
+      "end_sample": 10998480,
+      "kind": "Preserve",
+      "loudest_track": 1,
+      "rms_by_track": [
+        0.015492269772193078,
+        0.017924717408347744,
+        0.0040595850863947534
+      ],
+      "start_sample": 10968528,
+      "track": 0
+    },
+    {
+      "end_sample": 12096288,
+      "kind": "Bleed",
+      "loudest_track": 1,
+      "rms_by_track": [
+        0.0022934208361831666,
+        0.02217307378848447,
+        0.0022033925272523878
+      ],
+      "start_sample": 10998480,
+      "track": 0
+    },
+    {
+      "end_sample": 12107232,
+      "kind": "Bleed",
+      "loudest_track": 1,
+      "rms_by_track": [
+        0.002339616695820886,
+        0.02222720705721237,
+        0.0022569642631539676
+      ],
+      "start_sample": 11096688,
+      "track": 2
+    },
+    {
+      "end_sample": 11682336,
+      "kind": "Ignore",
+      "loudest_track": 1,
+      "rms_by_track": [
+        0.000784922561228182,
+        0.0008189985947247779,
+        0.000682917531643538
+      ],
+      "start_sample": 11667936,
+      "track": 1
+    },
+    {
+      "end_sample": 12996240,
+      "kind": "Bleed",
+      "loudest_track": 0,
+      "rms_by_track": [
+        0.022062880196625858,
+        0.004709383499982397,
+        0.005897341620639132
+      ],
+      "start_sample": 12228864,
+      "track": 1
+    },
+    {
+      "end_sample": 14550528,
+      "kind": "Bleed",
+      "loudest_track": 0,
+      "rms_by_track": [
+        0.028678658130295843,
+        0.005597370614198341,
+        0.0076829199877031665
+      ],
+      "start_sample": 13861104,
+      "track": 1
+    }
+  ],
+  "formats": [
+    {
+      "bext_time_reference": 8973764,
+      "bits_per_sample": 32,
+      "format_tag": 65534
+    },
+    {
+      "bext_time_reference": 8973764,
+      "bits_per_sample": 32,
+      "format_tag": 65534
+    },
+    {
+      "bext_time_reference": 8973764,
+      "bits_per_sample": 32,
+      "format_tag": 65534
+    }
+  ],
+  "human_listening_performed": false,
+  "paths": [
+    "C:/Users/User/Downloads/00005603_A01.wav",
+    "C:/Users/User/Downloads/00005603_A02.wav",
+    "C:/Users/User/Downloads/00005603_A03.wav"
+  ],
+  "sample_count": 14550536,
+  "sample_rate": 48000,
+  "validation_warnings": []
+}
