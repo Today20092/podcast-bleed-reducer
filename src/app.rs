@@ -62,7 +62,7 @@ fn available_project_path(directory: &std::path::Path) -> PathBuf {
 mod tests {
     #[test]
     fn completed_render_cannot_replace_changed_session() {
-        for change in 0..7 {
+        for change in 0..8 {
             let directory = std::env::temp_dir().join(format!(
                 "cleanslate-render-snapshot-{}-{change}",
                 std::process::id()
@@ -106,6 +106,9 @@ mod tests {
                         .mark_render_current(directory.join("other-report.json"))
                         .unwrap();
                     app.project = Some(other);
+                }
+                7 => {
+                    let _ = app.update(super::Message::Attenuation(-12.0));
                 }
                 _ => {
                     let project = app.project.as_mut().unwrap();
@@ -814,6 +817,16 @@ mod tests {
         assert!(delivery.join("voice-clean.wav").is_file());
         assert!(!delivery.join("report.json").exists());
         assert!(app.messages[0].starts_with("Export committed"));
+        let _ = app.update(super::Message::Attenuation(-12.0));
+        assert!(!app.export_ready());
+        let blocked = directory.join("during-drag");
+        app.export_to(blocked.clone());
+        assert!(!blocked.exists());
+        assert!(matches!(
+            app.project.as_ref().unwrap().render(),
+            crate::RenderState::Current { .. }
+        ));
+        app.preview_parameters = app.project.as_ref().unwrap().parameters();
         std::fs::remove_file(rendered).unwrap();
         app.refresh_export_readiness();
         assert!(!app.export_ready());
@@ -1124,6 +1137,11 @@ impl CleanSlateApp {
     }
 
     fn export_to(&mut self, destination: PathBuf) {
+        if !self.export_ready() {
+            self.messages =
+                vec!["Export blocked: render the current settings before exporting".into()];
+            return;
+        }
         let Some(project) = &self.project else { return };
         match export(project, &destination, None) {
             Ok(()) => {
@@ -1138,6 +1156,7 @@ impl CleanSlateApp {
             && self.export_error.is_none()
             && self.project.as_ref().is_some_and(|project| {
                 project.sources.iter().all(|source| source.available)
+                    && project.parameters() == self.preview_parameters
                     && matches!(project.render(), RenderState::Current { identity } if identity.is_file())
             })
     }
@@ -1439,7 +1458,8 @@ impl CleanSlateApp {
             .project
             .as_ref()
             .and_then(|project| RenderSnapshot::read(project).ok());
-        let current = current.as_ref() == Some(&processing.snapshot);
+        let current = current.as_ref() == Some(&processing.snapshot)
+            && self.preview_parameters == processing.snapshot.parameters;
         let same_project = self
             .project
             .as_ref()
@@ -1448,10 +1468,11 @@ impl CleanSlateApp {
         match result {
             Ok(_) if !current => {
                 self.messages = vec!["Final render completed for earlier settings or sources; render again before exporting".into()];
-                if same_project && let Some(project) = &mut self.project {
-                    if let Err(error) = project.mark_render_stale() {
-                        self.messages.push(error.to_string());
-                    }
+                if same_project
+                    && let Some(project) = &mut self.project
+                    && let Err(error) = project.mark_render_stale()
+                {
+                    self.messages.push(error.to_string());
                 }
                 self.refresh_export_readiness();
             }
