@@ -4,6 +4,18 @@ CleanSlate is a local, non-destructive automixer for synchronized mono podcast s
 
 ## Language
 
+**Room-tone example**:
+A user-marked interval on one microphone containing background sound without intended speech. It teaches that microphone's background level.
+_Avoid_: Silence threshold, mute range
+
+**Solo-speech example**:
+A user-marked interval where one participant speaks alone into their assigned microphone. It teaches the relationship between direct speech and its copies on the other microphones.
+_Avoid_: Voiceprint, transcript
+
+**Calibration**:
+The editable, source-bound collection of room-tone and solo-speech examples used to interpret a session. It is separate from protections and does not modify the recordings.
+_Avoid_: Normalization, automatic leveling
+
 **Session**:
 One or more synchronized 48 kHz mono WAV stems imported for a single automix. Every stem has the same sample count. Matching BEXT time references establish alignment when present on every stem; absent BEXT is allowed with an unverified-alignment warning, while mixed or conflicting BEXT blocks rendering.
 _Avoid_: Multitrack file, two-track minimum

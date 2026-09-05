@@ -1,6 +1,7 @@
 pub mod app;
 mod audio_io;
 mod audition;
+mod calibration;
 pub mod detector_quality;
 mod engine;
 mod export;
@@ -12,8 +13,10 @@ pub mod timeline;
 mod vad;
 mod waveform;
 
+pub use calibration::{CalibrationExample, CalibrationKind, OwnershipSettings};
 pub use engine::*;
 pub use export::*;
 pub use prepared_analysis::{PreviewCache, PreviewCacheStats, preview_stage};
 pub use project::*;
 pub use review::*;
+pub use waveform::SourceStamp;
