@@ -1,4 +1,4 @@
-use crate::{AutomixParameters, Protection};
+use crate::{AutomixParameters, OwnershipSettings, Protection, SourceStamp};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
@@ -46,6 +46,10 @@ pub struct Project {
     protections: Vec<Protection>,
     #[serde(default)]
     parameters: AutomixParameters,
+    #[serde(default)]
+    ownership: OwnershipSettings,
+    #[serde(skip)]
+    calibration_notice: Option<String>,
     review_states: BTreeMap<String, ReviewState>,
     render: RenderState,
     #[serde(default)]
@@ -64,6 +68,11 @@ impl Project {
             sources,
             protections: vec![],
             parameters: AutomixParameters::default(),
+            ownership: OwnershipSettings {
+                enabled: true,
+                ..Default::default()
+            },
+            calibration_notice: None,
             review_states: BTreeMap::new(),
             render: RenderState::None,
             last_render: None,
@@ -87,6 +96,11 @@ impl Project {
         for source in &mut project.sources {
             source.available = source.matches_disk();
             valid &= source.available;
+        }
+        if !valid {
+            project.invalidate_calibration("Source recordings changed or are missing.");
+        } else if let Err(error) = project.validate_ownership(&project.ownership) {
+            project.invalidate_calibration(&error.to_string());
         }
         if !valid {
             project.step = WorkflowStep::Import;
@@ -121,6 +135,72 @@ impl Project {
     }
     pub fn parameters(&self) -> AutomixParameters {
         self.parameters
+    }
+    pub fn ownership_settings(&self) -> &OwnershipSettings {
+        &self.ownership
+    }
+    pub fn calibration_notice(&self) -> Option<&str> {
+        self.calibration_notice.as_deref()
+    }
+
+    pub fn set_ownership_settings(&mut self, settings: OwnershipSettings) -> io::Result<()> {
+        self.validate_ownership(&settings)?;
+        let mut updated = self.clone();
+        updated.ownership = settings;
+        updated.calibration_notice = None;
+        if matches!(updated.render, RenderState::Current { .. }) {
+            updated.render = RenderState::Stale;
+        }
+        updated.save()?;
+        *self = updated;
+        Ok(())
+    }
+
+    fn validate_ownership(&self, settings: &OwnershipSettings) -> io::Result<()> {
+        if settings.examples.is_empty() {
+            return Ok(());
+        }
+        if self.sources.iter().any(|source| !source.available) {
+            return Err(io::Error::other(
+                "Relink unavailable sources before adding calibration examples.",
+            ));
+        }
+        let stamps = self
+            .sources
+            .iter()
+            .map(|source| SourceStamp::read(&source.path).map_err(io::Error::other))
+            .collect::<io::Result<Vec<_>>>()?;
+        // Header-only reads keep calibration edits independent of PCM size and inference.
+        let counts = self
+            .sources
+            .iter()
+            .map(|source| {
+                let mut reader =
+                    bwavfile::WaveReader::open(&source.path).map_err(io::Error::other)?;
+                let format = reader.format().map_err(io::Error::other)?;
+                if format.sample_rate != 48_000 || format.channel_count != 1 {
+                    return Err(io::Error::other(
+                        "Calibration requires 48 kHz mono sources.",
+                    ));
+                }
+                usize::try_from(reader.frame_length().map_err(io::Error::other)?)
+                    .map_err(io::Error::other)
+            })
+            .collect::<io::Result<Vec<_>>>()?;
+        settings
+            .validate(&stamps, &counts)
+            .map_err(io::Error::other)
+    }
+
+    fn invalidate_calibration(&mut self, reason: &str) {
+        if !self.ownership.examples.is_empty() {
+            self.ownership.examples.clear();
+            self.ownership.sources.clear();
+            self.calibration_notice = Some(format!(
+                "Calibration examples cleared. {reason} Select new examples for these sources."
+            ));
+            self.render = RenderState::Stale;
+        }
     }
     pub fn review_states(&self) -> &BTreeMap<String, ReviewState> {
         &self.review_states
@@ -209,10 +289,18 @@ impl Project {
     }
 
     pub fn relink(&mut self, index: usize, path: PathBuf) -> io::Result<()> {
-        self.sources[index] = SourceIdentity::read(path)?;
-        self.step = WorkflowStep::Validate;
-        self.render = RenderState::Stale;
-        self.save()
+        let mut updated = self.clone();
+        let source = updated
+            .sources
+            .get_mut(index)
+            .ok_or_else(|| io::Error::other("Source track is not in this session."))?;
+        *source = SourceIdentity::read(path)?;
+        updated.invalidate_calibration("A source was relinked.");
+        updated.step = WorkflowStep::Validate;
+        updated.render = RenderState::Stale;
+        updated.save()?;
+        *self = updated;
+        Ok(())
     }
 
     pub fn add_sources(&mut self, paths: Vec<PathBuf>) -> io::Result<()> {
@@ -223,6 +311,7 @@ impl Project {
                 .map(SourceIdentity::read)
                 .collect::<io::Result<Vec<_>>>()?,
         );
+        updated.invalidate_calibration("The session's source tracks changed.");
         updated.step = WorkflowStep::Process;
         updated.render = RenderState::Stale;
         updated.save()?;
