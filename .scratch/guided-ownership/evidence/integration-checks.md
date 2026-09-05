@@ -21,3 +21,7 @@ The editor-test merge conflict was resolved by retaining both the calibration te
 - Quality corrections `efcf0e7` and `1dc1f2a` merged in `fb321b5`: independent final Standards and Spec delta reviews both report no actionable findings. Their scope includes padding, per-track speech evidence, reliable residual fallback and rejection of incoherent solo examples.
 
 These checks do not constitute real-recording quality acceptance or a listening sign-off. Task 03 measures the recordings; final performance, release build and packaging results follow integration of its findings. The user will open and listen to the application themselves.
+
+## Protection regression found during quality testing
+
+The prior engine only set a unity target inside protection ranges, so samples remained attenuated during recovery. A targeted test reproduced gain0.20826721 at the first protected sample, where the domain contract requires1.0. The shared envelope now pins gain to1.0 for the half-open protection interval, including entry during an existing unity-target recovery. Overlapping/session protections and sequential/random access agree. Ordinary unprotected one-pole behavior is unchanged. The rendered-float regression now requires every protected sample to equal its original value, replacing the old test that explicitly expected a recovery ramp within protection. Entry is immediate; the guide explains boundary placement.

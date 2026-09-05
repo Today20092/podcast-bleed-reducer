@@ -134,10 +134,7 @@ fn renders_float_overlap_and_protection_and_round_trips_bext() {
             let opening =
                 |elapsed| 0.5 * (1.0 - (1.0 - floor) * (-(elapsed as f32) / 2_400.0).exp());
             assert!((samples[1_999] - opening(1_000)).abs() < 0.000_01); // uncertain opens toward unity
-            let opened = opening(1_000) / 0.5;
-            let closed = floor + (opened - floor) * (-500.0_f32 / 24_000.0).exp();
-            let protected = 0.5 * (1.0 - (1.0 - closed) * (-500.0_f32 / 2_400.0).exp());
-            assert!((samples[2_999] - protected).abs() < 0.000_01); // protection reverses the close smoothly
+            assert!(samples[2_500..3_000].iter().all(|&sample| sample == 0.5));
         }
     }
     fs::remove_dir_all(root).unwrap();

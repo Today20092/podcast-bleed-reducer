@@ -68,7 +68,70 @@ fn default_speech_padding() -> f32 {
 mod preview_tests {
     use super::*;
 
-    // Keep the sample-scanning implementation as an independent compatibility oracle.
+    #[test]
+    fn range_protection_forces_exact_unity_during_attenuation_and_recovery() {
+        let regions = vec![
+            Region {
+                start: 0,
+                end: 100,
+                decision: Decision::Owned(vec![0]),
+            },
+            Region {
+                start: 100,
+                end: 200,
+                decision: Decision::Owned(vec![0, 1]),
+            },
+            Region {
+                start: 200,
+                end: 300,
+                decision: Decision::Owned(vec![0]),
+            },
+        ];
+        let protections = vec![
+            Protection {
+                track: Some(1),
+                start: 20,
+                end: 40,
+            },
+            Protection {
+                track: None,
+                start: 30,
+                end: 60,
+            },
+            Protection {
+                track: Some(1),
+                start: 150,
+                end: 180,
+            },
+        ];
+        let envelope = gain_envelope(1, 300, &regions, &protections, 0.125, 10.0, 20.0);
+        assert!(envelope.gain_at(19) < 1.0);
+        for sample in (20..60).chain(150..180) {
+            assert_eq!(envelope.gain_at(sample), 1.0, "protected sample {sample}");
+        }
+        assert!(envelope.gain_at(60) < 1.0, "protection end is exclusive");
+        assert!(
+            envelope.gain_at(149) < 1.0,
+            "second range starts during recovery"
+        );
+        assert_eq!(envelope.gain_bounds(20, 60), Some((1.0, 1.0)));
+        let other = gain_envelope(2, 300, &regions, &protections, 0.125, 10.0, 20.0);
+        assert!(other.gain_at(20) < 1.0, "track-specific protection leaked");
+        assert_eq!(
+            other.gain_at(30),
+            1.0,
+            "session protection omitted another track"
+        );
+        let mut cursor = 0;
+        for sample in 0..300 {
+            assert_eq!(
+                envelope.gain_at_sequential(sample, &mut cursor),
+                envelope.gain_at(sample)
+            );
+        }
+    }
+
+    // Independent sample-scanning oracle, including the explicit unity override.
     fn scanned_envelope(
         track: usize,
         sample_count: usize,
@@ -93,6 +156,20 @@ mod preview_tests {
             target,
         });
         for sample in 1..sample_count {
+            if protections.iter().any(|p| {
+                p.start <= sample && sample < p.end && p.track.is_none_or(|owner| owner == track)
+            }) {
+                if envelope.points.last().unwrap().gain != 1.0 || target != 1.0 {
+                    envelope.points.push(GainPoint {
+                        sample,
+                        gain: 1.0,
+                        alpha: 0.0,
+                        target: 1.0,
+                    });
+                }
+                target = 1.0;
+                continue;
+            }
             let next =
                 target_gain_with_attenuation(track, sample, regions, protections, attenuation);
             if next == target {
@@ -889,11 +966,21 @@ pub(crate) fn gain_envelope(
         if sample == 0 {
             continue;
         }
-        let next_target = if protected > 0 {
-            1.0
-        } else {
-            target_gain_with_attenuation(track, sample, regions, &[], attenuation)
-        };
+        if protected > 0 {
+            // A protection preserves the samples themselves, not just a target
+            // approached asymptotically. Ordinary closing resumes at its end.
+            if target != 1.0 || points.last().unwrap().gain != 1.0 {
+                points.push(GainPoint {
+                    sample,
+                    gain: 1.0,
+                    alpha: 0.0,
+                    target: 1.0,
+                });
+            }
+            target = 1.0;
+            continue;
+        }
+        let next_target = target_gain_with_attenuation(track, sample, regions, &[], attenuation);
         if next_target != target {
             let previous = points.last().unwrap();
             let elapsed = (sample - 1 - previous.sample) as f32;
@@ -1011,7 +1098,7 @@ fn report_regions(
             edges.dedup();
             edges.windows(2).map(|span| {
             let protected = protections.iter().any(|p| (p.track.is_none() || p.track == track) && p.start <= span[0] && p.end >= span[1]);
-            let reasons = if protected { "protection sets unity target" } else { reasons };
+            let reasons = if protected { "protection forces unity gain" } else { reasons };
             let warning = if region.end - region.start >= 10 * 48_000
                 && region.decision != Decision::Uncertain
                 && !protected

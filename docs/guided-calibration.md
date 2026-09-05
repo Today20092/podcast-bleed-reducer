@@ -14,4 +14,6 @@ If a solo example is rejected because it does not show a clear relationship betw
 
 Examples are optional, saved with the session, and separate from protection ranges. Removing an example updates the preview. Replacing or reordering source recordings invalidates old examples. Changing settings requires a new final render before exporting updated audio.
 
+Protection forces unity immediately at its start and keeps every protected sample unchanged. Include a little lead-in and place protection edges in quiet audio to avoid an abrupt gain change; ordinary closing resumes after the range ends.
+
 Use the three original `chopshow podcast 155_A01.wav`, `_A02.wav`, and `_A03.wav` tracks together. These controls do not modify the original recordings.
