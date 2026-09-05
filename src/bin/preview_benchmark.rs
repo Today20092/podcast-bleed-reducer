@@ -40,20 +40,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         cache.analyze_with_ownership(&paths, &[], parameters, &ownership, &progress, None)?;
     let cold_ms = start.elapsed().as_secs_f64() * 1000.0;
     let mut timings = BTreeMap::<&str, Vec<f64>>::new();
-    for iteration in 0..iterations {
-        for control in [
-            "attenuation",
-            "open",
-            "close",
-            "sensitivity",
-            "bleed",
-            "padding",
-            "protection",
-            "calibration",
-        ] {
-            if control == "calibration" && ownership.examples.is_empty() {
-                continue;
-            }
+    for control in [
+        "attenuation",
+        "open",
+        "close",
+        "sensitivity",
+        "bleed",
+        "padding",
+        "protection",
+        "calibration",
+    ] {
+        if control == "calibration" && ownership.examples.is_empty() {
+            continue;
+        }
+        for iteration in 0..iterations {
             let alternate = iteration % 2 == 0;
             match control {
                 "attenuation" => parameters.attenuation_db = if alternate { -12.0 } else { -18.0 },
