@@ -27,8 +27,12 @@ $peakPrivate = 0L
 while (-not $process.WaitForExit(100)) {
     $process.Refresh()
     if (-not $process.HasExited) {
-        $peakWorkingSet = [Math]::Max($peakWorkingSet, $process.PeakWorkingSet64)
-        $peakPrivate = [Math]::Max($peakPrivate, $process.PrivateMemorySize64)
+        try {
+            $peakWorkingSet = [Math]::Max($peakWorkingSet, $process.PeakWorkingSet64)
+            $peakPrivate = [Math]::Max($peakPrivate, $process.PrivateMemorySize64)
+        } catch {
+            if (-not $process.HasExited) { throw }
+        }
     }
 }
 $watch.Stop()
