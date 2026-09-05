@@ -1,0 +1,4 @@
+track,start_seconds,end_seconds,label,notes
+"chopshow podcast 155_A03.wav",828,831,"bleed","Provisional bounds inferred from screenshot; user circled bleed; not sample-exact"
+"chopshow podcast 155_A02.wav",828,831,"bleed","Provisional bounds inferred from screenshot; user circled bleed; not sample-exact"
+"chopshow podcast 155_A01.wav",828,831,"direct-speech","Provisional bounds inferred from screenshot; user circled direct speech; not sample-exact"

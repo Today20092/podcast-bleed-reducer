@@ -201,6 +201,24 @@ impl JointFacts {
         for pair in &self.pairs {
             for (source, target) in [(pair.a, pair.b), (pair.b, pair.a)] {
                 if !solo[source].is_empty() {
+                    // Do not treat unrelated audible sound in a declared solo
+                    // example as the room's tolerated copy residual.
+                    let audible: Vec<_> = solo[source]
+                        .iter()
+                        .copied()
+                        .filter(|&f| {
+                            self.levels[source][f] > -100.0
+                                && self.levels[target][f] > floors[target] + 6.0
+                        })
+                        .map(|f| pair.explained[f])
+                        .collect();
+                    if audible.len() >= 3 && quantile(audible, 0.5) < 0.1 {
+                        return Err(RenderBlocker(format!(
+                            "Solo-speech example for track {} does not show clear copied speech on track {}. Choose a clearer solo interval or remove this example.",
+                            source + 1,
+                            target + 1
+                        )));
+                    }
                     leakage[source][target] = self.learn(
                         pair,
                         source,
@@ -227,7 +245,8 @@ impl JointFacts {
             speech[frame] =
                 (0..tracks).any(|t| facts.probabilities[t][frame] >= parameters.speech_sensitivity);
             for track in 0..tracks {
-                active[track][frame] = speech[frame]
+                active[track][frame] = facts.probabilities[track][frame]
+                    >= parameters.speech_sensitivity
                     && self.levels[track][frame]
                         > floors[track] + parameters.bleed_discrimination_db;
             }
@@ -242,7 +261,23 @@ impl JointFacts {
                             || pair.explained[frame] >= 0.9999
                             || self.levels[source][frame] + residual
                                 <= floors[target] + parameters.bleed_discrimination_db;
-                        if active[source][frame]
+                        // Cross-microphone speech alone is not a target voice.
+                        // A correlated copy with excess independent residual is:
+                        // preserve it even when the quieter voice misses its own VAD.
+                        let source_has_voice = facts.probabilities[source][frame]
+                            >= parameters.speech_sensitivity
+                            && self.levels[source][frame]
+                                > floors[source] + parameters.bleed_discrimination_db;
+                        if source_has_voice && pair.explained[frame] >= 0.25
+                            && self.levels[source][frame] + residual > floors[target] + parameters.bleed_discrimination_db
+                            // A rough acoustic fit cannot distinguish room variation
+                            // from a new voice below VAD. Require a well-fit example.
+                            && (solo[source].is_empty() || model.residual_db <= model.level_db - 10.0
+                                && residual > model.residual_db + 3.0)
+                        {
+                            active[target][frame] = true;
+                        }
+                        if source_has_voice
                             && residual_is_safe
                             && pair.explained[frame] >= 0.25
                             && (!solo[source].is_empty() || difference < -8.0)
@@ -269,10 +304,8 @@ impl JointFacts {
             }
             let padding = (parameters.speech_padding_ms / 32.0).round() as usize;
             active[track] = crate::vad::preserve_nearby(&active[track], padding);
-            // Padding may extend direct speech, but never override current copy evidence.
-            for (f, &copy) in stable.iter().enumerate() {
-                active[track][f] &= !copy;
-            }
+            // Apply padding after removing copied candidates. A track's own
+            // nearby independent/ambiguous speech must retain its word boundaries.
         }
         let mut regions: Vec<Region> = Vec::new();
         for frame in 0..frames {
@@ -477,13 +510,11 @@ mod tests {
             }],
             ..Default::default()
         };
+        let mut evidence = facts(&tracks);
+        // Quiet independent speech can fall below its own microphone's VAD threshold.
+        evidence.probabilities[1].fill(0.01);
         let regions = joint
-            .regions(
-                &facts(&tracks),
-                AutomixParameters::default(),
-                &settings,
-                None,
-            )
+            .regions(&evidence, AutomixParameters::default(), &settings, None)
             .unwrap();
         let at = |sample| {
             &regions
@@ -645,6 +676,251 @@ mod tests {
                 .decision,
             Decision::Owned(vec![0, 1])
         );
+    }
+
+    #[test]
+    fn quiet_voice_shaped_overlap_survives_gain_polarity_delay_and_room_noise() {
+        use crate::{CalibrationExample, CalibrationKind};
+        let direct = signal(192_000, 0.0);
+        for (scale, delay) in [(0.15, 48usize), (-0.4, 156), (1.6, 480)] {
+            let mut seed = 17u32;
+            let mixed: Vec<_> = (0..direct.len())
+                .map(|i| {
+                    seed = seed.wrapping_mul(1664525).wrapping_add(1013904223);
+                    let noise = (seed as f64 / u32::MAX as f64 - 0.5) as f32 * 0.000002;
+                    let voice = if (96_000..120_000).contains(&i) {
+                        let t = i as f32 / 48_000.0;
+                        // Harmonics with a pulsing envelope stand in for a quiet laugh/voice.
+                        0.006
+                            * (1.0 + (t * 27.0).sin())
+                            * ((t * 1297.0).sin() + 0.3 * (t * 2594.0).sin())
+                    } else {
+                        0.0
+                    };
+                    scale * direct.get(i.wrapping_sub(delay)).copied().unwrap_or(0.0)
+                        + voice
+                        + noise
+                })
+                .collect();
+            let tracks = [direct.as_slice(), mixed.as_slice()];
+            let mut evidence = facts(&tracks);
+            evidence.probabilities[0][..30].fill(0.0);
+            evidence.probabilities[1].fill(0.01);
+            let settings = OwnershipSettings {
+                enabled: true,
+                examples: vec![CalibrationExample {
+                    kind: CalibrationKind::SoloSpeech,
+                    track: 0,
+                    start: 60_000,
+                    end: 84_000,
+                }],
+                ..Default::default()
+            };
+            let regions = JointFacts::prepare(&tracks, None)
+                .unwrap()
+                .regions(&evidence, AutomixParameters::default(), &settings, None)
+                .unwrap();
+            let at = |sample| {
+                &regions
+                    .iter()
+                    .find(|r| r.start <= sample && r.end > sample)
+                    .unwrap()
+                    .decision
+            };
+            assert_eq!(
+                at(9_600),
+                &Decision::NoSpeech,
+                "scale={scale} delay={delay}"
+            );
+            assert_eq!(
+                at(108_000),
+                &Decision::Owned(vec![0, 1]),
+                "scale={scale} delay={delay}"
+            );
+            assert_eq!(
+                at(180_000),
+                &Decision::Owned(vec![0]),
+                "scale={scale} delay={delay}"
+            );
+        }
+    }
+
+    #[test]
+    fn solo_example_with_independent_sound_does_not_train_a_copy_model() {
+        use crate::{CalibrationExample, CalibrationKind};
+        let direct = signal(144_000, 0.0);
+        let independent: Vec<_> = (0..direct.len())
+            .map(|i| {
+                if i >= 48_000 {
+                    0.03 * (i as f32 * 0.047).sin()
+                } else {
+                    0.0
+                }
+            })
+            .collect();
+        let tracks = [direct.as_slice(), independent.as_slice()];
+        let settings = OwnershipSettings {
+            enabled: true,
+            examples: vec![CalibrationExample {
+                kind: CalibrationKind::SoloSpeech,
+                track: 0,
+                start: 60_000,
+                end: 84_000,
+            }],
+            ..Default::default()
+        };
+        let result = JointFacts::prepare(&tracks, None).unwrap().regions(
+            &facts(&tracks),
+            AutomixParameters::default(),
+            &settings,
+            None,
+        );
+        assert!(result.unwrap_err().to_string().contains("clearer solo"));
+    }
+
+    #[test]
+    fn another_microphones_speech_does_not_turn_room_noise_into_an_owner() {
+        let direct = signal(192_000, 0.0);
+        let noise: Vec<_> = (0..direct.len())
+            .map(|i| {
+                if i >= 48_000 {
+                    0.001 * (i as f32 * 0.037).sin()
+                } else {
+                    0.0
+                }
+            })
+            .collect();
+        let tracks = [direct.as_slice(), noise.as_slice()];
+        let mut evidence = facts(&tracks);
+        evidence.probabilities[1].fill(0.01);
+        let regions = JointFacts::prepare(&tracks, None)
+            .unwrap()
+            .regions(
+                &evidence,
+                AutomixParameters::default(),
+                &OwnershipSettings::default(),
+                None,
+            )
+            .unwrap();
+        assert_eq!(
+            regions
+                .iter()
+                .find(|r| r.start <= 144_000 && r.end > 144_000)
+                .unwrap()
+                .decision,
+            Decision::Owned(vec![0])
+        );
+    }
+
+    #[test]
+    fn independent_speech_padding_preserves_short_copied_gaps_in_overlap() {
+        use crate::{CalibrationExample, CalibrationKind};
+        let direct = signal(192_000, 0.0);
+        let mixed: Vec<_> = (0..direct.len())
+            .map(|i| {
+                -0.25 * direct.get(i.wrapping_sub(156)).copied().unwrap_or(0.0)
+                    + if (84_000..96_000).contains(&i) || (120_000..132_000).contains(&i) {
+                        0.08 * (i as f32 * 0.047).sin()
+                    } else {
+                        0.0
+                    }
+            })
+            .collect();
+        let tracks = [direct.as_slice(), mixed.as_slice()];
+        let settings = OwnershipSettings {
+            enabled: true,
+            examples: vec![CalibrationExample {
+                kind: CalibrationKind::SoloSpeech,
+                track: 0,
+                start: 48_000,
+                end: 67_200,
+            }],
+            ..Default::default()
+        };
+        let regions = JointFacts::prepare(&tracks, None)
+            .unwrap()
+            .regions(
+                &facts(&tracks),
+                AutomixParameters::default(),
+                &settings,
+                None,
+            )
+            .unwrap();
+        assert_eq!(
+            regions
+                .iter()
+                .find(|r| r.start <= 108_000 && r.end > 108_000)
+                .unwrap()
+                .decision,
+            Decision::Owned(vec![0, 1])
+        );
+        assert_eq!(
+            regions
+                .iter()
+                .find(|r| r.start <= 168_000 && r.end > 168_000)
+                .unwrap()
+                .decision,
+            Decision::Owned(vec![0])
+        );
+    }
+
+    #[test]
+    #[ignore = "read-only reference development diagnostics"]
+    fn reference_calibration_diagnostics() {
+        use crate::{CalibrationExample, CalibrationKind};
+        let paths: Vec<_> = (1..=3)
+            .map(|t| {
+                std::path::PathBuf::from(format!("C:/Users/User/Downloads/00005603_A0{t}.wav"))
+            })
+            .collect();
+        let (stems, _) = crate::engine::load_and_validate(&paths).unwrap();
+        let tracks: Vec<_> = stems.iter().map(|s| s.samples.as_slice()).collect();
+        let joint = JointFacts::prepare(&tracks, None).unwrap();
+        let examples = [(0, 7.386, 9.199), (2, 4.746, 6.919), (1, 47.868, 51.810)].map(
+            |(track, start, end)| CalibrationExample {
+                kind: CalibrationKind::SoloSpeech,
+                track,
+                start: (start * 48000.0) as usize,
+                end: (end * 48000.0) as usize,
+            },
+        );
+        println!("floors {:?}", joint.floors);
+        for pair in &joint.pairs {
+            for (source, target) in [(pair.a, pair.b), (pair.b, pair.a)] {
+                let example = examples.iter().find(|e| e.track == source).unwrap();
+                let model = joint
+                    .learn(
+                        pair,
+                        source,
+                        target,
+                        example.start.div_ceil(FRAME)..example.end / FRAME,
+                    )
+                    .unwrap();
+                println!("model {source}->{target}: {model:?}");
+                if target == 2 {
+                    for frame in
+                        (111.337 * 48000.0) as usize / FRAME..(114.757 * 48000.0) as usize / FRAME
+                    {
+                        let difference = joint.levels[target][frame] - joint.levels[source][frame];
+                        let residual = difference + db((1.0 - pair.explained[frame]).max(1e-5));
+                        if pair.explained[frame] >= 0.25
+                            && difference <= model.level_db + 3.0
+                            && residual <= model.residual_db + 3.0
+                        {
+                            println!(
+                                "copy {:.3} {source}->{target} source {:.1} target {:.1} explained {:.3} difference {:.1} residual {:.1}",
+                                frame as f64 * 0.032,
+                                joint.levels[source][frame],
+                                joint.levels[target][frame],
+                                pair.explained[frame],
+                                difference,
+                                residual
+                            );
+                        }
+                    }
+                }
+            }
+        }
     }
 
     #[test]
