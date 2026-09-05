@@ -1,7 +1,7 @@
 use crate::{
     AnalysisPreview, AutomixParameters, Comparison, PreviewCache, Project, RenderState,
     ReviewState, ReviewWorkspace, RunRequest, WorkflowStep,
-    audition::{AuditionMode, LiveAudition},
+    audition::{AuditionMode, AuditionPreparation, LiveAudition},
     export, preview_stage, run_with_parameters,
     timeline::{TimelineEvent, TimelineViewport},
     validate, validate_export,
@@ -227,6 +227,61 @@ mod tests {
             app.preview.as_ref().unwrap().envelopes[0].sample_count(),
             3073
         );
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn audition_stop_relink_and_error_do_not_start_output() {
+        let directory =
+            std::env::temp_dir().join(format!("audition-editor-{}", std::process::id()));
+        std::fs::create_dir_all(&directory).unwrap();
+        let path = directory.join("voice.wav");
+        write_wav(&path, &[0.0; 1537]);
+        let mut app = super::CleanSlateApp {
+            project: Some(
+                crate::Project::create(directory.join("episode.cleanslate"), vec![path.clone()])
+                    .unwrap(),
+            ),
+            ..Default::default()
+        };
+        let preview = crate::AnalysisPreview {
+            stems: vec![path.clone()],
+            regions: vec![],
+            envelopes: vec![crate::GainEnvelope::constant(1537, 1.0)],
+            protections: vec![],
+            parameters: Default::default(),
+        };
+        app.preview = Some(preview.clone());
+        app.timeline.set_total_samples(1537);
+        app.timeline.set_selection(Some((17, 600)));
+        let drain = |app: &mut super::CleanSlateApp| {
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+            while app.audition_preparation.is_busy() {
+                app.poll_audition();
+                assert!(std::time::Instant::now() < deadline);
+                std::thread::yield_now();
+            }
+            assert!(app.audition.is_none());
+        };
+        app.audition(true);
+        assert_eq!(app.audition_range, Some((17, 600)));
+        let _ = app.update(super::Message::Timeline(
+            crate::timeline::TimelineEvent::Seek(40),
+        ));
+        assert_eq!(app.audition_range, Some((40, 600)));
+        let _ = app.update(super::Message::Stop);
+        drain(&mut app);
+        assert!(app.audition_range.is_none());
+        app.audition(false);
+        app.install_waveforms(vec![]);
+        drain(&mut app);
+        assert!(app.audition_range.is_none());
+        app.preview = Some(preview);
+        std::fs::remove_file(&path).unwrap();
+        app.audition(false);
+        drain(&mut app);
+        assert!(!app.messages.is_empty());
+        assert!(app.audition_range.is_none());
         std::fs::remove_dir_all(directory).unwrap();
     }
 
@@ -467,6 +522,8 @@ pub struct CleanSlateApp {
     processing: Option<Processing>,
     review: Option<ReviewWorkspace>,
     audition: Option<LiveAudition>,
+    audition_preparation: AuditionPreparation,
+    audition_range: Option<(usize, usize)>,
     audition_mode: AuditionMode,
     monitor_db: f32,
     selecting_range: bool,
@@ -491,6 +548,8 @@ impl Default for CleanSlateApp {
             processing: None,
             review: None,
             audition: None,
+            audition_preparation: AuditionPreparation::default(),
+            audition_range: None,
             audition_mode: AuditionMode::Original,
             monitor_db: -6.0,
             selecting_range: false,
@@ -594,6 +653,8 @@ fn waveform_height(workspace_height: f32, stem_count: usize, compact: bool) -> f
 
 impl CleanSlateApp {
     fn install_waveforms(&mut self, waveforms: Vec<WaveformCache>) {
+        self.audition_preparation.invalidate();
+        self.audition_range = None;
         if let Some(audition) = self.audition.take() {
             audition.stop();
         }
@@ -945,17 +1006,8 @@ impl CleanSlateApp {
             |range| range.0.max(range.1),
         );
         self.audition.take().inspect(|playing| playing.stop());
-        match LiveAudition::start(
-            project.source_paths(),
-            preview.envelopes.clone(),
-            self.audition_mode,
-            10.0_f32.powf(self.monitor_db / 20.0),
-            start,
-            end,
-        ) {
-            Ok(audition) => self.audition = Some(audition),
-            Err(error) => self.messages = vec![error.to_string()],
-        }
+        self.audition_range = Some((start, end));
+        self.audition_preparation.request(project.source_paths());
     }
 
     fn poll_processing(&mut self) {
@@ -1050,6 +1102,37 @@ impl CleanSlateApp {
     }
 
     fn poll_audition(&mut self) {
+        if let Some(result) = self.audition_preparation.poll()
+            && let Some((start, end)) = self.audition_range.take()
+        {
+            match result {
+                Ok(prepared) => {
+                    if let (Some(project), Some(preview)) = (&self.project, &self.preview) {
+                        if prepared.is_current(&project.source_paths())
+                            && prepared.matches_preview(&self.preview_cache)
+                        {
+                            match LiveAudition::start(
+                                prepared,
+                                preview.envelopes.clone(),
+                                self.audition_mode,
+                                10.0_f32.powf(self.monitor_db / 20.0),
+                                start,
+                                end,
+                            ) {
+                                Ok(audition) => self.audition = Some(audition),
+                                Err(error) => self.messages = vec![error.to_string()],
+                            }
+                        } else {
+                            self.audition_preparation.invalidate();
+                            self.messages = vec![
+                                "Sources changed; prepare the session again before audition".into(),
+                            ];
+                        }
+                    }
+                }
+                Err(error) => self.messages = vec![error.to_string()],
+            }
+        }
         let Some(audition) = &self.audition else {
             return;
         };
@@ -1069,12 +1152,23 @@ impl CleanSlateApp {
         }
     }
 
+    fn stop_audition(&mut self) {
+        self.audition_range = None;
+        self.audition_preparation.cancel();
+        if let Some(audition) = self.audition.take() {
+            audition.stop();
+        }
+    }
+
     fn seek_to_selection_start(&mut self) {
         let start = self
             .timeline
             .selection()
             .map_or(0, |range| range.0.min(range.1));
         self.timeline.seek(start);
+        if let Some(range) = &mut self.audition_range {
+            range.0 = start.min(range.1);
+        }
         if let Some(audition) = &self.audition {
             audition.seek(start);
         }
@@ -1189,9 +1283,7 @@ impl CleanSlateApp {
             Message::Audition => self.audition(false),
             Message::AuditionSelection => self.audition(true),
             Message::Stop => {
-                if let Some(audition) = self.audition.take() {
-                    audition.stop();
-                }
+                self.stop_audition();
             }
             Message::Previous => self.seek_to_selection_start(),
             Message::MonitorGain(value) => {
@@ -1202,8 +1294,8 @@ impl CleanSlateApp {
             }
             Message::KeyPressed(key) => match key.as_ref() {
                 keyboard::Key::Named(keyboard::key::Named::Space) => {
-                    if let Some(audition) = self.audition.take() {
-                        audition.stop();
+                    if self.audition.is_some() || self.audition_range.is_some() {
+                        self.stop_audition();
                     } else {
                         self.audition(false);
                     }
@@ -1279,6 +1371,9 @@ impl CleanSlateApp {
                 | TimelineEvent::Drag(sample)
                 | TimelineEvent::DragEnd(sample) => {
                     self.timeline.seek(sample);
+                    if let Some(range) = &mut self.audition_range {
+                        range.0 = sample.min(range.1);
+                    }
                     if let Some(audition) = &self.audition {
                         audition.seek(sample);
                     }
@@ -1326,6 +1421,7 @@ impl CleanSlateApp {
             || self.preview_processing.is_some()
             || self.preview_pending.is_some()
             || self.audition.is_some()
+            || self.audition_preparation.is_busy()
         {
             let interval = if self.preview_processing.is_some() || self.preview_pending.is_some() {
                 10
@@ -1676,13 +1772,17 @@ impl CleanSlateApp {
             )),
             Space::new().width(Fill),
             button("Previous").on_press(Message::Previous),
-            button(if self.audition.is_some() {
+            button(if self.audition_range.is_some() {
+                "Preparing audio…"
+            } else if self.audition.is_some() {
                 "Playing"
             } else {
                 "Play"
             })
             .on_press_maybe(self.preview.is_some().then_some(Message::Audition)),
-            button("Stop").on_press_maybe(self.audition.is_some().then_some(Message::Stop)),
+            button("Stop").on_press_maybe(
+                (self.audition.is_some() || self.audition_range.is_some()).then_some(Message::Stop)
+            ),
             Space::new().width(Fill),
             text("AUDITION"),
             button(if self.audition_mode == AuditionMode::Original {

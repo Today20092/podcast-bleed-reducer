@@ -61,6 +61,13 @@ pub(crate) struct Stem {
 
 impl Stem {
     pub(crate) fn read(path: &Path) -> Result<Self, RenderBlocker> {
+        Self::read_cancellable(path, None)
+    }
+
+    pub(crate) fn read_cancellable(
+        path: &Path,
+        cancelled: Option<&std::sync::atomic::AtomicBool>,
+    ) -> Result<Self, RenderBlocker> {
         let mut reader = WaveReader::open(path)?;
         let format = reader.format()?;
         if format.channel_count != 1
@@ -83,17 +90,30 @@ impl Stem {
             .map_err(|_| RenderBlocker("stem is too large for this platform".into()))?;
         let bext = reader.broadcast_extension()?;
         let mut frames = reader.audio_frame_reader()?;
-        let mut samples = format.create_frame_buffer::<f32>(frame_count);
-        let read = frames.read_frames(&mut samples)?;
-        samples.truncate(
-            usize::try_from(read)
-                .map_err(|_| RenderBlocker("stem is too large for this platform".into()))?,
-        );
-        if samples.iter().any(|sample| !sample.is_finite()) {
-            return Err(RenderBlocker(format!(
-                "{}: contains invalid samples",
-                path.display()
-            )));
+        let mut samples = Vec::new();
+        samples
+            .try_reserve_exact(frame_count)
+            .map_err(|_| RenderBlocker("not enough memory to prepare audio".into()))?;
+        let mut buffer = vec![0.0_f32; 65_536];
+        while samples.len() < frame_count {
+            if cancelled.is_some_and(|flag| flag.load(std::sync::atomic::Ordering::Relaxed)) {
+                return Err(RenderBlocker("audio preparation cancelled".into()));
+            }
+            let count = buffer.len().min(frame_count - samples.len());
+            let read = frames.read_frames(&mut buffer[..count])? as usize;
+            if read == 0 {
+                return Err(RenderBlocker(format!(
+                    "{}: truncated audio",
+                    path.display()
+                )));
+            }
+            if buffer[..read].iter().any(|sample| !sample.is_finite()) {
+                return Err(RenderBlocker(format!(
+                    "{}: contains invalid samples",
+                    path.display()
+                )));
+            }
+            samples.extend_from_slice(&buffer[..read]);
         }
         Ok(Self {
             path: path.into(),
