@@ -170,16 +170,8 @@ impl JointFacts {
         let mut leakage = self.leakage.clone();
         let mut room = vec![Vec::new(); tracks];
         let mut solo = vec![Vec::new(); tracks];
+        // Engine/cache boundaries validate source identity and ranges before this call.
         for example in &settings.examples {
-            if example.track >= tracks
-                || example.start >= example.end
-                || example.end > facts.sample_count
-                || example.end - example.start < 12_000
-            {
-                return Err(RenderBlocker(
-                    "calibration needs a valid track and at least 250 ms inside the session".into(),
-                ));
-            }
             let selected = example.start.div_ceil(FRAME)..example.end / FRAME;
             match example.kind {
                 crate::CalibrationKind::RoomTone => {
@@ -244,7 +236,14 @@ impl JointFacts {
                     if let Some(model) = leakage[source][target] {
                         let difference = self.levels[target][frame] - self.levels[source][frame];
                         let residual = difference + db((1.0 - pair.explained[frame]).max(1e-5));
+                        // Unlabelled overlap cannot teach its own suppression threshold.
+                        // Only a declared solo example can establish acoustic residual.
+                        let residual_is_safe = !solo[source].is_empty()
+                            || pair.explained[frame] >= 0.9999
+                            || self.levels[source][frame] + residual
+                                <= floors[target] + parameters.bleed_discrimination_db;
                         if active[source][frame]
+                            && residual_is_safe
                             && pair.explained[frame] >= 0.25
                             && (!solo[source].is_empty() || difference < -8.0)
                             && difference <= model.level_db + 3.0
@@ -498,7 +497,8 @@ mod tests {
     }
 
     #[test]
-    fn filtered_bleed_is_reduced_while_a_quiet_third_speaker_stays_owned() {
+    fn guided_filtered_bleed_is_reduced_while_a_quiet_third_speaker_stays_owned() {
+        use crate::{CalibrationExample, CalibrationKind};
         let direct = signal(144_000, 0.0);
         let mut low = 0.0;
         let copy: Vec<_> = (0..direct.len())
@@ -509,7 +509,7 @@ mod tests {
             .collect();
         let quiet: Vec<_> = (0..direct.len())
             .map(|i| {
-                if i < 48_000 {
+                if i < 96_000 {
                     0.0
                 } else {
                     0.007 * (i as f32 * 0.047).sin()
@@ -518,11 +518,21 @@ mod tests {
             .collect();
         let tracks = [direct.as_slice(), copy.as_slice(), quiet.as_slice()];
         let joint = JointFacts::prepare(&tracks, None).unwrap();
+        let settings = OwnershipSettings {
+            enabled: true,
+            examples: vec![CalibrationExample {
+                kind: CalibrationKind::SoloSpeech,
+                track: 0,
+                start: 60_000,
+                end: 84_000,
+            }],
+            ..Default::default()
+        };
         let regions = joint
             .regions(
                 &facts(&tracks),
                 AutomixParameters::default(),
-                &OwnershipSettings::default(),
+                &settings,
                 None,
             )
             .unwrap();
@@ -602,5 +612,90 @@ mod tests {
                 )
                 .is_err()
         );
+    }
+
+    #[test]
+    fn automatic_estimation_cannot_learn_persistent_independent_speech_as_bleed() {
+        let direct = signal(144_000, 0.0);
+        let mixed: Vec<_> = (0..direct.len())
+            .map(|i| {
+                0.2 * direct.get(i.wrapping_sub(120)).copied().unwrap_or(0.0)
+                    + if i >= 48_000 {
+                        0.015 * (i as f32 * 0.047).sin()
+                    } else {
+                        0.0
+                    }
+            })
+            .collect();
+        let tracks = [direct.as_slice(), mixed.as_slice()];
+        let joint = JointFacts::prepare(&tracks, None).unwrap();
+        let regions = joint
+            .regions(
+                &facts(&tracks),
+                AutomixParameters::default(),
+                &OwnershipSettings::default(),
+                None,
+            )
+            .unwrap();
+        assert_eq!(
+            regions
+                .iter()
+                .find(|r| r.start <= 96_000 && r.end > 96_000)
+                .unwrap()
+                .decision,
+            Decision::Owned(vec![0, 1])
+        );
+    }
+
+    #[test]
+    #[ignore = "bounded synthetic feature timing; run with --ignored --nocapture"]
+    fn bounded_joint_feature_benchmark() {
+        use std::{hint::black_box, time::Instant};
+        let seed = signal(144_000, 0.0);
+        let direct: Vec<_> = seed.into_iter().cycle().take(1_440_000).collect();
+        let copy: Vec<_> = (0..direct.len())
+            .map(|i| -0.2 * direct.get(i.wrapping_sub(120)).copied().unwrap_or(0.0))
+            .collect();
+        let quiet: Vec<_> = direct
+            .iter()
+            .enumerate()
+            .map(|(i, &x)| {
+                if x == 0.0 {
+                    0.0
+                } else {
+                    0.01 * (i as f32 * 0.047).sin()
+                }
+            })
+            .collect();
+        let tracks = [direct.as_slice(), copy.as_slice(), quiet.as_slice()];
+        let started = Instant::now();
+        let joint = JointFacts::prepare(&tracks, None).unwrap();
+        let preparation = started.elapsed();
+        let facts = facts(&tracks);
+        let mut warm = Vec::new();
+        for padding in 0..20 {
+            let started = Instant::now();
+            black_box(
+                joint
+                    .regions(
+                        &facts,
+                        AutomixParameters {
+                            speech_padding_ms: padding as f32 * 32.0,
+                            ..Default::default()
+                        },
+                        &OwnershipSettings::default(),
+                        None,
+                    )
+                    .unwrap(),
+            );
+            warm.push(started.elapsed());
+        }
+        warm.sort();
+        println!(
+            "synthetic_seconds=30 tracks=3 preparation={preparation:?} feature_payload_bytes={} warm_p95={:?}",
+            joint.retained_bytes(),
+            warm[18]
+        );
+        assert!(joint.retained_bytes() < 30_000);
     }
 }

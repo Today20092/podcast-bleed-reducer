@@ -34,6 +34,7 @@ struct PreparedAnalysis {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct JointDiagnostics {
     pub feature_preparation_ms: u128,
+    /// Numeric feature payload, excluding Vec/allocation headers and legacy VAD facts.
     pub retained_feature_bytes: usize,
     pub pair_count: usize,
 }

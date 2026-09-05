@@ -16,6 +16,23 @@ Conclusion: lag-aware evidence distinguishes the constructed overlap, but correl
 
 Parent independently probed the provisional 828–831 second screenshot interval in the full originals. Median absolute speech-band correlation was 0.675 for A03/A01 and 0.585 for A02/A01, with level differences -15.72 and -18.45 dB. This excludes requiring near-perfect correlation as the only useful rule. The interval remains provisional and is not a training label here.
 
-## Pending measurements
+## Implemented algorithm
 
-Implementation checks, timing, tradeoffs and review outcomes will be appended after execution. No listening or release acceptance is claimed.
+- Two Butterworth biquads form an approximate 150–3000 Hz sidechain at 48 kHz, then decimation by six supplies 8 kHz samples. This is a lightweight sidechain, not the separate 127-tap experimental anti-alias VAD path. Source samples and legacy VAD preprocessing stay unchanged.
+- Filter state continues across 256 ms blocks. Each unordered microphone pair searches signed lags within 12 ms using sparse samples once per block. Each 32 ms decision stores squared correlation over up to 96 ms at the chosen lag and its neighboring samples. Windows truncate at block/file boundaries.
+- Retained facts contain speech-band level per track/frame and explained power per unordered pair/frame. Full filtered audio is never retained. Three tracks use six floats per frame plus small calibration summaries. The existing VAD probabilities and broadband energy remain cached separately.
+- Automatic floors use the tenth percentile. Directional level/residual medians use frames with at least 8 dB level separation, speech-band energy above floor, and squared correlation at least 0.25. Automatic suppression also requires residual energy below the receiving floor plus the selected energy margin, or squared correlation at least 0.9999. This independent bound prevents persistent overlap from teaching its own suppression threshold.
+- Room-tone examples replace the selected track's floor with their median band level. Solo examples replace directional leakage and residual medians, including reversed recording gain. Example windows use only wholly contained analysis frames. The source-bound API rejects missing/stale stamps, invalid tracks/ranges, and intervals shorter than 250 ms. Near-silent solo examples fail with an explicit error.
+- A copy must fit learned level and residual within 3 dB, have squared correlation at least 0.25, and have an adjacent copied frame. Multiple owners remain possible. Padding extends direct ownership but cannot override current stable copy evidence. Existing global attenuation and one-pole protections/gains are used without normalization or waveform subtraction.
+
+## Review correction and limits
+
+The first Spec review found that learning median residual from unlabelled frames could absorb continuous independent speech into the bleed model. A new regression reproduced this failure. Automatic residual acceptance now has the independent noise/purity bound described above. Explicit solo examples can establish an acoustic residual baseline; automatic overlap cannot.
+
+The first Standards review found duplicated range validation. Range/source checks now live at the engine/cache boundary. The detector only checks whether a declared solo has usable energy. Parent integration may consolidate the local engine validator with ticket01's calibration helper.
+
+Automatic mode intentionally preserves filtered/reverberant copies whose unexplained energy cannot be distinguished from independent speech. Guided examples enable those cases. Incorrect solo labels, independent speech below the learned acoustic residual, lag changes inside a block, delays beyond 12 ms, and heavy filtering remain limits. No numeric confidence or listening acceptance is claimed.
+
+## Verification
+
+Red/green tests reproduced legacy double ownership, missing public APIs, and the automatic persistent-overlap flaw before their fixes. Synthetic checks cover delayed/inverted copies, guided filtered copies, reversed gain, independent quiet overlap, a quiet third speaker, meaningful room tone, and cancellation. Public API checks cover cold/warm equality without re-preparation, invalid calibration/parameters, and rendered samples matching preview gains. Full checks and bounded timing results follow below. Actual labelled recordings and the provisional screenshot interval remain for parent task03; they were not used to tune these thresholds.
