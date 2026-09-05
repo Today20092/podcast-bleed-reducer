@@ -1,6 +1,7 @@
 use crate::{
-    AnalysisPreview, AutomixParameters, Comparison, PreviewCache, Project, RenderState,
-    ReviewState, ReviewWorkspace, RunRequest, WorkflowStep,
+    AnalysisPreview, AutomixParameters, CalibrationExample, CalibrationKind, Comparison,
+    OwnershipSettings, PreviewCache, Project, RenderState, ReviewState, ReviewWorkspace,
+    RunRequest, WorkflowStep,
     audition::{AuditionMode, AuditionPreparation, LiveAudition},
     export,
     prepared_analysis::source_stamps,
@@ -13,7 +14,7 @@ use iced::{
     Element, Fill, Length, Subscription, Task, Theme, keyboard,
     widget::{
         Space, button, canvas, column, container, progress_bar, responsive, row, scrollable,
-        slider, text,
+        slider, text, text_input,
     },
     window,
 };
@@ -129,6 +130,149 @@ mod tests {
             }
             std::fs::remove_dir_all(directory).unwrap();
         }
+    }
+
+    #[test]
+    fn calibration_time_controls_reject_invalid_input_and_capture_playhead() {
+        let directory =
+            std::env::temp_dir().join(format!("calibration-times-{}", std::process::id()));
+        std::fs::create_dir_all(&directory).unwrap();
+        let source = directory.join("voice.wav");
+        write_wav(&source, &vec![0.0; 48_000]);
+        let mut app = super::CleanSlateApp {
+            project: Some(
+                crate::Project::create(directory.join("episode.cleanslate"), vec![source]).unwrap(),
+            ),
+            ..Default::default()
+        };
+        app.timeline.set_total_samples(48_000);
+        for input in ["NaN", "inf", "-0.01", "1e99", "", "not a time"] {
+            let _ = app.update(super::Message::CalibrationStart(input.into()));
+            let _ = app.update(super::Message::CalibrationEnd("1".into()));
+            let _ = app.update(super::Message::SaveCalibration(
+                crate::CalibrationKind::RoomTone,
+                0,
+            ));
+            assert!(app.calibration_error.is_some(), "{input}");
+            assert!(
+                app.project
+                    .as_ref()
+                    .unwrap()
+                    .ownership_settings()
+                    .examples
+                    .is_empty()
+            );
+            assert!(app.preview_processing.is_none());
+        }
+        app.timeline.seek(17);
+        let _ = app.update(super::Message::CalibrationStartAtPlayhead);
+        app.timeline.seek(24_017);
+        let _ = app.update(super::Message::CalibrationEndAtPlayhead);
+        let start = app.calibration_start.clone();
+        let end = app.calibration_end.clone();
+        let _ = app.update(super::Message::Timeline(
+            crate::timeline::TimelineEvent::Select(100, 30_000),
+        ));
+        assert_eq!(app.calibration_start, start);
+        assert_eq!(app.calibration_end, end);
+        let _ = app.update(super::Message::CalibrationFromSelection);
+        assert_eq!(app.calibration_start, "0.00208333");
+        assert_eq!(app.calibration_end, "0.62500000");
+        assert!(app.project.as_ref().unwrap().protections().is_empty());
+        let source = app.project.as_ref().unwrap().source_paths()[0].clone();
+        write_wav(&source, &vec![0.0; 96_000]);
+        let _ = app.update(super::Message::SaveCalibration(
+            crate::CalibrationKind::RoomTone,
+            0,
+        ));
+        assert!(
+            app.calibration_error
+                .as_deref()
+                .unwrap()
+                .contains("changed")
+        );
+        assert!(
+            app.project
+                .as_ref()
+                .unwrap()
+                .ownership_settings()
+                .examples
+                .is_empty()
+        );
+        assert!(app.preview_processing.is_none());
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn calibration_drag_saves_exact_examples_without_protection_and_refreshes_preview() {
+        let directory =
+            std::env::temp_dir().join(format!("calibration-editor-{}", std::process::id()));
+        std::fs::create_dir_all(&directory).unwrap();
+        let source = directory.join("voice.wav");
+        write_wav(&source, &vec![0.0; 48_000]);
+        let mut app = super::CleanSlateApp {
+            project: Some(
+                crate::Project::create(directory.join("episode.cleanslate"), vec![source]).unwrap(),
+            ),
+            ..Default::default()
+        };
+        app.timeline.set_total_samples(48_000);
+        let _ = app.update(super::Message::CalibrationMode(true));
+        let _ = app.update(super::Message::Timeline(
+            crate::timeline::TimelineEvent::Select(24_001, 1),
+        ));
+        let _ = app.update(super::Message::SaveCalibration(
+            crate::CalibrationKind::RoomTone,
+            0,
+        ));
+        assert!(
+            app.calibration_error.is_none(),
+            "{:?}",
+            app.calibration_error
+        );
+        assert_eq!(
+            app.project.as_ref().unwrap().ownership_settings().examples,
+            vec![crate::CalibrationExample {
+                kind: crate::CalibrationKind::RoomTone,
+                track: 0,
+                start: 1,
+                end: 24_001,
+            }]
+        );
+        assert!(app.project.as_ref().unwrap().protections().is_empty());
+        assert!(app.preview_processing.is_some() || app.preview_pending.is_some());
+        let _ = app.update(super::Message::SaveCalibration(
+            crate::CalibrationKind::SoloSpeech,
+            0,
+        ));
+        assert_eq!(
+            app.project
+                .as_ref()
+                .unwrap()
+                .ownership_settings()
+                .examples
+                .len(),
+            2
+        );
+        let _ = app.update(super::Message::RemoveCalibration(0));
+        assert_eq!(
+            app.project.as_ref().unwrap().ownership_settings().examples[0].kind,
+            crate::CalibrationKind::SoloSpeech
+        );
+        let _ = app.update(super::Message::OwnershipMode(false));
+        assert!(
+            !crate::Project::open(app.project.as_ref().unwrap().path())
+                .unwrap()
+                .ownership_settings()
+                .enabled
+        );
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+        while app.preview_processing.is_some() || app.preview_pending.is_some() {
+            app.poll_processing();
+            assert!(std::time::Instant::now() < deadline);
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+        std::fs::remove_dir_all(directory).unwrap();
     }
 
     #[test]
@@ -659,6 +803,10 @@ pub struct CleanSlateApp {
     audition_mode: AuditionMode,
     monitor_db: f32,
     selecting_range: bool,
+    calibrating: bool,
+    calibration_start: String,
+    calibration_end: String,
+    calibration_error: Option<String>,
     waveforms: Vec<WaveformCache>,
     timeline: TimelineViewport,
     preview_parameters: AutomixParameters,
@@ -686,6 +834,10 @@ impl Default for CleanSlateApp {
             audition_mode: AuditionMode::Original,
             monitor_db: -6.0,
             selecting_range: false,
+            calibrating: false,
+            calibration_start: String::new(),
+            calibration_end: String::new(),
+            calibration_error: None,
             waveforms: vec![],
             timeline: TimelineViewport::default(),
             preview_parameters: AutomixParameters::default(),
@@ -771,6 +923,15 @@ enum Message {
     MonitorGain(f32),
     KeyPressed(keyboard::Key),
     RangeModifier(bool),
+    OwnershipMode(bool),
+    CalibrationMode(bool),
+    CalibrationStart(String),
+    CalibrationEnd(String),
+    CalibrationStartAtPlayhead,
+    CalibrationEndAtPlayhead,
+    CalibrationFromSelection,
+    SaveCalibration(CalibrationKind, usize),
+    RemoveCalibration(usize),
     ToggleReviewed,
     ProtectRegion,
     ProtectTrack(usize),
@@ -807,6 +968,10 @@ fn waveform_height(workspace_height: f32, stem_count: usize, compact: bool) -> f
 
 impl CleanSlateApp {
     fn install_waveforms(&mut self, waveforms: Vec<WaveformCache>) {
+        self.calibrating = false;
+        self.calibration_start.clear();
+        self.calibration_end.clear();
+        self.calibration_error = None;
         self.audition_preparation.invalidate();
         self.audition_range = None;
         if let Some(audition) = self.audition.take() {
@@ -1351,6 +1516,66 @@ impl CleanSlateApp {
     fn can_protect_selection(&self) -> bool {
         self.project.is_some() && self.timeline.selection().is_some()
     }
+
+    fn save_ownership(&mut self, settings: OwnershipSettings) {
+        let Some(project) = &mut self.project else {
+            return;
+        };
+        match project.set_ownership_settings(settings) {
+            Ok(()) => {
+                self.calibration_error = None;
+                self.start_preview();
+            }
+            Err(error) => self.calibration_error = Some(error.to_string()),
+        }
+    }
+
+    fn save_calibration(&mut self, kind: CalibrationKind, track: usize) {
+        let result = (|| {
+            let project = self
+                .project
+                .as_ref()
+                .ok_or("Import sources before calibrating.")?;
+            if !project.ownership_settings().enabled {
+                return Err("Enable joint ownership before adding examples.".to_string());
+            }
+            let sample = |value: &str| {
+                let seconds = value
+                    .trim()
+                    .parse::<f64>()
+                    .map_err(|_| "Enter start and end in seconds.")?;
+                let samples = seconds * 48_000.0;
+                if !samples.is_finite() || samples < 0.0 || samples >= usize::MAX as f64 {
+                    return Err("Times must be finite, nonnegative seconds within the recording.");
+                }
+                Ok(samples.round() as usize)
+            };
+            let example = CalibrationExample {
+                kind,
+                track,
+                start: sample(&self.calibration_start)?,
+                end: sample(&self.calibration_end)?,
+            };
+            let mut settings = project.ownership_settings().clone();
+            if settings.examples.is_empty() {
+                settings.sources =
+                    source_stamps(&project.source_paths()).map_err(|error| error.to_string())?;
+            }
+            if !settings.examples.contains(&example) {
+                settings.examples.push(example);
+            }
+            Ok(settings)
+        })();
+        match result {
+            Ok(settings) => self.save_ownership(settings),
+            Err(error) => self.calibration_error = Some(error),
+        }
+    }
+
+    fn capture_calibration_range(&mut self, start: usize, end: usize) {
+        self.calibration_start = format!("{:.8}", start.min(end) as f64 / 48_000.0);
+        self.calibration_end = format!("{:.8}", start.max(end) as f64 / 48_000.0);
+    }
 }
 
 impl CleanSlateApp {
@@ -1478,6 +1703,41 @@ impl CleanSlateApp {
                 _ => {}
             },
             Message::RangeModifier(selecting) => self.selecting_range = selecting,
+            Message::OwnershipMode(enabled) => {
+                if let Some(project) = &self.project {
+                    let mut settings = project.ownership_settings().clone();
+                    settings.enabled = enabled;
+                    self.save_ownership(settings);
+                }
+            }
+            Message::CalibrationMode(enabled) => self.calibrating = enabled,
+            Message::CalibrationStart(value) => self.calibration_start = value,
+            Message::CalibrationEnd(value) => self.calibration_end = value,
+            Message::CalibrationStartAtPlayhead => {
+                self.calibration_start =
+                    format!("{:.8}", self.timeline.playhead() as f64 / 48_000.0);
+            }
+            Message::CalibrationEndAtPlayhead => {
+                self.calibration_end = format!("{:.8}", self.timeline.playhead() as f64 / 48_000.0);
+            }
+            Message::CalibrationFromSelection => {
+                if let Some((start, end)) = self.timeline.selection() {
+                    self.capture_calibration_range(start, end);
+                }
+            }
+            Message::SaveCalibration(kind, track) => self.save_calibration(kind, track),
+            Message::RemoveCalibration(index) => {
+                if let Some(project) = &self.project {
+                    let mut settings = project.ownership_settings().clone();
+                    if index < settings.examples.len() {
+                        settings.examples.remove(index);
+                        if settings.examples.is_empty() {
+                            settings.sources.clear();
+                        }
+                        self.save_ownership(settings);
+                    }
+                }
+            }
             Message::ToggleReviewed => {
                 if let (Some(project), Some(key)) = (
                     self.project.as_mut(),
@@ -1561,6 +1821,9 @@ impl CleanSlateApp {
                     self.timeline.pan_by_pixels(delta_x, width)
                 }
                 TimelineEvent::Select(start, end) => {
+                    if self.calibrating {
+                        self.capture_calibration_range(start, end);
+                    }
                     self.timeline
                         .set_selection(Some((start.min(end), start.max(end))));
                     if let Some(review) = &mut self.review {
@@ -1576,11 +1839,13 @@ impl CleanSlateApp {
     }
 
     fn subscription(&self) -> Subscription<Message> {
-        let drops = iced::event::listen_with(|event, _status, _window| match event {
+        let drops = iced::event::listen_with(|event, status, _window| match event {
             iced::Event::Window(iced::window::Event::FileDropped(path)) => {
                 Some(Message::FileDropped(path))
             }
-            iced::Event::Keyboard(keyboard::Event::KeyPressed { key, .. }) => {
+            iced::Event::Keyboard(keyboard::Event::KeyPressed { key, .. })
+                if status == iced::event::Status::Ignored =>
+            {
                 Some(Message::KeyPressed(key))
             }
             iced::Event::Keyboard(keyboard::Event::ModifiersChanged(modifiers)) => {
@@ -1608,6 +1873,54 @@ impl CleanSlateApp {
 
     fn view(&self) -> Element<'_, Message> {
         responsive(|size| self.workspace(compact_workspace(size.width), size.height)).into()
+    }
+
+    fn calibration_controls(&self) -> Element<'_, Message> {
+        let Some(project) = &self.project else {
+            return column![].into();
+        };
+        let settings = project.ownership_settings();
+        let mut controls = column![
+            text("Microphone ownership").size(18),
+            text(if settings.enabled { "Joint ownership enabled" } else { "Legacy independent detection" }),
+            button(if settings.enabled { "Use legacy detection" } else { "Enable joint ownership" }).on_press(Message::OwnershipMode(!settings.enabled)),
+            text("Examples are optional. Room tone teaches this microphone's background with nobody speaking. Solo speech teaches direct speech and its copies while only this microphone's participant speaks.").size(12),
+            button(if self.calibrating { "Stop calibration selection" } else { "Select calibration range" }).on_press(Message::CalibrationMode(!self.calibrating)),
+            text("Start in seconds").size(12),
+            text_input("Start seconds", &self.calibration_start).on_input(Message::CalibrationStart),
+            button("Start at playhead").on_press(Message::CalibrationStartAtPlayhead),
+            text("End in seconds").size(12),
+            text_input("End seconds", &self.calibration_end).on_input(Message::CalibrationEnd),
+            button("End at playhead").on_press(Message::CalibrationEndAtPlayhead),
+            button("Use timeline selection").on_press_maybe(self.timeline.selection().map(|_| Message::CalibrationFromSelection)),
+            text("Select at least 0.25 seconds, then use Save room tone or Save solo speech under the intended track. Examples do not add protections.").size(12),
+        ].spacing(8);
+        if let Some(notice) = project.calibration_notice() {
+            controls = controls.push(text(notice));
+        }
+        if let Some(error) = &self.calibration_error {
+            controls = controls.push(text(format!("Example not saved: {error}")));
+        }
+        if settings.examples.is_empty() {
+            controls = controls.push(text(
+                "No saved examples. Joint mode uses automatic estimates.",
+            ));
+        }
+        for (index, example) in settings.examples.iter().enumerate() {
+            let kind = match example.kind {
+                CalibrationKind::RoomTone => "Room tone",
+                CalibrationKind::SoloSpeech => "Solo speech",
+            };
+            controls = controls
+                .push(text(format!(
+                    "{kind}, track {}: {:.5} to {:.5} s",
+                    example.track + 1,
+                    example.start as f64 / 48_000.0,
+                    example.end as f64 / 48_000.0
+                )))
+                .push(button("Remove example").on_press(Message::RemoveCalibration(index)));
+        }
+        controls.into()
     }
 
     fn workspace(&self, compact: bool, height: f32) -> Element<'_, Message> {
@@ -1658,7 +1971,7 @@ impl CleanSlateApp {
                 container(
                     canvas(TimelineCanvas::ruler(
                         &self.timeline,
-                        self.selecting_range,
+                        self.selecting_range || self.calibrating,
                         Message::Timeline,
                     ))
                     .width(Fill)
@@ -1667,7 +1980,11 @@ impl CleanSlateApp {
                 .padding([0, 12]),
             );
             for (index, source) in project.sources.iter().enumerate() {
-                let mut header = row![text(source.path.display().to_string())];
+                let mut header = row![text(format!(
+                    "Track {}: {}",
+                    index + 1,
+                    source.path.display()
+                ))];
                 if self
                     .review
                     .as_ref()
@@ -1696,7 +2013,7 @@ impl CleanSlateApp {
                             &self.timeline,
                             Message::Timeline,
                             self.preview.as_ref().map(|preview| (preview, index)),
-                            self.selecting_range,
+                            self.selecting_range || self.calibrating,
                         ))
                         .width(Fill)
                         .height(waveform_height)
@@ -1704,10 +2021,32 @@ impl CleanSlateApp {
                     },
                 );
                 timeline_content = timeline_content.push(
-                    container(column![header, waveform].spacing(8))
-                        .padding(12)
-                        .width(Fill)
-                        .style(container::bordered_box),
+                    container(
+                        column![
+                            header,
+                            waveform,
+                            row![
+                                button("Save room tone").on_press_maybe(
+                                    project.ownership_settings().enabled.then_some(
+                                        Message::SaveCalibration(CalibrationKind::RoomTone, index)
+                                    )
+                                ),
+                                button("Save solo speech").on_press_maybe(
+                                    project.ownership_settings().enabled.then_some(
+                                        Message::SaveCalibration(
+                                            CalibrationKind::SoloSpeech,
+                                            index
+                                        )
+                                    )
+                                ),
+                            ]
+                            .spacing(8)
+                        ]
+                        .spacing(8),
+                    )
+                    .padding(12)
+                    .width(Fill)
+                    .style(container::bordered_box),
                 );
             }
             match current {
@@ -1823,7 +2162,7 @@ impl CleanSlateApp {
 
         let timeline = column![
             text("SESSION TIMELINE").size(12),
-            text("Shift-drag a waveform to select a protection range.").size(11),
+            text(if self.calibrating { "Calibration selection: drag a waveform, then save an example on the intended track. No protection is added." } else { "Shift-drag selects a range. Use Protect selected range to protect it, or enable calibration selection to save examples." }).size(11),
             scrollable(timeline_content).height(Fill),
         ]
         .spacing(10)
@@ -1865,6 +2204,7 @@ impl CleanSlateApp {
                 text("Session parameters").size(20),
                 text("Live preview only — final render is unchanged."),
                 preview_state,
+                self.calibration_controls(),
                 text(format!(
                     "Speech sensitivity: {:.2}",
                     1.0 - parameters.speech_sensitivity
