@@ -196,11 +196,14 @@ impl DetectorFacts {
     }
 }
 
-fn preserve_nearby(detected: &[bool], preservation_frames: usize) -> Vec<bool> {
+pub(crate) fn preserve_nearby(detected: &[bool], preservation_frames: usize) -> Vec<bool> {
     (0..detected.len())
         .map(|frame| {
             detected[frame.saturating_sub(preservation_frames)
-                ..(frame + preservation_frames + 1).min(detected.len())]
+                ..frame
+                    .saturating_add(preservation_frames)
+                    .saturating_add(1)
+                    .min(detected.len())]
                 .iter()
                 .any(|active| *active)
         })

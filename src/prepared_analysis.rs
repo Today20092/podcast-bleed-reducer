@@ -1,7 +1,8 @@
 //! Validated source facts retained without PCM; one cache belongs to one editor session.
 use crate::{
-    AnalysisPreview, AutomixParameters, Protection, Region, RenderBlocker,
+    AnalysisPreview, AutomixParameters, OwnershipSettings, Protection, Region, RenderBlocker,
     engine::{gain_envelope, load_and_validate},
+    joint_detector::JointFacts,
     vad,
     waveform::SourceStamp,
 };
@@ -26,6 +27,16 @@ struct PreparedAnalysis {
     sources: Vec<SourceStamp>,
     preparation_id: &'static str,
     facts: DetectorFacts,
+    joint: JointFacts,
+    feature_millis: u128,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct JointDiagnostics {
+    pub feature_preparation_ms: u128,
+    /// Numeric feature payload, excluding Vec/allocation headers and legacy VAD facts.
+    pub retained_feature_bytes: usize,
+    pub pair_count: usize,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -40,13 +51,22 @@ pub struct PreviewCacheStats {
 pub struct PreviewCache {
     preprocessing: vad::Preprocessing,
     prepared: Option<Arc<PreparedAnalysis>>,
-    ownership: Option<(AutomixParameters, Arc<Vec<Region>>)>,
+    ownership: Option<(AutomixParameters, OwnershipSettings, Arc<Vec<Region>>)>,
     stats: PreviewCacheStats,
 }
 
 impl PreviewCache {
     pub fn stats(&self) -> PreviewCacheStats {
         self.stats
+    }
+
+    pub fn joint_diagnostics(&self) -> Option<JointDiagnostics> {
+        self.prepared.as_ref().map(|p| JointDiagnostics {
+            feature_preparation_ms: p.feature_millis,
+            retained_feature_bytes: p.joint.retained_bytes(),
+            pair_count: p.facts.probabilities.len() * p.facts.probabilities.len().saturating_sub(1)
+                / 2,
+        })
     }
 
     /// Rechecks ordered source stamps on every request. No audio is retained after preparation.
@@ -59,9 +79,31 @@ impl PreviewCache {
         progress: &AtomicU8,
         cancelled: Option<&AtomicBool>,
     ) -> Result<AnalysisPreview, RenderBlocker> {
+        self.analyze_with_ownership(
+            paths,
+            protections,
+            parameters,
+            &OwnershipSettings::default(),
+            progress,
+            cancelled,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)] // Shared editor/render contract.
+    pub fn analyze_with_ownership(
+        &mut self,
+        paths: &[PathBuf],
+        protections: &[Protection],
+        parameters: AutomixParameters,
+        ownership: &OwnershipSettings,
+        progress: &AtomicU8,
+        cancelled: Option<&AtomicBool>,
+    ) -> Result<AnalysisPreview, RenderBlocker> {
         check_cancelled(cancelled)?;
+        validate_parameters(parameters)?;
         progress.store(1, Ordering::Relaxed);
         let sources = source_stamps(paths)?;
+        validate_calibration(ownership, &sources, None)?;
         if self.prepared.as_ref().is_none_or(|prepared| {
             prepared.sources != sources || prepared.preparation_id != self.preprocessing.identity()
         }) {
@@ -69,6 +111,7 @@ impl PreviewCache {
             self.ownership = None;
             progress.store(5, Ordering::Relaxed);
             let (stems, _) = load_and_validate(paths)?;
+            validate_calibration(ownership, &sources, Some(stems[0].samples.len()))?;
             check_cancelled(cancelled)?;
             let facts = vad::prepare(
                 &stems
@@ -79,6 +122,15 @@ impl PreviewCache {
                 cancelled,
                 self.preprocessing,
             )?;
+            let started = std::time::Instant::now();
+            let joint = JointFacts::prepare(
+                &stems
+                    .iter()
+                    .map(|s| s.samples.as_slice())
+                    .collect::<Vec<_>>(),
+                cancelled,
+            )?;
+            let feature_millis = started.elapsed().as_millis();
             if source_stamps(paths)? != sources {
                 return Err(RenderBlocker(
                     "source changed during analysis preparation; retry".into(),
@@ -88,13 +140,16 @@ impl PreviewCache {
             self.stats.preparations += 1;
             self.stats.inference_frames += facts.probabilities.iter().map(Vec::len).sum::<usize>();
             self.prepared = Some(Arc::new(PreparedAnalysis {
-                sources,
+                sources: sources.clone(),
                 preparation_id: self.preprocessing.identity(),
                 facts,
+                joint,
+                feature_millis,
             }));
         }
         let prepared = self.prepared.as_ref().unwrap();
         let sample_count = prepared.facts.sample_count;
+        validate_calibration(ownership, &sources, Some(sample_count))?;
         if protections.iter().any(|p| {
             p.start > p.end
                 || (p.end != usize::MAX && p.end > sample_count)
@@ -103,23 +158,34 @@ impl PreviewCache {
             return Err(RenderBlocker("protection is outside the session".into()));
         }
         check_cancelled(cancelled)?;
-        if self.ownership.as_ref().is_none_or(|(previous, _)| {
-            previous.speech_sensitivity != parameters.speech_sensitivity
-                || previous.bleed_discrimination_db != parameters.bleed_discrimination_db
-                || previous.speech_padding_ms != parameters.speech_padding_ms
-        }) {
+        if self
+            .ownership
+            .as_ref()
+            .is_none_or(|(previous, previous_settings, _)| {
+                previous_settings != ownership
+                    || previous.speech_sensitivity != parameters.speech_sensitivity
+                    || previous.bleed_discrimination_db != parameters.bleed_discrimination_db
+                    || previous.speech_padding_ms != parameters.speech_padding_ms
+            })
+        {
             progress.store(70, Ordering::Relaxed);
-            let regions = prepared.facts.regions(
-                parameters.speech_sensitivity,
-                parameters.bleed_discrimination_db,
-                (parameters.speech_padding_ms * 48_000.0 / 1000.0 / 1_536.0).round() as usize,
-            );
+            let regions = if ownership.enabled {
+                prepared
+                    .joint
+                    .regions(&prepared.facts, parameters, ownership, cancelled)?
+            } else {
+                prepared.facts.regions(
+                    parameters.speech_sensitivity,
+                    parameters.bleed_discrimination_db,
+                    (parameters.speech_padding_ms * 48_000.0 / 1000.0 / 1_536.0).round() as usize,
+                )
+            };
             check_cancelled(cancelled)?;
-            self.ownership = Some((parameters, Arc::new(regions)));
+            self.ownership = Some((parameters, ownership.clone(), Arc::new(regions)));
             self.stats.ownership_derivations += 1;
         }
         progress.store(80, Ordering::Relaxed);
-        let regions = &self.ownership.as_ref().unwrap().1;
+        let regions = &self.ownership.as_ref().unwrap().2;
         let mut envelopes = Vec::with_capacity(paths.len());
         for track in 0..paths.len() {
             check_cancelled(cancelled)?;
@@ -154,6 +220,55 @@ impl PreviewCache {
 
 pub(crate) fn source_stamps(paths: &[PathBuf]) -> Result<Vec<SourceStamp>, RenderBlocker> {
     paths.iter().map(|path| SourceStamp::read(path)).collect()
+}
+
+// Local engine boundary validation; calibration.rs owns project/editor validation.
+pub(crate) fn validate_calibration(
+    settings: &OwnershipSettings,
+    sources: &[SourceStamp],
+    sample_count: Option<usize>,
+) -> Result<(), RenderBlocker> {
+    if !settings.examples.is_empty() && settings.sources != sources {
+        return Err(RenderBlocker(
+            "calibration sources changed or are missing; replace the examples".into(),
+        ));
+    }
+    if settings.examples.iter().any(|e| {
+        e.track >= sources.len()
+            || e.start >= e.end
+            || e.end - e.start < 12_000
+            || sample_count.is_some_and(|count| e.end > count)
+    }) {
+        return Err(RenderBlocker(
+            "calibration needs a valid track and at least 250 ms inside the session".into(),
+        ));
+    }
+    Ok(())
+}
+
+pub(crate) fn validate_parameters(p: AutomixParameters) -> Result<(), RenderBlocker> {
+    if ![
+        p.speech_sensitivity,
+        p.bleed_discrimination_db,
+        p.attenuation_db,
+        p.speech_padding_ms * 48.0,
+        p.open_ms * 48.0,
+        p.close_ms * 48.0,
+    ]
+    .iter()
+    .all(|v| v.is_finite())
+        || !(0.0..=1.0).contains(&p.speech_sensitivity)
+        || p.bleed_discrimination_db < 0.0
+        || p.attenuation_db > 0.0
+        || p.speech_padding_ms < 0.0
+        || p.open_ms < 0.0
+        || p.close_ms < 0.0
+    {
+        return Err(RenderBlocker(
+            "automix parameters must be finite, attenuation-only, and within valid ranges".into(),
+        ));
+    }
+    Ok(())
 }
 
 pub(crate) fn check_cancelled(cancelled: Option<&AtomicBool>) -> Result<(), RenderBlocker> {
