@@ -279,6 +279,56 @@ mod preview_tests {
     }
 
     #[test]
+    fn gain_bounds_include_internal_open_close_and_protection_edges() {
+        let regions = vec![
+            Region {
+                start: 0,
+                end: 20,
+                decision: Decision::NoSpeech,
+            },
+            Region {
+                start: 20,
+                end: 40,
+                decision: Decision::Owned(vec![0]),
+            },
+            Region {
+                start: 40,
+                end: 80,
+                decision: Decision::NoSpeech,
+            },
+        ];
+        let protections = [Protection {
+            track: Some(0),
+            start: 55,
+            end: 65,
+        }];
+        let envelope = gain_envelope(0, 80, &regions, &protections, 0.25, 4.0, 6.0);
+        for (start, end) in [
+            (0, 80),
+            (20, 40),
+            (40, 55),
+            (55, 65),
+            (65, 80),
+            (38, 70),
+            (79, 99),
+        ] {
+            let actual: Vec<_> = (start..end.min(80))
+                .map(|sample| envelope.gain_at(sample))
+                .collect();
+            let expected = actual
+                .iter()
+                .fold((f32::INFINITY, f32::NEG_INFINITY), |(low, high), &gain| {
+                    (low.min(gain), high.max(gain))
+                });
+            assert_eq!(envelope.gain_bounds(start, end), Some(expected));
+        }
+        assert_eq!(envelope.gain_bounds(80, 90), None);
+        assert_eq!(envelope.gain_bounds(20, 20), None);
+        assert_eq!(GainEnvelope::constant(0, 1.0).gain_bounds(0, 10), None);
+        assert!(envelope.gain_bounds(0, 80).unwrap().1 > envelope.gain_at(0));
+    }
+
+    #[test]
     fn one_pole_matches_closed_form_and_retargets_from_current_gain() {
         let floor = 0.25;
         let regions = vec![
@@ -381,6 +431,27 @@ impl GainEnvelope {
 
     pub fn sample_count(&self) -> usize {
         self.sample_count
+    }
+
+    /// Exact gain extrema in the half-open sample range, clipped to this envelope.
+    pub(crate) fn gain_bounds(&self, start: usize, end: usize) -> Option<(f32, f32)> {
+        let end = end.min(self.sample_count);
+        if start >= end {
+            return None;
+        }
+        let first = self.points.partition_point(|point| point.sample <= start);
+        let last = self.points.partition_point(|point| point.sample < end);
+        let mut bounds = (self.gain_at(start), self.gain_at(start));
+        // One-pole segments are monotonic. Include both sides of every retarget.
+        for sample in std::iter::once(end - 1).chain(
+            self.points[first..last]
+                .iter()
+                .flat_map(|point| [point.sample - 1, point.sample]),
+        ) {
+            let gain = self.gain_at(sample);
+            bounds = (bounds.0.min(gain), bounds.1.max(gain));
+        }
+        Some(bounds)
     }
 }
 

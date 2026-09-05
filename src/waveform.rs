@@ -17,6 +17,12 @@ use std::{
 const BASE_BUCKET: usize = 256;
 const ATTENUATION_HATCH_SPACING: f32 = 20.0;
 
+fn processed_peak((min, max): (f32, f32), (low, high): (f32, f32)) -> (f32, f32) {
+    // ponytail: cached peaks lack sample positions, so these are conservative
+    // bounds. Use source samples if exact processed extrema become necessary.
+    ((min * low).min(min * high), (max * low).max(max * high))
+}
+
 fn attenuation_hatches(left: f32, right: f32, height: f32) -> Vec<(Point, Point)> {
     let first = ((left - height) / ATTENUATION_HATCH_SPACING).floor() * ATTENUATION_HATCH_SPACING;
     let mut base = first;
@@ -467,11 +473,18 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
                 let processed = canvas::Path::new(|builder| {
                     for (index, (min, max)) in level.peaks[first..last].iter().enumerate() {
                         let sample = (first + index) * level.samples_per_bucket;
-                        let gain =
-                            envelope.gain_at(sample.min(envelope.sample_count().saturating_sub(1)));
+                        let Some(gains) = envelope.gain_bounds(
+                            sample,
+                            sample
+                                .saturating_add(level.samples_per_bucket)
+                                .min(cache.sample_count),
+                        ) else {
+                            continue;
+                        };
+                        let (min, max) = processed_peak((*min, *max), gains);
                         let x = self.viewport.x_for_sample(sample, bounds.width);
-                        builder.move_to(Point::new(x, center - max * gain * scale));
-                        builder.line_to(Point::new(x, center - min * gain * scale));
+                        builder.move_to(Point::new(x, center - max * scale));
+                        builder.line_to(Point::new(x, center - min * scale));
                     }
                 });
                 frame.stroke(
@@ -541,6 +554,15 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
 mod tests {
     use super::*;
     use bwavfile::{WaveFmt, WaveWriter};
+
+    #[test]
+    fn processed_bucket_bounds_cover_changing_gain_for_both_sample_signs() {
+        assert_eq!(processed_peak((-0.8, 0.6), (0.25, 1.0)), (-0.8, 0.6));
+        assert_eq!(processed_peak((0.2, 0.8), (0.25, 1.0)), (0.05, 0.8));
+        assert_eq!(processed_peak((-0.8, -0.2), (0.25, 1.0)), (-0.8, -0.05));
+        assert_eq!(processed_peak((-0.8, 0.6), (0.5, 0.5)), (-0.4, 0.3));
+        assert_eq!(processed_peak((0.0, 0.0), (0.25, 1.0)), (0.0, 0.0));
+    }
 
     #[test]
     fn attenuation_hatches_keep_screen_phase_and_clip_to_region() {

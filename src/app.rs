@@ -25,6 +25,11 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+// Match the detector's rounding of 1536-sample frames at 48 kHz.
+fn effective_padding_ms(value: f32) -> f32 {
+    (value / 32.0).round() * 32.0
+}
+
 fn dialog_start_directory() -> PathBuf {
     std::env::var_os("USERPROFILE")
         .map(PathBuf::from)
@@ -52,6 +57,48 @@ fn available_project_path(directory: &std::path::Path) -> PathBuf {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn padding_control_shows_effective_steps_and_keeps_legacy_value_until_edited() {
+        let mut app = super::CleanSlateApp::default();
+        app.preview_parameters.speech_padding_ms = 300.0;
+        assert_eq!(super::effective_padding_ms(300.0), 288.0);
+        assert_eq!(app.preview_parameters.speech_padding_ms, 300.0);
+        for value in [0.0, 32.0, 320.0, 992.0] {
+            let _ = app.update(super::Message::SpeechPadding(value));
+            assert_eq!(app.preview_parameters.speech_padding_ms, value);
+            let saved = serde_json::to_string(&app.preview_parameters).unwrap();
+            assert_eq!(
+                serde_json::from_str::<crate::AutomixParameters>(&saved).unwrap(),
+                app.preview_parameters
+            );
+        }
+        let _ = app.update(super::Message::SpeechPadding(300.0));
+        assert_eq!(app.preview_parameters.speech_padding_ms, 288.0);
+    }
+
+    #[test]
+    fn sensitivity_control_inverts_threshold_without_changing_legacy_storage() {
+        let legacy: crate::AutomixParameters =
+            serde_json::from_str(r#"{"speech_sensitivity":0.6,"speech_padding_ms":300.0}"#)
+                .unwrap();
+        let mut app = super::CleanSlateApp {
+            preview_parameters: legacy,
+            ..Default::default()
+        };
+        let saved = serde_json::to_string(&app.preview_parameters).unwrap();
+        assert_eq!(
+            serde_json::from_str::<crate::AutomixParameters>(&saved).unwrap(),
+            legacy
+        );
+        let _ = app.update(super::Message::SpeechSensitivity(0.8));
+        assert!((app.preview_parameters.speech_sensitivity - 0.2).abs() < 1e-6);
+        assert!(app.preview_parameters.speech_sensitivity < legacy.speech_sensitivity);
+        assert_eq!(app.preview_parameters.speech_padding_ms, 300.0);
+        let saved = serde_json::to_string(&app.preview_parameters).unwrap();
+        let reopened: crate::AutomixParameters = serde_json::from_str(&saved).unwrap();
+        assert!((reopened.speech_sensitivity - 0.2).abs() < 1e-6);
+    }
+
     fn write_wav(path: &std::path::Path, samples: &[f32]) {
         let writer =
             bwavfile::WaveWriter::create(path, bwavfile::WaveFmt::new_pcm_mono(48_000, 16))
@@ -750,12 +797,16 @@ impl CleanSlateApp {
                 self.poll_processing();
                 self.poll_audition();
             }
-            Message::SpeechSensitivity(value) => self.preview_parameters.speech_sensitivity = value,
+            Message::SpeechSensitivity(value) => {
+                self.preview_parameters.speech_sensitivity = 1.0 - value
+            }
             Message::BleedDiscrimination(value) => {
                 self.preview_parameters.bleed_discrimination_db = value
             }
             Message::Attenuation(value) => self.preview_parameters.attenuation_db = value,
-            Message::SpeechPadding(value) => self.preview_parameters.speech_padding_ms = value,
+            Message::SpeechPadding(value) => {
+                self.preview_parameters.speech_padding_ms = effective_padding_ms(value)
+            }
             Message::OpenTime(value) => self.preview_parameters.open_ms = value,
             Message::CloseTime(value) => self.preview_parameters.close_ms = value,
             Message::RefreshPreview => {
@@ -1192,15 +1243,16 @@ impl CleanSlateApp {
                 preview_state,
                 text(format!(
                     "Speech sensitivity: {:.2}",
-                    parameters.speech_sensitivity
+                    1.0 - parameters.speech_sensitivity
                 )),
                 slider(
                     0.1..=0.9,
-                    parameters.speech_sensitivity,
+                    1.0 - parameters.speech_sensitivity,
                     Message::SpeechSensitivity
                 )
                 .step(0.01)
                 .on_release(Message::RefreshPreview),
+                text("Higher sensitivity admits weaker speech evidence.").size(12),
                 text(format!(
                     "Bleed discrimination: {:.1} dB",
                     parameters.bleed_discrimination_db
@@ -1212,6 +1264,7 @@ impl CleanSlateApp {
                 )
                 .step(0.5)
                 .on_release(Message::RefreshPreview),
+                text("Required margin above each track's own noise floor.").size(12),
                 text(format!("Attenuation: {:.1} dB", parameters.attenuation_db)),
                 slider(
                     -30.0..=-3.0,
@@ -1221,16 +1274,17 @@ impl CleanSlateApp {
                 .step(1.0)
                 .on_release(Message::RefreshPreview),
                 text(format!(
-                    "Speech padding: {:.0} ms",
-                    parameters.speech_padding_ms
+                    "Speech padding: {:.0} ms effective",
+                    effective_padding_ms(parameters.speech_padding_ms)
                 )),
                 slider(
-                    0.0..=1000.0,
-                    parameters.speech_padding_ms,
+                    0.0..=992.0,
+                    effective_padding_ms(parameters.speech_padding_ms),
                     Message::SpeechPadding
                 )
-                .step(16.0)
+                .step(32.0)
                 .on_release(Message::RefreshPreview),
+                text("32 ms steps. Legacy stored values stay unchanged until padding is edited.").size(12),
                 text(format!(
                     "Open time: {:.0} ms",
                     parameters.open_ms
@@ -1248,12 +1302,15 @@ impl CleanSlateApp {
                 text(
                     "Overlay: preserved solid · attenuated diagonal hatch · uncertain dotted · protected outline"
                 ),
+                text("Bright waveform: conservative processed bounds; faint waveform: Original.").size(12),
             ]
             .spacing(12),
         )
         .padding(18)
         .width(if compact { Fill } else { Length::Fixed(280.0) })
         .style(container::bordered_box);
+        let inspector =
+            scrollable(inspector).height(if compact { Length::Fixed(240.0) } else { Fill });
         let transport = row![
             text(format!(
                 "{:02}:{:06.3}",
