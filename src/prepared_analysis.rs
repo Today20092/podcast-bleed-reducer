@@ -38,6 +38,7 @@ pub struct PreviewCacheStats {
 /// Cheap to clone for a worker: detector facts and ownership are immutable and shared.
 #[derive(Clone, Debug, Default)]
 pub struct PreviewCache {
+    preprocessing: vad::Preprocessing,
     prepared: Option<Arc<PreparedAnalysis>>,
     ownership: Option<(AutomixParameters, Arc<Vec<Region>>)>,
     stats: PreviewCacheStats,
@@ -68,7 +69,7 @@ impl PreviewCache {
         progress.store(1, Ordering::Relaxed);
         let sources = source_stamps(paths)?;
         if self.prepared.as_ref().is_none_or(|prepared| {
-            prepared.sources != sources || prepared.preparation_id != vad::PREPARATION_ID
+            prepared.sources != sources || prepared.preparation_id != self.preprocessing.identity()
         }) {
             self.prepared = None;
             self.ownership = None;
@@ -82,6 +83,7 @@ impl PreviewCache {
                     .collect::<Vec<_>>(),
                 progress,
                 cancelled,
+                self.preprocessing,
             )?;
             if source_stamps(paths)? != sources {
                 return Err(RenderBlocker(
@@ -93,7 +95,7 @@ impl PreviewCache {
             self.stats.inference_frames += facts.probabilities.iter().map(Vec::len).sum::<usize>();
             self.prepared = Some(Arc::new(PreparedAnalysis {
                 sources,
-                preparation_id: vad::PREPARATION_ID,
+                preparation_id: self.preprocessing.identity(),
                 facts,
             }));
         }
@@ -176,5 +178,46 @@ pub fn preview_stage(progress: u8) -> &'static str {
         70..=79 => "Updating ownership",
         80..=99 => "Updating gain curves",
         _ => "Preview ready",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn preprocessing_change_invalidates_detector_and_ownership_then_restores_legacy() {
+        use bwavfile::{WaveFmt, WaveWriter};
+        let path =
+            std::env::temp_dir().join(format!("detector-identity-{}.wav", std::process::id()));
+        let writer = WaveWriter::create(&path, WaveFmt::new_pcm_mono(48_000, 16)).unwrap();
+        let mut frames = writer.audio_frame_writer().unwrap();
+        frames.write_frames(&vec![0.0_f32; 3_073]).unwrap();
+        frames.end().unwrap();
+        let mut cache = PreviewCache::default();
+        let progress = AtomicU8::new(0);
+        let paths = std::slice::from_ref(&path);
+        let parameters = AutomixParameters::default();
+        let legacy = cache
+            .analyze(paths, &[], parameters, &progress, None)
+            .unwrap();
+        cache.preprocessing = vad::Preprocessing::AntiAlias;
+        cache
+            .analyze(paths, &[], parameters, &progress, None)
+            .unwrap();
+        cache
+            .analyze(paths, &[], parameters, &progress, None)
+            .unwrap();
+        assert_eq!(cache.stats().preparations, 2);
+        assert_eq!(cache.stats().ownership_derivations, 2);
+        cache.preprocessing = vad::Preprocessing::Legacy;
+        assert_eq!(
+            legacy,
+            cache
+                .analyze(paths, &[], parameters, &progress, None)
+                .unwrap()
+        );
+        assert_eq!(cache.stats().preparations, 3);
+        std::fs::remove_file(path).unwrap();
     }
 }

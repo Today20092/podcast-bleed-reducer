@@ -1,6 +1,7 @@
 pub mod app;
 mod audio_io;
 mod audition;
+pub mod detector_quality;
 mod engine;
 mod export;
 mod prepared_analysis;
