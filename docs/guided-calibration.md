@@ -10,6 +10,8 @@ New sessions use joint ownership. For a saved session from an older build, choos
 
 Room tone alone cannot identify which participant is speaking. Solo examples provide the microphone relationship; they do not train a voice identity model. Very quiet independent speech mixed with reverberant bleed remains a difficult case and needs listening.
 
+If a solo example is rejected because it does not show a clear relationship between microphones, remove it and choose a clearer interval with one participant speaking. The previous completed preview stays visible until valid settings produce a new one.
+
 Examples are optional, saved with the session, and separate from protection ranges. Removing an example updates the preview. Replacing or reordering source recordings invalidates old examples. Changing settings requires a new final render before exporting updated audio.
 
 Use the three original `chopshow podcast 155_A01.wav`, `_A02.wav`, and `_A03.wav` tracks together. These controls do not modify the original recordings.
