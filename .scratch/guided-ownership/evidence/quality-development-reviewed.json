@@ -1,0 +1,2039 @@
+{
+  "baseline_for_added_attenuation": "legacy_default",
+  "guided_settings": {
+    "enabled": true,
+    "examples": [
+      {
+        "end": 372960,
+        "kind": "SoloSpeech",
+        "start": 354528,
+        "track": 0
+      },
+      {
+        "end": 296928,
+        "kind": "SoloSpeech",
+        "start": 278496,
+        "track": 2
+      },
+      {
+        "end": 3197328,
+        "kind": "SoloSpeech",
+        "start": 3172752,
+        "track": 1
+      },
+      {
+        "end": 186144,
+        "kind": "RoomTone",
+        "start": 160560,
+        "track": 2
+      }
+    ],
+    "sources": [
+      {
+        "bytes": 58203562,
+        "modified_nanos": 1786476028723533600,
+        "path": "C:/Users/User/Downloads/00005603_A01.wav"
+      },
+      {
+        "bytes": 58203562,
+        "modified_nanos": 1786476028723533600,
+        "path": "C:/Users/User/Downloads/00005603_A02.wav"
+      },
+      {
+        "bytes": 58203562,
+        "modified_nanos": 1786476028723533600,
+        "path": "C:/Users/User/Downloads/00005603_A03.wav"
+      }
+    ]
+  },
+  "human_listening_performed": false,
+  "labels": [
+    {
+      "end_seconds": 2.043,
+      "kind": "Preserve",
+      "metrics": {
+        "automatic_joint": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 0,
+          "energy_attenuation_db": 0.0,
+          "input_energy": 111.13091154537415,
+          "minimum_gain_db": 0.0,
+          "output_energy": 111.13091154537415,
+          "sample_count": 87984,
+          "worst_additional_gain_db": 0.0
+        },
+        "guided_joint": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 0,
+          "energy_attenuation_db": 0.0,
+          "input_energy": 111.13091154537415,
+          "minimum_gain_db": 0.0,
+          "output_energy": 111.13091154537415,
+          "sample_count": 87984,
+          "worst_additional_gain_db": 0.0
+        },
+        "legacy_0_20": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 0,
+          "energy_attenuation_db": 0.0,
+          "input_energy": 111.13091154537415,
+          "minimum_gain_db": 0.0,
+          "output_energy": 111.13091154537415,
+          "sample_count": 87984,
+          "worst_additional_gain_db": 0.0
+        },
+        "legacy_default": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 0,
+          "energy_attenuation_db": 0.0,
+          "input_energy": 111.13091154537415,
+          "minimum_gain_db": 0.0,
+          "output_energy": 111.13091154537415,
+          "sample_count": 87984,
+          "worst_additional_gain_db": 0.0
+        }
+      },
+      "path": "C:/Users/User/Downloads/00005603_A01.wav",
+      "start_seconds": 0.21,
+      "track": 0
+    },
+    {
+      "end_seconds": 3.31,
+      "kind": "Preserve",
+      "metrics": {
+        "automatic_joint": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 0,
+          "energy_attenuation_db": 0.0,
+          "input_energy": 40.50658308479559,
+          "minimum_gain_db": 0.0,
+          "output_energy": 40.50658308479559,
+          "sample_count": 40656,
+          "worst_additional_gain_db": 0.0
+        },
+        "guided_joint": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 0,
+          "energy_attenuation_db": 0.0,
+          "input_energy": 40.50658308479559,
+          "minimum_gain_db": 0.0,
+          "output_energy": 40.50658308479559,
+          "sample_count": 40656,
+          "worst_additional_gain_db": 0.0
+        },
+        "legacy_0_20": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 0,
+          "energy_attenuation_db": 0.0,
+          "input_energy": 40.50658308479559,
+          "minimum_gain_db": 0.0,
+          "output_energy": 40.50658308479559,
+          "sample_count": 40656,
+          "worst_additional_gain_db": 0.0
+        },
+        "legacy_default": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 0,
+          "energy_attenuation_db": 0.0,
+          "input_energy": 40.50658308479559,
+          "minimum_gain_db": 0.0,
+          "output_energy": 40.50658308479559,
+          "sample_count": 40656,
+          "worst_additional_gain_db": 0.0
+        }
+      },
+      "path": "C:/Users/User/Downloads/00005603_A01.wav",
+      "start_seconds": 2.463,
+      "track": 0
+    },
+    {
+      "end_seconds": 4.367,
+      "kind": "Preserve",
+      "metrics": {
+        "automatic_joint": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 0,
+          "energy_attenuation_db": 0.0,
+          "input_energy": 15.601077798142407,
+          "minimum_gain_db": 0.0,
+          "output_energy": 15.601077798142407,
+          "sample_count": 23136,
+          "worst_additional_gain_db": 0.0
+        },
+        "guided_joint": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 0,
+          "energy_attenuation_db": 0.0,
+          "input_energy": 15.601077798142407,
+          "minimum_gain_db": 0.0,
+          "output_energy": 15.601077798142407,
+          "sample_count": 23136,
+          "worst_additional_gain_db": 0.0
+        },
+        "legacy_0_20": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 0,
+          "energy_attenuation_db": 0.0,
+          "input_energy": 15.601077798142407,
+          "minimum_gain_db": 0.0,
+          "output_energy": 15.601077798142407,
+          "sample_count": 23136,
+          "worst_additional_gain_db": 0.0
+        },
+        "legacy_default": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 0,
+          "energy_attenuation_db": 0.0,
+          "input_energy": 15.601077798142407,
+          "minimum_gain_db": 0.0,
+          "output_energy": 15.601077798142407,
+          "sample_count": 23136,
+          "worst_additional_gain_db": 0.0
+        }
+      },
+      "path": "C:/Users/User/Downloads/00005603_A01.wav",
+      "start_seconds": 3.885,
+      "track": 0
+    },
+    {
+      "end_seconds": 6.865,
+      "kind": "Bleed",
+      "metrics": {
+        "automatic_joint": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 20468,
+          "below_minus_1_db_samples": 17596,
+          "below_unity_samples": 20784,
+          "energy_attenuation_db": -0.19069287043581695,
+          "input_energy": 2.914435365550028,
+          "minimum_gain_db": -6.132753372192383,
+          "output_energy": 2.789235224904211,
+          "sample_count": 106272,
+          "worst_additional_gain_db": 0.0
+        },
+        "guided_joint": {
+          "additional_below_minus_0_1_db_samples": 25076,
+          "additional_below_minus_1_db_samples": 22204,
+          "additional_below_unity_samples": 25392,
+          "below_minus_0_1_db_samples": 25076,
+          "below_minus_1_db_samples": 22204,
+          "below_unity_samples": 25392,
+          "energy_attenuation_db": -0.28078711321627403,
+          "input_energy": 2.914435365550028,
+          "minimum_gain_db": -7.343669414520264,
+          "output_energy": 2.731968684826908,
+          "sample_count": 106272,
+          "worst_additional_gain_db": -1.4391881227493286
+        },
+        "legacy_0_20": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 0,
+          "energy_attenuation_db": 0.0,
+          "input_energy": 2.914435365550028,
+          "minimum_gain_db": 0.0,
+          "output_energy": 2.914435365550028,
+          "sample_count": 106272,
+          "worst_additional_gain_db": 0.0
+        },
+        "legacy_default": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 20468,
+          "below_minus_1_db_samples": 17596,
+          "below_unity_samples": 20784,
+          "energy_attenuation_db": -0.19069287043581695,
+          "input_energy": 2.914435365550028,
+          "minimum_gain_db": -6.132753372192383,
+          "output_energy": 2.789235224904211,
+          "sample_count": 106272,
+          "worst_additional_gain_db": 0.0
+        }
+      },
+      "path": "C:/Users/User/Downloads/00005603_A01.wav",
+      "start_seconds": 4.651,
+      "track": 0
+    },
+    {
+      "end_seconds": 9.199,
+      "kind": "Preserve",
+      "metrics": {
+        "automatic_joint": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 20600,
+          "energy_attenuation_db": -4.965957791817707e-6,
+          "input_energy": 72.74502459942597,
+          "minimum_gain_db": -0.0013824207708239555,
+          "output_energy": 72.74494141888138,
+          "sample_count": 87024,
+          "worst_additional_gain_db": 0.0
+        },
+        "guided_joint": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 15524,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 20804,
+          "energy_attenuation_db": -5.4056552194316235e-6,
+          "input_energy": 72.74502459942597,
+          "minimum_gain_db": -0.001505140564404428,
+          "output_energy": 72.7449340538875,
+          "sample_count": 87024,
+          "worst_additional_gain_db": -0.00012270035222172737
+        },
+        "legacy_0_20": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 0,
+          "energy_attenuation_db": 0.0,
+          "input_energy": 72.74502459942597,
+          "minimum_gain_db": 0.0,
+          "output_energy": 72.74502459942597,
+          "sample_count": 87024,
+          "worst_additional_gain_db": 0.0
+        },
+        "legacy_default": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 20600,
+          "energy_attenuation_db": -4.965957791817707e-6,
+          "input_energy": 72.74502459942597,
+          "minimum_gain_db": -0.0013824207708239555,
+          "output_energy": 72.74494141888138,
+          "sample_count": 87024,
+          "worst_additional_gain_db": 0.0
+        }
+      },
+      "path": "C:/Users/User/Downloads/00005603_A01.wav",
+      "start_seconds": 7.386,
+      "track": 0
+    },
+    {
+      "end_seconds": 11.46,
+      "kind": "Preserve",
+      "metrics": {
+        "automatic_joint": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 0,
+          "energy_attenuation_db": 0.0,
+          "input_energy": 71.68358915227982,
+          "minimum_gain_db": 0.0,
+          "output_energy": 71.68358915227982,
+          "sample_count": 89664,
+          "worst_additional_gain_db": 0.0
+        },
+        "guided_joint": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 0,
+          "energy_attenuation_db": 0.0,
+          "input_energy": 71.68358915227982,
+          "minimum_gain_db": 0.0,
+          "output_energy": 71.68358915227982,
+          "sample_count": 89664,
+          "worst_additional_gain_db": 0.0
+        },
+        "legacy_0_20": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 0,
+          "energy_attenuation_db": 0.0,
+          "input_energy": 71.68358915227982,
+          "minimum_gain_db": 0.0,
+          "output_energy": 71.68358915227982,
+          "sample_count": 89664,
+          "worst_additional_gain_db": 0.0
+        },
+        "legacy_default": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 0,
+          "energy_attenuation_db": 0.0,
+          "input_energy": 71.68358915227982,
+          "minimum_gain_db": 0.0,
+          "output_energy": 71.68358915227982,
+          "sample_count": 89664,
+          "worst_additional_gain_db": 0.0
+        }
+      },
+      "path": "C:/Users/User/Downloads/00005603_A01.wav",
+      "start_seconds": 9.592,
+      "track": 0
+    },
+    {
+      "end_seconds": 13.849,
+      "kind": "Bleed",
+      "metrics": {
+        "automatic_joint": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 82292,
+          "below_minus_1_db_samples": 79420,
+          "below_unity_samples": 82608,
+          "energy_attenuation_db": -2.3109320861403697,
+          "input_energy": 3.8130626719299854,
+          "minimum_gain_db": -16.176355361938477,
+          "output_energy": 2.2396529926632742,
+          "sample_count": 112416,
+          "worst_additional_gain_db": 0.0
+        },
+        "guided_joint": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 82292,
+          "below_minus_1_db_samples": 79420,
+          "below_unity_samples": 82608,
+          "energy_attenuation_db": -2.3109320861403697,
+          "input_energy": 3.8130626719299854,
+          "minimum_gain_db": -16.176355361938477,
+          "output_energy": 2.2396529926632742,
+          "sample_count": 112416,
+          "worst_additional_gain_db": 0.0
+        },
+        "legacy_0_20": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 56180,
+          "below_minus_1_db_samples": 53308,
+          "below_unity_samples": 56496,
+          "energy_attenuation_db": -1.047347354456414,
+          "input_energy": 3.8130626719299854,
+          "minimum_gain_db": -13.424659729003906,
+          "output_energy": 2.99598205674905,
+          "sample_count": 112416,
+          "worst_additional_gain_db": 0.0
+        },
+        "legacy_default": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 82292,
+          "below_minus_1_db_samples": 79420,
+          "below_unity_samples": 82608,
+          "energy_attenuation_db": -2.3109320861403697,
+          "input_energy": 3.8130626719299854,
+          "minimum_gain_db": -16.176355361938477,
+          "output_energy": 2.2396529926632742,
+          "sample_count": 112416,
+          "worst_additional_gain_db": 0.0
+        }
+      },
+      "path": "C:/Users/User/Downloads/00005603_A01.wav",
+      "start_seconds": 11.507,
+      "track": 0
+    },
+    {
+      "end_seconds": 14.615,
+      "kind": "Preserve",
+      "metrics": {
+        "automatic_joint": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 13536,
+          "energy_attenuation_db": -0.00004821243890914636,
+          "input_energy": 7.889267774041125,
+          "minimum_gain_db": -0.00027801975375041366,
+          "output_energy": 7.889180193207106,
+          "sample_count": 13536,
+          "worst_additional_gain_db": 0.0
+        },
+        "guided_joint": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 13536,
+          "energy_attenuation_db": -0.00004821243890914636,
+          "input_energy": 7.889267774041125,
+          "minimum_gain_db": -0.00027801975375041366,
+          "output_energy": 7.889180193207106,
+          "sample_count": 13536,
+          "worst_additional_gain_db": 0.0
+        },
+        "legacy_0_20": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 13536,
+          "energy_attenuation_db": -0.00004492385405332645,
+          "input_energy": 7.889267774041125,
+          "minimum_gain_db": -0.0002588635543361306,
+          "output_energy": 7.889186167091052,
+          "sample_count": 13536,
+          "worst_additional_gain_db": 0.0
+        },
+        "legacy_default": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 13536,
+          "energy_attenuation_db": -0.00004821243890914636,
+          "input_energy": 7.889267774041125,
+          "minimum_gain_db": -0.00027801975375041366,
+          "output_energy": 7.889180193207106,
+          "sample_count": 13536,
+          "worst_additional_gain_db": 0.0
+        }
+      },
+      "path": "C:/Users/User/Downloads/00005603_A01.wav",
+      "start_seconds": 14.333,
+      "track": 0
+    },
+    {
+      "end_seconds": 17.368,
+      "kind": "Bleed",
+      "metrics": {
+        "automatic_joint": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 94497,
+          "below_minus_1_db_samples": 86221,
+          "below_unity_samples": 104064,
+          "energy_attenuation_db": -3.50188725144359,
+          "input_energy": 4.449608421770313,
+          "minimum_gain_db": -16.376262664794922,
+          "output_energy": 1.986703552530092,
+          "sample_count": 121152,
+          "worst_additional_gain_db": 0.0
+        },
+        "guided_joint": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 94497,
+          "below_minus_1_db_samples": 86221,
+          "below_unity_samples": 104064,
+          "energy_attenuation_db": -3.50188725144359,
+          "input_energy": 4.449608421770313,
+          "minimum_gain_db": -16.376262664794922,
+          "output_energy": 1.986703552530092,
+          "sample_count": 121152,
+          "worst_additional_gain_db": 0.0
+        },
+        "legacy_0_20": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 0,
+          "energy_attenuation_db": 0.0,
+          "input_energy": 4.449608421770313,
+          "minimum_gain_db": 0.0,
+          "output_energy": 4.449608421770313,
+          "sample_count": 121152,
+          "worst_additional_gain_db": 0.0
+        },
+        "legacy_default": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 97577,
+          "below_minus_1_db_samples": 89302,
+          "below_unity_samples": 107136,
+          "energy_attenuation_db": -3.8205220776876514,
+          "input_energy": 4.449608421770313,
+          "minimum_gain_db": -16.55603790283203,
+          "output_energy": 1.8461610571679157,
+          "sample_count": 121152,
+          "worst_additional_gain_db": 0.0
+        }
+      },
+      "path": "C:/Users/User/Downloads/00005603_A01.wav",
+      "start_seconds": 14.844,
+      "track": 0
+    },
+    {
+      "end_seconds": 20.45,
+      "kind": "Preserve",
+      "metrics": {
+        "automatic_joint": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 21994,
+          "energy_attenuation_db": -7.050578320457783e-6,
+          "input_energy": 161.18992517788888,
+          "minimum_gain_db": -0.002470908220857382,
+          "output_energy": 161.18966349340593,
+          "sample_count": 148320,
+          "worst_additional_gain_db": 0.0
+        },
+        "guided_joint": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 21994,
+          "energy_attenuation_db": -7.050578320457783e-6,
+          "input_energy": 161.18992517788888,
+          "minimum_gain_db": -0.002470908220857382,
+          "output_energy": 161.18966349340593,
+          "sample_count": 148320,
+          "worst_additional_gain_db": 0.0
+        },
+        "legacy_0_20": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 0,
+          "energy_attenuation_db": 0.0,
+          "input_energy": 161.18992517788888,
+          "minimum_gain_db": 0.0,
+          "output_energy": 161.18992517788888,
+          "sample_count": 148320,
+          "worst_additional_gain_db": 0.0
+        },
+        "legacy_default": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 22002,
+          "energy_attenuation_db": -7.076427101416009e-6,
+          "input_energy": 161.18992517788888,
+          "minimum_gain_db": -0.002480229828506708,
+          "output_energy": 161.1896625340209,
+          "sample_count": 148320,
+          "worst_additional_gain_db": 0.0
+        }
+      },
+      "path": "C:/Users/User/Downloads/00005603_A01.wav",
+      "start_seconds": 17.36,
+      "track": 0
+    },
+    {
+      "end_seconds": 51.81,
+      "kind": "Preserve",
+      "metrics": {
+        "automatic_joint": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 0,
+          "energy_attenuation_db": 0.0,
+          "input_energy": 459.1796490208278,
+          "minimum_gain_db": 0.0,
+          "output_energy": 459.1796490208278,
+          "sample_count": 189216,
+          "worst_additional_gain_db": 0.0
+        },
+        "guided_joint": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 0,
+          "energy_attenuation_db": 0.0,
+          "input_energy": 459.1796490208278,
+          "minimum_gain_db": 0.0,
+          "output_energy": 459.1796490208278,
+          "sample_count": 189216,
+          "worst_additional_gain_db": 0.0
+        },
+        "legacy_0_20": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 0,
+          "energy_attenuation_db": 0.0,
+          "input_energy": 459.1796490208278,
+          "minimum_gain_db": 0.0,
+          "output_energy": 459.1796490208278,
+          "sample_count": 189216,
+          "worst_additional_gain_db": 0.0
+        },
+        "legacy_default": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 0,
+          "energy_attenuation_db": 0.0,
+          "input_energy": 459.1796490208278,
+          "minimum_gain_db": 0.0,
+          "output_energy": 459.1796490208278,
+          "sample_count": 189216,
+          "worst_additional_gain_db": 0.0
+        }
+      },
+      "path": "C:/Users/User/Downloads/00005603_A02.wav",
+      "start_seconds": 47.868,
+      "track": 1
+    },
+    {
+      "end_seconds": 55.298,
+      "kind": "Bleed",
+      "metrics": {
+        "automatic_joint": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 17520,
+          "below_minus_1_db_samples": 7654,
+          "below_unity_samples": 23136,
+          "energy_attenuation_db": -0.0021373088803561227,
+          "input_energy": 6.209427965851074,
+          "minimum_gain_db": -2.1485729217529297,
+          "output_energy": 6.206372849805371,
+          "sample_count": 153600,
+          "worst_additional_gain_db": 0.0
+        },
+        "guided_joint": {
+          "additional_below_minus_0_1_db_samples": 4951,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 36128,
+          "below_minus_0_1_db_samples": 22471,
+          "below_minus_1_db_samples": 7654,
+          "below_unity_samples": 59264,
+          "energy_attenuation_db": -0.011623998419771344,
+          "input_energy": 6.209427965851074,
+          "minimum_gain_db": -2.1485729217529297,
+          "output_energy": 6.192830501139231,
+          "sample_count": 153600,
+          "worst_additional_gain_db": -0.4839004576206207
+        },
+        "legacy_0_20": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 12662,
+          "below_minus_1_db_samples": 4387,
+          "below_unity_samples": 18528,
+          "energy_attenuation_db": -0.001656608604153995,
+          "input_energy": 6.209427965851074,
+          "minimum_gain_db": -1.9101817607879639,
+          "output_energy": 6.207059842245552,
+          "sample_count": 153600,
+          "worst_additional_gain_db": 0.0
+        },
+        "legacy_default": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 17520,
+          "below_minus_1_db_samples": 7654,
+          "below_unity_samples": 23136,
+          "energy_attenuation_db": -0.0021373088803561227,
+          "input_energy": 6.209427965851074,
+          "minimum_gain_db": -2.1485729217529297,
+          "output_energy": 6.206372849805371,
+          "sample_count": 153600,
+          "worst_additional_gain_db": 0.0
+        }
+      },
+      "path": "C:/Users/User/Downloads/00005603_A02.wav",
+      "start_seconds": 52.098,
+      "track": 1
+    },
+    {
+      "end_seconds": 70.476,
+      "kind": "Preserve",
+      "metrics": {
+        "automatic_joint": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 17065,
+          "energy_attenuation_db": -1.4046563055144168e-7,
+          "input_energy": 1269.858846374921,
+          "minimum_gain_db": -0.00031685002613812685,
+          "output_energy": 1269.8588053033607,
+          "sample_count": 720048,
+          "worst_additional_gain_db": 0.0
+        },
+        "guided_joint": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 17065,
+          "energy_attenuation_db": -1.4046563055144168e-7,
+          "input_energy": 1269.858846374921,
+          "minimum_gain_db": -0.00031685002613812685,
+          "output_energy": 1269.8588053033607,
+          "sample_count": 720048,
+          "worst_additional_gain_db": 0.0
+        },
+        "legacy_0_20": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 16815,
+          "energy_attenuation_db": -1.2652866330448725e-7,
+          "input_energy": 1269.858846374921,
+          "minimum_gain_db": -0.000285785790765658,
+          "output_energy": 1269.8588093784713,
+          "sample_count": 720048,
+          "worst_additional_gain_db": 0.0
+        },
+        "legacy_default": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 17065,
+          "energy_attenuation_db": -1.4046563055144168e-7,
+          "input_energy": 1269.858846374921,
+          "minimum_gain_db": -0.00031685002613812685,
+          "output_energy": 1269.8588053033607,
+          "sample_count": 720048,
+          "worst_additional_gain_db": 0.0
+        }
+      },
+      "path": "C:/Users/User/Downloads/00005603_A02.wav",
+      "start_seconds": 55.475,
+      "track": 1
+    },
+    {
+      "end_seconds": 1.402,
+      "kind": "Preserve",
+      "metrics": {
+        "automatic_joint": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 0,
+          "energy_attenuation_db": 0.0,
+          "input_energy": 75.7414748344358,
+          "minimum_gain_db": 0.0,
+          "output_energy": 75.7414748344358,
+          "sample_count": 67296,
+          "worst_additional_gain_db": 0.0
+        },
+        "guided_joint": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 0,
+          "energy_attenuation_db": 0.0,
+          "input_energy": 75.7414748344358,
+          "minimum_gain_db": 0.0,
+          "output_energy": 75.7414748344358,
+          "sample_count": 67296,
+          "worst_additional_gain_db": 0.0
+        },
+        "legacy_0_20": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 0,
+          "energy_attenuation_db": 0.0,
+          "input_energy": 75.7414748344358,
+          "minimum_gain_db": 0.0,
+          "output_energy": 75.7414748344358,
+          "sample_count": 67296,
+          "worst_additional_gain_db": 0.0
+        },
+        "legacy_default": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 0,
+          "energy_attenuation_db": 0.0,
+          "input_energy": 75.7414748344358,
+          "minimum_gain_db": 0.0,
+          "output_energy": 75.7414748344358,
+          "sample_count": 67296,
+          "worst_additional_gain_db": 0.0
+        }
+      },
+      "path": "C:/Users/User/Downloads/00005603_A03.wav",
+      "start_seconds": 0.0,
+      "track": 2
+    },
+    {
+      "end_seconds": 3.878,
+      "kind": "Ignore",
+      "metrics": {
+        "automatic_joint": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 0,
+          "energy_attenuation_db": 0.0,
+          "input_energy": 0.011026746850013007,
+          "minimum_gain_db": 0.0,
+          "output_energy": 0.011026746850013007,
+          "sample_count": 25584,
+          "worst_additional_gain_db": 0.0
+        },
+        "guided_joint": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 4213,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 4213,
+          "energy_attenuation_db": -1.7580422911756078e-7,
+          "input_energy": 0.011026746850013007,
+          "minimum_gain_db": -1.553158199385507e-6,
+          "output_energy": 0.011026746403645675,
+          "sample_count": 25584,
+          "worst_additional_gain_db": -1.553158199385507e-6
+        },
+        "legacy_0_20": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 0,
+          "energy_attenuation_db": 0.0,
+          "input_energy": 0.011026746850013007,
+          "minimum_gain_db": 0.0,
+          "output_energy": 0.011026746850013007,
+          "sample_count": 25584,
+          "worst_additional_gain_db": 0.0
+        },
+        "legacy_default": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 0,
+          "energy_attenuation_db": 0.0,
+          "input_energy": 0.011026746850013007,
+          "minimum_gain_db": 0.0,
+          "output_energy": 0.011026746850013007,
+          "sample_count": 25584,
+          "worst_additional_gain_db": 0.0
+        }
+      },
+      "path": "C:/Users/User/Downloads/00005603_A03.wav",
+      "start_seconds": 3.345,
+      "track": 2
+    },
+    {
+      "end_seconds": 6.919,
+      "kind": "Preserve",
+      "metrics": {
+        "automatic_joint": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 0,
+          "energy_attenuation_db": 0.0,
+          "input_energy": 221.6185117997669,
+          "minimum_gain_db": 0.0,
+          "output_energy": 221.6185117997669,
+          "sample_count": 104304,
+          "worst_additional_gain_db": 0.0
+        },
+        "guided_joint": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 0,
+          "energy_attenuation_db": 0.0,
+          "input_energy": 221.6185117997669,
+          "minimum_gain_db": 0.0,
+          "output_energy": 221.6185117997669,
+          "sample_count": 104304,
+          "worst_additional_gain_db": 0.0
+        },
+        "legacy_0_20": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 0,
+          "energy_attenuation_db": 0.0,
+          "input_energy": 221.6185117997669,
+          "minimum_gain_db": 0.0,
+          "output_energy": 221.6185117997669,
+          "sample_count": 104304,
+          "worst_additional_gain_db": 0.0
+        },
+        "legacy_default": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 0,
+          "energy_attenuation_db": 0.0,
+          "input_energy": 221.6185117997669,
+          "minimum_gain_db": 0.0,
+          "output_energy": 221.6185117997669,
+          "sample_count": 104304,
+          "worst_additional_gain_db": 0.0
+        }
+      },
+      "path": "C:/Users/User/Downloads/00005603_A03.wav",
+      "start_seconds": 4.746,
+      "track": 2
+    },
+    {
+      "end_seconds": 13.973,
+      "kind": "Preserve",
+      "metrics": {
+        "automatic_joint": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 0,
+          "energy_attenuation_db": 0.0,
+          "input_energy": 305.52355481160487,
+          "minimum_gain_db": 0.0,
+          "output_energy": 305.52355481160487,
+          "sample_count": 147072,
+          "worst_additional_gain_db": 0.0
+        },
+        "guided_joint": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 0,
+          "energy_attenuation_db": 0.0,
+          "input_energy": 305.52355481160487,
+          "minimum_gain_db": 0.0,
+          "output_energy": 305.52355481160487,
+          "sample_count": 147072,
+          "worst_additional_gain_db": 0.0
+        },
+        "legacy_0_20": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 0,
+          "energy_attenuation_db": 0.0,
+          "input_energy": 305.52355481160487,
+          "minimum_gain_db": 0.0,
+          "output_energy": 305.52355481160487,
+          "sample_count": 147072,
+          "worst_additional_gain_db": 0.0
+        },
+        "legacy_default": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 0,
+          "energy_attenuation_db": 0.0,
+          "input_energy": 305.52355481160487,
+          "minimum_gain_db": 0.0,
+          "output_energy": 305.52355481160487,
+          "sample_count": 147072,
+          "worst_additional_gain_db": 0.0
+        }
+      },
+      "path": "C:/Users/User/Downloads/00005603_A03.wav",
+      "start_seconds": 10.909,
+      "track": 2
+    },
+    {
+      "end_seconds": 16.458,
+      "kind": "Preserve",
+      "metrics": {
+        "automatic_joint": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 0,
+          "energy_attenuation_db": 0.0,
+          "input_energy": 193.70508745760995,
+          "minimum_gain_db": 0.0,
+          "output_energy": 193.70508745760995,
+          "sample_count": 79104,
+          "worst_additional_gain_db": 0.0
+        },
+        "guided_joint": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 0,
+          "energy_attenuation_db": 0.0,
+          "input_energy": 193.70508745760995,
+          "minimum_gain_db": 0.0,
+          "output_energy": 193.70508745760995,
+          "sample_count": 79104,
+          "worst_additional_gain_db": 0.0
+        },
+        "legacy_0_20": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 0,
+          "energy_attenuation_db": 0.0,
+          "input_energy": 193.70508745760995,
+          "minimum_gain_db": 0.0,
+          "output_energy": 193.70508745760995,
+          "sample_count": 79104,
+          "worst_additional_gain_db": 0.0
+        },
+        "legacy_default": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 0,
+          "energy_attenuation_db": 0.0,
+          "input_energy": 193.70508745760995,
+          "minimum_gain_db": 0.0,
+          "output_energy": 193.70508745760995,
+          "sample_count": 79104,
+          "worst_additional_gain_db": 0.0
+        }
+      },
+      "path": "C:/Users/User/Downloads/00005603_A03.wav",
+      "start_seconds": 14.81,
+      "track": 2
+    },
+    {
+      "end_seconds": 19.053,
+      "kind": "Preserve",
+      "metrics": {
+        "automatic_joint": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 0,
+          "energy_attenuation_db": 0.0,
+          "input_energy": 178.03445337400706,
+          "minimum_gain_db": 0.0,
+          "output_energy": 178.03445337400706,
+          "sample_count": 47712,
+          "worst_additional_gain_db": 0.0
+        },
+        "guided_joint": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 0,
+          "energy_attenuation_db": 0.0,
+          "input_energy": 178.03445337400706,
+          "minimum_gain_db": 0.0,
+          "output_energy": 178.03445337400706,
+          "sample_count": 47712,
+          "worst_additional_gain_db": 0.0
+        },
+        "legacy_0_20": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 0,
+          "energy_attenuation_db": 0.0,
+          "input_energy": 178.03445337400706,
+          "minimum_gain_db": 0.0,
+          "output_energy": 178.03445337400706,
+          "sample_count": 47712,
+          "worst_additional_gain_db": 0.0
+        },
+        "legacy_default": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 0,
+          "energy_attenuation_db": 0.0,
+          "input_energy": 178.03445337400706,
+          "minimum_gain_db": 0.0,
+          "output_energy": 178.03445337400706,
+          "sample_count": 47712,
+          "worst_additional_gain_db": 0.0
+        }
+      },
+      "path": "C:/Users/User/Downloads/00005603_A03.wav",
+      "start_seconds": 18.059,
+      "track": 2
+    },
+    {
+      "end_seconds": 40.24,
+      "kind": "Bleed",
+      "metrics": {
+        "automatic_joint": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 24277,
+          "below_minus_1_db_samples": 18874,
+          "below_unity_samples": 55138,
+          "energy_attenuation_db": -0.25918239301977875,
+          "input_energy": 15.455022171307315,
+          "minimum_gain_db": -18.0,
+          "output_energy": 14.559665355829269,
+          "sample_count": 197424,
+          "worst_additional_gain_db": 0.0
+        },
+        "guided_joint": {
+          "additional_below_minus_0_1_db_samples": 51873,
+          "additional_below_minus_1_db_samples": 46432,
+          "additional_below_unity_samples": 82738,
+          "below_minus_0_1_db_samples": 65749,
+          "below_minus_1_db_samples": 60346,
+          "below_unity_samples": 96610,
+          "energy_attenuation_db": -2.464558345691093,
+          "input_energy": 15.455022171307315,
+          "minimum_gain_db": -18.0,
+          "output_energy": 8.762212831590377,
+          "sample_count": 197424,
+          "worst_additional_gain_db": -18.0
+        },
+        "legacy_0_20": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 0,
+          "energy_attenuation_db": 0.0,
+          "input_energy": 15.455022171307315,
+          "minimum_gain_db": 0.0,
+          "output_energy": 15.455022171307315,
+          "sample_count": 197424,
+          "worst_additional_gain_db": 0.0
+        },
+        "legacy_default": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 24277,
+          "below_minus_1_db_samples": 18874,
+          "below_unity_samples": 55138,
+          "energy_attenuation_db": -0.25918239301977875,
+          "input_energy": 15.455022171307315,
+          "minimum_gain_db": -18.0,
+          "output_energy": 14.559665355829269,
+          "sample_count": 197424,
+          "worst_additional_gain_db": 0.0
+        }
+      },
+      "path": "C:/Users/User/Downloads/00005603_A03.wav",
+      "start_seconds": 36.127,
+      "track": 2
+    },
+    {
+      "end_seconds": 44.613,
+      "kind": "Bleed",
+      "metrics": {
+        "automatic_joint": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 30166,
+          "energy_attenuation_db": -4.449838308114598e-6,
+          "input_energy": 20.719765330250667,
+          "minimum_gain_db": -0.07474125921726227,
+          "output_energy": 20.719744100517822,
+          "sample_count": 171504,
+          "worst_additional_gain_db": 0.0
+        },
+        "guided_joint": {
+          "additional_below_minus_0_1_db_samples": 8935,
+          "additional_below_minus_1_db_samples": 3536,
+          "additional_below_unity_samples": 39839,
+          "below_minus_0_1_db_samples": 8978,
+          "below_minus_1_db_samples": 3575,
+          "below_unity_samples": 39839,
+          "energy_attenuation_db": -0.00022584302717972853,
+          "input_energy": 20.719765330250667,
+          "minimum_gain_db": -3.7450027465820312,
+          "output_energy": 20.718687883252922,
+          "sample_count": 171504,
+          "worst_additional_gain_db": -3.6907706260681152
+        },
+        "legacy_0_20": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 30166,
+          "energy_attenuation_db": -4.449838308114598e-6,
+          "input_energy": 20.719765330250667,
+          "minimum_gain_db": -0.07474125921726227,
+          "output_energy": 20.719744100517822,
+          "sample_count": 171504,
+          "worst_additional_gain_db": 0.0
+        },
+        "legacy_default": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 30166,
+          "energy_attenuation_db": -4.449838308114598e-6,
+          "input_energy": 20.719765330250667,
+          "minimum_gain_db": -0.07474125921726227,
+          "output_energy": 20.719744100517822,
+          "sample_count": 171504,
+          "worst_additional_gain_db": 0.0
+        }
+      },
+      "path": "C:/Users/User/Downloads/00005603_A03.wav",
+      "start_seconds": 41.04,
+      "track": 2
+    },
+    {
+      "end_seconds": 45.301,
+      "kind": "Ignore",
+      "metrics": {
+        "automatic_joint": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 0,
+          "energy_attenuation_db": 0.0,
+          "input_energy": 0.009247043236042744,
+          "minimum_gain_db": 0.0,
+          "output_energy": 0.009247043236042744,
+          "sample_count": 25296,
+          "worst_additional_gain_db": 0.0
+        },
+        "guided_joint": {
+          "additional_below_minus_0_1_db_samples": 10533,
+          "additional_below_minus_1_db_samples": 8222,
+          "additional_below_unity_samples": 10759,
+          "below_minus_0_1_db_samples": 11444,
+          "below_minus_1_db_samples": 8572,
+          "below_unity_samples": 11760,
+          "energy_attenuation_db": -0.701912388178555,
+          "input_energy": 0.009247043236042744,
+          "minimum_gain_db": -3.2940938472747803,
+          "output_energy": 0.007867045272826455,
+          "sample_count": 25296,
+          "worst_additional_gain_db": -3.288757801055908
+        },
+        "legacy_0_20": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 4951,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 13296,
+          "energy_attenuation_db": -0.055536039193699836,
+          "input_energy": 0.009247043236042744,
+          "minimum_gain_db": -0.4839004576206207,
+          "output_energy": 0.00912954816806297,
+          "sample_count": 25296,
+          "worst_additional_gain_db": 0.0
+        },
+        "legacy_default": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 4951,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 13296,
+          "energy_attenuation_db": -0.055536039193699836,
+          "input_energy": 0.009247043236042744,
+          "minimum_gain_db": -0.4839004576206207,
+          "output_energy": 0.00912954816806297,
+          "sample_count": 25296,
+          "worst_additional_gain_db": 0.0
+        }
+      },
+      "path": "C:/Users/User/Downloads/00005603_A03.wav",
+      "start_seconds": 44.774,
+      "track": 2
+    },
+    {
+      "end_seconds": 110.012,
+      "kind": "Preserve",
+      "metrics": {
+        "automatic_joint": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 0,
+          "energy_attenuation_db": 0.0,
+          "input_energy": 312.395328942971,
+          "minimum_gain_db": 0.0,
+          "output_energy": 312.395328942971,
+          "sample_count": 194448,
+          "worst_additional_gain_db": 0.0
+        },
+        "guided_joint": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 0,
+          "energy_attenuation_db": 0.0,
+          "input_energy": 312.395328942971,
+          "minimum_gain_db": 0.0,
+          "output_energy": 312.395328942971,
+          "sample_count": 194448,
+          "worst_additional_gain_db": 0.0
+        },
+        "legacy_0_20": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 0,
+          "energy_attenuation_db": 0.0,
+          "input_energy": 312.395328942971,
+          "minimum_gain_db": 0.0,
+          "output_energy": 312.395328942971,
+          "sample_count": 194448,
+          "worst_additional_gain_db": 0.0
+        },
+        "legacy_default": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 0,
+          "energy_attenuation_db": 0.0,
+          "input_energy": 312.395328942971,
+          "minimum_gain_db": 0.0,
+          "output_energy": 312.395328942971,
+          "sample_count": 194448,
+          "worst_additional_gain_db": 0.0
+        }
+      },
+      "path": "C:/Users/User/Downloads/00005603_A03.wav",
+      "start_seconds": 105.961,
+      "track": 2
+    },
+    {
+      "end_seconds": 114.757,
+      "kind": "Preserve",
+      "metrics": {
+        "automatic_joint": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 0,
+          "energy_attenuation_db": 0.0,
+          "input_energy": 233.65571847379704,
+          "minimum_gain_db": 0.0,
+          "output_energy": 233.65571847379704,
+          "sample_count": 164160,
+          "worst_additional_gain_db": 0.0
+        },
+        "guided_joint": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 0,
+          "energy_attenuation_db": 0.0,
+          "input_energy": 233.65571847379704,
+          "minimum_gain_db": 0.0,
+          "output_energy": 233.65571847379704,
+          "sample_count": 164160,
+          "worst_additional_gain_db": 0.0
+        },
+        "legacy_0_20": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 0,
+          "energy_attenuation_db": 0.0,
+          "input_energy": 233.65571847379704,
+          "minimum_gain_db": 0.0,
+          "output_energy": 233.65571847379704,
+          "sample_count": 164160,
+          "worst_additional_gain_db": 0.0
+        },
+        "legacy_default": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 0,
+          "energy_attenuation_db": 0.0,
+          "input_energy": 233.65571847379704,
+          "minimum_gain_db": 0.0,
+          "output_energy": 233.65571847379704,
+          "sample_count": 164160,
+          "worst_additional_gain_db": 0.0
+        }
+      },
+      "path": "C:/Users/User/Downloads/00005603_A03.wav",
+      "start_seconds": 111.337,
+      "track": 2
+    },
+    {
+      "end_seconds": 123.661,
+      "kind": "Bleed",
+      "metrics": {
+        "automatic_joint": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 117792,
+          "below_minus_1_db_samples": 117792,
+          "below_unity_samples": 117792,
+          "energy_attenuation_db": -17.99659596412282,
+          "input_energy": 0.3149537857640767,
+          "minimum_gain_db": -17.999881744384766,
+          "output_energy": 0.0049955951644260295,
+          "sample_count": 117792,
+          "worst_additional_gain_db": 0.0
+        },
+        "guided_joint": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 117792,
+          "below_minus_0_1_db_samples": 117792,
+          "below_minus_1_db_samples": 117792,
+          "below_unity_samples": 117792,
+          "energy_attenuation_db": -17.999910772365425,
+          "input_energy": 0.3149537857640767,
+          "minimum_gain_db": -17.999996185302734,
+          "output_energy": 0.004991783667222468,
+          "sample_count": 117792,
+          "worst_additional_gain_db": -0.015522144734859467
+        },
+        "legacy_0_20": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 117792,
+          "below_minus_1_db_samples": 117792,
+          "below_unity_samples": 117792,
+          "energy_attenuation_db": -17.97523331947438,
+          "input_energy": 0.3149537857640767,
+          "minimum_gain_db": -17.999141693115234,
+          "output_energy": 0.005020228686527336,
+          "sample_count": 117792,
+          "worst_additional_gain_db": 0.0
+        },
+        "legacy_default": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 117792,
+          "below_minus_1_db_samples": 117792,
+          "below_unity_samples": 117792,
+          "energy_attenuation_db": -17.99659596412282,
+          "input_energy": 0.3149537857640767,
+          "minimum_gain_db": -17.999881744384766,
+          "output_energy": 0.0049955951644260295,
+          "sample_count": 117792,
+          "worst_additional_gain_db": 0.0
+        }
+      },
+      "path": "C:/Users/User/Downloads/00005603_A03.wav",
+      "start_seconds": 121.207,
+      "track": 2
+    },
+    {
+      "end_seconds": 130.044,
+      "kind": "Bleed",
+      "metrics": {
+        "automatic_joint": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 206121,
+          "below_minus_1_db_samples": 197846,
+          "below_unity_samples": 237298,
+          "energy_attenuation_db": -5.214731223192237,
+          "input_energy": 10.503719954940308,
+          "minimum_gain_db": -17.99999237060547,
+          "output_energy": 3.1613313052095577,
+          "sample_count": 252864,
+          "worst_additional_gain_db": 0.0
+        },
+        "guided_joint": {
+          "additional_below_minus_0_1_db_samples": 16354,
+          "additional_below_minus_1_db_samples": 10932,
+          "additional_below_unity_samples": 60850,
+          "below_minus_0_1_db_samples": 212265,
+          "below_minus_1_db_samples": 203990,
+          "below_unity_samples": 243442,
+          "energy_attenuation_db": -6.158120447148763,
+          "input_energy": 10.503719954940308,
+          "minimum_gain_db": -18.0,
+          "output_energy": 2.5440819082452597,
+          "sample_count": 252864,
+          "worst_additional_gain_db": -17.392288208007812
+        },
+        "legacy_0_20": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 3877,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 34738,
+          "energy_attenuation_db": -0.002320920669987369,
+          "input_energy": 10.503719954940308,
+          "minimum_gain_db": -0.5149133801460266,
+          "output_energy": 10.498108143391697,
+          "sample_count": 252864,
+          "worst_additional_gain_db": 0.0
+        },
+        "legacy_default": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 206121,
+          "below_minus_1_db_samples": 197846,
+          "below_unity_samples": 237298,
+          "energy_attenuation_db": -5.214731223192237,
+          "input_energy": 10.503719954940308,
+          "minimum_gain_db": -17.99999237060547,
+          "output_energy": 3.1613313052095577,
+          "sample_count": 252864,
+          "worst_additional_gain_db": 0.0
+        }
+      },
+      "path": "C:/Users/User/Downloads/00005603_A03.wav",
+      "start_seconds": 124.776,
+      "track": 2
+    },
+    {
+      "end_seconds": 147.684,
+      "kind": "Preserve",
+      "metrics": {
+        "automatic_joint": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 0,
+          "energy_attenuation_db": 0.0,
+          "input_energy": 91.02842409377035,
+          "minimum_gain_db": 0.0,
+          "output_energy": 91.02842409377035,
+          "sample_count": 117840,
+          "worst_additional_gain_db": 0.0
+        },
+        "guided_joint": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 0,
+          "energy_attenuation_db": 0.0,
+          "input_energy": 91.02842409377035,
+          "minimum_gain_db": 0.0,
+          "output_energy": 91.02842409377035,
+          "sample_count": 117840,
+          "worst_additional_gain_db": 0.0
+        },
+        "legacy_0_20": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 0,
+          "energy_attenuation_db": 0.0,
+          "input_energy": 91.02842409377035,
+          "minimum_gain_db": 0.0,
+          "output_energy": 91.02842409377035,
+          "sample_count": 117840,
+          "worst_additional_gain_db": 0.0
+        },
+        "legacy_default": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 0,
+          "energy_attenuation_db": 0.0,
+          "input_energy": 91.02842409377035,
+          "minimum_gain_db": 0.0,
+          "output_energy": 91.02842409377035,
+          "sample_count": 117840,
+          "worst_additional_gain_db": 0.0
+        }
+      },
+      "path": "C:/Users/User/Downloads/00005603_A03.wav",
+      "start_seconds": 145.229,
+      "track": 2
+    }
+  ],
+  "overlap": [
+    {
+      "changed_samples": {
+        "automatic_joint": 0,
+        "guided_joint": 0,
+        "legacy_0_20": 0,
+        "legacy_default": 0
+      },
+      "end_sample": 67296,
+      "start_sample": 10080,
+      "tracks": [
+        0,
+        2
+      ]
+    },
+    {
+      "changed_samples": {
+        "automatic_joint": 0,
+        "guided_joint": 0,
+        "legacy_0_20": 0,
+        "legacy_default": 0
+      },
+      "end_sample": 550080,
+      "start_sample": 523632,
+      "tracks": [
+        0,
+        2
+      ]
+    },
+    {
+      "changed_samples": {
+        "automatic_joint": 0,
+        "guided_joint": 0,
+        "legacy_0_20": 0,
+        "legacy_default": 0
+      },
+      "end_sample": 914544,
+      "start_sample": 866832,
+      "tracks": [
+        0,
+        2
+      ]
+    }
+  ],
+  "parameters": {
+    "attenuation_db": -18.0,
+    "bleed_discrimination_db": 6.0,
+    "close_ms": 500.0,
+    "open_ms": 50.0,
+    "speech_padding_ms": 512.0,
+    "speech_sensitivity": 0.5
+  },
+  "paths": [
+    "C:/Users/User/Downloads/00005603_A01.wav",
+    "C:/Users/User/Downloads/00005603_A02.wav",
+    "C:/Users/User/Downloads/00005603_A03.wav"
+  ],
+  "preparations": 1,
+  "sample_count": 14550536,
+  "sample_rate": 48000,
+  "sources": [
+    {
+      "bytes": 58203562,
+      "modified_nanos": 1786476028723533600,
+      "path": "C:/Users/User/Downloads/00005603_A01.wav"
+    },
+    {
+      "bytes": 58203562,
+      "modified_nanos": 1786476028723533600,
+      "path": "C:/Users/User/Downloads/00005603_A02.wav"
+    },
+    {
+      "bytes": 58203562,
+      "modified_nanos": 1786476028723533600,
+      "path": "C:/Users/User/Downloads/00005603_A03.wav"
+    }
+  ],
+  "split": "development",
+  "summaries": {
+    "automatic_joint": {
+      "Bleed": {
+        "additional_below_minus_0_1_db_samples": 0,
+        "additional_below_minus_1_db_samples": 0,
+        "additional_below_unity_samples": 0,
+        "below_minus_0_1_db_samples": 562967,
+        "below_minus_1_db_samples": 525403,
+        "below_unity_samples": 670986,
+        "energy_attenuation_db": -0.9553180566005121,
+        "minimum_gain_db": -18.0,
+        "sample_count": 1233024,
+        "worst_additional_gain_db": 0.0
+      },
+      "Ignore": {
+        "additional_below_minus_0_1_db_samples": 0,
+        "additional_below_minus_1_db_samples": 0,
+        "additional_below_unity_samples": 0,
+        "below_minus_0_1_db_samples": 0,
+        "below_minus_1_db_samples": 0,
+        "below_unity_samples": 0,
+        "energy_attenuation_db": 0.0,
+        "minimum_gain_db": 0.0,
+        "sample_count": 50880,
+        "worst_additional_gain_db": 0.0
+      },
+      "Preserve": {
+        "additional_below_minus_0_1_db_samples": 0,
+        "additional_below_minus_1_db_samples": 0,
+        "additional_below_unity_samples": 0,
+        "below_minus_0_1_db_samples": 0,
+        "below_minus_1_db_samples": 0,
+        "below_unity_samples": 73195,
+        "energy_attenuation_db": -5.38130819737697e-7,
+        "minimum_gain_db": -0.002470908220857382,
+        "sample_count": 2321520,
+        "worst_additional_gain_db": 0.0
+      }
+    },
+    "guided_joint": {
+      "Bleed": {
+        "additional_below_minus_0_1_db_samples": 107189,
+        "additional_below_minus_1_db_samples": 83104,
+        "additional_below_unity_samples": 362739,
+        "below_minus_0_1_db_samples": 629120,
+        "below_minus_1_db_samples": 581202,
+        "below_unity_samples": 769011,
+        "energy_attenuation_db": -1.537938531799956,
+        "minimum_gain_db": -18.0,
+        "sample_count": 1233024,
+        "worst_additional_gain_db": -18.0
+      },
+      "Ignore": {
+        "additional_below_minus_0_1_db_samples": 10533,
+        "additional_below_minus_1_db_samples": 8222,
+        "additional_below_unity_samples": 14972,
+        "below_minus_0_1_db_samples": 11444,
+        "below_minus_1_db_samples": 8572,
+        "below_unity_samples": 15973,
+        "energy_attenuation_db": -0.30615823013290067,
+        "minimum_gain_db": -3.2940938472747803,
+        "sample_count": 50880,
+        "worst_additional_gain_db": -3.288757801055908
+      },
+      "Preserve": {
+        "additional_below_minus_0_1_db_samples": 0,
+        "additional_below_minus_1_db_samples": 0,
+        "additional_below_unity_samples": 15524,
+        "below_minus_0_1_db_samples": 0,
+        "below_minus_1_db_samples": 0,
+        "below_unity_samples": 73399,
+        "energy_attenuation_db": -5.465007979437393e-7,
+        "minimum_gain_db": -0.002470908220857382,
+        "sample_count": 2321520,
+        "worst_additional_gain_db": -0.00012270035222172737
+      }
+    },
+    "legacy_0_20": {
+      "Bleed": {
+        "additional_below_minus_0_1_db_samples": 0,
+        "additional_below_minus_1_db_samples": 0,
+        "additional_below_unity_samples": 0,
+        "below_minus_0_1_db_samples": 190511,
+        "below_minus_1_db_samples": 175487,
+        "below_unity_samples": 257720,
+        "energy_attenuation_db": -0.07724881280930623,
+        "minimum_gain_db": -17.999141693115234,
+        "sample_count": 1233024,
+        "worst_additional_gain_db": 0.0
+      },
+      "Ignore": {
+        "additional_below_minus_0_1_db_samples": 0,
+        "additional_below_minus_1_db_samples": 0,
+        "additional_below_unity_samples": 0,
+        "below_minus_0_1_db_samples": 4951,
+        "below_minus_1_db_samples": 0,
+        "below_unity_samples": 13296,
+        "energy_attenuation_db": -0.02524239224136662,
+        "minimum_gain_db": -0.4839004576206207,
+        "sample_count": 50880,
+        "worst_additional_gain_db": 0.0
+      },
+      "Preserve": {
+        "additional_below_minus_0_1_db_samples": 0,
+        "additional_below_minus_1_db_samples": 0,
+        "additional_below_unity_samples": 0,
+        "below_minus_0_1_db_samples": 0,
+        "below_minus_1_db_samples": 0,
+        "below_unity_samples": 30351,
+        "energy_attenuation_db": -1.3478731489376058e-7,
+        "minimum_gain_db": -0.000285785790765658,
+        "sample_count": 2321520,
+        "worst_additional_gain_db": 0.0
+      }
+    },
+    "legacy_default": {
+      "Bleed": {
+        "additional_below_minus_0_1_db_samples": 0,
+        "additional_below_minus_1_db_samples": 0,
+        "additional_below_unity_samples": 0,
+        "below_minus_0_1_db_samples": 566047,
+        "below_minus_1_db_samples": 528484,
+        "below_unity_samples": 674058,
+        "energy_attenuation_db": -0.9671474962192319,
+        "minimum_gain_db": -18.0,
+        "sample_count": 1233024,
+        "worst_additional_gain_db": 0.0
+      },
+      "Ignore": {
+        "additional_below_minus_0_1_db_samples": 0,
+        "additional_below_minus_1_db_samples": 0,
+        "additional_below_unity_samples": 0,
+        "below_minus_0_1_db_samples": 4951,
+        "below_minus_1_db_samples": 0,
+        "below_unity_samples": 13296,
+        "energy_attenuation_db": -0.02524239224136662,
+        "minimum_gain_db": -0.4839004576206207,
+        "sample_count": 50880,
+        "worst_additional_gain_db": 0.0
+      },
+      "Preserve": {
+        "additional_below_minus_0_1_db_samples": 0,
+        "additional_below_minus_1_db_samples": 0,
+        "additional_below_unity_samples": 0,
+        "below_minus_0_1_db_samples": 0,
+        "below_minus_1_db_samples": 0,
+        "below_unity_samples": 73203,
+        "energy_attenuation_db": -5.392211169542771e-7,
+        "minimum_gain_db": -0.002480229828506708,
+        "sample_count": 2321520,
+        "worst_additional_gain_db": 0.0
+      }
+    }
+  }
+}

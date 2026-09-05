@@ -91,28 +91,8 @@ fn measure(samples: &[&[f32]], envelopes: &[GainEnvelope], labels: &[Label]) -> 
             "minimum_gain": minimum_gain, "attenuation_db": attenuation(input, output)})
         })
         .collect();
-    let preserved: Vec<_> = labels
-        .iter()
-        .filter(|label| label.kind == LabelKind::Preserve)
-        .collect();
-    let mut edges: Vec<_> = preserved
-        .iter()
-        .flat_map(|label| [label.start, label.end])
-        .collect();
-    edges.sort_unstable();
-    edges.dedup();
     let (mut overlap_samples, mut changed_overlap_samples) = (0, 0);
-    for span in edges.windows(2) {
-        let mut tracks: Vec<_> = preserved
-            .iter()
-            .filter(|label| label.start <= span[0] && label.end >= span[1])
-            .map(|label| label.track)
-            .collect();
-        tracks.sort_unstable();
-        tracks.dedup();
-        if tracks.len() < 2 {
-            continue;
-        }
+    for (span, tracks) in overlap_spans(labels) {
         overlap_samples += span[1] - span[0];
         changed_overlap_samples += (span[0]..span[1])
             .filter(|&sample| {
@@ -130,6 +110,29 @@ fn measure(samples: &[&[f32]], envelopes: &[GainEnvelope], labels: &[Label]) -> 
 
 fn attenuation(input: f64, output: f64) -> Option<f64> {
     (input > 0.0 && output > 0.0).then(|| 10.0 * (output / input).log10())
+}
+
+fn overlap_spans(labels: &[Label]) -> Vec<([usize; 2], Vec<usize>)> {
+    let preserved: Vec<_> = labels
+        .iter()
+        .filter(|l| l.kind == LabelKind::Preserve)
+        .collect();
+    let mut edges: Vec<_> = preserved.iter().flat_map(|l| [l.start, l.end]).collect();
+    edges.sort_unstable();
+    edges.dedup();
+    edges
+        .windows(2)
+        .filter_map(|span| {
+            let mut tracks: Vec<_> = preserved
+                .iter()
+                .filter(|l| l.start <= span[0] && l.end >= span[1])
+                .map(|l| l.track)
+                .collect();
+            tracks.sort_unstable();
+            tracks.dedup();
+            (tracks.len() >= 2).then_some(([span[0], span[1]], tracks))
+        })
+        .collect()
 }
 
 /// Evaluate supplied aligned WAVs without rendering, modifying, or copying files.
@@ -213,9 +216,219 @@ pub fn compare(paths: &[PathBuf], csv: &str) -> Result<Value, RenderBlocker> {
     )
 }
 
+fn ownership_metrics(
+    samples: &[f32],
+    start: usize,
+    envelope: &GainEnvelope,
+    baseline: &GainEnvelope,
+) -> Value {
+    let mut counts = [0usize; 6];
+    let (mut input, mut output) = (0.0, 0.0);
+    let (mut minimum, mut minimum_ratio) = (1.0_f32, 1.0_f32);
+    let thresholds = [1.0, 10.0_f32.powf(-0.1 / 20.0), 10.0_f32.powf(-1.0 / 20.0)];
+    for (offset, &sample) in samples.iter().enumerate() {
+        let gain = envelope.gain_at(start + offset);
+        let ratio = gain / baseline.gain_at(start + offset);
+        minimum = minimum.min(gain);
+        minimum_ratio = minimum_ratio.min(ratio);
+        for (i, &threshold) in thresholds.iter().enumerate() {
+            counts[i] += usize::from(gain < threshold);
+            counts[i + 3] += usize::from(ratio < threshold);
+        }
+        input += f64::from(sample).powi(2);
+        output += (f64::from(sample) * f64::from(gain)).powi(2);
+    }
+    json!({"sample_count": samples.len(), "below_unity_samples": counts[0],
+        "below_minus_0_1_db_samples": counts[1], "below_minus_1_db_samples": counts[2],
+        "additional_below_unity_samples": counts[3],
+        "additional_below_minus_0_1_db_samples": counts[4], "additional_below_minus_1_db_samples": counts[5],
+        "minimum_gain_db": 20.0 * minimum.log10(), "worst_additional_gain_db": 20.0 * minimum_ratio.log10(),
+        "input_energy": input, "output_energy": output, "energy_attenuation_db": attenuation(input, output)})
+}
+
+/// Compare the actual preview path. Split controls scoring only; automatic estimates
+/// use the imported session, as in the app. Human examples must be external to holdout.
+pub fn compare_ownership(
+    paths: &[PathBuf],
+    csv: &str,
+    guided: &crate::OwnershipSettings,
+    split: &str,
+) -> Result<Value, RenderBlocker> {
+    use crate::{OwnershipSettings, PreviewCache, audio_io::Stem};
+    if !matches!(split, "development" | "holdout" | "all") {
+        return Err(RenderBlocker(
+            "split must be development, holdout, or all".into(),
+        ));
+    }
+    let stamps = paths
+        .iter()
+        .map(|path| crate::SourceStamp::read(path))
+        .collect::<Result<Vec<_>, _>>()?;
+    let mut cache = PreviewCache::default();
+    let progress = AtomicU8::new(0);
+    let mut previews = Vec::new();
+    for (name, threshold, settings) in [
+        ("legacy_default", 0.5, OwnershipSettings::default()),
+        ("legacy_0_20", 0.2, OwnershipSettings::default()),
+        (
+            "automatic_joint",
+            0.5,
+            OwnershipSettings {
+                enabled: true,
+                ..Default::default()
+            },
+        ),
+        ("guided_joint", 0.5, guided.clone()),
+    ] {
+        eprintln!("analyzing {name}");
+        let parameters = AutomixParameters {
+            speech_sensitivity: threshold,
+            ..Default::default()
+        };
+        previews.push((
+            name,
+            cache.analyze_with_ownership(paths, &[], parameters, &settings, &progress, None)?,
+        ));
+    }
+    let count = previews[0].1.envelopes[0].sample_count();
+    let labels: Vec<_> = read_labels(csv, paths, count)?
+        .into_iter()
+        .filter(|l| match split {
+            "development" => l.start < 185 * 48_000,
+            "holdout" => l.start >= 185 * 48_000,
+            _ => true,
+        })
+        .collect();
+    if labels.is_empty() {
+        return Err(RenderBlocker("no labels in scoring split".into()));
+    }
+    let mut rows = Vec::new();
+    // Read one original stem at a time after preparation has discarded its PCM.
+    for (track, path) in paths.iter().enumerate() {
+        let stem = Stem::read(path)?;
+        for label in labels.iter().filter(|l| l.track == track) {
+            let metrics = previews
+                .iter()
+                .map(|(name, preview)| {
+                    (
+                        (*name).to_owned(),
+                        ownership_metrics(
+                            &stem.samples[label.start..label.end],
+                            label.start,
+                            &preview.envelopes[track],
+                            &previews[0].1.envelopes[track],
+                        ),
+                    )
+                })
+                .collect::<serde_json::Map<_, _>>();
+            rows.push(json!({"track": track, "path": path, "start_seconds": label.start as f64 / 48_000.0,
+                "end_seconds": label.end as f64 / 48_000.0, "kind": format!("{:?}", label.kind), "metrics": metrics}));
+        }
+    }
+    let mut summaries = serde_json::Map::new();
+    for (name, _) in &previews {
+        let mut groups = serde_json::Map::new();
+        for kind in ["Preserve", "Bleed", "Ignore"] {
+            let selected: Vec<_> = rows
+                .iter()
+                .filter(|r| r["kind"] == kind)
+                .map(|r| &r["metrics"][name])
+                .collect();
+            let mut summary = serde_json::Map::new();
+            for key in [
+                "sample_count",
+                "below_unity_samples",
+                "below_minus_0_1_db_samples",
+                "below_minus_1_db_samples",
+                "additional_below_unity_samples",
+                "additional_below_minus_0_1_db_samples",
+                "additional_below_minus_1_db_samples",
+            ] {
+                let total: u64 = selected.iter().map(|m| m[key].as_u64().unwrap()).sum();
+                summary.insert(key.into(), json!(total));
+            }
+            let input: f64 = selected
+                .iter()
+                .map(|m| m["input_energy"].as_f64().unwrap())
+                .sum();
+            let output: f64 = selected
+                .iter()
+                .map(|m| m["output_energy"].as_f64().unwrap())
+                .sum();
+            summary.insert(
+                "energy_attenuation_db".into(),
+                json!(attenuation(input, output)),
+            );
+            for key in ["minimum_gain_db", "worst_additional_gain_db"] {
+                summary.insert(
+                    key.into(),
+                    json!(
+                        selected
+                            .iter()
+                            .map(|m| m[key].as_f64().unwrap())
+                            .fold(0.0_f64, f64::min)
+                    ),
+                );
+            }
+            groups.insert(kind.into(), json!(summary));
+        }
+        summaries.insert((*name).into(), json!(groups));
+    }
+    let mut overlap = Vec::new();
+    for (span, tracks) in overlap_spans(&labels) {
+        let changed = previews
+            .iter()
+            .map(|(name, p)| {
+                (
+                    (*name).into(),
+                    json!(
+                        (span[0]..span[1])
+                            .filter(|&s| tracks.iter().any(|&t| p.envelopes[t].gain_at(s) < 1.0))
+                            .count()
+                    ),
+                )
+            })
+            .collect::<serde_json::Map<_, _>>();
+        overlap.push(json!({"start_sample": span[0], "end_sample": span[1], "tracks": tracks, "changed_samples": changed}));
+    }
+    if paths
+        .iter()
+        .map(|path| crate::SourceStamp::read(path))
+        .collect::<Result<Vec<_>, _>>()?
+        != stamps
+    {
+        return Err(RenderBlocker("source changed during evaluation".into()));
+    }
+    Ok(
+        json!({"paths": paths, "sources": stamps, "sample_rate": 48_000, "sample_count": count,
+        "split": split, "guided_settings": guided, "parameters": AutomixParameters::default(),
+        "baseline_for_added_attenuation": "legacy_default", "summaries": summaries, "labels": rows, "overlap": overlap,
+        "preparations": cache.stats().preparations, "human_listening_performed": false}),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ownership_metrics_distinguish_exact_tails_from_added_damage() {
+        use crate::{Decision, Region};
+        let regions = [Region {
+            start: 0,
+            end: 4,
+            decision: Decision::Owned(vec![0]),
+        }];
+        let unity = gain_envelope(0, 4, &regions, &[], 0.5, 1.0, 1.0);
+        let half = gain_envelope(1, 4, &regions, &[], 0.5, 1.0, 1.0);
+        let metrics = ownership_metrics(&[1.0; 4], 0, &half, &unity);
+        assert_eq!(metrics["below_unity_samples"], 4);
+        assert_eq!(metrics["below_minus_1_db_samples"], 4);
+        assert_eq!(metrics["additional_below_minus_1_db_samples"], 4);
+        assert!((metrics["energy_attenuation_db"].as_f64().unwrap() + 6.0206).abs() < 0.0001);
+        let same = ownership_metrics(&[1.0; 4], 0, &half, &half);
+        assert_eq!(same["additional_below_unity_samples"], 0);
+    }
 
     #[test]
     fn measurement_counts_overlap_once_and_measures_applied_gain() {

@@ -1,0 +1,46 @@
+{
+  "enabled": true,
+  "examples": [
+    {
+      "kind": "SoloSpeech",
+      "track": 0,
+      "start": 354528,
+      "end": 372960
+    },
+    {
+      "kind": "SoloSpeech",
+      "track": 2,
+      "start": 278496,
+      "end": 296928
+    },
+    {
+      "kind": "SoloSpeech",
+      "track": 1,
+      "start": 3172752,
+      "end": 3197328
+    },
+    {
+      "kind": "RoomTone",
+      "track": 2,
+      "start": 160560,
+      "end": 186144
+    }
+  ],
+  "sources": [
+    {
+      "bytes": 58203562,
+      "modified_nanos": 1786476028723533600,
+      "path": "C:/Users/User/Downloads/00005603_A01.wav"
+    },
+    {
+      "bytes": 58203562,
+      "modified_nanos": 1786476028723533600,
+      "path": "C:/Users/User/Downloads/00005603_A02.wav"
+    },
+    {
+      "bytes": 58203562,
+      "modified_nanos": 1786476028723533600,
+      "path": "C:/Users/User/Downloads/00005603_A03.wav"
+    }
+  ]
+}
