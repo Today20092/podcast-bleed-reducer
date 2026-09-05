@@ -68,6 +68,216 @@ fn default_speech_padding() -> f32 {
 mod preview_tests {
     use super::*;
 
+    // Keep the sample-scanning implementation as an independent compatibility oracle.
+    fn scanned_envelope(
+        track: usize,
+        sample_count: usize,
+        regions: &[Region],
+        protections: &[Protection],
+        attenuation: f32,
+        open_samples: f32,
+        close_samples: f32,
+    ) -> GainEnvelope {
+        let mut envelope = GainEnvelope {
+            sample_count,
+            points: vec![],
+        };
+        if sample_count == 0 {
+            return envelope;
+        }
+        let mut target = target_gain_with_attenuation(track, 0, regions, protections, attenuation);
+        envelope.points.push(GainPoint {
+            sample: 0,
+            gain: target,
+            alpha: 0.0,
+            target,
+        });
+        for sample in 1..sample_count {
+            let next =
+                target_gain_with_attenuation(track, sample, regions, protections, attenuation);
+            if next == target {
+                continue;
+            }
+            let gain = envelope.gain_at(sample - 1);
+            target = next;
+            let alpha = 1.0
+                - (-1.0
+                    / if target > gain {
+                        open_samples
+                    } else {
+                        close_samples
+                    })
+                .exp();
+            envelope.points.push(GainPoint {
+                sample,
+                gain: gain + alpha * (target - gain),
+                alpha,
+                target,
+            });
+        }
+        envelope
+    }
+
+    #[test]
+    fn envelope_matches_sample_scan_at_region_and_protection_edges() {
+        // Sorted starts, including ties, overlaps, gaps and empty intervals.
+        let regions = vec![
+            Region {
+                start: 3,
+                end: 18,
+                decision: Decision::NoSpeech,
+            },
+            Region {
+                start: 8,
+                end: 12,
+                decision: Decision::Owned(vec![0, 1]),
+            },
+            Region {
+                start: 8,
+                end: 10,
+                decision: Decision::Owned(vec![1]),
+            },
+            Region {
+                start: 15,
+                end: 15,
+                decision: Decision::NoSpeech,
+            },
+            Region {
+                start: 20,
+                end: 28,
+                decision: Decision::Uncertain,
+            },
+            Region {
+                start: 28,
+                end: 64,
+                decision: Decision::NoSpeech,
+            },
+        ];
+        let protections = vec![
+            Protection {
+                track: Some(0),
+                start: 35,
+                end: usize::MAX,
+            },
+            Protection {
+                track: None,
+                start: 5,
+                end: 9,
+            },
+            Protection {
+                track: Some(1),
+                start: 8,
+                end: 14,
+            },
+            Protection {
+                track: None,
+                start: 9,
+                end: 11,
+            },
+            Protection {
+                track: None,
+                start: 30,
+                end: 30,
+            },
+            Protection {
+                track: Some(2),
+                start: 0,
+                end: 2,
+            },
+        ];
+        for track in 0..3 {
+            for count in [0, 1, 8, 64] {
+                for floor in [0.0, 0.25, 1.0] {
+                    for (open, close) in [(1.0, 1.0), (10.0, 20.0), (2400.0, 24000.0)] {
+                        for (regions, protections) in [
+                            (regions.as_slice(), protections.as_slice()),
+                            (regions.as_slice(), &[][..]),
+                            (&[][..], protections.as_slice()),
+                            (&[][..], &[][..]),
+                        ] {
+                            let actual = gain_envelope(
+                                track,
+                                count,
+                                regions,
+                                protections,
+                                floor,
+                                open,
+                                close,
+                            );
+                            let expected = scanned_envelope(
+                                track,
+                                count,
+                                regions,
+                                protections,
+                                floor,
+                                open,
+                                close,
+                            );
+                            assert_eq!(actual.sample_count(), count);
+                            for sample in 0..count {
+                                assert_eq!(
+                                    actual.gain_at(sample),
+                                    expected.gain_at(sample),
+                                    "track {track}, count {count}, sample {sample}"
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    #[ignore = "long-session construction benchmark; run with --ignored --nocapture"]
+    fn long_session_gain_construction_benchmark() {
+        use std::{hint::black_box, time::Instant};
+        let count = 239_660_221;
+        let regions: Vec<_> = (0..count)
+            .step_by(48_000)
+            .enumerate()
+            .map(|(index, start)| Region {
+                start,
+                end: (start + 48_000).min(count),
+                decision: if index % 2 == 0 {
+                    Decision::NoSpeech
+                } else {
+                    Decision::Owned(vec![index % 3])
+                },
+            })
+            .collect();
+        let start = Instant::now();
+        let expected: Vec<_> = (0..3)
+            .map(|track| scanned_envelope(track, count, &regions, &[], 0.25, 2400.0, 24000.0))
+            .collect();
+        let scanned = start.elapsed();
+        let start = Instant::now();
+        let actual: Vec<_> = (0..3)
+            .map(|track| {
+                black_box(gain_envelope(
+                    track,
+                    count,
+                    &regions,
+                    &[],
+                    0.25,
+                    2400.0,
+                    24000.0,
+                ))
+            })
+            .collect();
+        let swept = start.elapsed();
+        assert_eq!(actual, expected);
+        println!(
+            "samples={count}, tracks=3, regions={}, sample_scan={scanned:?}, edge_sweep={swept:?}, speedup={:.1}x",
+            regions.len(),
+            scanned.as_secs_f64() / swept.as_secs_f64()
+        );
+        assert!(
+            swept < scanned,
+            "edge construction must beat the sample scan"
+        );
+    }
+
     #[test]
     fn one_pole_matches_closed_form_and_retargets_from_current_gain() {
         let floor = 0.25;
@@ -490,9 +700,39 @@ fn gain_envelope(
         alpha: 0.0,
         target,
     }];
-    for sample in 1..sample_count {
-        let next_target =
-            target_gain_with_attenuation(track, sample, regions, protections, attenuation);
+    // Targets are constant between edges. Count active protections so overlapping
+    // ranges remain additive without scanning every protection at every edge.
+    let mut edges: Vec<(usize, isize)> = regions
+        .iter()
+        .flat_map(|region| [(region.start, 0), (region.end, 0)])
+        .filter(|(sample, _)| *sample < sample_count)
+        .collect();
+    for protection in protections.iter().filter(|p| {
+        p.start < p.end && p.start < sample_count && p.track.is_none_or(|owner| owner == track)
+    }) {
+        edges.push((protection.start, 1));
+        if protection.end < sample_count {
+            edges.push((protection.end, -1));
+        }
+    }
+    edges.sort_unstable_by_key(|&(sample, _)| sample);
+    let mut protected = 0;
+    let mut edge = 0;
+    while edge < edges.len() {
+        let sample = edges[edge].0;
+        // Apply all starts and ends together to preserve half-open intervals.
+        while edge < edges.len() && edges[edge].0 == sample {
+            protected += edges[edge].1;
+            edge += 1;
+        }
+        if sample == 0 {
+            continue;
+        }
+        let next_target = if protected > 0 {
+            1.0
+        } else {
+            target_gain_with_attenuation(track, sample, regions, &[], attenuation)
+        };
         if next_target != target {
             let previous = points.last().unwrap();
             let elapsed = (sample - 1 - previous.sample) as f32;
