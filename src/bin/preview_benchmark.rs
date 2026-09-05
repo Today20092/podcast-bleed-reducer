@@ -1,5 +1,5 @@
-//! Read-only benchmark: preview_benchmark <iterations> <stem.wav> [stem.wav ...]
-use rust_app::{AutomixParameters, PreviewCache, Protection};
+//! Read-only benchmark: preview_benchmark <iterations> [--ownership settings.json] <stem.wav> ...
+use rust_app::{AutomixParameters, OwnershipSettings, PreviewCache, Protection};
 use std::{collections::BTreeMap, path::PathBuf, sync::atomic::AtomicU8, time::Instant};
 
 fn distribution(mut milliseconds: Vec<f64>) -> serde_json::Value {
@@ -18,12 +18,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .and_then(|value| value.to_str()?.parse::<usize>().ok())
         .filter(|count| *count > 0)
         .ok_or("usage: preview_benchmark <positive iterations> <stem.wav> [stem.wav ...]")?;
+    let mut args = args.peekable();
+    let ownership = if args.peek().is_some_and(|arg| arg == "--ownership") {
+        args.next();
+        serde_json::from_slice::<OwnershipSettings>(&std::fs::read(
+            args.next()
+                .ok_or("--ownership requires a settings JSON file")?,
+        )?)?
+    } else {
+        OwnershipSettings::default()
+    };
     let paths: Vec<PathBuf> = args.map(PathBuf::from).collect();
+    if paths.is_empty() {
+        return Err("at least one source WAV is required".into());
+    }
     let mut cache = PreviewCache::default();
     let progress = AtomicU8::new(0);
     let mut parameters = AutomixParameters::default();
     let start = Instant::now();
-    let cold = cache.analyze(&paths, &[], parameters, &progress, None)?;
+    let cold =
+        cache.analyze_with_ownership(&paths, &[], parameters, &ownership, &progress, None)?;
     let cold_ms = start.elapsed().as_secs_f64() * 1000.0;
     let mut timings = BTreeMap::<&str, Vec<f64>>::new();
     for iteration in 0..iterations {
@@ -35,7 +49,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "bleed",
             "padding",
             "protection",
+            "calibration",
         ] {
+            if control == "calibration" && ownership.examples.is_empty() {
+                continue;
+            }
             let alternate = iteration % 2 == 0;
             match control {
                 "attenuation" => parameters.attenuation_db = if alternate { -12.0 } else { -18.0 },
@@ -56,19 +74,45 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 vec![]
             };
             let start = Instant::now();
-            cache.analyze(&paths, &protections, parameters, &progress, None)?;
+            let mut settings = ownership.clone();
+            if control == "calibration" && alternate {
+                settings.examples.clear();
+                settings.sources.clear();
+            }
+            cache.analyze_with_ownership(
+                &paths,
+                &protections,
+                parameters,
+                &settings,
+                &progress,
+                None,
+            )?;
             timings
                 .entry(control)
                 .or_default()
                 .push(start.elapsed().as_secs_f64() * 1000.0);
         }
     }
-    let restored = cache.analyze(&paths, &[], AutomixParameters::default(), &progress, None)?;
+    let restored = cache.analyze_with_ownership(
+        &paths,
+        &[],
+        AutomixParameters::default(),
+        &ownership,
+        &progress,
+        None,
+    )?;
     assert_eq!(
         cold, restored,
         "restoring parameters must reproduce the cold preview"
     );
     let stats = cache.stats();
+    let joint = cache.joint_diagnostics().map(|diagnostics| {
+        serde_json::json!({
+            "feature_preparation_ms": diagnostics.feature_preparation_ms,
+            "retained_feature_bytes": diagnostics.retained_feature_bytes,
+            "pair_count": diagnostics.pair_count,
+        })
+    });
     assert_eq!(
         stats.preparations, 1,
         "warm previews must not rerun inference"
@@ -78,6 +122,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         serde_json::to_string_pretty(&serde_json::json!({
             "paths": paths, "sample_count": cold.envelopes[0].sample_count(),
             "cold_ms": cold_ms,
+            "ownership": ownership,
+            "joint_features": joint,
             "controls": timings.into_iter().map(|(name, runs)| (name, distribution(runs))).collect::<BTreeMap<_, _>>(),
             "restored_preview_equal": true,
             "preparations": stats.preparations, "inference_frames": stats.inference_frames,

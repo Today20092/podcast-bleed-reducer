@@ -5,7 +5,7 @@ use crate::{
     audition::{AuditionMode, AuditionPreparation, LiveAudition},
     export,
     prepared_analysis::source_stamps,
-    preview_stage, run_with_parameters,
+    preview_stage, run_with_ownership,
     timeline::{TimelineEvent, TimelineViewport},
     validate, validate_export,
     waveform::{self, TimelineCanvas, WaveformCache},
@@ -625,7 +625,7 @@ mod tests {
             std::env::temp_dir().join(format!("cleanslate-prepared-editor-{}", std::process::id()));
         std::fs::create_dir_all(&directory).unwrap();
         let path = directory.join("voice.wav");
-        write_wav(&path, &[0.0; 1537]);
+        write_wav(&path, &vec![0.0; 48_000]);
         let mut app = super::CleanSlateApp {
             project: Some(
                 crate::Project::create(directory.join("episode.cleanslate"), vec![path.clone()])
@@ -652,6 +652,25 @@ mod tests {
             app.preview.as_ref().unwrap().parameters.attenuation_db,
             -9.0
         );
+        for enabled in [false, true] {
+            let before = app.preview_cache.stats().ownership_derivations;
+            let _ = app.update(super::Message::OwnershipMode(enabled));
+            wait(&mut app);
+            assert_eq!(app.preview_cache.stats().ownership_derivations, before + 1);
+        }
+        app.calibration_start = "0".into();
+        app.calibration_end = "0.5".into();
+        let before = app.preview_cache.stats().ownership_derivations;
+        let _ = app.update(super::Message::SaveCalibration(
+            crate::CalibrationKind::RoomTone,
+            0,
+        ));
+        wait(&mut app);
+        assert_eq!(app.preview_cache.stats().ownership_derivations, before + 1);
+        let _ = app.update(super::Message::RemoveCalibration(0));
+        wait(&mut app);
+        assert_eq!(app.preview_cache.stats().ownership_derivations, before + 2);
+        assert_eq!(app.preview_cache.stats().preparations, 1);
         write_wav(&path, &[0.0; 3073]);
         app.start_preview();
         wait(&mut app);
@@ -1190,6 +1209,7 @@ impl CleanSlateApp {
         let stems = project.source_paths();
         let protections = project.protections().to_vec();
         let parameters = project.parameters();
+        let ownership = snapshot.ownership.clone();
         let parent = project
             .path()
             .parent()
@@ -1207,7 +1227,7 @@ impl CleanSlateApp {
         let request_progress = Arc::clone(&progress);
         let (sender, result) = mpsc::channel();
         std::thread::spawn(move || {
-            let outcome = run_with_parameters(
+            let outcome = run_with_ownership(
                 RunRequest {
                     stems,
                     output_dir,
@@ -1217,6 +1237,7 @@ impl CleanSlateApp {
                 },
                 Some(request_progress),
                 parameters,
+                &ownership,
             )
             .map(|_| report.display().to_string())
             .map_err(|error| error.to_string());
@@ -1279,6 +1300,7 @@ impl CleanSlateApp {
         };
         let protections = project.protections().to_vec();
         let parameters = self.preview_parameters;
+        let ownership = project.ownership_settings().clone();
         let progress = Arc::new(AtomicU8::new(0));
         let worker_progress = Arc::clone(&progress);
         let cancelled = Arc::new(AtomicBool::new(false));
@@ -1287,10 +1309,11 @@ impl CleanSlateApp {
         let (sender, result) = mpsc::channel();
         std::thread::spawn(move || {
             let result = cache
-                .analyze(
+                .analyze_with_ownership(
                     &stems,
                     &protections,
                     parameters,
+                    &ownership,
                     &worker_progress,
                     Some(&worker_cancelled),
                 )
@@ -2220,7 +2243,7 @@ impl CleanSlateApp {
             column![
                 text("ANALYSIS PREVIEW").size(12),
                 text("Session parameters").size(20),
-                text("Live preview only — final render is unchanged."),
+                text("Preview and audition use these settings. Render again to update exported audio."),
                 preview_state,
                 self.calibration_controls(),
                 text(format!(

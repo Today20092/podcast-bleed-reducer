@@ -222,28 +222,17 @@ pub(crate) fn source_stamps(paths: &[PathBuf]) -> Result<Vec<SourceStamp>, Rende
     paths.iter().map(|path| SourceStamp::read(path)).collect()
 }
 
-// Local engine boundary validation; calibration.rs owns project/editor validation.
+// Source lengths are equal after engine validation; before loading, validate all
+// constraints that do not require the audio length using the shared boundary.
 pub(crate) fn validate_calibration(
     settings: &OwnershipSettings,
     sources: &[SourceStamp],
     sample_count: Option<usize>,
 ) -> Result<(), RenderBlocker> {
-    if !settings.examples.is_empty() && settings.sources != sources {
-        return Err(RenderBlocker(
-            "calibration sources changed or are missing; replace the examples".into(),
-        ));
-    }
-    if settings.examples.iter().any(|e| {
-        e.track >= sources.len()
-            || e.start >= e.end
-            || e.end - e.start < 12_000
-            || sample_count.is_some_and(|count| e.end > count)
-    }) {
-        return Err(RenderBlocker(
-            "calibration needs a valid track and at least 250 ms inside the session".into(),
-        ));
-    }
-    Ok(())
+    settings.validate(
+        sources,
+        &vec![sample_count.unwrap_or(usize::MAX); sources.len()],
+    )
 }
 
 pub(crate) fn validate_parameters(p: AutomixParameters) -> Result<(), RenderBlocker> {
