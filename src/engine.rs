@@ -596,11 +596,31 @@ pub fn run_with_parameters(
     progress: Option<Arc<AtomicU8>>,
     parameters: AutomixParameters,
 ) -> Result<RunResult, RenderBlocker> {
+    run_with_ownership(
+        request,
+        progress,
+        parameters,
+        &crate::OwnershipSettings::default(),
+    )
+}
+
+pub fn run_with_ownership(
+    request: RunRequest,
+    progress: Option<Arc<AtomicU8>>,
+    parameters: AutomixParameters,
+    ownership: &crate::OwnershipSettings,
+) -> Result<RunResult, RenderBlocker> {
+    use crate::prepared_analysis::{source_stamps, validate_calibration, validate_parameters};
+    check_cancelled(&request)?;
+    validate_parameters(parameters)?;
     if request.output_dir.exists() {
         return Err(RenderBlocker("output directory already exists".into()));
     }
+    let sources = source_stamps(&request.stems)?;
+    validate_calibration(ownership, &sources, None)?;
     let (stems, validation) = load_and_validate(&request.stems)?;
     let sample_count = stems[0].samples.len();
+    validate_calibration(ownership, &sources, Some(sample_count))?;
     let references: Vec<Option<u64>> = stems
         .iter()
         .map(|stem| stem.bext.as_ref().map(|bext| bext.time_reference))
@@ -635,19 +655,40 @@ pub fn run_with_parameters(
         return Err(RenderBlocker("protection is outside the session".into()));
     }
     let automated = request.regions.is_empty();
-    let regions = if automated {
-        vad::analyze_with_parameters(
-            &stems
+    let joint = automated && ownership.enabled;
+    let regions =
+        if joint {
+            let tracks = stems
                 .iter()
                 .map(|stem| stem.samples.as_slice())
-                .collect::<Vec<_>>(),
-            parameters.speech_sensitivity,
-            parameters.bleed_discrimination_db,
-            (parameters.speech_padding_ms * 48_000.0 / 1000.0 / 1_536.0).round() as usize,
-        )?
-    } else {
-        request.regions.clone()
-    };
+                .collect::<Vec<_>>();
+            let fallback_progress = AtomicU8::new(0);
+            let facts = vad::prepare(
+                &tracks,
+                progress.as_deref().unwrap_or(&fallback_progress),
+                request.cancelled.as_deref(),
+                vad::Preprocessing::Legacy,
+            )?;
+            crate::joint_detector::JointFacts::prepare(&tracks, request.cancelled.as_deref())?
+                .regions(&facts, parameters, ownership, request.cancelled.as_deref())?
+        } else if automated {
+            vad::analyze_with_parameters(
+                &stems
+                    .iter()
+                    .map(|stem| stem.samples.as_slice())
+                    .collect::<Vec<_>>(),
+                parameters.speech_sensitivity,
+                parameters.bleed_discrimination_db,
+                (parameters.speech_padding_ms * 48_000.0 / 1000.0 / 1_536.0).round() as usize,
+            )?
+        } else {
+            request.regions.clone()
+        };
+    if source_stamps(&request.stems)? != sources {
+        return Err(RenderBlocker(
+            "source changed during render analysis; retry".into(),
+        ));
+    }
     if automated
         && regions.iter().any(|region| {
             region.end - region.start >= 10 * 48_000 && region.decision != Decision::Uncertain
@@ -698,7 +739,7 @@ pub fn run_with_parameters(
             }
         }
         check_cancelled(&request)?;
-        let report = format!(
+        let mut report = format!(
             "{{\n  \"detector\": \"silero-vad-v5\",\n  \"model\": {{\"sha256\": \"1A153A22F4509E292A94E67D6F9B85E8DEB25B4988682B7E174C65279D8788E3\", \"license\": \"MIT\"}},\n  \"thresholds\": {{\"speech_probability\": {}, \"energy_margin_db\": {}, \"attenuation_db\": {}, \"speech_padding_ms\": {}, \"open_ms\": {}, \"close_ms\": {}}},\n  \"input\": {{\"sample_rate\": 48000, \"sample_count\": {sample_count}, \"channel_count\": 1, \"bext_time_reference\": {}, \"stems\": [{}]}},\n  \"output\": {{\"sample_rate\": 48000, \"sample_count\": {sample_count}, \"channel_count\": 1, \"stems\": [{}], \"invalid_samples\": 0, \"clipping_introduced\": false}},\n  \"regions\": [{}],\n  \"warnings\": [{}],\n  \"protections\": [{}]\n}}\n",
             parameters.speech_sensitivity,
             parameters.bleed_discrimination_db,
@@ -720,7 +761,13 @@ pub fn run_with_parameters(
                 .join(", "),
             regions
                 .iter()
-                .flat_map(|region| report_regions(region, stems.len()))
+                .flat_map(|region| report_regions(
+                    region,
+                    stems.len(),
+                    parameters.attenuation_db,
+                    joint,
+                    &request.protections
+                ))
                 .collect::<Vec<_>>()
                 .join(", "),
             warnings
@@ -742,6 +789,30 @@ pub fn run_with_parameters(
                 .collect::<Vec<_>>()
                 .join(", ")
         );
+        // Preserve the established JSON formatting while adding source-bound settings.
+        if ownership.enabled {
+            report = report.replacen(
+                "silero-vad-v5",
+                if joint {
+                    "joint-speech-band-copy-v1"
+                } else {
+                    "provided-regions"
+                },
+                1,
+            );
+        }
+        report.insert_str(
+            2,
+            &format!(
+                "  \"ownership_settings\": {},\n  \"attenuation_values_are_targets\": true,\n",
+                serde_json::to_string(ownership).map_err(|e| RenderBlocker(e.to_string()))?
+            ),
+        );
+        if source_stamps(&request.stems)? != sources {
+            return Err(RenderBlocker(
+                "source changed during rendering; retry".into(),
+            ));
+        }
         output.write_report(&report)?;
         output.commit()?;
         Ok(RunResult {
@@ -886,7 +957,13 @@ pub(crate) fn load_and_validate(
     Ok((stems, Validation { warnings }))
 }
 
-fn report_regions(region: &Region, track_count: usize) -> Vec<String> {
+fn report_regions(
+    region: &Region,
+    track_count: usize,
+    attenuation_db: f32,
+    joint: bool,
+    protections: &[Protection],
+) -> Vec<String> {
     let (decision, owners, reasons, affected): (&str, String, &str, Vec<Option<usize>>) =
         match &region.decision {
             Decision::Owned(owners) => (
@@ -896,7 +973,11 @@ fn report_regions(region: &Region, track_count: usize) -> Vec<String> {
                     .map(usize::to_string)
                     .collect::<Vec<_>>()
                     .join(", "),
-                "Silero speech and calibrated energy agree",
+                if joint {
+                    "joint speech-band ownership after leakage, residual and padding checks"
+                } else {
+                    "Silero speech and calibrated energy agree"
+                },
                 (0..track_count)
                     .filter(|track| !owners.contains(track))
                     .map(Some)
@@ -911,15 +992,29 @@ fn report_regions(region: &Region, track_count: usize) -> Vec<String> {
             Decision::NoSpeech => (
                 "NoSpeech",
                 String::new(),
-                "Silero and calibrated energy agree on non-speech",
+                if joint {
+                    "no model speech and all speech-band levels below calibrated floors"
+                } else {
+                    "Silero and calibrated energy agree on non-speech"
+                },
                 (0..track_count).map(Some).collect(),
             ),
         };
     affected
         .into_iter()
-        .map(|track| {
+        .flat_map(|track| {
+            let mut edges = vec![region.start, region.end];
+            for protection in protections.iter().filter(|p| p.track.is_none() || p.track == track) {
+                edges.extend([protection.start, protection.end].into_iter().filter(|&s| region.start < s && s < region.end));
+            }
+            edges.sort_unstable();
+            edges.dedup();
+            edges.windows(2).map(|span| {
+            let protected = protections.iter().any(|p| (p.track.is_none() || p.track == track) && p.start <= span[0] && p.end >= span[1]);
+            let reasons = if protected { "protection sets unity target" } else { reasons };
             let warning = if region.end - region.start >= 10 * 48_000
                 && region.decision != Decision::Uncertain
+                && !protected
             {
                 "\"unusually broad attenuation\""
             } else {
@@ -927,11 +1022,12 @@ fn report_regions(region: &Region, track_count: usize) -> Vec<String> {
             };
             format!(
                 "{{\"start\": {}, \"end\": {}, \"decision\": \"{decision}\", \"owners\": [{owners}], \"affected_track\": {}, \"applied_attenuation_db\": {}, \"evidence_reasons\": [\"{reasons}\"], \"review_warning\": {warning}}}",
-                region.start,
-                region.end,
+                span[0],
+                span[1],
                 track.map_or("null".into(), |track| track.to_string()),
-                if matches!(region.decision, Decision::Uncertain) { 0 } else { -18 }
+                if protected || matches!(region.decision, Decision::Uncertain) { 0.0 } else { attenuation_db }
             )
+            }).collect::<Vec<_>>()
         })
         .collect()
 }
