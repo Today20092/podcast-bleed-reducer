@@ -59,15 +59,15 @@ struct PersistedWaveforms {
     waveforms: Vec<WaveformCache>,
 }
 
-#[derive(Deserialize, Eq, PartialEq, Serialize)]
-struct SourceStamp {
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub(crate) struct SourceStamp {
     path: PathBuf,
     bytes: u64,
     modified_nanos: u128,
 }
 
 impl SourceStamp {
-    fn read(path: &Path) -> Result<Self, RenderBlocker> {
+    pub(crate) fn read(path: &Path) -> Result<Self, RenderBlocker> {
         let metadata = fs::metadata(path)?;
         Ok(Self {
             path: path.into(),

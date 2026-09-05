@@ -709,47 +709,10 @@ pub fn analyze_preview(
     parameters: AutomixParameters,
     progress: Arc<AtomicU8>,
 ) -> Result<AnalysisPreview, RenderBlocker> {
-    progress.store(5, Ordering::Relaxed);
-    let (stems, _) = load_and_validate(stems)?;
-    let samples = stems
-        .iter()
-        .map(|stem| stem.samples.as_slice())
-        .collect::<Vec<_>>();
-    progress.store(20, Ordering::Relaxed);
-    let regions = vad::analyze_with_parameters(
-        &samples,
-        parameters.speech_sensitivity,
-        parameters.bleed_discrimination_db,
-        (parameters.speech_padding_ms * 48_000.0 / 1000.0 / 1_536.0).round() as usize,
-    )?;
-    progress.store(80, Ordering::Relaxed);
-    let attenuation = 10.0_f32.powf(parameters.attenuation_db / 20.0);
-    let open = (parameters.open_ms * 48_000.0 / 1000.0).max(1.0);
-    let close = (parameters.close_ms * 48_000.0 / 1000.0).max(1.0);
-    let envelopes = (0..stems.len())
-        .map(|track| {
-            gain_envelope(
-                track,
-                samples[0].len(),
-                &regions,
-                protections,
-                attenuation,
-                open,
-                close,
-            )
-        })
-        .collect();
-    progress.store(100, Ordering::Relaxed);
-    Ok(AnalysisPreview {
-        stems: stems.iter().map(|stem| stem.path.clone()).collect(),
-        regions,
-        envelopes,
-        protections: protections.to_vec(),
-        parameters,
-    })
+    crate::PreviewCache::default().analyze(stems, protections, parameters, &progress, None)
 }
 
-fn gain_envelope(
+pub(crate) fn gain_envelope(
     track: usize,
     sample_count: usize,
     regions: &[Region],
@@ -832,7 +795,9 @@ fn gain_envelope(
     }
 }
 
-fn load_and_validate(paths: &[PathBuf]) -> Result<(Vec<Stem>, Validation), RenderBlocker> {
+pub(crate) fn load_and_validate(
+    paths: &[PathBuf],
+) -> Result<(Vec<Stem>, Validation), RenderBlocker> {
     if paths.is_empty() {
         return Err(RenderBlocker("session requires at least one stem".into()));
     }

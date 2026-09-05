@@ -1,8 +1,8 @@
 use crate::{
-    AnalysisPreview, AutomixParameters, Comparison, Project, RenderState, ReviewState,
-    ReviewWorkspace, RunRequest, WorkflowStep, analyze_preview,
+    AnalysisPreview, AutomixParameters, Comparison, PreviewCache, Project, RenderState,
+    ReviewState, ReviewWorkspace, RunRequest, WorkflowStep,
     audition::{AuditionMode, LiveAudition},
-    export, run_with_parameters,
+    export, preview_stage, run_with_parameters,
     timeline::{TimelineEvent, TimelineViewport},
     validate, validate_export,
     waveform::{self, TimelineCanvas, WaveformCache},
@@ -97,6 +97,50 @@ mod tests {
         let saved = serde_json::to_string(&app.preview_parameters).unwrap();
         let reopened: crate::AutomixParameters = serde_json::from_str(&saved).unwrap();
         assert!((reopened.speech_sensitivity - 0.2).abs() < 1e-6);
+    }
+
+    #[test]
+    fn editor_retains_preparation_for_parameter_edits_and_rechecks_same_path() {
+        let directory =
+            std::env::temp_dir().join(format!("cleanslate-prepared-editor-{}", std::process::id()));
+        std::fs::create_dir_all(&directory).unwrap();
+        let path = directory.join("voice.wav");
+        write_wav(&path, &[0.0; 1537]);
+        let mut app = super::CleanSlateApp {
+            project: Some(
+                crate::Project::create(directory.join("episode.cleanslate"), vec![path.clone()])
+                    .unwrap(),
+            ),
+            ..Default::default()
+        };
+        let wait = |app: &mut super::CleanSlateApp| {
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+            while app.preview_processing.is_some() {
+                app.poll_processing();
+                assert!(std::time::Instant::now() < deadline);
+                std::thread::sleep(std::time::Duration::from_millis(1));
+            }
+            assert!(app.preview_error.is_none(), "{:?}", app.preview_error);
+        };
+        app.start_preview();
+        wait(&mut app);
+        app.preview_parameters.attenuation_db = -9.0;
+        app.start_preview();
+        wait(&mut app);
+        assert_eq!(app.preview_cache.stats().preparations, 1);
+        assert_eq!(
+            app.preview.as_ref().unwrap().parameters.attenuation_db,
+            -9.0
+        );
+        write_wav(&path, &[0.0; 3073]);
+        app.start_preview();
+        wait(&mut app);
+        assert_eq!(app.preview_cache.stats().preparations, 2);
+        assert_eq!(
+            app.preview.as_ref().unwrap().envelopes[0].sample_count(),
+            3073
+        );
+        std::fs::remove_dir_all(directory).unwrap();
     }
 
     fn write_wav(path: &std::path::Path, samples: &[f32]) {
@@ -257,6 +301,7 @@ pub struct CleanSlateApp {
     timeline: TimelineViewport,
     preview_parameters: AutomixParameters,
     preview: Option<AnalysisPreview>,
+    preview_cache: PreviewCache,
     preview_processing: Option<PreviewProcessing>,
     preview_error: Option<String>,
     export_error: Option<String>,
@@ -277,6 +322,7 @@ impl Default for CleanSlateApp {
             timeline: TimelineViewport::default(),
             preview_parameters: AutomixParameters::default(),
             preview: None,
+            preview_cache: PreviewCache::default(),
             preview_processing: None,
             preview_error: None,
             export_error: None,
@@ -292,7 +338,7 @@ struct Processing {
 
 struct PreviewProcessing {
     progress: Arc<AtomicU8>,
-    result: Receiver<Result<AnalysisPreview, String>>,
+    result: Receiver<Result<(AnalysisPreview, PreviewCache), String>>,
 }
 
 #[derive(Debug, Clone)]
@@ -363,6 +409,7 @@ impl CleanSlateApp {
             audition.stop();
         }
         self.preview = None;
+        self.preview_cache = PreviewCache::default();
         self.preview_processing = None;
         if let Some(cache) = waveforms.first() {
             self.timeline.set_total_samples(cache.sample_count);
@@ -593,20 +640,14 @@ impl CleanSlateApp {
         }
         let protections = project.protections().to_vec();
         let parameters = self.preview_parameters;
-        if self.preview.as_ref().is_some_and(|preview| {
-            preview.stems == stems
-                && preview.parameters == parameters
-                && preview.protections == protections
-        }) {
-            self.preview_processing = None;
-            self.preview_error = None;
-            return;
-        }
         let progress = Arc::new(AtomicU8::new(0));
         let worker_progress = Arc::clone(&progress);
+        let mut cache = self.preview_cache.clone();
         let (sender, result) = mpsc::channel();
         std::thread::spawn(move || {
-            let result = analyze_preview(&stems, &protections, parameters, worker_progress)
+            let result = cache
+                .analyze(&stems, &protections, parameters, &worker_progress, None)
+                .map(|preview| (preview, cache))
                 .map_err(|error| error.to_string());
             let _ = sender.send(result);
         });
@@ -666,7 +707,8 @@ impl CleanSlateApp {
         {
             self.preview_processing = None;
             match result {
-                Ok(preview) => {
+                Ok((preview, cache)) => {
+                    self.preview_cache = cache;
                     if let Some(audition) = &self.audition {
                         audition.replace_envelopes(preview.envelopes.clone());
                     }
@@ -1213,7 +1255,7 @@ impl CleanSlateApp {
         {
             let progress = processing.progress.load(Ordering::Relaxed) as f32;
             column![
-                text(format!("Recalculating preview: {progress:.0}%")),
+                text(format!("{}: {progress:.0}%", preview_stage(progress as u8))),
                 progress_bar(0.0..=100.0, progress),
                 text(if self.preview.is_some() {
                     "Showing previous completed preview"
