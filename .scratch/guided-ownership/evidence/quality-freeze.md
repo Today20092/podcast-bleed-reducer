@@ -1,5 +1,7 @@
 # Candidate frozen before holdout
 
+Historical freeze record. Subsequent experiments inspected late and screenshot scores; all supplied real audio is now development evidence. The experiments were discarded, and production classification remains the reviewed candidate. See quality-results.md for final results and unmet requirements; this document is not a current holdout-accuracy claim.
+
 The first candidate was frozen at efcf0e7 before any holdout scoring. A holdout report was subsequently computed but remained unread while independent code review found a stronger-independent-voice edge case. The review fix and automatic-mode restriction below were selected using synthetic regressions and development measurements only, before inspecting any holdout metrics. The final candidate is recorded in the commit containing this update. Automatic estimates use the entire imported session, as the app does; this is not an inductive machine-learning train/test split. Human calibration and scored holdout ranges remain disjoint.
 
 ## Rules

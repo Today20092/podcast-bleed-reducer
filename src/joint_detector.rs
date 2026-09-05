@@ -819,6 +819,81 @@ mod tests {
     }
 
     #[test]
+    fn short_independent_interjection_gets_padding_and_recovers_before_onset() {
+        use crate::{CalibrationExample, CalibrationKind};
+        let direct = signal(240_000, 0.0);
+        for filter_step in [1.0, 0.02] {
+            for interjection_samples in [1_536, 3_072] {
+                let end = 144_000 + interjection_samples;
+                let mut low = 0.0;
+                let copy: Vec<_> = (0..direct.len())
+                    .map(|i| {
+                        low += filter_step
+                            * (direct.get(i.wrapping_sub(156)).copied().unwrap_or(0.0) - low);
+                        -0.25 * low
+                            + if (144_000..end).contains(&i) {
+                                0.08 * (i as f32 * 0.047).sin()
+                            } else {
+                                0.0
+                            }
+                    })
+                    .collect();
+                let tracks = [direct.as_slice(), copy.as_slice()];
+                let settings = OwnershipSettings {
+                    enabled: true,
+                    examples: vec![CalibrationExample {
+                        kind: CalibrationKind::SoloSpeech,
+                        track: 0,
+                        start: 60_000,
+                        end: 84_000,
+                    }],
+                    ..Default::default()
+                };
+                let regions = JointFacts::prepare(&tracks, None)
+                    .unwrap()
+                    .regions(
+                        &facts(&tracks),
+                        AutomixParameters::default(),
+                        &settings,
+                        None,
+                    )
+                    .unwrap();
+                let envelope = crate::engine::gain_envelope(
+                    1,
+                    direct.len(),
+                    &regions,
+                    &[],
+                    10.0_f32.powf(-18.0 / 20.0),
+                    50.0 * 48.0,
+                    500.0 * 48.0,
+                );
+                assert!(
+                    envelope.gain_at(96_000) < 0.5,
+                    "target must be attenuated before interjection"
+                );
+                assert!(
+                    (144_000..end).all(|s| envelope.gain_at(s) > 0.999),
+                    "brief wanted onset must recover before the syllable"
+                );
+                let protected = crate::engine::gain_envelope(
+                    1,
+                    direct.len(),
+                    &regions,
+                    &[crate::Protection {
+                        track: Some(1),
+                        start: 144_000,
+                        end,
+                    }],
+                    10.0_f32.powf(-18.0 / 20.0),
+                    50.0 * 48.0,
+                    500.0 * 48.0,
+                );
+                assert!((144_000..end).all(|s| protected.gain_at(s) == 1.0));
+            }
+        }
+    }
+
+    #[test]
     fn independent_speech_padding_preserves_short_copied_gaps_in_overlap() {
         use crate::{CalibrationExample, CalibrationKind};
         let direct = signal(192_000, 0.0);
@@ -874,20 +949,32 @@ mod tests {
     #[ignore = "read-only reference development diagnostics"]
     fn reference_calibration_diagnostics() {
         use crate::{CalibrationExample, CalibrationKind};
+        let full = std::env::var_os("OWNERSHIP_DIAGNOSTIC_FULL").is_some();
+        let prefix = if full {
+            "chopshow podcast 155"
+        } else {
+            "00005603"
+        };
+        let offset = if full { 8_973_765 } else { 0 };
+        let (start, end) = if full {
+            (828.0, 831.0)
+        } else {
+            (288.773, 303.136)
+        };
         let paths: Vec<_> = (1..=3)
             .map(|t| {
-                std::path::PathBuf::from(format!("C:/Users/User/Downloads/00005603_A0{t}.wav"))
+                std::path::PathBuf::from(format!("C:/Users/User/Downloads/{prefix}_A0{t}.wav"))
             })
             .collect();
         let (stems, _) = crate::engine::load_and_validate(&paths).unwrap();
         let tracks: Vec<_> = stems.iter().map(|s| s.samples.as_slice()).collect();
         let joint = JointFacts::prepare(&tracks, None).unwrap();
-        let examples = [(0, 7.386, 9.199), (2, 4.746, 6.919), (1, 47.868, 51.810)].map(
+        let examples = [(0, 7.386, 7.770), (2, 5.802, 6.186), (1, 66.099, 66.611)].map(
             |(track, start, end)| CalibrationExample {
                 kind: CalibrationKind::SoloSpeech,
                 track,
-                start: (start * 48000.0) as usize,
-                end: (end * 48000.0) as usize,
+                start: offset + (start * 48000.0) as usize,
+                end: offset + (end * 48000.0) as usize,
             },
         );
         println!("floors {:?}", joint.floors);
@@ -903,28 +990,42 @@ mod tests {
                     )
                     .unwrap();
                 println!("model {source}->{target}: {model:?}");
-                if target == 2 {
-                    for frame in
-                        (111.337 * 48000.0) as usize / FRAME..(114.757 * 48000.0) as usize / FRAME
+                let (
+                    mut all,
+                    mut correlation_pass,
+                    mut level_pass,
+                    mut residual_pass,
+                    mut copied,
+                    mut run,
+                    mut longest,
+                ) = (0, 0, 0, 0, 0, 0, 0);
+                let mut differences = Vec::new();
+                let mut explained = Vec::new();
+                for frame in (start * 48000.0) as usize / FRAME..(end * 48000.0) as usize / FRAME {
+                    let difference = joint.levels[target][frame] - joint.levels[source][frame];
+                    let residual = difference + db((1.0 - pair.explained[frame]).max(1e-5));
+                    all += 1;
+                    differences.push(difference);
+                    explained.push(pair.explained[frame]);
+                    correlation_pass += usize::from(pair.explained[frame] >= 0.25);
+                    level_pass += usize::from(difference <= model.level_db + 3.0);
+                    residual_pass += usize::from(residual <= model.residual_db + 3.0);
+                    if pair.explained[frame] >= 0.25
+                        && difference <= model.level_db + 3.0
+                        && residual <= model.residual_db + 3.0
                     {
-                        let difference = joint.levels[target][frame] - joint.levels[source][frame];
-                        let residual = difference + db((1.0 - pair.explained[frame]).max(1e-5));
-                        if pair.explained[frame] >= 0.25
-                            && difference <= model.level_db + 3.0
-                            && residual <= model.residual_db + 3.0
-                        {
-                            println!(
-                                "copy {:.3} {source}->{target} source {:.1} target {:.1} explained {:.3} difference {:.1} residual {:.1}",
-                                frame as f64 * 0.032,
-                                joint.levels[source][frame],
-                                joint.levels[target][frame],
-                                pair.explained[frame],
-                                difference,
-                                residual
-                            );
-                        }
+                        copied += 1;
+                        run += 1;
+                        longest = longest.max(run);
+                    } else {
+                        run = 0;
                     }
                 }
+                println!(
+                    "{source}->{target} frames={all} correlation_pass={correlation_pass} level_pass={level_pass} residual_pass={residual_pass} copy_pass={copied} longest_run_frames={longest} median_level_difference={} median_explained={}",
+                    quantile(differences, 0.5),
+                    quantile(explained, 0.5)
+                );
             }
         }
     }

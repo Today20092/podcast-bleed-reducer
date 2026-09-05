@@ -1,0 +1,436 @@
+{
+  "baseline_for_added_attenuation": "legacy_default",
+  "guided_settings": {
+    "enabled": true,
+    "examples": [
+      {
+        "end": 9346725,
+        "kind": "SoloSpeech",
+        "start": 9328293,
+        "track": 0
+      },
+      {
+        "end": 9270693,
+        "kind": "SoloSpeech",
+        "start": 9252261,
+        "track": 2
+      },
+      {
+        "end": 12171093,
+        "kind": "SoloSpeech",
+        "start": 12146517,
+        "track": 1
+      },
+      {
+        "end": 9159909,
+        "kind": "RoomTone",
+        "start": 9134325,
+        "track": 2
+      }
+    ],
+    "sources": [
+      {
+        "bytes": 958641326,
+        "modified_nanos": 1786476334182694300,
+        "path": "C:/Users/User/Downloads/chopshow podcast 155_A01.wav"
+      },
+      {
+        "bytes": 958641326,
+        "modified_nanos": 1786476334182694300,
+        "path": "C:/Users/User/Downloads/chopshow podcast 155_A02.wav"
+      },
+      {
+        "bytes": 958641326,
+        "modified_nanos": 1786476334182694300,
+        "path": "C:/Users/User/Downloads/chopshow podcast 155_A03.wav"
+      }
+    ]
+  },
+  "human_listening_performed": false,
+  "labels": [
+    {
+      "end_seconds": 831.0,
+      "kind": "Preserve",
+      "metrics": {
+        "automatic_joint": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 0,
+          "energy_attenuation_db": 0.0,
+          "input_energy": 487.2512965592228,
+          "minimum_gain_db": 0.0,
+          "output_energy": 487.2512965592228,
+          "sample_count": 144000,
+          "worst_additional_gain_db": 0.0
+        },
+        "guided_joint": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 0,
+          "energy_attenuation_db": 0.0,
+          "input_energy": 487.2512965592228,
+          "minimum_gain_db": 0.0,
+          "output_energy": 487.2512965592228,
+          "sample_count": 144000,
+          "worst_additional_gain_db": 0.0
+        },
+        "legacy_0_20": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 0,
+          "energy_attenuation_db": 0.0,
+          "input_energy": 487.2512965592228,
+          "minimum_gain_db": 0.0,
+          "output_energy": 487.2512965592228,
+          "sample_count": 144000,
+          "worst_additional_gain_db": 0.0
+        },
+        "legacy_default": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 0,
+          "energy_attenuation_db": 0.0,
+          "input_energy": 487.2512965592228,
+          "minimum_gain_db": 0.0,
+          "output_energy": 487.2512965592228,
+          "sample_count": 144000,
+          "worst_additional_gain_db": 0.0
+        }
+      },
+      "path": "C:/Users/User/Downloads/chopshow podcast 155_A01.wav",
+      "start_seconds": 828.0,
+      "track": 0
+    },
+    {
+      "end_seconds": 831.0,
+      "kind": "Bleed",
+      "metrics": {
+        "automatic_joint": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 0,
+          "energy_attenuation_db": 0.0,
+          "input_energy": 4.4678162826449945,
+          "minimum_gain_db": 0.0,
+          "output_energy": 4.4678162826449945,
+          "sample_count": 144000,
+          "worst_additional_gain_db": 0.0
+        },
+        "guided_joint": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 0,
+          "energy_attenuation_db": 0.0,
+          "input_energy": 4.4678162826449945,
+          "minimum_gain_db": 0.0,
+          "output_energy": 4.4678162826449945,
+          "sample_count": 144000,
+          "worst_additional_gain_db": 0.0
+        },
+        "legacy_0_20": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 0,
+          "energy_attenuation_db": 0.0,
+          "input_energy": 4.4678162826449945,
+          "minimum_gain_db": 0.0,
+          "output_energy": 4.4678162826449945,
+          "sample_count": 144000,
+          "worst_additional_gain_db": 0.0
+        },
+        "legacy_default": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 0,
+          "energy_attenuation_db": 0.0,
+          "input_energy": 4.4678162826449945,
+          "minimum_gain_db": 0.0,
+          "output_energy": 4.4678162826449945,
+          "sample_count": 144000,
+          "worst_additional_gain_db": 0.0
+        }
+      },
+      "path": "C:/Users/User/Downloads/chopshow podcast 155_A02.wav",
+      "start_seconds": 828.0,
+      "track": 1
+    },
+    {
+      "end_seconds": 831.0,
+      "kind": "Bleed",
+      "metrics": {
+        "automatic_joint": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 0,
+          "energy_attenuation_db": 0.0,
+          "input_energy": 9.551166729341395,
+          "minimum_gain_db": 0.0,
+          "output_energy": 9.551166729341395,
+          "sample_count": 144000,
+          "worst_additional_gain_db": 0.0
+        },
+        "guided_joint": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 0,
+          "energy_attenuation_db": 0.0,
+          "input_energy": 9.551166729341395,
+          "minimum_gain_db": 0.0,
+          "output_energy": 9.551166729341395,
+          "sample_count": 144000,
+          "worst_additional_gain_db": 0.0
+        },
+        "legacy_0_20": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 0,
+          "energy_attenuation_db": 0.0,
+          "input_energy": 9.551166729341395,
+          "minimum_gain_db": 0.0,
+          "output_energy": 9.551166729341395,
+          "sample_count": 144000,
+          "worst_additional_gain_db": 0.0
+        },
+        "legacy_default": {
+          "additional_below_minus_0_1_db_samples": 0,
+          "additional_below_minus_1_db_samples": 0,
+          "additional_below_unity_samples": 0,
+          "below_minus_0_1_db_samples": 0,
+          "below_minus_1_db_samples": 0,
+          "below_unity_samples": 0,
+          "energy_attenuation_db": 0.0,
+          "input_energy": 9.551166729341395,
+          "minimum_gain_db": 0.0,
+          "output_energy": 9.551166729341395,
+          "sample_count": 144000,
+          "worst_additional_gain_db": 0.0
+        }
+      },
+      "path": "C:/Users/User/Downloads/chopshow podcast 155_A03.wav",
+      "start_seconds": 828.0,
+      "track": 2
+    }
+  ],
+  "overlap": [],
+  "parameters": {
+    "attenuation_db": -18.0,
+    "bleed_discrimination_db": 6.0,
+    "close_ms": 500.0,
+    "open_ms": 50.0,
+    "speech_padding_ms": 512.0,
+    "speech_sensitivity": 0.5
+  },
+  "paths": [
+    "C:/Users/User/Downloads/chopshow podcast 155_A01.wav",
+    "C:/Users/User/Downloads/chopshow podcast 155_A02.wav",
+    "C:/Users/User/Downloads/chopshow podcast 155_A03.wav"
+  ],
+  "preparations": 1,
+  "sample_count": 239660221,
+  "sample_rate": 48000,
+  "sources": [
+    {
+      "bytes": 958641326,
+      "modified_nanos": 1786476334182694300,
+      "path": "C:/Users/User/Downloads/chopshow podcast 155_A01.wav"
+    },
+    {
+      "bytes": 958641326,
+      "modified_nanos": 1786476334182694300,
+      "path": "C:/Users/User/Downloads/chopshow podcast 155_A02.wav"
+    },
+    {
+      "bytes": 958641326,
+      "modified_nanos": 1786476334182694300,
+      "path": "C:/Users/User/Downloads/chopshow podcast 155_A03.wav"
+    }
+  ],
+  "split": "all",
+  "summaries": {
+    "automatic_joint": {
+      "Bleed": {
+        "additional_below_minus_0_1_db_samples": 0,
+        "additional_below_minus_1_db_samples": 0,
+        "additional_below_unity_samples": 0,
+        "below_minus_0_1_db_samples": 0,
+        "below_minus_1_db_samples": 0,
+        "below_unity_samples": 0,
+        "energy_attenuation_db": 0.0,
+        "minimum_gain_db": 0.0,
+        "sample_count": 288000,
+        "worst_additional_gain_db": 0.0
+      },
+      "Ignore": {
+        "additional_below_minus_0_1_db_samples": 0,
+        "additional_below_minus_1_db_samples": 0,
+        "additional_below_unity_samples": 0,
+        "below_minus_0_1_db_samples": 0,
+        "below_minus_1_db_samples": 0,
+        "below_unity_samples": 0,
+        "energy_attenuation_db": null,
+        "minimum_gain_db": 0.0,
+        "sample_count": 0,
+        "worst_additional_gain_db": 0.0
+      },
+      "Preserve": {
+        "additional_below_minus_0_1_db_samples": 0,
+        "additional_below_minus_1_db_samples": 0,
+        "additional_below_unity_samples": 0,
+        "below_minus_0_1_db_samples": 0,
+        "below_minus_1_db_samples": 0,
+        "below_unity_samples": 0,
+        "energy_attenuation_db": 0.0,
+        "minimum_gain_db": 0.0,
+        "sample_count": 144000,
+        "worst_additional_gain_db": 0.0
+      }
+    },
+    "guided_joint": {
+      "Bleed": {
+        "additional_below_minus_0_1_db_samples": 0,
+        "additional_below_minus_1_db_samples": 0,
+        "additional_below_unity_samples": 0,
+        "below_minus_0_1_db_samples": 0,
+        "below_minus_1_db_samples": 0,
+        "below_unity_samples": 0,
+        "energy_attenuation_db": 0.0,
+        "minimum_gain_db": 0.0,
+        "sample_count": 288000,
+        "worst_additional_gain_db": 0.0
+      },
+      "Ignore": {
+        "additional_below_minus_0_1_db_samples": 0,
+        "additional_below_minus_1_db_samples": 0,
+        "additional_below_unity_samples": 0,
+        "below_minus_0_1_db_samples": 0,
+        "below_minus_1_db_samples": 0,
+        "below_unity_samples": 0,
+        "energy_attenuation_db": null,
+        "minimum_gain_db": 0.0,
+        "sample_count": 0,
+        "worst_additional_gain_db": 0.0
+      },
+      "Preserve": {
+        "additional_below_minus_0_1_db_samples": 0,
+        "additional_below_minus_1_db_samples": 0,
+        "additional_below_unity_samples": 0,
+        "below_minus_0_1_db_samples": 0,
+        "below_minus_1_db_samples": 0,
+        "below_unity_samples": 0,
+        "energy_attenuation_db": 0.0,
+        "minimum_gain_db": 0.0,
+        "sample_count": 144000,
+        "worst_additional_gain_db": 0.0
+      }
+    },
+    "legacy_0_20": {
+      "Bleed": {
+        "additional_below_minus_0_1_db_samples": 0,
+        "additional_below_minus_1_db_samples": 0,
+        "additional_below_unity_samples": 0,
+        "below_minus_0_1_db_samples": 0,
+        "below_minus_1_db_samples": 0,
+        "below_unity_samples": 0,
+        "energy_attenuation_db": 0.0,
+        "minimum_gain_db": 0.0,
+        "sample_count": 288000,
+        "worst_additional_gain_db": 0.0
+      },
+      "Ignore": {
+        "additional_below_minus_0_1_db_samples": 0,
+        "additional_below_minus_1_db_samples": 0,
+        "additional_below_unity_samples": 0,
+        "below_minus_0_1_db_samples": 0,
+        "below_minus_1_db_samples": 0,
+        "below_unity_samples": 0,
+        "energy_attenuation_db": null,
+        "minimum_gain_db": 0.0,
+        "sample_count": 0,
+        "worst_additional_gain_db": 0.0
+      },
+      "Preserve": {
+        "additional_below_minus_0_1_db_samples": 0,
+        "additional_below_minus_1_db_samples": 0,
+        "additional_below_unity_samples": 0,
+        "below_minus_0_1_db_samples": 0,
+        "below_minus_1_db_samples": 0,
+        "below_unity_samples": 0,
+        "energy_attenuation_db": 0.0,
+        "minimum_gain_db": 0.0,
+        "sample_count": 144000,
+        "worst_additional_gain_db": 0.0
+      }
+    },
+    "legacy_default": {
+      "Bleed": {
+        "additional_below_minus_0_1_db_samples": 0,
+        "additional_below_minus_1_db_samples": 0,
+        "additional_below_unity_samples": 0,
+        "below_minus_0_1_db_samples": 0,
+        "below_minus_1_db_samples": 0,
+        "below_unity_samples": 0,
+        "energy_attenuation_db": 0.0,
+        "minimum_gain_db": 0.0,
+        "sample_count": 288000,
+        "worst_additional_gain_db": 0.0
+      },
+      "Ignore": {
+        "additional_below_minus_0_1_db_samples": 0,
+        "additional_below_minus_1_db_samples": 0,
+        "additional_below_unity_samples": 0,
+        "below_minus_0_1_db_samples": 0,
+        "below_minus_1_db_samples": 0,
+        "below_unity_samples": 0,
+        "energy_attenuation_db": null,
+        "minimum_gain_db": 0.0,
+        "sample_count": 0,
+        "worst_additional_gain_db": 0.0
+      },
+      "Preserve": {
+        "additional_below_minus_0_1_db_samples": 0,
+        "additional_below_minus_1_db_samples": 0,
+        "additional_below_unity_samples": 0,
+        "below_minus_0_1_db_samples": 0,
+        "below_minus_1_db_samples": 0,
+        "below_unity_samples": 0,
+        "energy_attenuation_db": 0.0,
+        "minimum_gain_db": 0.0,
+        "sample_count": 144000,
+        "worst_additional_gain_db": 0.0
+      }
+    }
+  }
+}
