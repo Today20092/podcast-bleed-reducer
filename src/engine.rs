@@ -406,7 +406,64 @@ struct GainPoint {
     target: f32,
 }
 
+impl GainPoint {
+    fn gain_at(self, sample: usize) -> f32 {
+        let elapsed = sample.saturating_sub(self.sample) as f32;
+        self.target + (self.gain - self.target) * (1.0 - self.alpha).powf(elapsed)
+    }
+}
+
+#[test]
+fn sequential_gain_matches_random_access_across_seeks() {
+    let envelope = GainEnvelope {
+        sample_count: 6000,
+        points: vec![
+            GainPoint {
+                sample: 0,
+                gain: 1.0,
+                alpha: 0.001,
+                target: 0.1,
+            },
+            GainPoint {
+                sample: 2000,
+                gain: 0.22,
+                alpha: 0.02,
+                target: 1.0,
+            },
+            GainPoint {
+                sample: 3100,
+                gain: 1.0,
+                alpha: 0.0,
+                target: 1.0,
+            },
+        ],
+    };
+    let mut cursor = 0;
+    for sample in (0..6000).chain(1990..3200).chain(0..20) {
+        assert_eq!(
+            envelope.gain_at_sequential(sample, &mut cursor),
+            envelope.gain_at(sample)
+        );
+    }
+}
+
 impl GainEnvelope {
+    /// Same arithmetic as random access; retain the segment index during playback.
+    pub(crate) fn gain_at_sequential(&self, sample: usize, cursor: &mut usize) -> f32 {
+        if self.points.is_empty() {
+            return 1.0;
+        }
+        if *cursor >= self.points.len() || sample < self.points[*cursor].sample {
+            *cursor = self
+                .points
+                .partition_point(|point| point.sample <= sample)
+                .saturating_sub(1);
+        }
+        while *cursor + 1 < self.points.len() && self.points[*cursor + 1].sample <= sample {
+            *cursor += 1;
+        }
+        self.points[*cursor].gain_at(sample)
+    }
     #[cfg(test)]
     pub(crate) fn constant(sample_count: usize, gain: f32) -> Self {
         Self {
@@ -425,8 +482,7 @@ impl GainEnvelope {
             .points
             .partition_point(|point| point.sample <= sample)
             .saturating_sub(1)];
-        let elapsed = sample.saturating_sub(point.sample) as f32;
-        point.target + (point.gain - point.target) * (1.0 - point.alpha).powf(elapsed)
+        point.gain_at(sample)
     }
 
     pub fn sample_count(&self) -> usize {

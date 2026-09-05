@@ -44,6 +44,12 @@ pub struct PreviewCache {
 }
 
 impl PreviewCache {
+    pub(crate) fn matches_sources(&self, sources: &[SourceStamp]) -> bool {
+        self.prepared
+            .as_ref()
+            .is_some_and(|prepared| prepared.sources == sources)
+    }
+
     pub fn stats(&self) -> PreviewCacheStats {
         self.stats
     }
