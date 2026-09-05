@@ -62,14 +62,14 @@ fn available_project_path(directory: &std::path::Path) -> PathBuf {
 mod tests {
     #[test]
     fn completed_render_cannot_replace_changed_session() {
-        for change in 0..5 {
+        for change in 0..7 {
             let directory = std::env::temp_dir().join(format!(
                 "cleanslate-render-snapshot-{}-{change}",
                 std::process::id()
             ));
             std::fs::create_dir_all(&directory).unwrap();
             let source = directory.join("voice.wav");
-            write_wav(&source, &[0.0; 1537]);
+            write_wav(&source, &vec![0.0; 48_000]);
             let project =
                 crate::Project::create(directory.join("episode.cleanslate"), vec![source.clone()])
                     .unwrap();
@@ -96,7 +96,7 @@ mod tests {
                 1 => app.project.as_mut().unwrap().protect_range(0, 100).unwrap(),
                 2 => write_wav(&source, &[0.0; 3073]),
                 3 => app.project = None,
-                _ => {
+                4 => {
                     let mut other = crate::Project::create(
                         directory.join("other.cleanslate"),
                         vec![source.clone()],
@@ -106,6 +106,22 @@ mod tests {
                         .mark_render_current(directory.join("other-report.json"))
                         .unwrap();
                     app.project = Some(other);
+                }
+                _ => {
+                    let project = app.project.as_mut().unwrap();
+                    let mut settings = project.ownership_settings().clone();
+                    if change == 5 {
+                        settings.enabled = false;
+                    } else {
+                        settings.sources = super::source_stamps(&project.source_paths()).unwrap();
+                        settings.examples.push(crate::CalibrationExample {
+                            kind: crate::CalibrationKind::RoomTone,
+                            track: 0,
+                            start: 0,
+                            end: 24_000,
+                        });
+                    }
+                    project.set_ownership_settings(settings).unwrap();
                 }
             }
             sender
@@ -867,6 +883,7 @@ struct RenderSnapshot {
     sources: Vec<waveform::SourceStamp>,
     parameters: AutomixParameters,
     protections: Vec<crate::Protection>,
+    ownership: OwnershipSettings,
 }
 
 impl RenderSnapshot {
@@ -876,6 +893,7 @@ impl RenderSnapshot {
             sources: source_stamps(&project.source_paths()).map_err(|error| error.to_string())?,
             parameters: project.parameters(),
             protections: project.protections().to_vec(),
+            ownership: project.ownership_settings().clone(),
         })
     }
 }
