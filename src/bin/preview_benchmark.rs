@@ -1,6 +1,6 @@
 //! Read-only benchmark: preview_benchmark <iterations> <stem.wav> [stem.wav ...]
-use rust_app::{AutomixParameters, PreviewCache};
-use std::{path::PathBuf, sync::atomic::AtomicU8, time::Instant};
+use rust_app::{AutomixParameters, PreviewCache, Protection};
+use std::{collections::BTreeMap, path::PathBuf, sync::atomic::AtomicU8, time::Instant};
 
 fn distribution(mut milliseconds: Vec<f64>) -> serde_json::Value {
     milliseconds.sort_by(f64::total_cmp);
@@ -25,18 +25,43 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let start = Instant::now();
     let cold = cache.analyze(&paths, &[], parameters, &progress, None)?;
     let cold_ms = start.elapsed().as_secs_f64() * 1000.0;
-    let mut gain_times = Vec::new();
-    let mut ownership_times = Vec::new();
+    let mut timings = BTreeMap::<&str, Vec<f64>>::new();
     for iteration in 0..iterations {
-        parameters.attenuation_db = if iteration % 2 == 0 { -12.0 } else { -18.0 };
-        parameters.open_ms = if iteration % 2 == 0 { 10.0 } else { 50.0 };
-        let start = Instant::now();
-        cache.analyze(&paths, &[], parameters, &progress, None)?;
-        gain_times.push(start.elapsed().as_secs_f64() * 1000.0);
-        parameters.speech_sensitivity = if iteration % 2 == 0 { 0.55 } else { 0.5 };
-        let start = Instant::now();
-        cache.analyze(&paths, &[], parameters, &progress, None)?;
-        ownership_times.push(start.elapsed().as_secs_f64() * 1000.0);
+        for control in [
+            "attenuation",
+            "open",
+            "close",
+            "sensitivity",
+            "bleed",
+            "padding",
+            "protection",
+        ] {
+            let alternate = iteration % 2 == 0;
+            match control {
+                "attenuation" => parameters.attenuation_db = if alternate { -12.0 } else { -18.0 },
+                "open" => parameters.open_ms = if alternate { 10.0 } else { 50.0 },
+                "close" => parameters.close_ms = if alternate { 100.0 } else { 500.0 },
+                "sensitivity" => parameters.speech_sensitivity = if alternate { 0.55 } else { 0.5 },
+                "bleed" => parameters.bleed_discrimination_db = if alternate { 8.0 } else { 6.0 },
+                "padding" => parameters.speech_padding_ms = if alternate { 320.0 } else { 512.0 },
+                _ => {}
+            }
+            let protections = if control == "protection" && alternate {
+                vec![Protection {
+                    track: None,
+                    start: 0,
+                    end: cold.envelopes[0].sample_count().min(48_000),
+                }]
+            } else {
+                vec![]
+            };
+            let start = Instant::now();
+            cache.analyze(&paths, &protections, parameters, &progress, None)?;
+            timings
+                .entry(control)
+                .or_default()
+                .push(start.elapsed().as_secs_f64() * 1000.0);
+        }
     }
     let restored = cache.analyze(&paths, &[], AutomixParameters::default(), &progress, None)?;
     assert_eq!(
@@ -52,8 +77,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "{}",
         serde_json::to_string_pretty(&serde_json::json!({
             "paths": paths, "sample_count": cold.envelopes[0].sample_count(),
-            "cold_ms": cold_ms, "gain_only": distribution(gain_times),
-            "ownership": distribution(ownership_times), "restored_preview_equal": true,
+            "cold_ms": cold_ms,
+            "controls": timings.into_iter().map(|(name, runs)| (name, distribution(runs))).collect::<BTreeMap<_, _>>(),
+            "restored_preview_equal": true,
             "preparations": stats.preparations, "inference_frames": stats.inference_frames,
             "ownership_derivations": stats.ownership_derivations,
         }))?
