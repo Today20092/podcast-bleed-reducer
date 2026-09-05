@@ -6,6 +6,7 @@
 **Status:** ready-for-agent
 
 - [ ] Resolve merge overlaps by intent and preserve all required behaviors.
+- [ ] Editor passes an immutable ownership-settings snapshot to preview/render; a render completed after settings/sources/protections changed cannot become current for export.
 - [ ] All-target tests, fmt, strict Clippy, locked release build and relevant render checks pass or pre-existing failures are explicitly differentiated.
 - [ ] Full-session warm timings and memory measured; no duplicated inference on slider/calibration edits.
 - [ ] Independent final Standards/Spec review findings resolved.
