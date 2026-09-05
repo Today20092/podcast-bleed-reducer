@@ -61,7 +61,7 @@ fn available_project_path(directory: &std::path::Path) -> PathBuf {
 mod tests {
     #[test]
     fn completed_render_cannot_replace_changed_session() {
-        for change in 0..4 {
+        for change in 0..5 {
             let directory = std::env::temp_dir().join(format!(
                 "cleanslate-render-snapshot-{}-{change}",
                 std::process::id()
@@ -94,7 +94,18 @@ mod tests {
                 }
                 1 => app.project.as_mut().unwrap().protect_range(0, 100).unwrap(),
                 2 => write_wav(&source, &[0.0; 3073]),
-                _ => app.project = None,
+                3 => app.project = None,
+                _ => {
+                    let mut other = crate::Project::create(
+                        directory.join("other.cleanslate"),
+                        vec![source.clone()],
+                    )
+                    .unwrap();
+                    other
+                        .mark_render_current(directory.join("other-report.json"))
+                        .unwrap();
+                    app.project = Some(other);
+                }
             }
             sender
                 .send(Ok(directory.join("old-report.json").display().to_string()))
@@ -104,8 +115,17 @@ mod tests {
             assert!(app.messages[0].contains("earlier settings or sources"));
             assert!(!app.export_ready());
             if let Some(project) = app.project {
-                assert_eq!(project.render(), &crate::RenderState::Stale);
-                assert!(project.review_identity().is_none());
+                if change == 4 {
+                    assert_eq!(
+                        project.render(),
+                        &crate::RenderState::Current {
+                            identity: directory.join("other-report.json")
+                        }
+                    );
+                } else {
+                    assert_eq!(project.render(), &crate::RenderState::Stale);
+                    assert!(project.review_identity().is_none());
+                }
             }
             std::fs::remove_dir_all(directory).unwrap();
         }
@@ -1214,11 +1234,15 @@ impl CleanSlateApp {
             .as_ref()
             .and_then(|project| RenderSnapshot::read(project).ok());
         let current = current.as_ref() == Some(&processing.snapshot);
+        let same_project = self
+            .project
+            .as_ref()
+            .is_some_and(|project| project.path() == processing.snapshot.project);
         self.processing = None;
         match result {
             Ok(_) if !current => {
                 self.messages = vec!["Final render completed for earlier settings or sources; render again before exporting".into()];
-                if let Some(project) = &mut self.project {
+                if same_project && let Some(project) = &mut self.project {
                     if let Err(error) = project.mark_render_stale() {
                         self.messages.push(error.to_string());
                     }
