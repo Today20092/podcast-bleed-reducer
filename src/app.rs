@@ -695,6 +695,26 @@ mod tests {
     }
 
     #[test]
+    fn drop_defers_source_loading_until_background_work() {
+        let directory =
+            std::env::temp_dir().join(format!("cleanslate-deferred-import-{}", std::process::id()));
+        std::fs::create_dir_all(&directory).unwrap();
+        let source = directory.join("track.wav");
+        write_wav(&source, &[0.0; 16]);
+        let mut app = super::CleanSlateApp::default();
+        let _ = app.update(super::Message::FileDropped(source));
+        assert!(
+            app.project.is_none(),
+            "drop handling must return before validating and creating the project"
+        );
+        assert!(
+            app.waveforms.is_empty(),
+            "drop handling must not decode source samples"
+        );
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
     fn direct_import_is_deterministic_incremental_and_preserves_valid_session_on_error() {
         let directory =
             std::env::temp_dir().join(format!("cleanslate-import-test-{}", std::process::id()));
@@ -708,15 +728,174 @@ mod tests {
 
         let mut app = super::CleanSlateApp::default();
         app.add_stems([b.clone(), a.clone(), b]);
+        assert_eq!(app.pending_imports, [a.clone(), directory.join("B.wav")]);
+        assert_eq!(app.loading_paths().len(), 2);
+        assert!(
+            app.source_loading.is_none(),
+            "multi-file drops are coalesced before reading"
+        );
+        finish_import(&mut app);
         assert_eq!(
             app.project.as_ref().unwrap().source_paths(),
             [a, directory.join("B.wav")]
         );
         app.add_stems([invalid]);
+        let original_parameters = app.preview_parameters;
+        let _ = app.update(super::Message::Attenuation(-3.0));
+        assert_eq!(
+            app.preview_parameters, original_parameters,
+            "edits cannot race the import snapshot"
+        );
+        finish_import(&mut app);
         assert_eq!(app.project.as_ref().unwrap().sources.len(), 2);
         assert!(app.messages[0].starts_with("Import blocked:"));
 
+        let saved = app.project.as_ref().unwrap().path().to_owned();
+        app.begin_source_loading(super::SourceRequest::Open(saved));
+        assert!(app.source_loading.is_some());
+        finish_import(&mut app);
+        assert_eq!(app.waveforms.len(), 2);
+        let replacement = directory.join("replacement.wav");
+        write_wav(&replacement, &[0.0; 16]);
+        app.begin_source_loading(super::SourceRequest::Relink(0, replacement.clone()));
+        assert_ne!(app.project.as_ref().unwrap().source_paths()[0], replacement);
+        finish_import(&mut app);
+        assert_eq!(app.project.as_ref().unwrap().source_paths()[0], replacement);
+
         std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    fn finish_import(app: &mut super::CleanSlateApp) {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+        while app.sources_busy() {
+            if app.import_due.is_some() {
+                app.import_due = Some(std::time::Instant::now());
+            }
+            app.poll_sources();
+            assert!(
+                std::time::Instant::now() < deadline,
+                "source loader did not complete"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+    }
+
+    #[test]
+    #[ignore = "reads full WAVs from CLEANSLATE_IMPORT_BENCHMARK"]
+    fn full_recording_import_timing() {
+        let paths: Vec<_> = std::env::split_paths(
+            &std::env::var_os("CLEANSLATE_IMPORT_BENCHMARK").expect("set source paths"),
+        )
+        .collect();
+        assert!(!paths.is_empty());
+        let directory =
+            std::env::temp_dir().join(format!("cleanslate-load-benchmark-{}", std::process::id()));
+        std::fs::create_dir_all(&directory).unwrap();
+        let mut app = super::CleanSlateApp {
+            project: Some(
+                crate::Project::create(directory.join("benchmark.cleanslate"), vec![]).unwrap(),
+            ),
+            ..Default::default()
+        };
+        let started = std::time::Instant::now();
+        for path in &paths {
+            let _ = app.update(super::Message::FileDropped(path.clone()));
+        }
+        let drop_ms = started.elapsed().as_secs_f64() * 1000.0;
+        assert_eq!(app.loading_paths().len(), paths.len());
+        assert!(app.source_loading.is_none());
+        let mut waveform_ms = Vec::new();
+        while app.sources_busy() {
+            app.poll_sources();
+            if let Some(loading) = &app.source_loading {
+                while waveform_ms.len() < loading.waveforms.len() {
+                    waveform_ms.push(started.elapsed().as_secs_f64() * 1000.0);
+                }
+            }
+            assert!(started.elapsed().as_secs() < 300, "import timed out");
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        assert_eq!(
+            app.project.as_ref().unwrap().sources.len(),
+            paths.len(),
+            "{:?}",
+            app.messages
+        );
+        assert_eq!(app.waveforms.len(), paths.len());
+        println!(
+            "IMPORT_TIMING {}",
+            serde_json::json!({"tracks": paths.len(), "drop_handler_ms": drop_ms, "waveforms_ready_ms": waveform_ms, "validated_import_ms": started.elapsed().as_secs_f64() * 1000.0})
+        );
+        drop(app);
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn import_displays_partial_waveforms_and_keeps_drops_received_during_loading() {
+        let directory =
+            std::env::temp_dir().join(format!("cleanslate-import-queue-{}", std::process::id()));
+        std::fs::create_dir_all(&directory).unwrap();
+        let a = directory.join("a.wav");
+        let b = directory.join("b.wav");
+        write_wav(&a, &[0.0; 16]);
+        write_wav(&b, &[0.0; 16]);
+        let mut app = super::CleanSlateApp::default();
+        app.add_stems([a.clone()]);
+        app.import_due = Some(std::time::Instant::now());
+        app.poll_sources();
+        assert!(app.source_loading.is_some());
+        app.add_stems([a.clone(), b.clone()]);
+        assert_eq!(app.pending_imports, std::slice::from_ref(&b));
+        assert_eq!(app.loading_paths(), [a.clone(), b.clone()]);
+        finish_import(&mut app);
+        assert_eq!(app.project.as_ref().unwrap().source_paths(), [a, b]);
+        assert_eq!(app.waveforms.len(), 2);
+
+        // Deliver a waveform without completing validation. The window must be
+        // able to draw it while retaining the previous committed session.
+        let (sender, events) = super::mpsc::channel();
+        app.source_loading = Some(super::SourceLoading {
+            paths: app.project.as_ref().unwrap().source_paths(),
+            waveforms: vec![],
+            timeline: Default::default(),
+            stage: "Loading waveforms",
+            events,
+        });
+        sender
+            .send(super::SourceEvent::Waveform(0, app.waveforms[0].clone()))
+            .unwrap();
+        app.poll_sources();
+        assert_eq!(app.source_loading.as_ref().unwrap().waveforms.len(), 1);
+        assert_eq!(app.project.as_ref().unwrap().sources.len(), 2);
+        let _ = app.workspace(false, 900.0);
+        drop(sender);
+        app.poll_sources();
+        assert!(!app.sources_busy());
+        assert!(app.messages[0].contains("stopped unexpectedly"));
+        assert_eq!(app.waveforms.len(), 2);
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn calibration_range_explains_clicks_and_short_or_reversed_ranges() {
+        let mut app = super::CleanSlateApp::default();
+        app.capture_calibration_range(24_000, 24_000);
+        assert!(
+            app.calibration_range()
+                .unwrap_err()
+                .contains("end must be after")
+        );
+        app.capture_calibration_range(24_000, 24_001);
+        assert!(
+            app.calibration_range()
+                .unwrap_err()
+                .contains("0.25 seconds")
+        );
+        app.capture_calibration_range(48_000, 12_000);
+        assert_eq!(app.calibration_range().unwrap(), (12_000, 48_000));
+        app.calibration_start = "2".into();
+        app.calibration_end = "1".into();
+        assert!(app.calibration_range().is_err());
     }
 
     #[test]
@@ -842,6 +1021,9 @@ mod tests {
 
 pub struct CleanSlateApp {
     project: Option<Project>,
+    pending_imports: Vec<PathBuf>,
+    import_due: Option<Instant>,
+    source_loading: Option<SourceLoading>,
     messages: Vec<String>,
     processing: Option<Processing>,
     review: Option<ReviewWorkspace>,
@@ -852,6 +1034,7 @@ pub struct CleanSlateApp {
     monitor_db: f32,
     selecting_range: bool,
     calibrating: bool,
+    calibration_timing: bool,
     calibration_start: String,
     calibration_end: String,
     calibration_error: Option<String>,
@@ -873,6 +1056,9 @@ impl Default for CleanSlateApp {
     fn default() -> Self {
         Self {
             project: None,
+            pending_imports: vec![],
+            import_due: None,
+            source_loading: None,
             messages: vec![],
             processing: None,
             review: None,
@@ -883,6 +1069,7 @@ impl Default for CleanSlateApp {
             monitor_db: -6.0,
             selecting_range: false,
             calibrating: false,
+            calibration_timing: false,
             calibration_start: String::new(),
             calibration_end: String::new(),
             calibration_error: None,
@@ -900,6 +1087,150 @@ impl Default for CleanSlateApp {
             export_error: None,
         }
     }
+}
+
+enum SourceRequest {
+    Add(Vec<PathBuf>),
+    Open(PathBuf),
+    Relink(usize, PathBuf),
+    Validate,
+}
+
+struct LoadedSession {
+    project: Project,
+    warnings: Vec<String>,
+    review: Option<ReviewWorkspace>,
+    export_error: Option<String>,
+}
+
+enum SourceEvent {
+    Paths(Vec<PathBuf>),
+    Waveform(usize, WaveformCache),
+    Stage(&'static str),
+    Finished(Result<Box<LoadedSession>, String>),
+}
+
+struct SourceLoading {
+    paths: Vec<PathBuf>,
+    waveforms: Vec<WaveformCache>,
+    timeline: TimelineViewport,
+    stage: &'static str,
+    events: Receiver<SourceEvent>,
+}
+
+// All source reads, validation, hashing, cache persistence and saved-review reads
+// belong to this worker. The window only receives display data and a finished session.
+fn load_sources(
+    request: SourceRequest,
+    project: Option<Project>,
+    parameters: AutomixParameters,
+    sender: &mpsc::Sender<SourceEvent>,
+) -> Result<LoadedSession, String> {
+    let mut project = project;
+    let opening = matches!(request, SourceRequest::Open(_));
+    if let SourceRequest::Open(path) = &request {
+        project = Some(Project::open(path).map_err(|error| error.to_string())?);
+    }
+    let mut paths = project
+        .as_ref()
+        .map_or_else(Vec::new, Project::source_paths);
+    match &request {
+        SourceRequest::Add(additions) => paths.extend(additions.iter().cloned()),
+        SourceRequest::Relink(index, path) => {
+            *paths
+                .get_mut(*index)
+                .ok_or("Source track is not in this session.")? = path.clone();
+        }
+        _ => {}
+    }
+    let _ = sender.send(SourceEvent::Paths(paths.clone()));
+    if paths.is_empty() {
+        return Err("No source tracks were selected.".into());
+    }
+    let project_path = project.as_ref().map_or_else(
+        || {
+            available_project_path(
+                paths[0]
+                    .parent()
+                    .unwrap_or_else(|| std::path::Path::new(".")),
+            )
+        },
+        |project| project.path().to_owned(),
+    );
+    let _ = sender.send(SourceEvent::Stage("Loading waveforms"));
+    let waveform_result =
+        waveform::load_or_build_progress(&project_path, &paths, |index, waveform| {
+            let _ = sender.send(SourceEvent::Waveform(index, waveform.clone()));
+        });
+    let mut warnings = Vec::new();
+    // A saved session with missing sources must still open so it can be relinked.
+    if opening {
+        if let Err(error) = waveform_result {
+            warnings.push(format!("Waveforms unavailable: {error}"));
+        }
+    } else {
+        waveform_result.map_err(|error| format!("Import blocked: {error}"))?;
+        let _ = sender.send(SourceEvent::Stage("Validating audio"));
+        warnings = validate(&paths)
+            .map_err(|error| format!("Import blocked: {error}"))?
+            .warnings;
+    }
+    let _ = sender.send(SourceEvent::Stage("Saving source identities"));
+    match request {
+        SourceRequest::Add(additions) => {
+            if let Some(project) = &mut project {
+                project
+                    .add_sources(additions)
+                    .map_err(|error| error.to_string())?;
+            } else {
+                let mut created =
+                    Project::create(project_path, additions).map_err(|error| error.to_string())?;
+                created
+                    .set_parameters(parameters)
+                    .map_err(|error| error.to_string())?;
+                created
+                    .mark_validated()
+                    .map_err(|error| error.to_string())?;
+                project = Some(created);
+            }
+        }
+        SourceRequest::Relink(index, path) => {
+            let project = project.as_mut().ok_or("No session to relink.")?;
+            project
+                .relink(index, path)
+                .map_err(|error| error.to_string())?;
+            project
+                .mark_validated()
+                .map_err(|error| error.to_string())?;
+        }
+        SourceRequest::Validate => project
+            .as_mut()
+            .ok_or("No session to validate.")?
+            .mark_validated()
+            .map_err(|error| error.to_string())?,
+        SourceRequest::Open(_) => {}
+    }
+    let project = project.ok_or("No session was loaded.")?;
+    let review = if opening {
+        project
+            .review_identity()
+            .and_then(|identity| ReviewWorkspace::open(identity, &paths).ok())
+    } else {
+        None
+    };
+    let export_error = if matches!(project.render(), RenderState::Current { .. }) {
+        validate_export(&project)
+            .err()
+            .map(|error| error.to_string())
+    } else {
+        None
+    };
+    Ok(LoadedSession {
+        project,
+        warnings,
+        review,
+        export_error,
+    })
 }
 
 struct Processing {
@@ -975,6 +1306,7 @@ enum Message {
     RangeModifier(bool),
     OwnershipMode(bool),
     CalibrationMode(bool),
+    CalibrationTiming(bool),
     CalibrationStart(String),
     CalibrationEnd(String),
     CalibrationStartAtPlayhead,
@@ -1043,10 +1375,12 @@ impl CleanSlateApp {
     }
 
     fn add_stems(&mut self, paths: impl IntoIterator<Item = PathBuf>) {
-        let existing = self
-            .project
-            .as_ref()
-            .map_or_else(Vec::new, Project::source_paths);
+        if self.processing.is_some() {
+            self.messages =
+                vec!["Wait for the final render to finish before importing tracks.".into()];
+            return;
+        }
+        let existing = self.loading_paths();
         let mut additions: Vec<_> = paths
             .into_iter()
             .filter(|path| {
@@ -1070,40 +1404,136 @@ impl CleanSlateApp {
             return;
         }
 
-        let combined: Vec<_> = existing.iter().chain(&additions).cloned().collect();
-        let validation = match validate(&combined) {
-            Ok(validation) => validation,
-            Err(blocker) => {
-                self.messages = vec![format!("Import blocked: {blocker}")];
-                return;
-            }
-        };
+        self.pending_imports.extend(additions);
+        self.pending_imports
+            .sort_by_key(|path| path.to_string_lossy().to_lowercase());
+        // A desktop multi-file drop arrives as separate events. Collect the burst
+        // before starting one source pass, without delaying placeholder rows.
+        self.import_due = Some(Instant::now() + Duration::from_millis(150));
+        self.messages.clear();
+        self.stop_audition();
+        self.preview_pending = None;
+        self.preview_generation += 1;
+        self.preview_processing = None;
+    }
 
-        let result = if let Some(project) = &mut self.project {
-            project.add_sources(additions)
-        } else {
-            let directory = additions[0]
-                .parent()
-                .unwrap_or_else(|| std::path::Path::new("."));
-            Project::create(available_project_path(directory), additions).and_then(|mut project| {
-                project.set_parameters(self.preview_parameters)?;
-                project.mark_validated()?;
-                self.project = Some(project);
-                Ok(())
-            })
-        };
-        if let Err(error) = result {
-            self.messages = vec![format!("Import failed: {error}")];
+    fn sources_busy(&self) -> bool {
+        self.source_loading.is_some() || !self.pending_imports.is_empty()
+    }
+
+    fn loading_paths(&self) -> Vec<PathBuf> {
+        let mut paths = self.source_loading.as_ref().map_or_else(
+            || {
+                self.project
+                    .as_ref()
+                    .map_or_else(Vec::new, Project::source_paths)
+            },
+            |loading| loading.paths.clone(),
+        );
+        paths.extend(self.pending_imports.iter().cloned());
+        paths
+    }
+
+    fn begin_source_loading(&mut self, request: SourceRequest) {
+        if self.source_loading.is_some() || self.processing.is_some() {
             return;
         }
+        self.stop_audition();
+        self.preview_pending = None;
+        self.preview_generation += 1;
+        self.preview_processing = None;
+        let project = self.project.clone();
+        let parameters = self.preview_parameters;
+        let mut paths = project
+            .as_ref()
+            .map_or_else(Vec::new, Project::source_paths);
+        match &request {
+            SourceRequest::Add(additions) => paths.extend(additions.iter().cloned()),
+            SourceRequest::Open(_) => paths.clear(),
+            SourceRequest::Relink(index, path) => {
+                if let Some(source) = paths.get_mut(*index) {
+                    *source = path.clone();
+                }
+            }
+            SourceRequest::Validate => {}
+        }
+        let (sender, events) = mpsc::channel();
+        std::thread::spawn(move || {
+            let result = load_sources(request, project, parameters, &sender).map(Box::new);
+            let _ = sender.send(SourceEvent::Finished(result));
+        });
+        self.source_loading = Some(SourceLoading {
+            paths,
+            waveforms: vec![],
+            timeline: TimelineViewport::default(),
+            stage: "Opening audio",
+            events,
+        });
+    }
 
-        let project = self.project.as_ref().unwrap();
-        self.install_waveforms(
-            waveform::load_or_build(project.path(), &project.source_paths()).unwrap_or_default(),
-        );
-        self.review = None;
-        self.messages = validation.warnings;
-        self.start_preview();
+    fn poll_sources(&mut self) {
+        while let Some(loading) = &mut self.source_loading {
+            match loading.events.try_recv() {
+                Ok(SourceEvent::Paths(paths)) => loading.paths = paths,
+                Ok(SourceEvent::Stage(stage)) => loading.stage = stage,
+                Ok(SourceEvent::Waveform(index, waveform)) => {
+                    if index == loading.waveforms.len() {
+                        if index == 0 {
+                            loading.timeline.set_total_samples(waveform.sample_count);
+                        }
+                        loading.waveforms.push(waveform);
+                    }
+                }
+                result => {
+                    let result = match result {
+                        Ok(SourceEvent::Finished(result)) => result,
+                        Err(mpsc::TryRecvError::Empty) => break,
+                        Err(mpsc::TryRecvError::Disconnected) => {
+                            Err("Source loader stopped unexpectedly.".into())
+                        }
+                        _ => unreachable!(),
+                    };
+                    let loading = self.source_loading.take().unwrap();
+                    match result {
+                        Ok(loaded) => {
+                            self.preview_parameters = loaded.project.parameters();
+                            self.project = Some(loaded.project);
+                            self.install_waveforms(loading.waveforms);
+                            self.review = loaded.review;
+                            self.export_error = loaded.export_error;
+                            self.messages = loaded.warnings;
+                        }
+                        Err(error) => self.messages = vec![error],
+                    }
+                    if self.pending_imports.is_empty() {
+                        self.start_preview();
+                    }
+                    break;
+                }
+            }
+        }
+        if self.source_loading.is_none() && self.import_due.is_some_and(|due| Instant::now() >= due)
+        {
+            self.import_due = None;
+            let existing = self
+                .project
+                .as_ref()
+                .map_or_else(Vec::new, Project::source_paths);
+            let additions: Vec<_> = std::mem::take(&mut self.pending_imports)
+                .into_iter()
+                .filter(|path| {
+                    !existing.iter().any(|old| {
+                        old.to_string_lossy()
+                            .eq_ignore_ascii_case(&path.to_string_lossy())
+                    })
+                })
+                .collect();
+            if !additions.is_empty() {
+                self.begin_source_loading(SourceRequest::Add(additions));
+            } else {
+                self.start_preview();
+            }
+        }
     }
 
     fn import_stems(&mut self) {
@@ -1152,7 +1582,8 @@ impl CleanSlateApp {
     }
 
     fn export_ready(&self) -> bool {
-        self.processing.is_none()
+        !self.sources_busy()
+            && self.processing.is_none()
             && self.export_error.is_none()
             && self.project.as_ref().is_some_and(|project| {
                 project.sources.iter().all(|source| source.available)
@@ -1181,35 +1612,12 @@ impl CleanSlateApp {
         else {
             return;
         };
-        match Project::open(path) {
-            Ok(project) => {
-                self.preview_parameters = project.parameters();
-                self.install_waveforms(
-                    waveform::load_or_build(project.path(), &project.source_paths())
-                        .unwrap_or_default(),
-                );
-                self.project = Some(project);
-                self.refresh_export_readiness();
-                self.load_review();
-                self.messages.clear();
-                self.start_preview();
-            }
-            Err(error) => self.messages = vec![error.to_string()],
-        }
+        self.begin_source_loading(SourceRequest::Open(path));
     }
 
     fn validate(&mut self) {
-        let Some(project) = &mut self.project else {
-            return;
-        };
-        match validate(&project.source_paths()) {
-            Ok(validation) => {
-                self.messages = validation.warnings;
-                if let Err(error) = project.mark_validated() {
-                    self.messages.push(error.to_string());
-                }
-            }
-            Err(blocker) => self.messages = vec![format!("Render blocker: {blocker}")],
+        if self.project.is_some() {
+            self.begin_source_loading(SourceRequest::Validate);
         }
     }
 
@@ -1601,22 +2009,12 @@ impl CleanSlateApp {
             if !project.ownership_settings().enabled {
                 return Err("Enable joint ownership before adding examples.".to_string());
             }
-            let sample = |value: &str| {
-                let seconds = value
-                    .trim()
-                    .parse::<f64>()
-                    .map_err(|_| "Enter start and end in seconds.")?;
-                let samples = seconds * 48_000.0;
-                if !samples.is_finite() || samples < 0.0 || samples >= usize::MAX as f64 {
-                    return Err("Times must be finite, nonnegative seconds within the recording.");
-                }
-                Ok(samples.round() as usize)
-            };
+            let (start, end) = self.calibration_range()?;
             let example = CalibrationExample {
                 kind,
                 track,
-                start: sample(&self.calibration_start)?,
-                end: sample(&self.calibration_end)?,
+                start,
+                end,
             };
             let mut settings = project.ownership_settings().clone();
             if settings.examples.is_empty() {
@@ -1637,11 +2035,70 @@ impl CleanSlateApp {
     fn capture_calibration_range(&mut self, start: usize, end: usize) {
         self.calibration_start = format!("{:.8}", start.min(end) as f64 / 48_000.0);
         self.calibration_end = format!("{:.8}", start.max(end) as f64 / 48_000.0);
+        self.calibration_error = None;
+    }
+
+    fn calibration_range(&self) -> Result<(usize, usize), String> {
+        let sample = |value: &str| {
+            let seconds = value.trim().parse::<f64>().map_err(
+                |_| "Drag across a waveform to select an example, or enter start and end seconds.",
+            )?;
+            let samples = seconds * 48_000.0;
+            if !samples.is_finite() || samples < 0.0 || samples >= usize::MAX as f64 {
+                return Err("Times must be finite, nonnegative seconds within the recording.");
+            }
+            Ok(samples.round() as usize)
+        };
+        let start = sample(&self.calibration_start)?;
+        let end = sample(&self.calibration_end)?;
+        if end <= start {
+            return Err("No usable range: the end must be after the start. Drag across the waveform rather than clicking once.".into());
+        }
+        if end - start < 12_000 {
+            return Err(
+                "Select at least 0.25 seconds. A few seconds is easier to judge by listening."
+                    .into(),
+            );
+        }
+        Ok((start, end))
     }
 }
 
 impl CleanSlateApp {
     fn update(&mut self, message: Message) -> Task<Message> {
+        if self.sources_busy()
+            && let Message::Timeline(event) = &message
+        {
+            if let Some(loading) = &mut self.source_loading {
+                match *event {
+                    TimelineEvent::Zoom {
+                        cursor_x,
+                        width,
+                        direction,
+                    } => loading.timeline.zoom_at(cursor_x, width, direction),
+                    TimelineEvent::Pan { delta_x, width } => {
+                        loading.timeline.pan_by_pixels(delta_x, width)
+                    }
+                    _ => {}
+                }
+            }
+            return Task::none();
+        }
+        // Keep navigation and further drops responsive, but don't let edits race
+        // the session snapshot being validated and saved by the source worker.
+        if self.sources_busy()
+            && !matches!(
+                message,
+                Message::FileDropped(_)
+                    | Message::ImportStems
+                    | Message::Tick
+                    | Message::Stop
+                    | Message::Timeline(_)
+                    | Message::RangeModifier(_)
+            )
+        {
+            return Task::none();
+        }
         let previous_parameters = self.preview_parameters;
         match message {
             Message::ImportStems => self.import_stems(),
@@ -1669,17 +2126,7 @@ impl CleanSlateApp {
                     .add_filter("WAV audio", &["wav"])
                     .pick_file()
                 {
-                    let project = self.project.as_mut().unwrap();
-                    match project.relink(index, path) {
-                        Ok(()) => {
-                            let waveforms =
-                                waveform::load_or_build(project.path(), &project.source_paths())
-                                    .unwrap_or_default();
-                            self.install_waveforms(waveforms);
-                            self.start_preview();
-                        }
-                        Err(error) => self.messages = vec![error.to_string()],
-                    }
+                    self.begin_source_loading(SourceRequest::Relink(index, path));
                 }
             }
             Message::Validate => self.validate(),
@@ -1690,7 +2137,10 @@ impl CleanSlateApp {
                 }
             }
             Message::Tick => {
-                self.poll_processing();
+                self.poll_sources();
+                if !self.sources_busy() {
+                    self.poll_processing();
+                }
                 self.poll_audition();
             }
             Message::SpeechSensitivity(value) => {
@@ -1766,6 +2216,9 @@ impl CleanSlateApp {
             },
             Message::RangeModifier(selecting) => self.selecting_range = selecting,
             Message::OwnershipMode(enabled) => {
+                if !enabled {
+                    self.calibrating = false;
+                }
                 if let Some(project) = &self.project {
                     let mut settings = project.ownership_settings().clone();
                     settings.enabled = enabled;
@@ -1773,8 +2226,15 @@ impl CleanSlateApp {
                 }
             }
             Message::CalibrationMode(enabled) => self.calibrating = enabled,
-            Message::CalibrationStart(value) => self.calibration_start = value,
-            Message::CalibrationEnd(value) => self.calibration_end = value,
+            Message::CalibrationTiming(enabled) => self.calibration_timing = enabled,
+            Message::CalibrationStart(value) => {
+                self.calibration_start = value;
+                self.calibration_error = None;
+            }
+            Message::CalibrationEnd(value) => {
+                self.calibration_end = value;
+                self.calibration_error = None;
+            }
             Message::CalibrationStartAtPlayhead => {
                 self.calibration_start =
                     format!("{:.8}", self.timeline.playhead() as f64 / 48_000.0);
@@ -1916,12 +2376,16 @@ impl CleanSlateApp {
             _ => None,
         });
         let processing = if self.processing.is_some()
+            || self.sources_busy()
             || self.preview_processing.is_some()
             || self.preview_pending.is_some()
             || self.audition.is_some()
             || self.audition_preparation.is_busy()
         {
-            let interval = if self.preview_processing.is_some() || self.preview_pending.is_some() {
+            let interval = if self.preview_processing.is_some()
+                || self.preview_pending.is_some()
+                || self.sources_busy()
+            {
                 10
             } else {
                 100
@@ -1943,20 +2407,48 @@ impl CleanSlateApp {
         };
         let settings = project.ownership_settings();
         let mut controls = column![
-            text("Microphone ownership").size(18),
-            text(if settings.enabled { "Joint ownership enabled" } else { "Legacy independent detection" }),
-            button(if settings.enabled { "Use legacy detection" } else { "Enable joint ownership" }).on_press(Message::OwnershipMode(!settings.enabled)),
-            text("Examples are optional. Room tone teaches this microphone's background with nobody speaking. Solo speech teaches direct speech and its copies while only this microphone's participant speaks.").size(12),
-            button(if self.calibrating { "Stop calibration selection" } else { "Select calibration range" }).on_press(Message::CalibrationMode(!self.calibrating)),
-            text("Start in seconds").size(12),
-            text_input("Start seconds", &self.calibration_start).on_input(Message::CalibrationStart),
-            button("Start at playhead").on_press(Message::CalibrationStartAtPlayhead),
-            text("End in seconds").size(12),
-            text_input("End seconds", &self.calibration_end).on_input(Message::CalibrationEnd),
-            button("End at playhead").on_press(Message::CalibrationEndAtPlayhead),
-            button("Use timeline selection").on_press_maybe(self.timeline.selection().map(|_| Message::CalibrationFromSelection)),
-            text("Select at least 0.25 seconds, then use Save room tone or Save solo speech under the intended track. Examples do not add protections.").size(12),
+            text("Microphone calibration").size(18),
+            text(if settings.enabled { "Microphone comparison is on" } else { "Legacy detection: examples are disabled" }),
+            button(if settings.enabled { "Use legacy detection" } else { "Enable microphone comparison" }).on_press(Message::OwnershipMode(!settings.enabled)),
+            text("Optional examples help distinguish direct speech from its quieter copies on other microphones.").size(12),
+            button(if self.calibrating { "Finish selecting" } else { "1. Select an example" }).on_press_maybe(settings.enabled.then_some(Message::CalibrationMode(!self.calibrating))),
+            text("Drag across a waveform. The highlighted time range applies to all tracks.").size(12),
+            text("2. Save the example under the intended track").size(14),
+            text("Room tone: nobody is speaking. Solo speech: only this track's participant is speaking; their voice may bleed into other tracks.").size(12),
+            text("These examples guide detection. They do not mute or protect the selected audio.").size(12),
         ].spacing(8);
+        controls = controls.push(text(if !settings.enabled {
+            "Enable microphone comparison above to save examples.".into()
+        } else {
+            match self.calibration_range() {
+                Ok((start, end)) => format!(
+                    "Selected {:.3}–{:.3} s ({:.3} s). Use a Save button below the track.",
+                    start as f64 / 48_000.0,
+                    end as f64 / 48_000.0,
+                    (end - start) as f64 / 48_000.0
+                ),
+                Err(error) => error,
+            }
+        }));
+        controls = controls.push(
+            button(if self.calibration_timing {
+                "Hide exact times"
+            } else {
+                "Exact times / existing selection"
+            })
+            .on_press(Message::CalibrationTiming(!self.calibration_timing)),
+        );
+        if self.calibration_timing {
+            controls = controls
+                .push(text("Start in seconds").size(12))
+                .push(text_input("Start seconds", &self.calibration_start).on_input(Message::CalibrationStart))
+                .push(button("Start at playhead").on_press(Message::CalibrationStartAtPlayhead))
+                .push(text("End in seconds").size(12))
+                .push(text_input("End seconds", &self.calibration_end).on_input(Message::CalibrationEnd))
+                .push(button("End at playhead").on_press(Message::CalibrationEndAtPlayhead))
+                .push(button("Copy highlighted timeline range").on_press_maybe(self.timeline.selection().map(|_| Message::CalibrationFromSelection)))
+                .push(text("Copies the current highlight into these times. Start/end at playhead copies the white cursor's position.").size(12));
+        }
         if let Some(notice) = project.calibration_notice() {
             controls = controls.push(text(notice));
         }
@@ -1965,7 +2457,7 @@ impl CleanSlateApp {
         }
         if settings.examples.is_empty() {
             controls = controls.push(text(
-                "No saved examples. Joint mode uses automatic estimates.",
+                "No saved examples. With microphone comparison on, automatic estimates are used until you add examples.",
             ));
         }
         for (index, example) in settings.examples.iter().enumerate() {
@@ -1997,22 +2489,74 @@ impl CleanSlateApp {
             ]
             .spacing(2),
             Space::new().width(Fill),
-            text(match current {
-                WorkflowStep::Import => "READY TO IMPORT",
-                WorkflowStep::Validate => "READY TO VALIDATE",
-                WorkflowStep::Process => "READY TO ANALYZE",
-                WorkflowStep::Review => "ANALYSIS COMPLETE",
-                WorkflowStep::Export => "EXPORT COMPLETE",
+            text(if self.sources_busy() {
+                "LOADING TRACKS"
+            } else {
+                match current {
+                    WorkflowStep::Import => "READY TO IMPORT",
+                    WorkflowStep::Validate => "READY TO VALIDATE",
+                    WorkflowStep::Process => "READY TO ANALYZE",
+                    WorkflowStep::Review => "ANALYSIS COMPLETE",
+                    WorkflowStep::Export => "EXPORT COMPLETE",
+                }
             })
             .size(12),
             button("Import stems").on_press(Message::ImportStems),
-            button("Open session").on_press(Message::OpenProject),
+            button("Open session").on_press_maybe(
+                (!self.sources_busy() && self.processing.is_none()).then_some(Message::OpenProject)
+            ),
         ]
         .spacing(12)
         .align_y(iced::Center);
 
         let mut timeline_content = column![].spacing(10).height(Fill);
-        if self.project.is_none() {
+        if self.sources_busy() {
+            let paths = self.loading_paths();
+            let track_height = waveform_height(height, paths.len().max(1), compact);
+            timeline_content = timeline_content.push(text(self.source_loading.as_ref().map_or(
+                "Tracks queued. Loading starts in the background…",
+                |loading| loading.stage,
+            )));
+            // Pending rows deliberately show a loading label, never a flat waveform.
+            for (index, path) in paths.iter().enumerate() {
+                let waveform: Element<'_, Message> = self
+                    .source_loading
+                    .as_ref()
+                    .and_then(|loading| loading.waveforms.get(index).map(|cache| (loading, cache)))
+                    .map_or_else(
+                        || {
+                            container(text("Waveform loading…"))
+                                .height(track_height)
+                                .center_y(Fill)
+                                .into()
+                        },
+                        |(loading, cache)| {
+                            canvas(TimelineCanvas::waveform(
+                                cache,
+                                &loading.timeline,
+                                Message::Timeline,
+                                None,
+                                false,
+                            ))
+                            .width(Fill)
+                            .height(track_height)
+                            .into()
+                        },
+                    );
+                timeline_content = timeline_content.push(
+                    container(
+                        column![
+                            text(format!("Track {}: {}", index + 1, path.display())),
+                            waveform,
+                        ]
+                        .spacing(8),
+                    )
+                    .padding(12)
+                    .width(Fill)
+                    .style(container::bordered_box),
+                );
+            }
+        } else if self.project.is_none() {
             timeline_content = timeline_content.push(
                 container(
                     column![
@@ -2089,17 +2633,20 @@ impl CleanSlateApp {
                             waveform,
                             row![
                                 button("Save room tone").on_press_maybe(
-                                    project.ownership_settings().enabled.then_some(
-                                        Message::SaveCalibration(CalibrationKind::RoomTone, index)
-                                    )
+                                    (project.ownership_settings().enabled
+                                        && self.calibration_range().is_ok())
+                                    .then_some(Message::SaveCalibration(
+                                        CalibrationKind::RoomTone,
+                                        index
+                                    ))
                                 ),
                                 button("Save solo speech").on_press_maybe(
-                                    project.ownership_settings().enabled.then_some(
-                                        Message::SaveCalibration(
-                                            CalibrationKind::SoloSpeech,
-                                            index
-                                        )
-                                    )
+                                    (project.ownership_settings().enabled
+                                        && self.calibration_range().is_ok())
+                                    .then_some(Message::SaveCalibration(
+                                        CalibrationKind::SoloSpeech,
+                                        index
+                                    ))
                                 ),
                             ]
                             .spacing(8)
@@ -2335,8 +2882,16 @@ impl CleanSlateApp {
         .padding(18)
         .width(if compact { Fill } else { Length::Fixed(280.0) })
         .style(container::bordered_box);
-        let inspector =
-            scrollable(inspector).height(if compact { Length::Fixed(240.0) } else { Fill });
+        let inspector: Element<'_, Message> = if self.sources_busy() {
+            container(column![text("Loading tracks").size(20),
+                text("Waveforms appear as each track is read. Validation and source checks run in the background, followed by speech analysis."),
+                text("You can scroll the tracks and drop more WAV files. Editing becomes available when the import is validated."),
+            ].spacing(12)).padding(18).width(if compact { Fill } else { Length::Fixed(280.0) }).into()
+        } else {
+            scrollable(inspector)
+                .height(if compact { Length::Fixed(240.0) } else { Fill })
+                .into()
+        };
         let transport = row![
             text(format!(
                 "{:02}:{:06.3}",

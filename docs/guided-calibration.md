@@ -1,12 +1,18 @@
 # Calibrating microphone bleed
 
-New sessions use joint ownership. For a saved session from an older build, choose **Enable joint ownership** in the calibration controls.
+New sessions compare microphones to distinguish direct speech from bleed. This is the algorithm's "ownership" decision: which microphone or microphones contain the intended speaker. For a saved session in legacy mode, choose **Enable microphone comparison** under **Microphone calibration**. The previous build called this button **Enable joint ownership**.
 
-1. Choose **Select calibration range** and drag across a useful part of the waveform. You can also enter start/end seconds, capture the playhead, or use the current timeline selection.
+1. Choose **1. Select an example**. Press the left mouse button on a waveform, drag across a few seconds, then release. Dragging in either direction works. The blue highlight shows the same time interval on all tracks. A single click creates no usable range.
 2. For **room tone**, select a section where nobody is speaking, then choose **Save room tone** under the intended microphone. This teaches its background level.
 3. For **solo speech**, select a section where only that microphone's participant speaks, then choose **Save solo speech** under that track. Other microphones may contain copies of that voice; the comparison uses them together.
 4. Add solo examples for other participants. Examples must span at least 0.25 seconds; choose a few seconds of representative speech when available. Avoid overlapping speakers in solo examples.
 5. Compare **Original**, **Processed**, and **Removed** audition modes. Wanted words or laughter in Removed indicate a mistake: check your examples, remove misleading ones, and protect wanted speech where necessary.
+
+The selection summary shows its start, end and duration. Save buttons stay disabled for an empty or shorter-than-0.25-second range, or while legacy detection is selected. Click **Finish selecting** to return to ordinary playhead navigation. You can also hold Shift while dragging to create a normal timeline selection.
+
+For precise entry, expand **Exact times / existing selection**. **Copy highlighted timeline range** copies the current blue highlight into the time fields. This was called **Use timeline selection** in the previous build. **Start at playhead** and **End at playhead** copy the white cursor position; clicking both without moving it produces a zero-length range.
+
+For example, if only the A01 participant is speaking, select that time and use **Save solo speech** under A01, even though the voice is audible as bleed on A02/A03. For room tone, choose a time when nobody is speaking, then save it under the microphone whose background you want to describe. Room tone is not a label for another participant's voice leaking into that microphone.
 
 Room tone alone cannot identify which participant is speaking. Solo examples provide the microphone relationship; they do not train a voice identity model. Very quiet independent speech mixed with reverberant bleed remains a difficult case and needs listening.
 

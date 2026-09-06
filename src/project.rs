@@ -351,7 +351,16 @@ impl SourceIdentity {
 }
 
 fn fingerprint(path: &Path) -> io::Result<String> {
+    use std::io::Read;
     let mut hash = Sha256::new();
-    hash.update(fs::read(path)?);
+    let mut file = fs::File::open(path)?;
+    let mut buffer = [0_u8; 65_536];
+    loop {
+        let count = file.read(&mut buffer)?;
+        if count == 0 {
+            break;
+        }
+        hash.update(&buffer[..count]);
+    }
     Ok(format!("{:x}", hash.finalize()))
 }

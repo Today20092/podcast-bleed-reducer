@@ -132,9 +132,18 @@ fn summarize(samples: &[f32], bucket: usize) -> Vec<(f32, f32)> {
         .collect()
 }
 
+#[cfg(test)]
 pub(crate) fn load_or_build(
     project_path: &Path,
     sources: &[PathBuf],
+) -> Result<Vec<WaveformCache>, RenderBlocker> {
+    load_or_build_progress(project_path, sources, |_, _| {})
+}
+
+pub(crate) fn load_or_build_progress(
+    project_path: &Path,
+    sources: &[PathBuf],
+    mut ready: impl FnMut(usize, &WaveformCache),
 ) -> Result<Vec<WaveformCache>, RenderBlocker> {
     let cache_path = project_path.with_extension("waveforms.json");
     let stamps = sources
@@ -145,12 +154,30 @@ pub(crate) fn load_or_build(
         && let Ok(cache) = serde_json::from_slice::<PersistedWaveforms>(&bytes)
         && cache.sources == stamps
     {
+        for (index, waveform) in cache.waveforms.iter().enumerate() {
+            ready(index, waveform);
+        }
         return Ok(cache.waveforms);
     }
     let waveforms = sources
         .iter()
-        .map(|path| Stem::read(path).map(|stem| WaveformCache::from_samples(&stem.samples)))
+        .enumerate()
+        .map(|(index, path)| {
+            let stem = Stem::read(path)?;
+            let waveform = WaveformCache::from_samples(&stem.samples);
+            ready(index, &waveform);
+            Ok(waveform)
+        })
+        .collect::<Result<Vec<_>, RenderBlocker>>()?;
+    let finished_stamps = sources
+        .iter()
+        .map(|path| SourceStamp::read(path))
         .collect::<Result<Vec<_>, _>>()?;
+    if finished_stamps != stamps {
+        return Err(RenderBlocker(
+            "Source changed while loading waveforms; import again.".into(),
+        ));
+    }
     fs::write(
         cache_path,
         serde_json::to_vec(&PersistedWaveforms {
