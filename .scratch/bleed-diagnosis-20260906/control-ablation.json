@@ -1,0 +1,1680 @@
+{
+  "case_definitions": [
+    {
+      "end_seconds": 4406,
+      "name": "new circle: A03 bleed (provisional screenshot interior)",
+      "start_seconds": 4387,
+      "track": 2
+    },
+    {
+      "end_seconds": 4406,
+      "name": "new circle: A01 likely direct (not human label)",
+      "start_seconds": 4387,
+      "track": 0
+    },
+    {
+      "end_seconds": 3262,
+      "name": "new box: A02 bleed (provisional screenshot interior)",
+      "start_seconds": 3248,
+      "track": 1
+    },
+    {
+      "end_seconds": 3262,
+      "name": "new box: A03 bleed (provisional screenshot interior)",
+      "start_seconds": 3248,
+      "track": 2
+    },
+    {
+      "end_seconds": 3262,
+      "name": "new boxes: A01 likely direct (not human label)",
+      "start_seconds": 3248,
+      "track": 0
+    },
+    {
+      "end_seconds": 831,
+      "name": "previous circle: A02 bleed (provisional screenshot interior)",
+      "start_seconds": 828,
+      "track": 1
+    },
+    {
+      "end_seconds": 831,
+      "name": "previous circle: A03 bleed (provisional screenshot interior)",
+      "start_seconds": 828,
+      "track": 2
+    },
+    {
+      "end_seconds": 831,
+      "name": "previous circle: A01 likely direct (not human label)",
+      "start_seconds": 828,
+      "track": 0
+    }
+  ],
+  "gain_metric_note": "Time-weighted gain, not audio-energy-weighted attenuation. Screenshot ranges are provisional.",
+  "human_listening_performed": false,
+  "modes": [
+    {
+      "cases": [
+        {
+          "below_minus_1_db_samples": 119119,
+          "decision_samples": {
+            "no_speech": 0,
+            "owned_other": 118272,
+            "owned_target": 793728,
+            "uncertain": 0
+          },
+          "end_sample": 211488000,
+          "longest_above_minus_0_1_db_seconds": 11.6956875,
+          "minimum_gain_db": -11.81445598602295,
+          "name": "new circle: A03 bleed (provisional screenshot interior)",
+          "start_sample": 210576000,
+          "time_weighted_gain_db": -0.49382451920704573,
+          "track": 2,
+          "unity_samples": 752851
+        },
+        {
+          "below_minus_1_db_samples": 0,
+          "decision_samples": {
+            "no_speech": 0,
+            "owned_other": 0,
+            "owned_target": 912000,
+            "uncertain": 0
+          },
+          "end_sample": 211488000,
+          "longest_above_minus_0_1_db_seconds": 19.0,
+          "minimum_gain_db": 0.0,
+          "name": "new circle: A01 likely direct (not human label)",
+          "start_sample": 210576000,
+          "time_weighted_gain_db": 0.0,
+          "track": 0,
+          "unity_samples": 912000
+        },
+        {
+          "below_minus_1_db_samples": 503232,
+          "decision_samples": {
+            "no_speech": 0,
+            "owned_other": 501504,
+            "owned_target": 170496,
+            "uncertain": 0
+          },
+          "end_sample": 156576000,
+          "longest_above_minus_0_1_db_seconds": 1.7826666666666666,
+          "minimum_gain_db": -11.999993324279785,
+          "name": "new box: A02 bleed (provisional screenshot interior)",
+          "start_sample": 155904000,
+          "time_weighted_gain_db": -4.69857199282816,
+          "track": 1,
+          "unity_samples": 88708
+        },
+        {
+          "below_minus_1_db_samples": 0,
+          "decision_samples": {
+            "no_speech": 0,
+            "owned_other": 0,
+            "owned_target": 672000,
+            "uncertain": 0
+          },
+          "end_sample": 156576000,
+          "longest_above_minus_0_1_db_seconds": 14.0,
+          "minimum_gain_db": 0.0,
+          "name": "new box: A03 bleed (provisional screenshot interior)",
+          "start_sample": 155904000,
+          "time_weighted_gain_db": 0.0,
+          "track": 2,
+          "unity_samples": 672000
+        },
+        {
+          "below_minus_1_db_samples": 0,
+          "decision_samples": {
+            "no_speech": 0,
+            "owned_other": 0,
+            "owned_target": 672000,
+            "uncertain": 0
+          },
+          "end_sample": 156576000,
+          "longest_above_minus_0_1_db_seconds": 14.0,
+          "minimum_gain_db": 0.0,
+          "name": "new boxes: A01 likely direct (not human label)",
+          "start_sample": 155904000,
+          "time_weighted_gain_db": 0.0,
+          "track": 0,
+          "unity_samples": 672000
+        },
+        {
+          "below_minus_1_db_samples": 66528,
+          "decision_samples": {
+            "no_speech": 0,
+            "owned_other": 65664,
+            "owned_target": 78336,
+            "uncertain": 0
+          },
+          "end_sample": 39888000,
+          "longest_above_minus_0_1_db_seconds": 1.4306666666666668,
+          "minimum_gain_db": -12.0,
+          "name": "previous circle: A02 bleed (provisional screenshot interior)",
+          "start_sample": 39744000,
+          "time_weighted_gain_db": -1.860622164658101,
+          "track": 1,
+          "unity_samples": 37442
+        },
+        {
+          "below_minus_1_db_samples": 0,
+          "decision_samples": {
+            "no_speech": 0,
+            "owned_other": 0,
+            "owned_target": 144000,
+            "uncertain": 0
+          },
+          "end_sample": 39888000,
+          "longest_above_minus_0_1_db_seconds": 3.0,
+          "minimum_gain_db": 0.0,
+          "name": "previous circle: A03 bleed (provisional screenshot interior)",
+          "start_sample": 39744000,
+          "time_weighted_gain_db": 0.0,
+          "track": 2,
+          "unity_samples": 144000
+        },
+        {
+          "below_minus_1_db_samples": 0,
+          "decision_samples": {
+            "no_speech": 0,
+            "owned_other": 0,
+            "owned_target": 144000,
+            "uncertain": 0
+          },
+          "end_sample": 39888000,
+          "longest_above_minus_0_1_db_seconds": 3.0,
+          "minimum_gain_db": 0.0,
+          "name": "previous circle: A01 likely direct (not human label)",
+          "start_sample": 39744000,
+          "time_weighted_gain_db": 0.0,
+          "track": 0,
+          "unity_samples": 144000
+        }
+      ],
+      "elapsed_ms": 75714,
+      "name": "saved",
+      "parameters": {
+        "attenuation_db": -12.0,
+        "bleed_discrimination_db": 18.0,
+        "close_ms": 500.0,
+        "open_ms": 50.0,
+        "speech_padding_ms": 768.0,
+        "speech_sensitivity": 0.8999999761581421
+      },
+      "settings": {
+        "enabled": true,
+        "examples": [
+          {
+            "end": 44173267,
+            "kind": "SoloSpeech",
+            "start": 43968708,
+            "track": 0
+          },
+          {
+            "end": 44681353,
+            "kind": "SoloSpeech",
+            "start": 44425881,
+            "track": 1
+          },
+          {
+            "end": 52973455,
+            "kind": "SoloSpeech",
+            "start": 52770809,
+            "track": 2
+          },
+          {
+            "end": 52773325,
+            "kind": "RoomTone",
+            "start": 52754114,
+            "track": 2
+          },
+          {
+            "end": 52773325,
+            "kind": "RoomTone",
+            "start": 52754114,
+            "track": 1
+          },
+          {
+            "end": 52773325,
+            "kind": "RoomTone",
+            "start": 52754114,
+            "track": 0
+          },
+          {
+            "end": 108948521,
+            "kind": "SoloSpeech",
+            "start": 108838277,
+            "track": 1
+          },
+          {
+            "end": 101308530,
+            "kind": "SoloSpeech",
+            "start": 99675248,
+            "track": 1
+          },
+          {
+            "end": 109568084,
+            "kind": "SoloSpeech",
+            "start": 109473872,
+            "track": 0
+          },
+          {
+            "end": 109697778,
+            "kind": "SoloSpeech",
+            "start": 109605606,
+            "track": 0
+          },
+          {
+            "end": 109807896,
+            "kind": "SoloSpeech",
+            "start": 109727551,
+            "track": 0
+          },
+          {
+            "end": 109960021,
+            "kind": "SoloSpeech",
+            "start": 109839299,
+            "track": 0
+          },
+          {
+            "end": 110203666,
+            "kind": "SoloSpeech",
+            "start": 110120140,
+            "track": 0
+          },
+          {
+            "end": 110628016,
+            "kind": "SoloSpeech",
+            "start": 110542369,
+            "track": 0
+          },
+          {
+            "end": 111005678,
+            "kind": "SoloSpeech",
+            "start": 110822149,
+            "track": 2
+          },
+          {
+            "end": 111109520,
+            "kind": "SoloSpeech",
+            "start": 111028971,
+            "track": 0
+          },
+          {
+            "end": 124922176,
+            "kind": "SoloSpeech",
+            "start": 124551896,
+            "track": 2
+          },
+          {
+            "end": 216047575,
+            "kind": "RoomTone",
+            "start": 215420394,
+            "track": 0
+          },
+          {
+            "end": 215592990,
+            "kind": "RoomTone",
+            "start": 215230782,
+            "track": 1
+          },
+          {
+            "end": 220254902,
+            "kind": "RoomTone",
+            "start": 220135417,
+            "track": 0
+          },
+          {
+            "end": 220254902,
+            "kind": "RoomTone",
+            "start": 220135417,
+            "track": 1
+          },
+          {
+            "end": 220254902,
+            "kind": "RoomTone",
+            "start": 220135417,
+            "track": 2
+          }
+        ],
+        "sources": [
+          {
+            "bytes": 958641326,
+            "modified_nanos": 1786476334182694300,
+            "path": "C:\\Users\\User\\Downloads\\chopshow podcast 155_A01.wav"
+          },
+          {
+            "bytes": 958641326,
+            "modified_nanos": 1786476334182694300,
+            "path": "C:\\Users\\User\\Downloads\\chopshow podcast 155_A02.wav"
+          },
+          {
+            "bytes": 958641326,
+            "modified_nanos": 1786476334182694300,
+            "path": "C:\\Users\\User\\Downloads\\chopshow podcast 155_A03.wav"
+          }
+        ]
+      }
+    },
+    {
+      "cases": [
+        {
+          "below_minus_1_db_samples": 725332,
+          "decision_samples": {
+            "no_speech": 114432,
+            "owned_other": 574848,
+            "owned_target": 107520,
+            "uncertain": 115200
+          },
+          "end_sample": 211488000,
+          "longest_above_minus_0_1_db_seconds": 0.12229166666666667,
+          "minimum_gain_db": -9.240459442138672,
+          "name": "new circle: A03 bleed (provisional screenshot interior)",
+          "start_sample": 210576000,
+          "time_weighted_gain_db": -2.261286122309607,
+          "track": 2,
+          "unity_samples": 0
+        },
+        {
+          "below_minus_1_db_samples": 135620,
+          "decision_samples": {
+            "no_speech": 114432,
+            "owned_other": 47616,
+            "owned_target": 634752,
+            "uncertain": 115200
+          },
+          "end_sample": 211488000,
+          "longest_above_minus_0_1_db_seconds": 2.6691041666666666,
+          "minimum_gain_db": -6.7561821937561035,
+          "name": "new circle: A01 likely direct (not human label)",
+          "start_sample": 210576000,
+          "time_weighted_gain_db": -0.3685142935984205,
+          "track": 0,
+          "unity_samples": 344719
+        },
+        {
+          "below_minus_1_db_samples": 560197,
+          "decision_samples": {
+            "no_speech": 96768,
+            "owned_other": 424704,
+            "owned_target": 19968,
+            "uncertain": 130560
+          },
+          "end_sample": 156576000,
+          "longest_above_minus_0_1_db_seconds": 0.2655625,
+          "minimum_gain_db": -10.04536247253418,
+          "name": "new box: A02 bleed (provisional screenshot interior)",
+          "start_sample": 155904000,
+          "time_weighted_gain_db": -2.577419231550886,
+          "track": 1,
+          "unity_samples": 0
+        },
+        {
+          "below_minus_1_db_samples": 487799,
+          "decision_samples": {
+            "no_speech": 96768,
+            "owned_other": 381696,
+            "owned_target": 62976,
+            "uncertain": 130560
+          },
+          "end_sample": 156576000,
+          "longest_above_minus_0_1_db_seconds": 0.07772916666666667,
+          "minimum_gain_db": -7.977654457092285,
+          "name": "new box: A03 bleed (provisional screenshot interior)",
+          "start_sample": 155904000,
+          "time_weighted_gain_db": -1.8948662985875706,
+          "track": 2,
+          "unity_samples": 0
+        },
+        {
+          "below_minus_1_db_samples": 87453,
+          "decision_samples": {
+            "no_speech": 96768,
+            "owned_other": 19968,
+            "owned_target": 424704,
+            "uncertain": 130560
+          },
+          "end_sample": 156576000,
+          "longest_above_minus_0_1_db_seconds": 1.4096875,
+          "minimum_gain_db": -7.003716945648193,
+          "name": "new boxes: A01 likely direct (not human label)",
+          "start_sample": 155904000,
+          "time_weighted_gain_db": -0.3560935614227647,
+          "track": 0,
+          "unity_samples": 97377
+        },
+        {
+          "below_minus_1_db_samples": 143341,
+          "decision_samples": {
+            "no_speech": 24576,
+            "owned_other": 107136,
+            "owned_target": 4608,
+            "uncertain": 7680
+          },
+          "end_sample": 39888000,
+          "longest_above_minus_0_1_db_seconds": 0.0,
+          "minimum_gain_db": -9.561168670654297,
+          "name": "previous circle: A02 bleed (provisional screenshot interior)",
+          "start_sample": 39744000,
+          "time_weighted_gain_db": -4.286004197769335,
+          "track": 1,
+          "unity_samples": 0
+        },
+        {
+          "below_minus_1_db_samples": 136826,
+          "decision_samples": {
+            "no_speech": 24576,
+            "owned_other": 97920,
+            "owned_target": 13824,
+            "uncertain": 7680
+          },
+          "end_sample": 39888000,
+          "longest_above_minus_0_1_db_seconds": 0.0,
+          "minimum_gain_db": -6.876078128814697,
+          "name": "previous circle: A03 bleed (provisional screenshot interior)",
+          "start_sample": 39744000,
+          "time_weighted_gain_db": -3.064572364718226,
+          "track": 2,
+          "unity_samples": 0
+        },
+        {
+          "below_minus_1_db_samples": 22936,
+          "decision_samples": {
+            "no_speech": 24576,
+            "owned_other": 6144,
+            "owned_target": 105600,
+            "uncertain": 7680
+          },
+          "end_sample": 39888000,
+          "longest_above_minus_0_1_db_seconds": 0.7116875,
+          "minimum_gain_db": -4.7825517654418945,
+          "name": "previous circle: A01 likely direct (not human label)",
+          "start_sample": 39744000,
+          "time_weighted_gain_db": -0.4071119312090516,
+          "track": 0,
+          "unity_samples": 33792
+        }
+      ],
+      "elapsed_ms": 43,
+      "name": "saved_without_padding",
+      "parameters": {
+        "attenuation_db": -12.0,
+        "bleed_discrimination_db": 18.0,
+        "close_ms": 500.0,
+        "open_ms": 50.0,
+        "speech_padding_ms": 0.0,
+        "speech_sensitivity": 0.8999999761581421
+      },
+      "settings": {
+        "enabled": true,
+        "examples": [
+          {
+            "end": 44173267,
+            "kind": "SoloSpeech",
+            "start": 43968708,
+            "track": 0
+          },
+          {
+            "end": 44681353,
+            "kind": "SoloSpeech",
+            "start": 44425881,
+            "track": 1
+          },
+          {
+            "end": 52973455,
+            "kind": "SoloSpeech",
+            "start": 52770809,
+            "track": 2
+          },
+          {
+            "end": 52773325,
+            "kind": "RoomTone",
+            "start": 52754114,
+            "track": 2
+          },
+          {
+            "end": 52773325,
+            "kind": "RoomTone",
+            "start": 52754114,
+            "track": 1
+          },
+          {
+            "end": 52773325,
+            "kind": "RoomTone",
+            "start": 52754114,
+            "track": 0
+          },
+          {
+            "end": 108948521,
+            "kind": "SoloSpeech",
+            "start": 108838277,
+            "track": 1
+          },
+          {
+            "end": 101308530,
+            "kind": "SoloSpeech",
+            "start": 99675248,
+            "track": 1
+          },
+          {
+            "end": 109568084,
+            "kind": "SoloSpeech",
+            "start": 109473872,
+            "track": 0
+          },
+          {
+            "end": 109697778,
+            "kind": "SoloSpeech",
+            "start": 109605606,
+            "track": 0
+          },
+          {
+            "end": 109807896,
+            "kind": "SoloSpeech",
+            "start": 109727551,
+            "track": 0
+          },
+          {
+            "end": 109960021,
+            "kind": "SoloSpeech",
+            "start": 109839299,
+            "track": 0
+          },
+          {
+            "end": 110203666,
+            "kind": "SoloSpeech",
+            "start": 110120140,
+            "track": 0
+          },
+          {
+            "end": 110628016,
+            "kind": "SoloSpeech",
+            "start": 110542369,
+            "track": 0
+          },
+          {
+            "end": 111005678,
+            "kind": "SoloSpeech",
+            "start": 110822149,
+            "track": 2
+          },
+          {
+            "end": 111109520,
+            "kind": "SoloSpeech",
+            "start": 111028971,
+            "track": 0
+          },
+          {
+            "end": 124922176,
+            "kind": "SoloSpeech",
+            "start": 124551896,
+            "track": 2
+          },
+          {
+            "end": 216047575,
+            "kind": "RoomTone",
+            "start": 215420394,
+            "track": 0
+          },
+          {
+            "end": 215592990,
+            "kind": "RoomTone",
+            "start": 215230782,
+            "track": 1
+          },
+          {
+            "end": 220254902,
+            "kind": "RoomTone",
+            "start": 220135417,
+            "track": 0
+          },
+          {
+            "end": 220254902,
+            "kind": "RoomTone",
+            "start": 220135417,
+            "track": 1
+          },
+          {
+            "end": 220254902,
+            "kind": "RoomTone",
+            "start": 220135417,
+            "track": 2
+          }
+        ],
+        "sources": [
+          {
+            "bytes": 958641326,
+            "modified_nanos": 1786476334182694300,
+            "path": "C:\\Users\\User\\Downloads\\chopshow podcast 155_A01.wav"
+          },
+          {
+            "bytes": 958641326,
+            "modified_nanos": 1786476334182694300,
+            "path": "C:\\Users\\User\\Downloads\\chopshow podcast 155_A02.wav"
+          },
+          {
+            "bytes": 958641326,
+            "modified_nanos": 1786476334182694300,
+            "path": "C:\\Users\\User\\Downloads\\chopshow podcast 155_A03.wav"
+          }
+        ]
+      }
+    },
+    {
+      "cases": [
+        {
+          "below_minus_1_db_samples": 0,
+          "decision_samples": {
+            "no_speech": 0,
+            "owned_other": 0,
+            "owned_target": 912000,
+            "uncertain": 0
+          },
+          "end_sample": 211488000,
+          "longest_above_minus_0_1_db_seconds": 19.0,
+          "minimum_gain_db": 0.0,
+          "name": "new circle: A03 bleed (provisional screenshot interior)",
+          "start_sample": 210576000,
+          "time_weighted_gain_db": 0.0,
+          "track": 2,
+          "unity_samples": 912000
+        },
+        {
+          "below_minus_1_db_samples": 0,
+          "decision_samples": {
+            "no_speech": 0,
+            "owned_other": 0,
+            "owned_target": 912000,
+            "uncertain": 0
+          },
+          "end_sample": 211488000,
+          "longest_above_minus_0_1_db_seconds": 19.0,
+          "minimum_gain_db": 0.0,
+          "name": "new circle: A01 likely direct (not human label)",
+          "start_sample": 210576000,
+          "time_weighted_gain_db": 0.0,
+          "track": 0,
+          "unity_samples": 912000
+        },
+        {
+          "below_minus_1_db_samples": 0,
+          "decision_samples": {
+            "no_speech": 0,
+            "owned_other": 0,
+            "owned_target": 672000,
+            "uncertain": 0
+          },
+          "end_sample": 156576000,
+          "longest_above_minus_0_1_db_seconds": 14.0,
+          "minimum_gain_db": 0.0,
+          "name": "new box: A02 bleed (provisional screenshot interior)",
+          "start_sample": 155904000,
+          "time_weighted_gain_db": 0.0,
+          "track": 1,
+          "unity_samples": 672000
+        },
+        {
+          "below_minus_1_db_samples": 0,
+          "decision_samples": {
+            "no_speech": 0,
+            "owned_other": 0,
+            "owned_target": 672000,
+            "uncertain": 0
+          },
+          "end_sample": 156576000,
+          "longest_above_minus_0_1_db_seconds": 14.0,
+          "minimum_gain_db": 0.0,
+          "name": "new box: A03 bleed (provisional screenshot interior)",
+          "start_sample": 155904000,
+          "time_weighted_gain_db": 0.0,
+          "track": 2,
+          "unity_samples": 672000
+        },
+        {
+          "below_minus_1_db_samples": 0,
+          "decision_samples": {
+            "no_speech": 0,
+            "owned_other": 0,
+            "owned_target": 672000,
+            "uncertain": 0
+          },
+          "end_sample": 156576000,
+          "longest_above_minus_0_1_db_seconds": 14.0,
+          "minimum_gain_db": 0.0,
+          "name": "new boxes: A01 likely direct (not human label)",
+          "start_sample": 155904000,
+          "time_weighted_gain_db": 0.0,
+          "track": 0,
+          "unity_samples": 672000
+        },
+        {
+          "below_minus_1_db_samples": 0,
+          "decision_samples": {
+            "no_speech": 0,
+            "owned_other": 0,
+            "owned_target": 144000,
+            "uncertain": 0
+          },
+          "end_sample": 39888000,
+          "longest_above_minus_0_1_db_seconds": 3.0,
+          "minimum_gain_db": 0.0,
+          "name": "previous circle: A02 bleed (provisional screenshot interior)",
+          "start_sample": 39744000,
+          "time_weighted_gain_db": 0.0,
+          "track": 1,
+          "unity_samples": 144000
+        },
+        {
+          "below_minus_1_db_samples": 0,
+          "decision_samples": {
+            "no_speech": 0,
+            "owned_other": 0,
+            "owned_target": 144000,
+            "uncertain": 0
+          },
+          "end_sample": 39888000,
+          "longest_above_minus_0_1_db_seconds": 3.0,
+          "minimum_gain_db": 0.0,
+          "name": "previous circle: A03 bleed (provisional screenshot interior)",
+          "start_sample": 39744000,
+          "time_weighted_gain_db": 0.0,
+          "track": 2,
+          "unity_samples": 144000
+        },
+        {
+          "below_minus_1_db_samples": 0,
+          "decision_samples": {
+            "no_speech": 0,
+            "owned_other": 0,
+            "owned_target": 144000,
+            "uncertain": 0
+          },
+          "end_sample": 39888000,
+          "longest_above_minus_0_1_db_seconds": 3.0,
+          "minimum_gain_db": 0.0,
+          "name": "previous circle: A01 likely direct (not human label)",
+          "start_sample": 39744000,
+          "time_weighted_gain_db": 0.0,
+          "track": 0,
+          "unity_samples": 144000
+        }
+      ],
+      "elapsed_ms": 45,
+      "name": "default_gates",
+      "parameters": {
+        "attenuation_db": -12.0,
+        "bleed_discrimination_db": 6.0,
+        "close_ms": 500.0,
+        "open_ms": 50.0,
+        "speech_padding_ms": 768.0,
+        "speech_sensitivity": 0.5
+      },
+      "settings": {
+        "enabled": true,
+        "examples": [
+          {
+            "end": 44173267,
+            "kind": "SoloSpeech",
+            "start": 43968708,
+            "track": 0
+          },
+          {
+            "end": 44681353,
+            "kind": "SoloSpeech",
+            "start": 44425881,
+            "track": 1
+          },
+          {
+            "end": 52973455,
+            "kind": "SoloSpeech",
+            "start": 52770809,
+            "track": 2
+          },
+          {
+            "end": 52773325,
+            "kind": "RoomTone",
+            "start": 52754114,
+            "track": 2
+          },
+          {
+            "end": 52773325,
+            "kind": "RoomTone",
+            "start": 52754114,
+            "track": 1
+          },
+          {
+            "end": 52773325,
+            "kind": "RoomTone",
+            "start": 52754114,
+            "track": 0
+          },
+          {
+            "end": 108948521,
+            "kind": "SoloSpeech",
+            "start": 108838277,
+            "track": 1
+          },
+          {
+            "end": 101308530,
+            "kind": "SoloSpeech",
+            "start": 99675248,
+            "track": 1
+          },
+          {
+            "end": 109568084,
+            "kind": "SoloSpeech",
+            "start": 109473872,
+            "track": 0
+          },
+          {
+            "end": 109697778,
+            "kind": "SoloSpeech",
+            "start": 109605606,
+            "track": 0
+          },
+          {
+            "end": 109807896,
+            "kind": "SoloSpeech",
+            "start": 109727551,
+            "track": 0
+          },
+          {
+            "end": 109960021,
+            "kind": "SoloSpeech",
+            "start": 109839299,
+            "track": 0
+          },
+          {
+            "end": 110203666,
+            "kind": "SoloSpeech",
+            "start": 110120140,
+            "track": 0
+          },
+          {
+            "end": 110628016,
+            "kind": "SoloSpeech",
+            "start": 110542369,
+            "track": 0
+          },
+          {
+            "end": 111005678,
+            "kind": "SoloSpeech",
+            "start": 110822149,
+            "track": 2
+          },
+          {
+            "end": 111109520,
+            "kind": "SoloSpeech",
+            "start": 111028971,
+            "track": 0
+          },
+          {
+            "end": 124922176,
+            "kind": "SoloSpeech",
+            "start": 124551896,
+            "track": 2
+          },
+          {
+            "end": 216047575,
+            "kind": "RoomTone",
+            "start": 215420394,
+            "track": 0
+          },
+          {
+            "end": 215592990,
+            "kind": "RoomTone",
+            "start": 215230782,
+            "track": 1
+          },
+          {
+            "end": 220254902,
+            "kind": "RoomTone",
+            "start": 220135417,
+            "track": 0
+          },
+          {
+            "end": 220254902,
+            "kind": "RoomTone",
+            "start": 220135417,
+            "track": 1
+          },
+          {
+            "end": 220254902,
+            "kind": "RoomTone",
+            "start": 220135417,
+            "track": 2
+          }
+        ],
+        "sources": [
+          {
+            "bytes": 958641326,
+            "modified_nanos": 1786476334182694300,
+            "path": "C:\\Users\\User\\Downloads\\chopshow podcast 155_A01.wav"
+          },
+          {
+            "bytes": 958641326,
+            "modified_nanos": 1786476334182694300,
+            "path": "C:\\Users\\User\\Downloads\\chopshow podcast 155_A02.wav"
+          },
+          {
+            "bytes": 958641326,
+            "modified_nanos": 1786476334182694300,
+            "path": "C:\\Users\\User\\Downloads\\chopshow podcast 155_A03.wav"
+          }
+        ]
+      }
+    },
+    {
+      "cases": [
+        {
+          "below_minus_1_db_samples": 513515,
+          "decision_samples": {
+            "no_speech": 80640,
+            "owned_other": 464256,
+            "owned_target": 334848,
+            "uncertain": 32256
+          },
+          "end_sample": 211488000,
+          "longest_above_minus_0_1_db_seconds": 0.25677083333333334,
+          "minimum_gain_db": -7.69843053817749,
+          "name": "new circle: A03 bleed (provisional screenshot interior)",
+          "start_sample": 210576000,
+          "time_weighted_gain_db": -1.3642752349917042,
+          "track": 2,
+          "unity_samples": 0
+        },
+        {
+          "below_minus_1_db_samples": 138672,
+          "decision_samples": {
+            "no_speech": 80640,
+            "owned_other": 72192,
+            "owned_target": 726912,
+            "uncertain": 32256
+          },
+          "end_sample": 211488000,
+          "longest_above_minus_0_1_db_seconds": 2.705979166666667,
+          "minimum_gain_db": -7.003716945648193,
+          "name": "new circle: A01 likely direct (not human label)",
+          "start_sample": 210576000,
+          "time_weighted_gain_db": -0.3658224458686518,
+          "track": 0,
+          "unity_samples": 439539
+        },
+        {
+          "below_minus_1_db_samples": 519421,
+          "decision_samples": {
+            "no_speech": 66048,
+            "owned_other": 417024,
+            "owned_target": 161280,
+            "uncertain": 27648
+          },
+          "end_sample": 156576000,
+          "longest_above_minus_0_1_db_seconds": 0.33766666666666667,
+          "minimum_gain_db": -6.596450328826904,
+          "name": "new box: A02 bleed (provisional screenshot interior)",
+          "start_sample": 155904000,
+          "time_weighted_gain_db": -1.9302371659514823,
+          "track": 1,
+          "unity_samples": 0
+        },
+        {
+          "below_minus_1_db_samples": 428159,
+          "decision_samples": {
+            "no_speech": 66048,
+            "owned_other": 366336,
+            "owned_target": 211968,
+            "uncertain": 27648
+          },
+          "end_sample": 156576000,
+          "longest_above_minus_0_1_db_seconds": 0.15208333333333332,
+          "minimum_gain_db": -6.061306476593018,
+          "name": "new box: A03 bleed (provisional screenshot interior)",
+          "start_sample": 155904000,
+          "time_weighted_gain_db": -1.4927028345509394,
+          "track": 2,
+          "unity_samples": 0
+        },
+        {
+          "below_minus_1_db_samples": 66000,
+          "decision_samples": {
+            "no_speech": 66048,
+            "owned_other": 27648,
+            "owned_target": 550656,
+            "uncertain": 27648
+          },
+          "end_sample": 156576000,
+          "longest_above_minus_0_1_db_seconds": 2.7115416666666667,
+          "minimum_gain_db": -5.42879581451416,
+          "name": "new boxes: A01 likely direct (not human label)",
+          "start_sample": 155904000,
+          "time_weighted_gain_db": -0.2526774787239948,
+          "track": 0,
+          "unity_samples": 207039
+        },
+        {
+          "below_minus_1_db_samples": 115856,
+          "decision_samples": {
+            "no_speech": 9216,
+            "owned_other": 99456,
+            "owned_target": 24576,
+            "uncertain": 10752
+          },
+          "end_sample": 39888000,
+          "longest_above_minus_0_1_db_seconds": 0.11047916666666667,
+          "minimum_gain_db": -7.26058292388916,
+          "name": "previous circle: A02 bleed (provisional screenshot interior)",
+          "start_sample": 39744000,
+          "time_weighted_gain_db": -2.483025698702424,
+          "track": 1,
+          "unity_samples": 0
+        },
+        {
+          "below_minus_1_db_samples": 103945,
+          "decision_samples": {
+            "no_speech": 9216,
+            "owned_other": 93312,
+            "owned_target": 30720,
+            "uncertain": 10752
+          },
+          "end_sample": 39888000,
+          "longest_above_minus_0_1_db_seconds": 0.13647916666666668,
+          "minimum_gain_db": -7.008089542388916,
+          "name": "previous circle: A03 bleed (provisional screenshot interior)",
+          "start_sample": 39744000,
+          "time_weighted_gain_db": -2.1189368884489865,
+          "track": 2,
+          "unity_samples": 0
+        },
+        {
+          "below_minus_1_db_samples": 7476,
+          "decision_samples": {
+            "no_speech": 9216,
+            "owned_other": 4608,
+            "owned_target": 119424,
+            "uncertain": 10752
+          },
+          "end_sample": 39888000,
+          "longest_above_minus_0_1_db_seconds": 1.4796875,
+          "minimum_gain_db": -2.3975296020507812,
+          "name": "previous circle: A01 likely direct (not human label)",
+          "start_sample": 39744000,
+          "time_weighted_gain_db": -0.13025126882782598,
+          "track": 0,
+          "unity_samples": 70656
+        }
+      ],
+      "elapsed_ms": 44,
+      "name": "default_gates_without_padding",
+      "parameters": {
+        "attenuation_db": -12.0,
+        "bleed_discrimination_db": 6.0,
+        "close_ms": 500.0,
+        "open_ms": 50.0,
+        "speech_padding_ms": 0.0,
+        "speech_sensitivity": 0.5
+      },
+      "settings": {
+        "enabled": true,
+        "examples": [
+          {
+            "end": 44173267,
+            "kind": "SoloSpeech",
+            "start": 43968708,
+            "track": 0
+          },
+          {
+            "end": 44681353,
+            "kind": "SoloSpeech",
+            "start": 44425881,
+            "track": 1
+          },
+          {
+            "end": 52973455,
+            "kind": "SoloSpeech",
+            "start": 52770809,
+            "track": 2
+          },
+          {
+            "end": 52773325,
+            "kind": "RoomTone",
+            "start": 52754114,
+            "track": 2
+          },
+          {
+            "end": 52773325,
+            "kind": "RoomTone",
+            "start": 52754114,
+            "track": 1
+          },
+          {
+            "end": 52773325,
+            "kind": "RoomTone",
+            "start": 52754114,
+            "track": 0
+          },
+          {
+            "end": 108948521,
+            "kind": "SoloSpeech",
+            "start": 108838277,
+            "track": 1
+          },
+          {
+            "end": 101308530,
+            "kind": "SoloSpeech",
+            "start": 99675248,
+            "track": 1
+          },
+          {
+            "end": 109568084,
+            "kind": "SoloSpeech",
+            "start": 109473872,
+            "track": 0
+          },
+          {
+            "end": 109697778,
+            "kind": "SoloSpeech",
+            "start": 109605606,
+            "track": 0
+          },
+          {
+            "end": 109807896,
+            "kind": "SoloSpeech",
+            "start": 109727551,
+            "track": 0
+          },
+          {
+            "end": 109960021,
+            "kind": "SoloSpeech",
+            "start": 109839299,
+            "track": 0
+          },
+          {
+            "end": 110203666,
+            "kind": "SoloSpeech",
+            "start": 110120140,
+            "track": 0
+          },
+          {
+            "end": 110628016,
+            "kind": "SoloSpeech",
+            "start": 110542369,
+            "track": 0
+          },
+          {
+            "end": 111005678,
+            "kind": "SoloSpeech",
+            "start": 110822149,
+            "track": 2
+          },
+          {
+            "end": 111109520,
+            "kind": "SoloSpeech",
+            "start": 111028971,
+            "track": 0
+          },
+          {
+            "end": 124922176,
+            "kind": "SoloSpeech",
+            "start": 124551896,
+            "track": 2
+          },
+          {
+            "end": 216047575,
+            "kind": "RoomTone",
+            "start": 215420394,
+            "track": 0
+          },
+          {
+            "end": 215592990,
+            "kind": "RoomTone",
+            "start": 215230782,
+            "track": 1
+          },
+          {
+            "end": 220254902,
+            "kind": "RoomTone",
+            "start": 220135417,
+            "track": 0
+          },
+          {
+            "end": 220254902,
+            "kind": "RoomTone",
+            "start": 220135417,
+            "track": 1
+          },
+          {
+            "end": 220254902,
+            "kind": "RoomTone",
+            "start": 220135417,
+            "track": 2
+          }
+        ],
+        "sources": [
+          {
+            "bytes": 958641326,
+            "modified_nanos": 1786476334182694300,
+            "path": "C:\\Users\\User\\Downloads\\chopshow podcast 155_A01.wav"
+          },
+          {
+            "bytes": 958641326,
+            "modified_nanos": 1786476334182694300,
+            "path": "C:\\Users\\User\\Downloads\\chopshow podcast 155_A02.wav"
+          },
+          {
+            "bytes": 958641326,
+            "modified_nanos": 1786476334182694300,
+            "path": "C:\\Users\\User\\Downloads\\chopshow podcast 155_A03.wav"
+          }
+        ]
+      }
+    },
+    {
+      "cases": [
+        {
+          "below_minus_1_db_samples": 5436,
+          "decision_samples": {
+            "no_speech": 0,
+            "owned_other": 7680,
+            "owned_target": 904320,
+            "uncertain": 0
+          },
+          "end_sample": 211488000,
+          "longest_above_minus_0_1_db_seconds": 13.4876875,
+          "minimum_gain_db": -1.9932447671890259,
+          "name": "new circle: A03 bleed (provisional screenshot interior)",
+          "start_sample": 210576000,
+          "time_weighted_gain_db": -0.011806957373900251,
+          "track": 2,
+          "unity_samples": 866534
+        },
+        {
+          "below_minus_1_db_samples": 0,
+          "decision_samples": {
+            "no_speech": 0,
+            "owned_other": 0,
+            "owned_target": 912000,
+            "uncertain": 0
+          },
+          "end_sample": 211488000,
+          "longest_above_minus_0_1_db_seconds": 19.0,
+          "minimum_gain_db": 0.0,
+          "name": "new circle: A01 likely direct (not human label)",
+          "start_sample": 210576000,
+          "time_weighted_gain_db": 0.0,
+          "track": 0,
+          "unity_samples": 912000
+        },
+        {
+          "below_minus_1_db_samples": 0,
+          "decision_samples": {
+            "no_speech": 0,
+            "owned_other": 0,
+            "owned_target": 672000,
+            "uncertain": 0
+          },
+          "end_sample": 156576000,
+          "longest_above_minus_0_1_db_seconds": 14.0,
+          "minimum_gain_db": 0.0,
+          "name": "new box: A02 bleed (provisional screenshot interior)",
+          "start_sample": 155904000,
+          "time_weighted_gain_db": 0.0,
+          "track": 1,
+          "unity_samples": 672000
+        },
+        {
+          "below_minus_1_db_samples": 0,
+          "decision_samples": {
+            "no_speech": 0,
+            "owned_other": 0,
+            "owned_target": 672000,
+            "uncertain": 0
+          },
+          "end_sample": 156576000,
+          "longest_above_minus_0_1_db_seconds": 14.0,
+          "minimum_gain_db": 0.0,
+          "name": "new box: A03 bleed (provisional screenshot interior)",
+          "start_sample": 155904000,
+          "time_weighted_gain_db": 0.0,
+          "track": 2,
+          "unity_samples": 672000
+        },
+        {
+          "below_minus_1_db_samples": 0,
+          "decision_samples": {
+            "no_speech": 0,
+            "owned_other": 0,
+            "owned_target": 672000,
+            "uncertain": 0
+          },
+          "end_sample": 156576000,
+          "longest_above_minus_0_1_db_seconds": 14.0,
+          "minimum_gain_db": 0.0,
+          "name": "new boxes: A01 likely direct (not human label)",
+          "start_sample": 155904000,
+          "time_weighted_gain_db": 0.0,
+          "track": 0,
+          "unity_samples": 672000
+        },
+        {
+          "below_minus_1_db_samples": 0,
+          "decision_samples": {
+            "no_speech": 0,
+            "owned_other": 0,
+            "owned_target": 144000,
+            "uncertain": 0
+          },
+          "end_sample": 39888000,
+          "longest_above_minus_0_1_db_seconds": 3.0,
+          "minimum_gain_db": 0.0,
+          "name": "previous circle: A02 bleed (provisional screenshot interior)",
+          "start_sample": 39744000,
+          "time_weighted_gain_db": 0.0,
+          "track": 1,
+          "unity_samples": 144000
+        },
+        {
+          "below_minus_1_db_samples": 0,
+          "decision_samples": {
+            "no_speech": 0,
+            "owned_other": 0,
+            "owned_target": 144000,
+            "uncertain": 0
+          },
+          "end_sample": 39888000,
+          "longest_above_minus_0_1_db_seconds": 3.0,
+          "minimum_gain_db": 0.0,
+          "name": "previous circle: A03 bleed (provisional screenshot interior)",
+          "start_sample": 39744000,
+          "time_weighted_gain_db": 0.0,
+          "track": 2,
+          "unity_samples": 144000
+        },
+        {
+          "below_minus_1_db_samples": 0,
+          "decision_samples": {
+            "no_speech": 0,
+            "owned_other": 0,
+            "owned_target": 144000,
+            "uncertain": 0
+          },
+          "end_sample": 39888000,
+          "longest_above_minus_0_1_db_seconds": 3.0,
+          "minimum_gain_db": 0.0,
+          "name": "previous circle: A01 likely direct (not human label)",
+          "start_sample": 39744000,
+          "time_weighted_gain_db": 0.0,
+          "track": 0,
+          "unity_samples": 144000
+        }
+      ],
+      "elapsed_ms": 47,
+      "name": "automatic_saved_gates",
+      "parameters": {
+        "attenuation_db": -12.0,
+        "bleed_discrimination_db": 18.0,
+        "close_ms": 500.0,
+        "open_ms": 50.0,
+        "speech_padding_ms": 768.0,
+        "speech_sensitivity": 0.8999999761581421
+      },
+      "settings": {
+        "enabled": true,
+        "examples": [],
+        "sources": []
+      }
+    }
+  ],
+  "preparations": 1,
+  "session": {
+    "last_render": null,
+    "ownership": {
+      "enabled": true,
+      "examples": [
+        {
+          "end": 44173267,
+          "kind": "SoloSpeech",
+          "start": 43968708,
+          "track": 0
+        },
+        {
+          "end": 44681353,
+          "kind": "SoloSpeech",
+          "start": 44425881,
+          "track": 1
+        },
+        {
+          "end": 52973455,
+          "kind": "SoloSpeech",
+          "start": 52770809,
+          "track": 2
+        },
+        {
+          "end": 52773325,
+          "kind": "RoomTone",
+          "start": 52754114,
+          "track": 2
+        },
+        {
+          "end": 52773325,
+          "kind": "RoomTone",
+          "start": 52754114,
+          "track": 1
+        },
+        {
+          "end": 52773325,
+          "kind": "RoomTone",
+          "start": 52754114,
+          "track": 0
+        },
+        {
+          "end": 108948521,
+          "kind": "SoloSpeech",
+          "start": 108838277,
+          "track": 1
+        },
+        {
+          "end": 101308530,
+          "kind": "SoloSpeech",
+          "start": 99675248,
+          "track": 1
+        },
+        {
+          "end": 109568084,
+          "kind": "SoloSpeech",
+          "start": 109473872,
+          "track": 0
+        },
+        {
+          "end": 109697778,
+          "kind": "SoloSpeech",
+          "start": 109605606,
+          "track": 0
+        },
+        {
+          "end": 109807896,
+          "kind": "SoloSpeech",
+          "start": 109727551,
+          "track": 0
+        },
+        {
+          "end": 109960021,
+          "kind": "SoloSpeech",
+          "start": 109839299,
+          "track": 0
+        },
+        {
+          "end": 110203666,
+          "kind": "SoloSpeech",
+          "start": 110120140,
+          "track": 0
+        },
+        {
+          "end": 110628016,
+          "kind": "SoloSpeech",
+          "start": 110542369,
+          "track": 0
+        },
+        {
+          "end": 111005678,
+          "kind": "SoloSpeech",
+          "start": 110822149,
+          "track": 2
+        },
+        {
+          "end": 111109520,
+          "kind": "SoloSpeech",
+          "start": 111028971,
+          "track": 0
+        },
+        {
+          "end": 124922176,
+          "kind": "SoloSpeech",
+          "start": 124551896,
+          "track": 2
+        },
+        {
+          "end": 216047575,
+          "kind": "RoomTone",
+          "start": 215420394,
+          "track": 0
+        },
+        {
+          "end": 215592990,
+          "kind": "RoomTone",
+          "start": 215230782,
+          "track": 1
+        },
+        {
+          "end": 220254902,
+          "kind": "RoomTone",
+          "start": 220135417,
+          "track": 0
+        },
+        {
+          "end": 220254902,
+          "kind": "RoomTone",
+          "start": 220135417,
+          "track": 1
+        },
+        {
+          "end": 220254902,
+          "kind": "RoomTone",
+          "start": 220135417,
+          "track": 2
+        }
+      ],
+      "sources": [
+        {
+          "bytes": 958641326,
+          "modified_nanos": 1786476334182694300,
+          "path": "C:\\Users\\User\\Downloads\\chopshow podcast 155_A01.wav"
+        },
+        {
+          "bytes": 958641326,
+          "modified_nanos": 1786476334182694300,
+          "path": "C:\\Users\\User\\Downloads\\chopshow podcast 155_A02.wav"
+        },
+        {
+          "bytes": 958641326,
+          "modified_nanos": 1786476334182694300,
+          "path": "C:\\Users\\User\\Downloads\\chopshow podcast 155_A03.wav"
+        }
+      ]
+    },
+    "parameters": {
+      "attenuation_db": -12.0,
+      "bleed_discrimination_db": 18.0,
+      "close_ms": 500.0,
+      "open_ms": 50.0,
+      "speech_padding_ms": 768.0,
+      "speech_sensitivity": 0.8999999761581421
+    },
+    "protections": [],
+    "render": "None",
+    "review_states": {},
+    "sources": [
+      {
+        "fingerprint": "4b570effa91f0de90bf8016d8f26b1162f4d527844f891de7e0805386738419b",
+        "path": "C:\\Users\\User\\Downloads\\chopshow podcast 155_A01.wav"
+      },
+      {
+        "fingerprint": "08249b35998350a2b874b75c406b1ba5251ec7da4b05d303162f731fda4bf387",
+        "path": "C:\\Users\\User\\Downloads\\chopshow podcast 155_A02.wav"
+      },
+      {
+        "fingerprint": "ae06806c540bf3d6d0805d864d5a012493109ea1cc065ac30a925e671b2fb1a3",
+        "path": "C:\\Users\\User\\Downloads\\chopshow podcast 155_A03.wav"
+      }
+    ],
+    "step": "Process"
+  },
+  "source_session": {
+    "Windows": [
+      67,
+      58,
+      47,
+      85,
+      115,
+      101,
+      114,
+      115,
+      47,
+      85,
+      115,
+      101,
+      114,
+      47,
+      68,
+      111,
+      119,
+      110,
+      108,
+      111,
+      97,
+      100,
+      115,
+      47,
+      67,
+      108,
+      101,
+      97,
+      110,
+      83,
+      108,
+      97,
+      116,
+      101,
+      45,
+      49,
+      48,
+      46,
+      99,
+      108,
+      101,
+      97,
+      110,
+      115,
+      108,
+      97,
+      116,
+      101
+    ]
+  },
+  "sources": [
+    {
+      "bytes": 958641326,
+      "modified_nanos": 1786476334182694300,
+      "path": "C:\\Users\\User\\Downloads\\chopshow podcast 155_A01.wav"
+    },
+    {
+      "bytes": 958641326,
+      "modified_nanos": 1786476334182694300,
+      "path": "C:\\Users\\User\\Downloads\\chopshow podcast 155_A02.wav"
+    },
+    {
+      "bytes": 958641326,
+      "modified_nanos": 1786476334182694300,
+      "path": "C:\\Users\\User\\Downloads\\chopshow podcast 155_A03.wav"
+    }
+  ]
+}

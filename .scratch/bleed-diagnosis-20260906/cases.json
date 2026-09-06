@@ -1,0 +1,10 @@
+[
+  {"name":"new circle: A03 bleed (provisional screenshot interior)","track":2,"start_seconds":4387,"end_seconds":4406},
+  {"name":"new circle: A01 likely direct (not human label)","track":0,"start_seconds":4387,"end_seconds":4406},
+  {"name":"new box: A02 bleed (provisional screenshot interior)","track":1,"start_seconds":3248,"end_seconds":3262},
+  {"name":"new box: A03 bleed (provisional screenshot interior)","track":2,"start_seconds":3248,"end_seconds":3262},
+  {"name":"new boxes: A01 likely direct (not human label)","track":0,"start_seconds":3248,"end_seconds":3262},
+  {"name":"previous circle: A02 bleed (provisional screenshot interior)","track":1,"start_seconds":828,"end_seconds":831},
+  {"name":"previous circle: A03 bleed (provisional screenshot interior)","track":2,"start_seconds":828,"end_seconds":831},
+  {"name":"previous circle: A01 likely direct (not human label)","track":0,"start_seconds":828,"end_seconds":831}
+]
