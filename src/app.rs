@@ -636,6 +636,7 @@ mod tests {
             ),
             ..Default::default()
         };
+        app.timeline.set_total_samples(48_000);
         let wait = |app: &mut super::CleanSlateApp| {
             let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
             while app.preview_processing.is_some() {
@@ -702,7 +703,21 @@ mod tests {
         let source = directory.join("track.wav");
         write_wav(&source, &[0.0; 16]);
         let mut app = super::CleanSlateApp::default();
+        let cancelled = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let (_sender, result) = super::mpsc::channel();
+        app.preview_processing = Some(super::PreviewProcessing {
+            progress: Default::default(),
+            cancelled: cancelled.clone(),
+            generation: 0,
+            source_generation: 0,
+            sources: vec![],
+            result,
+        });
         let _ = app.update(super::Message::FileDropped(source));
+        assert!(
+            cancelled.load(super::Ordering::Relaxed),
+            "dropping the old preview job must cancel it"
+        );
         assert!(
             app.project.is_none(),
             "drop handling must return before validating and creating the project"
@@ -879,6 +894,7 @@ mod tests {
     #[test]
     fn calibration_range_explains_clicks_and_short_or_reversed_ranges() {
         let mut app = super::CleanSlateApp::default();
+        app.timeline.set_total_samples(48_000);
         app.capture_calibration_range(24_000, 24_000);
         assert!(
             app.calibration_range()
@@ -896,6 +912,52 @@ mod tests {
         app.calibration_start = "2".into();
         app.calibration_end = "1".into();
         assert!(app.calibration_range().is_err());
+        app.calibration_start = "100".into();
+        app.calibration_end = "101".into();
+        assert!(
+            app.calibration_range().is_err(),
+            "Save must reject ranges beyond the recording before a click"
+        );
+    }
+
+    #[test]
+    fn missing_sources_can_be_relinked_one_at_a_time() {
+        let directory =
+            std::env::temp_dir().join(format!("cleanslate-missing-relink-{}", std::process::id()));
+        std::fs::create_dir_all(&directory).unwrap();
+        let old_a = directory.join("a.wav");
+        let old_b = directory.join("b.wav");
+        let new_a = directory.join("moved-a.wav");
+        let new_b = directory.join("moved-b.wav");
+        write_wav(&old_a, &[0.0; 16]);
+        write_wav(&old_b, &[0.0; 16]);
+        let saved = directory.join("session.cleanslate");
+        crate::Project::create(&saved, vec![old_a.clone(), old_b.clone()]).unwrap();
+        std::fs::rename(old_a, &new_a).unwrap();
+        std::fs::rename(old_b, &new_b).unwrap();
+        let mut app = super::CleanSlateApp::default();
+        app.begin_source_loading(super::SourceRequest::Open(saved));
+        finish_import(&mut app);
+        app.begin_source_loading(super::SourceRequest::Relink(0, new_a));
+        finish_import(&mut app);
+        assert!(
+            app.project.as_ref().unwrap().sources[0].available,
+            "{:?}",
+            app.messages
+        );
+        assert!(!app.project.as_ref().unwrap().sources[1].available);
+        app.begin_source_loading(super::SourceRequest::Relink(1, new_b));
+        finish_import(&mut app);
+        assert!(
+            app.project
+                .as_ref()
+                .unwrap()
+                .sources
+                .iter()
+                .all(|source| source.available)
+        );
+        assert_eq!(app.waveforms.len(), 2);
+        std::fs::remove_dir_all(directory).unwrap();
     }
 
     #[test]
@@ -1128,6 +1190,20 @@ fn load_sources(
 ) -> Result<LoadedSession, String> {
     let mut project = project;
     let opening = matches!(request, SourceRequest::Open(_));
+    let partial_relink = if let SourceRequest::Relink(index, path) = &request {
+        // A replacement can be checked independently while other missing or
+        // changed sources still await the user's relink decisions.
+        validate(std::slice::from_ref(path)).map_err(|error| format!("Import blocked: {error}"))?;
+        project.as_ref().is_some_and(|project| {
+            project
+                .sources
+                .iter()
+                .enumerate()
+                .any(|(other, source)| other != *index && !source.available)
+        })
+    } else {
+        false
+    };
     if let SourceRequest::Open(path) = &request {
         project = Some(Project::open(path).map_err(|error| error.to_string())?);
     }
@@ -1164,7 +1240,7 @@ fn load_sources(
         });
     let mut warnings = Vec::new();
     // A saved session with missing sources must still open so it can be relinked.
-    if opening {
+    if opening || partial_relink {
         if let Err(error) = waveform_result {
             warnings.push(format!("Waveforms unavailable: {error}"));
         }
@@ -1199,9 +1275,13 @@ fn load_sources(
             project
                 .relink(index, path)
                 .map_err(|error| error.to_string())?;
-            project
-                .mark_validated()
-                .map_err(|error| error.to_string())?;
+            if !partial_relink {
+                project
+                    .mark_validated()
+                    .map_err(|error| error.to_string())?;
+            } else {
+                warnings.push("Replacement saved. Relink the remaining unavailable sources to complete validation.".into());
+            }
         }
         SourceRequest::Validate => project
             .as_mut()
@@ -2059,6 +2139,9 @@ impl CleanSlateApp {
                 "Select at least 0.25 seconds. A few seconds is easier to judge by listening."
                     .into(),
             );
+        }
+        if end > self.timeline.total_samples() {
+            return Err("Selected range extends past the end of the recording. Choose times within the waveform.".into());
         }
         Ok((start, end))
     }

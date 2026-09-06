@@ -33,6 +33,10 @@ impl TimelineViewport {
         self.start
     }
 
+    pub fn total_samples(&self) -> usize {
+        self.total_samples
+    }
+
     pub fn visible_samples(&self) -> f64 {
         self.visible
     }
