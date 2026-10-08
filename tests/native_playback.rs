@@ -8,7 +8,9 @@ fn playback_modes_and_seek_share_source_time_on_the_device_grid() {
         .join("tests/fixtures/import/mono96000.wav");
     let prepared =
         PreparedAudio::prepare_for_rate(&[path], 44_100, &AtomicBool::new(false)).unwrap();
-    let envelope = GainEnvelope::constant_at_rate(9_600, 96_000, 0.25).unwrap();
+    // A native-grid envelope ending at 50 ms must expose unity at that physical
+    // boundary, not at device frame 4,800 (approximately 109 ms).
+    let envelope = GainEnvelope::constant_at_rate(4_800, 96_000, 0.25).unwrap();
     let pcm = prepared.read_frames(0..prepared.frame_count()).unwrap();
     let mut source = prepared
         .playback(
@@ -32,12 +34,16 @@ fn playback_modes_and_seek_share_source_time_on_the_device_grid() {
         }
         assert!(std::time::Instant::now() < deadline);
     }
-    source.seek(28_224_000 / 20);
+    source.seek(28_224_000 * 3 / 40);
     source.set_mode(AuditionMode::Removed);
     loop {
         let sample = source.next().unwrap();
-        if source.position_frame() == 2_206 {
-            assert!((sample - pcm[0][2_205] * 0.375).abs() < 1e-6);
+        if source.position_frame() == 3_308 {
+            assert!(
+                pcm[0][3_307].abs() > 1e-5,
+                "fixture must expose an incorrectly retained attenuation"
+            );
+            assert_eq!(sample, 0.0);
             break;
         }
         assert!(std::time::Instant::now() < deadline);
