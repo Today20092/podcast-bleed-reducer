@@ -31,6 +31,15 @@ pub(crate) struct JointFacts {
 }
 
 impl JointFacts {
+    pub(crate) fn acoustic_levels(&self, track: usize) -> &[f32] {
+        &self.levels[track]
+    }
+    pub(crate) fn acoustic_pair(&self, a: usize, b: usize) -> Option<&[f32]> {
+        self.pairs
+            .iter()
+            .find(|pair| (pair.a == a && pair.b == b) || (pair.a == b && pair.b == a))
+            .map(|pair| pair.explained.as_slice())
+    }
     pub(crate) fn retained_bytes(&self) -> usize {
         (self.levels.iter().map(Vec::capacity).sum::<usize>()
             + self.floors.capacity()
@@ -66,7 +75,11 @@ impl JointFacts {
     ) -> Result<Self, RenderBlocker> {
         Self::prepare_blocks(
             tracks.len(),
-            tracks[0].identity.frame_count as usize,
+            tracks
+                .iter()
+                .map(|track| track.identity.frame_count as usize)
+                .max()
+                .unwrap_or(0),
             16_000,
             cancelled,
             |track, start, end| {
@@ -121,7 +134,11 @@ impl JointFacts {
                         })
                         .collect();
                     levels[track].extend(filtered.chunks(BAND_FRAME).map(|frame| {
-                        db(frame.iter().map(|x| x * x).sum::<f32>() / frame.len() as f32)
+                        (10.0
+                            * (frame.iter().map(|&x| f64::from(x).powi(2)).sum::<f64>()
+                                / frame.len() as f64)
+                                .max(1e-12)
+                                .log10()) as f32
                     }));
                     Ok(filtered)
                 })
@@ -402,14 +419,14 @@ fn correlation(a: &[f32], b: &[f32], start: usize, end: usize, lag: isize, step:
     if end.saturating_sub(start) < 32 {
         return 0.0;
     }
-    let (mut xx, mut yy, mut xy) = (0.0_f32, 0.0_f32, 0.0_f32);
+    let (mut xx, mut yy, mut xy) = (0.0_f64, 0.0_f64, 0.0_f64);
     for i in (start..end).step_by(step) {
-        let (x, y) = (a[i], b[(i as isize + lag) as usize]);
+        let (x, y) = (f64::from(a[i]), f64::from(b[(i as isize + lag) as usize]));
         xx += x * x;
         yy += y * y;
         xy += x * y;
     }
-    (xy * xy / (xx * yy).max(1e-30)).clamp(0.0, 1.0)
+    (xy * xy / (xx * yy).max(1e-30)).clamp(0.0, 1.0) as f32
 }
 
 struct BandFilter {

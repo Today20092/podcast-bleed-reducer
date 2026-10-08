@@ -1,3 +1,5 @@
+mod acoustic_transfer;
+mod acoustics;
 mod analysis_audio;
 pub mod app;
 mod audio_io;
@@ -19,6 +21,8 @@ pub mod timeline;
 mod vad;
 mod waveform;
 
+pub use acoustic_transfer::AcousticEstimatorComparison;
+pub use acoustics::*;
 pub use analysis_audio::{
     ANALYSIS_RESAMPLER_RECIPE, ANALYSIS_SAMPLE_RATE, AUDIO_DECODER_RECIPE, AnalysisAudioIdentity,
     PreparedAnalysisAudio, prepare_analysis_audio, prepare_analysis_audio_in,
