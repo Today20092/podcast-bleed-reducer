@@ -55,6 +55,9 @@ impl PreparedAudio {
             .iter()
             .map(|path| {
                 check_cancelled()?;
+                if crate::SourceMetadata::read_cancellable(path, Some(cancelled))?.grid.sample_rate != crate::timebase::DETECTOR_SAMPLE_RATE {
+                    return Err(RenderBlocker("Native-rate audition requires ticket 04 playback preparation; analysis and editing remain available.".into()));
+                }
                 let stem = Stem::read_cancellable(path, Some(cancelled))?;
                 // shortcut: reject mixed-rate audition until ticket 04 prepares a shared device grid.
                 if sample_rate.is_some_and(|rate| rate != stem.format.sample_rate) {
@@ -627,4 +630,10 @@ mod tests {
             assert_eq!(controls.position.load(Ordering::Relaxed), 1400);
         }
     }
+}
+#[test]
+fn native_96khz_audition_requires_the_source_time_adapter() {
+    let source =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/import/mono96000.wav");
+    assert!(PreparedAudio::prepare(&[source], None, &AtomicBool::new(false)).is_err());
 }

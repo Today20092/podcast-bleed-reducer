@@ -1,4 +1,4 @@
-//! Read-only benchmark: preview_benchmark <iterations> [--ownership settings.json] <stem.wav> ...
+//! Read-only benchmark: preview_benchmark <iterations> [--supplied-alignment] [--ownership settings.json] <source> ...
 use rust_app::{AutomixParameters, OwnershipSettings, PreviewCache, Protection};
 use std::{collections::BTreeMap, path::PathBuf, sync::atomic::AtomicU8, time::Instant};
 
@@ -19,6 +19,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .filter(|count| *count > 0)
         .ok_or("usage: preview_benchmark <positive iterations> <stem.wav> [stem.wav ...]")?;
     let mut args = args.peekable();
+    let supplied_alignment = args.peek().is_some_and(|arg| arg == "--supplied-alignment");
+    if supplied_alignment {
+        args.next();
+    }
     let ownership = if args.peek().is_some_and(|arg| arg == "--ownership") {
         args.next();
         serde_json::from_slice::<OwnershipSettings>(&std::fs::read(
@@ -32,7 +36,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if paths.is_empty() {
         return Err("at least one source WAV is required".into());
     }
-    let mut cache = PreviewCache::default();
+    let mut cache = PreviewCache::default().with_supplied_alignment(supplied_alignment);
     let progress = AtomicU8::new(0);
     let mut parameters = AutomixParameters::default();
     let start = Instant::now();

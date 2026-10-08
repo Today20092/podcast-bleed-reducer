@@ -669,9 +669,20 @@ pub struct Protection {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Validation {
     pub warnings: Vec<String>,
+    pub alignment_verified: bool,
+}
+
+impl Validation {
+    pub fn require_alignment(&self, supplied_alignment: bool) -> Result<(), RenderBlocker> {
+        if !self.alignment_verified && !supplied_alignment {
+            return Err(RenderBlocker("alignment unverified: confirm the supplied tracks are synchronized before analysis/export".into()));
+        }
+        Ok(())
+    }
 }
 
 pub struct RunRequest {
+    pub supplied_alignment: bool,
     pub stems: Vec<PathBuf>,
     pub output_dir: PathBuf,
     pub regions: Vec<Region>,
@@ -743,7 +754,31 @@ pub fn run_with_ownership(
     }
     let sources = source_stamps(&request.stems)?;
     validate_calibration(ownership, &sources, None)?;
+    let source_metadata = request
+        .stems
+        .iter()
+        .map(|path| crate::SourceMetadata::read_cancellable(path, request.cancelled.as_deref()))
+        .collect::<Result<Vec<_>, _>>()?;
+    validate_source_metadata(&source_metadata)?.require_alignment(request.supplied_alignment)?;
+    if source_metadata
+        .iter()
+        .any(|source| source.grid.sample_rate != crate::timebase::DETECTOR_SAMPLE_RATE)
+    {
+        return Err(RenderBlocker(
+            "native-rate rendering requires playback/render migration (ticket 04)".into(),
+        ));
+    }
     let (stems, validation) = load_and_validate(&request.stems)?;
+    validation.require_alignment(request.supplied_alignment)?;
+    // shortcut: ticket 04 adds native-rate rendering; never apply the retained 48 kHz renderer at another rate.
+    if stems
+        .iter()
+        .any(|stem| stem.format.sample_rate != crate::timebase::DETECTOR_SAMPLE_RATE)
+    {
+        return Err(RenderBlocker(
+            "native-rate rendering requires playback/render migration (ticket 04)".into(),
+        ));
+    }
     let sample_count = stems[0].samples.len();
     let sample_rate = stems[0].format.sample_rate;
     validate_calibration(ownership, &sources, Some(sample_count))?;
@@ -958,7 +993,26 @@ pub fn run_with_ownership(
 }
 
 pub fn validate(stems: &[PathBuf]) -> Result<Validation, RenderBlocker> {
-    load_and_validate(stems).map(|(_, validation)| validation)
+    validate_cancellable(stems, None)
+}
+
+pub fn validate_cancellable(
+    stems: &[PathBuf],
+    cancelled: Option<&AtomicBool>,
+) -> Result<Validation, RenderBlocker> {
+    if stems.is_empty() || stems.len() > 8 {
+        return Err(RenderBlocker(
+            "session requires one to eight mono tracks".into(),
+        ));
+    }
+    let metadata = stems
+        .iter()
+        .map(|path| {
+            crate::audio_io::decode_chunks(path, cancelled, |_, _| Ok(()))
+                .map(|decoded| decoded.metadata)
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    validate_source_metadata(&metadata)
 }
 
 pub fn analyze_preview(
@@ -966,8 +1020,11 @@ pub fn analyze_preview(
     protections: &[Protection],
     parameters: AutomixParameters,
     progress: Arc<AtomicU8>,
+    supplied_alignment: bool,
 ) -> Result<AnalysisPreview, RenderBlocker> {
-    crate::PreviewCache::default().analyze(stems, protections, parameters, &progress, None)
+    crate::PreviewCache::default()
+        .with_supplied_alignment(supplied_alignment)
+        .analyze(stems, protections, parameters, &progress, None)
 }
 
 pub(crate) fn gain_envelope(
@@ -1098,29 +1155,57 @@ pub(crate) fn load_and_validate(
         .iter()
         .map(|path| Stem::read(path))
         .collect::<Result<_, _>>()?;
-    let sample_count = stems[0].samples.len();
-    if sample_count == 0 {
-        return Err(RenderBlocker("stems contain no audio samples".into()));
-    }
-    if stems.iter().any(|stem| stem.samples.len() != sample_count) {
-        return Err(RenderBlocker("stems have unequal sample counts".into()));
-    }
-    let references: Vec<Option<u64>> = stems
-        .iter()
-        .map(|stem| stem.bext.as_ref().map(|bext| bext.time_reference))
-        .collect();
-    let warnings = if references.iter().all(Option::is_none) {
-        vec!["alignment could not be verified: no stems contain BEXT".into()]
-    } else if references.iter().any(Option::is_none) {
+    let validation =
+        validate_source_metadata(&stems.iter().map(|stem| stem.metadata).collect::<Vec<_>>())?;
+    Ok((stems, validation))
+}
+
+pub(crate) fn validate_source_metadata(
+    sources: &[crate::SourceMetadata],
+) -> Result<Validation, RenderBlocker> {
+    if sources.is_empty() || sources.len() > 8 {
         return Err(RenderBlocker(
-            "mixed BEXT presence prevents alignment verification".into(),
+            "session requires one to eight mono tracks".into(),
         ));
-    } else if references.iter().collect::<HashSet<_>>().len() != 1 {
+    }
+    let first = sources[0].grid;
+    let duration = first.duration()?;
+    for source in sources {
+        if source.channels != 1 || source.grid.frame_count == 0 {
+            return Err(RenderBlocker(
+                "stems contain no audio samples or are not mono".into(),
+            ));
+        }
+        let tolerance = crate::SourceTimebase::new(source.grid.sample_rate, 1)?
+            .duration()?
+            .max(crate::SourceTimebase::new(first.sample_rate, 1)?.duration()?);
+        if source.grid.duration()?.abs_diff(duration) > tolerance {
+            return Err(RenderBlocker("stems have unequal physical durations (unequal sample counts on a shared rate); sources will not be stretched, trimmed or padded".into()));
+        }
+    }
+    if sources
+        .iter()
+        .filter_map(|source| source.timing_origin)
+        .collect::<HashSet<_>>()
+        .len()
+        > 1
+    {
         return Err(RenderBlocker("conflicting BEXT time references".into()));
-    } else {
-        vec![]
-    };
-    Ok((stems, Validation { warnings }))
+    }
+    let alignment_verified = sources
+        .iter()
+        .all(|source| source.timing_origin.is_some() && source.gapless_timing);
+    let mut warnings = Vec::new();
+    if !alignment_verified {
+        warnings.push("alignment unverified: timing metadata is missing; declare that supplied sources are synchronized".into());
+    }
+    if sources.iter().any(|source| !source.gapless_timing) {
+        warnings.push("AAC-LC is not guaranteed gapless: decoded priming/padding is retained. Check decoded onset/duration; conflicting durations cannot be overridden by an alignment declaration.".into());
+    }
+    Ok(Validation {
+        warnings,
+        alignment_verified,
+    })
 }
 
 fn report_regions(

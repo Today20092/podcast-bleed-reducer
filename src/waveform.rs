@@ -1,6 +1,6 @@
 use crate::{
     AnalysisPreview, Decision, RenderBlocker,
-    audio_io::Stem,
+    audio_io::decode_chunks,
     timebase::{Rounding, SourceTimebase, TICKS_PER_SECOND, TimePosition},
     timeline::{TimelineEvent, TimelineViewport},
 };
@@ -16,7 +16,7 @@ use std::{
 };
 
 const BASE_BUCKET: usize = 256;
-const WAVEFORM_CACHE_VERSION: u32 = 1;
+const WAVEFORM_CACHE_VERSION: u32 = 2;
 const ATTENUATION_HATCH_SPACING: f32 = 20.0;
 
 fn processed_peak((min, max): (f32, f32), (low, high): (f32, f32)) -> (f32, f32) {
@@ -86,9 +86,13 @@ impl SourceStamp {
 }
 
 impl WaveformCache {
+    #[cfg(test)]
     fn from_samples(samples: &[f32], sample_rate: u32) -> Self {
+        Self::from_peaks(summarize(samples, BASE_BUCKET), samples.len(), sample_rate)
+    }
+
+    fn from_peaks(mut peaks: Vec<(f32, f32)>, sample_count: usize, sample_rate: u32) -> Self {
         let mut samples_per_bucket = BASE_BUCKET;
-        let mut peaks = summarize(samples, samples_per_bucket);
         let mut levels = vec![WaveformLevel {
             samples_per_bucket,
             peaks: peaks.clone(),
@@ -109,7 +113,7 @@ impl WaveformCache {
             });
         }
         Self {
-            sample_count: samples.len(),
+            sample_count,
             sample_rate,
             levels,
         }
@@ -145,6 +149,7 @@ impl WaveformCache {
     }
 }
 
+#[cfg(test)]
 fn summarize(samples: &[f32], bucket: usize) -> Vec<(f32, f32)> {
     samples
         .chunks(bucket)
@@ -195,8 +200,30 @@ pub(crate) fn load_or_build_progress(
         .iter()
         .enumerate()
         .map(|(index, path)| {
-            let stem = Stem::read(path)?;
-            let waveform = WaveformCache::from_samples(&stem.samples, stem.format.sample_rate);
+            let mut peaks = Vec::new();
+            let mut current = (f32::INFINITY, f32::NEG_INFINITY);
+            let mut used = 0;
+            let decoded = decode_chunks(path, None, |_, samples| {
+                for &sample in samples {
+                    current.0 = current.0.min(sample);
+                    current.1 = current.1.max(sample);
+                    used += 1;
+                    if used == BASE_BUCKET {
+                        peaks.push(current);
+                        current = (f32::INFINITY, f32::NEG_INFINITY);
+                        used = 0;
+                    }
+                }
+                Ok(())
+            })?;
+            if used != 0 {
+                peaks.push(current);
+            }
+            let waveform = WaveformCache::from_peaks(
+                peaks,
+                decoded.metadata.grid.frame_count as usize,
+                decoded.metadata.grid.sample_rate,
+            );
             ready(index, &waveform);
             Ok(waveform)
         })

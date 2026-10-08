@@ -29,7 +29,7 @@ fn warm_edits_match_cold_and_reuse_detector_and_ownership() {
     for path in &paths {
         wav(path, 12_001);
     }
-    let mut cache = PreviewCache::default();
+    let mut cache = PreviewCache::default().with_supplied_alignment(true);
     let mut parameters = AutomixParameters::default();
     let progress = Arc::new(AtomicU8::new(0));
     cache
@@ -54,7 +54,7 @@ fn warm_edits_match_cold_and_reuse_detector_and_ownership() {
         .unwrap();
     assert_eq!(
         warm,
-        analyze_preview(&paths, &protections, parameters, progress.clone()).unwrap()
+        analyze_preview(&paths, &protections, parameters, progress.clone(), true).unwrap()
     );
     assert_eq!(cache.stats().preparations, 1);
     assert_eq!(cache.stats().ownership_derivations, 1);
@@ -66,7 +66,7 @@ fn warm_edits_match_cold_and_reuse_detector_and_ownership() {
         .unwrap();
     assert_eq!(
         warm,
-        analyze_preview(&paths, &protections, parameters, progress).unwrap()
+        analyze_preview(&paths, &protections, parameters, progress, true).unwrap()
     );
     assert_eq!(cache.stats().preparations, 1);
     assert_eq!(cache.stats().ownership_derivations, 2);
@@ -83,7 +83,7 @@ fn ordered_relinked_and_modified_sources_invalidate_preparation() {
     for path in [&a, &b, &c] {
         wav(path, 3073);
     }
-    let mut cache = PreviewCache::default();
+    let mut cache = PreviewCache::default().with_supplied_alignment(true);
     let parameters = AutomixParameters::default();
     let progress = AtomicU8::new(0);
     cache
@@ -128,7 +128,7 @@ fn cancellation_preserves_completed_cache_and_invalid_protections_are_blocked() 
     std::fs::create_dir_all(&root).unwrap();
     let paths = vec![root.join("a.wav")];
     wav(&paths[0], 3073);
-    let mut cache = PreviewCache::default();
+    let mut cache = PreviewCache::default().with_supplied_alignment(true);
     let parameters = AutomixParameters::default();
     let progress = AtomicU8::new(0);
     let cancelled = AtomicBool::new(true);

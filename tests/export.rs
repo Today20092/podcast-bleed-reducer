@@ -43,6 +43,7 @@ fn exports_current_render_with_delivery_names() {
     .unwrap();
     let mut project =
         Project::create(dir.join("episode.cleanslate"), vec![source.clone()]).unwrap();
+    project.set_supplied_alignment(true).unwrap();
     project
         .mark_render_current(render.join("report.json"))
         .unwrap();
@@ -69,6 +70,7 @@ fn current_project(dir: &Path) -> Project {
     )
     .unwrap();
     let mut project = Project::create(dir.join("episode.cleanslate"), vec![source]).unwrap();
+    project.set_supplied_alignment(true).unwrap();
     project
         .mark_render_current(render.join("report.json"))
         .unwrap();

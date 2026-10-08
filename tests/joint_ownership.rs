@@ -15,7 +15,7 @@ fn calibration_edits_reuse_prepared_audio_and_reject_stale_sources() {
     audio.write_frames(&vec![0.0_f32; 48_000]).unwrap();
     audio.end().unwrap();
     let paths = vec![path];
-    let mut cache = PreviewCache::default();
+    let mut cache = PreviewCache::default().with_supplied_alignment(true);
     let progress = AtomicU8::new(0);
     let parameters = AutomixParameters::default();
     cache
@@ -44,6 +44,7 @@ fn calibration_edits_reuse_prepared_audio_and_reject_stale_sources() {
         .analyze_with_ownership(&paths, &[], parameters, &settings, &progress, None)
         .unwrap();
     let cold = PreviewCache::default()
+        .with_supplied_alignment(true)
         .analyze_with_ownership(&paths, &[], parameters, &settings, &progress, None)
         .unwrap();
     assert_eq!(warm, cold);
@@ -138,6 +139,7 @@ fn joint_render_matches_preview_gain_and_reports_settings() {
         end: u64::MAX,
     }];
     let preview = PreviewCache::default()
+        .with_supplied_alignment(true)
         .analyze_with_ownership(
             &paths,
             &protections,
@@ -150,6 +152,7 @@ fn joint_render_matches_preview_gain_and_reports_settings() {
     assert!(preview.envelopes[1].gain_at(72_000) < 0.8);
     let rendered = run_with_ownership(
         RunRequest {
+            supplied_alignment: true,
             stems: paths.clone(),
             output_dir: root.join("render"),
             regions: vec![],

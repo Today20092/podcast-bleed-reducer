@@ -106,6 +106,8 @@ pub struct Project {
     #[serde(skip)]
     path: PathBuf,
     pub sources: Vec<SourceIdentity>,
+    #[serde(default)]
+    supplied_alignment: bool,
     references: Vec<ReferenceLabel>,
     manual_edits: Vec<ManualGainEdit>,
     bound_protections: Vec<BoundProtection>,
@@ -153,6 +155,7 @@ impl Project {
             ticks_per_second: TICKS_PER_SECOND,
             path: path.into(),
             sources,
+            supplied_alignment: false,
             references: vec![],
             manual_edits: vec![],
             bound_protections: vec![],
@@ -576,6 +579,32 @@ impl Project {
     pub fn analysis_recipe(&self) -> Option<&AnalysisRecipe> {
         self.analysis_recipe.as_ref()
     }
+
+    pub fn supplied_alignment(&self) -> bool {
+        self.supplied_alignment
+    }
+
+    pub fn set_supplied_alignment(&mut self, declared: bool) -> io::Result<()> {
+        self.transaction(|next| {
+            if next.supplied_alignment != declared {
+                next.supplied_alignment = declared;
+                next.invalidate("Supplied alignment declaration changed; verify the synchronized source timeline.");
+            }
+            Ok(())
+        })
+    }
+
+    pub fn require_alignment(&self) -> io::Result<()> {
+        crate::engine::validate_source_metadata(
+            &self
+                .sources
+                .iter()
+                .map(|source| source.metadata)
+                .collect::<Vec<_>>(),
+        )
+        .and_then(|validation| validation.require_alignment(self.supplied_alignment))
+        .map_err(io_error)
+    }
     pub fn review_states(&self) -> &BTreeMap<String, ReviewState> {
         &self.review_states
     }
@@ -619,7 +648,8 @@ impl Project {
         for source in &self.sources {
             if !source.available
                 || fingerprint_cancellable(&source.path, cancelled)? != source.fingerprint
-                || SourceMetadata::read(&source.path).map_err(io_error)? != source.metadata
+                || SourceMetadata::read_cancellable(&source.path, cancelled).map_err(io_error)?
+                    != source.metadata
             {
                 return Err(invalid(
                     "Source audio changed; relink and review its bound decisions.",
@@ -856,6 +886,7 @@ impl Project {
             replacement.fingerprint != old.fingerprint || replacement.metadata != old.metadata;
         self.transaction(|next|{
             let id=replacement.track_id;next.sources[index]=replacement;
+            if changed { next.supplied_alignment = false; }
             if changed && !next.pending_rebind.contains(&id){next.pending_rebind.push(id);}
             if changed {next.invalidate("Replacement audio differs; recorded decisions are dormant until explicitly reviewed and rebound.");}
             next.step=WorkflowStep::Validate;Ok(())
@@ -929,6 +960,7 @@ impl Project {
             .collect::<io::Result<Vec<_>>>()?;
         self.transaction(|next| {
             next.sources.extend(sources);
+            next.supplied_alignment = false;
             next.step = WorkflowStep::Process;
             next.invalidate("Session tracks changed; Analyze is required.");
             Ok(())
@@ -970,7 +1002,7 @@ fn invalid_json(error: serde_json::Error) -> io::Error {
 fn fingerprint(path: &Path) -> io::Result<String> {
     fingerprint_cancellable(path, None)
 }
-fn fingerprint_cancellable(
+pub(crate) fn fingerprint_cancellable(
     path: &Path,
     cancelled: Option<&std::sync::atomic::AtomicBool>,
 ) -> io::Result<String> {

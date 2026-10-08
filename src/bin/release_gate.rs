@@ -93,6 +93,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         let output_dir = args[1].clone();
         return match run(RunRequest {
+            supplied_alignment: true,
             stems: args[2..].to_vec(),
             output_dir: output_dir.clone(),
             regions: vec![],
@@ -123,6 +124,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     let started = Instant::now();
     let result = run(RunRequest {
+        supplied_alignment: true,
         stems: stems.clone(),
         output_dir: output_dir.clone(),
         regions: vec![],

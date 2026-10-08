@@ -46,6 +46,7 @@ pub fn validate_export(project: &Project) -> Result<(), RenderBlocker> {
 }
 
 fn delivery_plan(project: &Project) -> Result<Vec<(String, std::path::PathBuf)>, RenderBlocker> {
+    project.require_alignment()?;
     let RenderState::Current { identity } = project.render() else {
         return Err(RenderBlocker(
             "only a current render can be exported".into(),

@@ -74,6 +74,7 @@ fn renders_float_overlap_and_protection_and_round_trips_bext() {
     let progress = Arc::new(AtomicU8::new(0));
     let result = run_with_progress(
         RunRequest {
+            supplied_alignment: true,
             stems: vec![a, b],
             output_dir: root.join("rendered"),
             regions: vec![
@@ -173,6 +174,7 @@ fn renders_one_pcm_stem_and_report_without_touching_source() {
     wav(&source, 1, &[0.5, -0.5], None);
     let original = fs::read(&source).unwrap();
     let result = run(RunRequest {
+        supplied_alignment: true,
         stems: vec![source.clone()],
         output_dir: root.join("rendered"),
         regions: vec![Region {
@@ -195,7 +197,9 @@ fn renders_one_pcm_stem_and_report_without_touching_source() {
     assert!(result.report.exists());
     assert_eq!(
         result.warnings,
-        vec!["alignment could not be verified: no stems contain BEXT"]
+        vec![
+            "alignment unverified: timing metadata is missing; declare that supplied sources are synchronized"
+        ]
     );
     fs::remove_dir_all(root).unwrap();
 }
@@ -213,6 +217,7 @@ fn automixes_silence_and_records_inspectable_evidence() {
     };
     let result = run_with_parameters(
         RunRequest {
+            supplied_alignment: true,
             stems: vec![source],
             output_dir: root.join("rendered"),
             regions: vec![],
@@ -253,6 +258,7 @@ fn blocks_empty_stems_instead_of_panicking() {
     let source = root.join("empty.wav");
     wav(&source, 3, &[], Some(42));
     let error = run(RunRequest {
+        supplied_alignment: true,
         stems: vec![source],
         output_dir: root.join("rendered"),
         regions: vec![],
@@ -272,6 +278,7 @@ fn blocks_invalid_owner_sets() {
     let source = root.join("voice.wav");
     wav(&source, 3, &[0.25; 10], Some(42));
     let error = run(RunRequest {
+        supplied_alignment: true,
         stems: vec![source],
         output_dir: root.join("rendered"),
         regions: vec![Region {
@@ -304,6 +311,7 @@ fn blocks_bad_alignment_and_cleans_up_failure_and_cancellation() {
     wav(&b, 1, &[0.0; 10], None);
     let output = root.join("rendered");
     let error = run(RunRequest {
+        supplied_alignment: false,
         stems: vec![a.clone(), b.clone()],
         output_dir: output.clone(),
         regions: vec![],
@@ -311,7 +319,7 @@ fn blocks_bad_alignment_and_cleans_up_failure_and_cancellation() {
         cancelled: None,
     })
     .unwrap_err();
-    assert!(error.to_string().contains("mixed BEXT"));
+    assert!(error.to_string().contains("alignment unverified"));
     assert!(!output.exists());
 
     wav(&a, 1, &vec![0.0; 1_000_000], Some(1));
@@ -324,6 +332,7 @@ fn blocks_bad_alignment_and_cleans_up_failure_and_cancellation() {
         fs::create_dir(blocked_second_stem).unwrap();
     });
     let error = run(RunRequest {
+        supplied_alignment: true,
         stems: vec![a.clone(), b.clone()],
         output_dir: output.clone(),
         regions: vec![],
@@ -343,6 +352,7 @@ fn blocks_bad_alignment_and_cleans_up_failure_and_cancellation() {
         cancel.store(true, std::sync::atomic::Ordering::Relaxed);
     });
     let error = run(RunRequest {
+        supplied_alignment: true,
         stems: vec![a, b],
         output_dir: output.clone(),
         regions: vec![],

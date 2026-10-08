@@ -50,41 +50,81 @@ impl JointFacts {
         tracks: &[&[f32]],
         cancelled: Option<&AtomicBool>,
     ) -> Result<Self, RenderBlocker> {
-        let frames = tracks[0].len().div_ceil(FRAME);
-        let mut levels = vec![Vec::with_capacity(frames); tracks.len()];
-        let mut pairs: Vec<_> = (0..tracks.len())
+        Self::prepare_blocks(
+            tracks.len(),
+            tracks[0].len(),
+            48_000,
+            cancelled,
+            |track, start, end| Ok(tracks[track][start..end].to_vec()),
+        )
+    }
+
+    pub(crate) fn prepare_analysis_tracks(
+        tracks: &[crate::PreparedAnalysisAudio],
+        cancelled: Option<&AtomicBool>,
+    ) -> Result<Self, RenderBlocker> {
+        Self::prepare_blocks(
+            tracks.len(),
+            tracks[0].identity.frame_count as usize,
+            16_000,
+            cancelled,
+            |track, start, end| {
+                let available = tracks[track].identity.frame_count as usize;
+                let mut samples =
+                    tracks[track].read_frames(start.min(available)..end.min(available))?;
+                // Analysis-only boundary extension, never a change to source PCM.
+                samples.resize(end - start, 0.0);
+                Ok(samples)
+            },
+        )
+    }
+
+    fn prepare_blocks(
+        track_count: usize,
+        sample_count: usize,
+        sample_rate: u32,
+        cancelled: Option<&AtomicBool>,
+        mut read: impl FnMut(usize, usize, usize) -> Result<Vec<f32>, RenderBlocker>,
+    ) -> Result<Self, RenderBlocker> {
+        let source_frame = sample_rate as usize * 32 / 1000;
+        let decimation = sample_rate as usize / 8_000;
+        let frames = sample_count.div_ceil(source_frame);
+        let mut levels = vec![Vec::with_capacity(frames); track_count];
+        let mut pairs: Vec<_> = (0..track_count)
             .flat_map(|a| {
-                (a + 1..tracks.len()).map(move |b| PairFacts {
+                (a + 1..track_count).map(move |b| PairFacts {
                     a,
                     b,
                     explained: Vec::with_capacity(frames),
                 })
             })
             .collect();
-        let mut filters: Vec<_> = tracks.iter().map(|_| BandFilter::new()).collect();
+        let mut filters: Vec<_> = (0..track_count)
+            .map(|_| BandFilter::new(sample_rate))
+            .collect();
         // Only a 256 ms filtered block is live. No full-session sidechain PCM.
-        for start in (0..tracks[0].len()).step_by(FRAME * BLOCK_FRAMES) {
+        for start in (0..sample_count).step_by(source_frame * BLOCK_FRAMES) {
             check_cancelled(cancelled)?;
-            let end = (start + FRAME * BLOCK_FRAMES).min(tracks[0].len());
-            let band: Vec<Vec<f32>> = tracks
-                .iter()
-                .zip(&mut filters)
+            let end = (start + source_frame * BLOCK_FRAMES).min(sample_count);
+            let band: Vec<Vec<f32>> = filters
+                .iter_mut()
                 .enumerate()
-                .map(|(track, (samples, filter))| {
-                    let filtered: Vec<_> = samples[start..end]
+                .map(|(track, filter)| -> Result<Vec<f32>, RenderBlocker> {
+                    let samples = read(track, start, end)?;
+                    let filtered: Vec<_> = samples
                         .iter()
                         .enumerate()
                         .filter_map(|(i, &x)| {
                             let y = filter.sample(x);
-                            (i % DECIMATION == 0).then_some(y)
+                            (i % decimation == 0).then_some(y)
                         })
                         .collect();
                     levels[track].extend(filtered.chunks(BAND_FRAME).map(|frame| {
                         db(frame.iter().map(|x| x * x).sum::<f32>() / frame.len() as f32)
                     }));
-                    filtered
+                    Ok(filtered)
                 })
-                .collect();
+                .collect::<Result<_, _>>()?;
             if band.iter().flatten().any(|x| !x.is_finite()) {
                 return Err(RenderBlocker(
                     "speech-band preparation produced nonfinite evidence".into(),
@@ -121,7 +161,7 @@ impl JointFacts {
             levels,
             floors,
             pairs,
-            leakage: vec![vec![None; tracks.len()]; tracks.len()],
+            leakage: vec![vec![None; track_count]; track_count],
         };
         for pair in &result.pairs {
             for (source, target) in [(pair.a, pair.b), (pair.b, pair.a)] {
@@ -376,10 +416,10 @@ struct BandFilter {
     low: Biquad,
 }
 impl BandFilter {
-    fn new() -> Self {
+    fn new(sample_rate: u32) -> Self {
         Self {
-            high: Biquad::new(150.0, true),
-            low: Biquad::new(3000.0, false),
+            high: Biquad::new(150.0, true, sample_rate),
+            low: Biquad::new(3000.0, false, sample_rate),
         }
     }
     fn sample(&mut self, x: f32) -> f32 {
@@ -392,8 +432,8 @@ struct Biquad {
     state: [f32; 2],
 }
 impl Biquad {
-    fn new(hz: f32, high: bool) -> Self {
-        let w = std::f32::consts::TAU * hz / 48_000.0;
+    fn new(hz: f32, high: bool, sample_rate: u32) -> Self {
+        let w = std::f32::consts::TAU * hz / sample_rate as f32;
         let c = w.cos();
         let alpha = w.sin() / 2.0_f32.sqrt();
         let b = if high {

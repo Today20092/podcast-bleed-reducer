@@ -1,7 +1,7 @@
 //! Validated source facts retained without PCM; one cache belongs to one editor session.
 use crate::{
     AnalysisPreview, AutomixParameters, OwnershipSettings, Protection, Region, RenderBlocker,
-    engine::{gain_envelope, load_and_validate},
+    engine::{gain_envelope, validate_source_metadata},
     joint_detector::JointFacts,
     vad,
     waveform::SourceStamp,
@@ -16,6 +16,8 @@ use std::{
 
 #[derive(Debug)]
 pub(crate) struct DetectorFacts {
+    /// Temporary 48 kHz envelope-coordinate adapter; evidence itself uses 16 kHz.
+    /// This is never the native source frame count.
     pub sample_count: usize,
     pub probabilities: Vec<Vec<f32>>,
     pub energies: Vec<Vec<f32>>,
@@ -25,7 +27,8 @@ pub(crate) struct DetectorFacts {
 #[derive(Debug)]
 struct PreparedAnalysis {
     sources: Vec<SourceStamp>,
-    preparation_id: &'static str,
+    audio_identities: Vec<crate::AnalysisAudioIdentity>,
+    preparation_id: (&'static str, &'static str),
     facts: DetectorFacts,
     joint: JointFacts,
     feature_millis: u128,
@@ -49,13 +52,20 @@ pub struct PreviewCacheStats {
 /// Cheap to clone for a worker: detector facts and ownership are immutable and shared.
 #[derive(Clone, Debug, Default)]
 pub struct PreviewCache {
-    preprocessing: vad::Preprocessing,
+    supplied_alignment: bool,
     prepared: Option<Arc<PreparedAnalysis>>,
     ownership: Option<(AutomixParameters, OwnershipSettings, Arc<Vec<Region>>)>,
     stats: PreviewCacheStats,
 }
 
 impl PreviewCache {
+    pub fn with_supplied_alignment(mut self, declared: bool) -> Self {
+        self.set_supplied_alignment(declared);
+        self
+    }
+    pub fn set_supplied_alignment(&mut self, declared: bool) {
+        self.supplied_alignment = declared;
+    }
     pub(crate) fn requires_source_validation(
         &self,
         paths: &[PathBuf],
@@ -119,31 +129,33 @@ impl PreviewCache {
         let sources = source_stamps(paths)?;
         validate_calibration(ownership, &sources, None)?;
         if self.prepared.as_ref().is_none_or(|prepared| {
-            prepared.sources != sources || prepared.preparation_id != self.preprocessing.identity()
+            prepared.sources != sources
+                || prepared.preparation_id
+                    != (
+                        crate::AUDIO_DECODER_RECIPE,
+                        crate::ANALYSIS_RESAMPLER_RECIPE,
+                    )
         }) {
             self.prepared = None;
             self.ownership = None;
             progress.store(5, Ordering::Relaxed);
-            let (stems, _) = load_and_validate(paths)?;
-            validate_calibration(ownership, &sources, Some(stems[0].samples.len()))?;
+            // Sequential bounded decoding/resampling; only disk artifact handles remain live.
+            let tracks = paths
+                .iter()
+                .map(|path| crate::prepare_analysis_audio(path, cancelled))
+                .collect::<Result<Vec<_>, _>>()?;
+            let metadata = tracks
+                .iter()
+                .map(|track| track.identity.source)
+                .collect::<Vec<_>>();
+            validate_source_metadata(&metadata)?.require_alignment(self.supplied_alignment)?;
+            let duration = metadata[0].grid.duration()?;
+            let sample_count = crate::timebase::detector_frame(duration, crate::Rounding::Ceil)?;
+            validate_calibration(ownership, &sources, Some(sample_count))?;
             check_cancelled(cancelled)?;
-            let facts = vad::prepare(
-                &stems
-                    .iter()
-                    .map(|stem| stem.samples.as_slice())
-                    .collect::<Vec<_>>(),
-                progress,
-                cancelled,
-                self.preprocessing,
-            )?;
+            let facts = vad::prepare_analysis_tracks(&tracks, sample_count, progress, cancelled)?;
             let started = std::time::Instant::now();
-            let joint = JointFacts::prepare(
-                &stems
-                    .iter()
-                    .map(|s| s.samples.as_slice())
-                    .collect::<Vec<_>>(),
-                cancelled,
-            )?;
+            let joint = JointFacts::prepare_analysis_tracks(&tracks, cancelled)?;
             let feature_millis = started.elapsed().as_millis();
             if source_stamps(paths)? != sources {
                 return Err(RenderBlocker(
@@ -155,13 +167,25 @@ impl PreviewCache {
             self.stats.inference_frames += facts.probabilities.iter().map(Vec::len).sum::<usize>();
             self.prepared = Some(Arc::new(PreparedAnalysis {
                 sources: sources.clone(),
-                preparation_id: self.preprocessing.identity(),
+                audio_identities: tracks.into_iter().map(|track| track.identity).collect(),
+                preparation_id: (
+                    crate::AUDIO_DECODER_RECIPE,
+                    crate::ANALYSIS_RESAMPLER_RECIPE,
+                ),
                 facts,
                 joint,
                 feature_millis,
             }));
         }
         let prepared = self.prepared.as_ref().unwrap();
+        validate_source_metadata(
+            &prepared
+                .audio_identities
+                .iter()
+                .map(|identity| identity.source)
+                .collect::<Vec<_>>(),
+        )?
+        .require_alignment(self.supplied_alignment)?;
         let sample_count = prepared.facts.sample_count;
         validate_calibration(ownership, &sources, Some(sample_count))?;
         if protections.iter().any(|p| {
@@ -295,46 +319,5 @@ pub fn preview_stage(progress: u8) -> &'static str {
         70..=79 => "Updating ownership",
         80..=99 => "Updating gain curves",
         _ => "Preview ready",
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn preprocessing_change_invalidates_detector_and_ownership_then_restores_legacy() {
-        use bwavfile::{WaveFmt, WaveWriter};
-        let path =
-            std::env::temp_dir().join(format!("detector-identity-{}.wav", std::process::id()));
-        let writer = WaveWriter::create(&path, WaveFmt::new_pcm_mono(48_000, 16)).unwrap();
-        let mut frames = writer.audio_frame_writer().unwrap();
-        frames.write_frames(&vec![0.0_f32; 3_073]).unwrap();
-        frames.end().unwrap();
-        let mut cache = PreviewCache::default();
-        let progress = AtomicU8::new(0);
-        let paths = std::slice::from_ref(&path);
-        let parameters = AutomixParameters::default();
-        let legacy = cache
-            .analyze(paths, &[], parameters, &progress, None)
-            .unwrap();
-        cache.preprocessing = vad::Preprocessing::AntiAlias;
-        cache
-            .analyze(paths, &[], parameters, &progress, None)
-            .unwrap();
-        cache
-            .analyze(paths, &[], parameters, &progress, None)
-            .unwrap();
-        assert_eq!(cache.stats().preparations, 2);
-        assert_eq!(cache.stats().ownership_derivations, 2);
-        cache.preprocessing = vad::Preprocessing::Legacy;
-        assert_eq!(
-            legacy,
-            cache
-                .analyze(paths, &[], parameters, &progress, None)
-                .unwrap()
-        );
-        assert_eq!(cache.stats().preparations, 3);
-        std::fs::remove_file(path).unwrap();
     }
 }

@@ -66,7 +66,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut default_gates_no_padding = default_gates;
     default_gates_no_padding.speech_padding_ms = 0.0;
     let guided = project.ownership_settings().clone();
-    let mut cache = PreviewCache::default();
+    project.require_alignment()?;
+    let mut cache = PreviewCache::default().with_supplied_alignment(project.supplied_alignment());
     let progress = AtomicU8::new(0);
     let mut modes = Vec::new();
     for (name, parameters, settings) in [

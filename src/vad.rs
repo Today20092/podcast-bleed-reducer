@@ -20,6 +20,7 @@ pub(crate) enum Preprocessing {
 }
 
 impl Preprocessing {
+    // Recipe labels for the frozen-detector comparison path, not editor preparation.
     pub(crate) fn identity(self) -> &'static str {
         match self {
             Self::Legacy => "silero-v5-1A153A22/stride3-rms1536-v1",
@@ -216,26 +217,91 @@ fn silero(
     preprocessing: Preprocessing,
     mut checkpoint: impl FnMut(usize) -> Result<(), RenderBlocker>,
 ) -> Result<Vec<f32>, RenderBlocker> {
-    checkpoint(0)?;
+    let filter = (preprocessing == Preprocessing::AntiAlias).then(AntiAlias::new);
+    silero_frames(frame_count, |frame| {
+        checkpoint(frame)?;
+        let offset = frame * SOURCE_FRAME;
+        Ok((0..MODEL_FRAME)
+            .map(|index| {
+                let center = offset + index * 3;
+                if let Some(filter) = &filter {
+                    filter.sample(samples, center)
+                } else {
+                    samples.get(center).copied().unwrap_or(0.0)
+                }
+            })
+            .collect())
+    })
+}
+
+pub(crate) fn prepare_analysis_tracks(
+    tracks: &[crate::PreparedAnalysisAudio],
+    sample_count: usize,
+    progress: &AtomicU8,
+    cancelled: Option<&AtomicBool>,
+) -> Result<DetectorFacts, RenderBlocker> {
+    use std::io::Read;
+    let frame_count = sample_count.div_ceil(SOURCE_FRAME);
+    let mut probabilities = Vec::with_capacity(tracks.len());
+    let mut energies = Vec::with_capacity(tracks.len());
+    for (track, source) in tracks.iter().enumerate() {
+        let file = std::fs::File::open(source.path()).map_err(|e| RenderBlocker(e.to_string()))?;
+        let mut reader = std::io::BufReader::new(file);
+        let mut remaining = source.identity.frame_count as usize;
+        let mut energy = Vec::with_capacity(frame_count);
+        probabilities.push(silero_frames(frame_count, |frame| {
+            check_cancelled(cancelled)?;
+            progress.store(
+                (20 + 50 * (track * frame_count + frame) / (tracks.len() * frame_count)) as u8,
+                Ordering::Relaxed,
+            );
+            let count = remaining.min(MODEL_FRAME);
+            let mut bytes = [0_u8; MODEL_FRAME * 4];
+            reader
+                .read_exact(&mut bytes[..count * 4])
+                .map_err(|e| RenderBlocker(e.to_string()))?;
+            remaining -= count;
+            let samples: Vec<f32> = bytes
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .map(|b| f32::from_le_bytes(*b))
+                .collect();
+            let power = samples[..count].iter().map(|s| s * s).sum::<f32>() / count.max(1) as f32;
+            energy.push(10.0 * power.max(1e-20).log10());
+            Ok(samples)
+        })?);
+        energies.push(energy);
+    }
+    let noise_floors = energies
+        .iter()
+        .map(|track| {
+            let mut sorted = track.clone();
+            sorted.sort_by(f32::total_cmp);
+            sorted[sorted.len() / 5]
+        })
+        .collect();
+    Ok(DetectorFacts {
+        sample_count,
+        probabilities,
+        energies,
+        noise_floors,
+    })
+}
+
+fn silero_frames(
+    frame_count: usize,
+    mut frame_samples: impl FnMut(usize) -> Result<Vec<f32>, RenderBlocker>,
+) -> Result<Vec<f32>, RenderBlocker> {
     let mut session = Session::builder()
         .and_then(|builder| builder.commit_from_memory(MODEL))
         .map_err(|error| RenderBlocker(format!("Silero detector could not start: {error}")))?;
     let mut state = vec![0.0_f32; 256];
     let mut context = vec![0.0_f32; CONTEXT];
     let mut probabilities = Vec::with_capacity(frame_count);
-    let filter = (preprocessing == Preprocessing::AntiAlias).then(AntiAlias::new);
-    for (frame, source) in samples.chunks(SOURCE_FRAME).enumerate() {
-        checkpoint(frame)?;
+    for frame in 0..frame_count {
         let mut audio = context.clone();
-        audio.extend((0..MODEL_FRAME).map(|index| {
-            if index * 3 >= source.len() {
-                0.0
-            } else if let Some(filter) = &filter {
-                filter.sample(samples, frame * SOURCE_FRAME + index * 3)
-            } else {
-                source[index * 3]
-            }
-        }));
+        audio.extend(frame_samples(frame)?);
         context.copy_from_slice(&audio[MODEL_FRAME..]);
         let outputs = session
             .run(inputs![

@@ -1,3 +1,4 @@
+mod analysis_audio;
 pub mod app;
 mod audio_io;
 mod audition;
@@ -6,6 +7,7 @@ pub mod detector_quality;
 mod engine;
 mod export;
 mod joint_detector;
+mod media;
 pub mod model;
 mod prepared_analysis;
 mod project;
@@ -16,6 +18,10 @@ pub mod timeline;
 mod vad;
 mod waveform;
 
+pub use analysis_audio::{
+    ANALYSIS_RESAMPLER_RECIPE, ANALYSIS_SAMPLE_RATE, AUDIO_DECODER_RECIPE, AnalysisAudioIdentity,
+    PreparedAnalysisAudio, prepare_analysis_audio, prepare_analysis_audio_in,
+};
 pub use audio_io::SourceMetadata;
 pub use calibration::{CalibrationExample, CalibrationKind, OwnershipSettings};
 pub use engine::*;

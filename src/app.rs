@@ -61,6 +61,14 @@ fn available_project_path(directory: &std::path::Path) -> PathBuf {
 
 #[cfg(test)]
 mod tests {
+    fn synchronized_project(
+        path: impl Into<std::path::PathBuf>,
+        sources: Vec<std::path::PathBuf>,
+    ) -> std::io::Result<crate::Project> {
+        let mut project = crate::Project::create(path, sources)?;
+        project.set_supplied_alignment(true)?;
+        Ok(project)
+    }
     #[test]
     fn completed_render_cannot_replace_changed_session() {
         for change in 0..8 {
@@ -72,7 +80,7 @@ mod tests {
             let source = directory.join("voice.wav");
             write_wav(&source, &vec![0.0; 48_000]);
             let project =
-                crate::Project::create(directory.join("episode.cleanslate"), vec![source.clone()])
+                synchronized_project(directory.join("episode.cleanslate"), vec![source.clone()])
                     .unwrap();
             let snapshot = super::RenderSnapshot::read(&project).unwrap();
             assert!(super::RenderSnapshot::read(&project).unwrap() == snapshot);
@@ -106,7 +114,7 @@ mod tests {
                 2 => write_wav(&source, &[0.0; 3073]),
                 3 => app.project = None,
                 4 => {
-                    let mut other = crate::Project::create(
+                    let mut other = synchronized_project(
                         directory.join("other.cleanslate"),
                         vec![source.clone()],
                     )
@@ -169,7 +177,7 @@ mod tests {
         write_wav(&source, &vec![0.0; 48_000]);
         let mut app = super::CleanSlateApp {
             project: Some(
-                crate::Project::create(directory.join("episode.cleanslate"), vec![source]).unwrap(),
+                synchronized_project(directory.join("episode.cleanslate"), vec![source]).unwrap(),
             ),
             ..Default::default()
         };
@@ -244,7 +252,7 @@ mod tests {
         write_wav(&source, &vec![0.0; 48_000]);
         let mut app = super::CleanSlateApp {
             project: Some(
-                crate::Project::create(directory.join("episode.cleanslate"), vec![source]).unwrap(),
+                synchronized_project(directory.join("episode.cleanslate"), vec![source]).unwrap(),
             ),
             ..Default::default()
         };
@@ -327,8 +335,7 @@ mod tests {
         let path = directory.join("voice.wav");
         write_wav(&path, &[0.0; 3073]);
         let mut project =
-            crate::Project::create(directory.join("episode.cleanslate"), vec![path.clone()])
-                .unwrap();
+            synchronized_project(directory.join("episode.cleanslate"), vec![path.clone()]).unwrap();
         project
             .protect_range(
                 crate::timebase::detector_time(1600),
@@ -397,7 +404,7 @@ mod tests {
         write_wav(&path, &[0.0; 1537]);
         let mut app = super::CleanSlateApp {
             project: Some(
-                crate::Project::create(directory.join("episode.cleanslate"), vec![path]).unwrap(),
+                synchronized_project(directory.join("episode.cleanslate"), vec![path]).unwrap(),
             ),
             ..Default::default()
         };
@@ -489,7 +496,7 @@ mod tests {
         write_wav(&path, &[0.0; 1537]);
         let mut app = super::CleanSlateApp {
             project: Some(
-                crate::Project::create(directory.join("episode.cleanslate"), vec![path.clone()])
+                synchronized_project(directory.join("episode.cleanslate"), vec![path.clone()])
                     .unwrap(),
             ),
             ..Default::default()
@@ -530,6 +537,7 @@ mod tests {
         let track = project.sources[0].track_id;
         project.relink(0, path.clone()).unwrap();
         project.review_and_rebind_source(track).unwrap();
+        project.set_supplied_alignment(true).unwrap();
         app.start_preview();
         while app.preview_processing.is_some() || app.preview_pending.is_some() {
             app.poll_processing();
@@ -586,7 +594,7 @@ mod tests {
         write_wav(&path, &[0.0; 1537]);
         let mut app = super::CleanSlateApp {
             project: Some(
-                crate::Project::create(directory.join("episode.cleanslate"), vec![path.clone()])
+                synchronized_project(directory.join("episode.cleanslate"), vec![path.clone()])
                     .unwrap(),
             ),
             ..Default::default()
@@ -684,7 +692,7 @@ mod tests {
         write_wav(&path, &vec![0.0; 48_000]);
         let mut app = super::CleanSlateApp {
             project: Some(
-                crate::Project::create(directory.join("episode.cleanslate"), vec![path.clone()])
+                synchronized_project(directory.join("episode.cleanslate"), vec![path.clone()])
                     .unwrap(),
             ),
             ..Default::default()
@@ -748,6 +756,7 @@ mod tests {
         let track = project.sources[0].track_id;
         project.relink(0, path.clone()).unwrap();
         project.review_and_rebind_source(track).unwrap();
+        project.set_supplied_alignment(true).unwrap();
         app.start_preview();
         wait(&mut app);
         assert_eq!(app.preview_cache.stats().preparations, 2);
@@ -880,7 +889,7 @@ mod tests {
         std::fs::create_dir_all(&directory).unwrap();
         let mut app = super::CleanSlateApp {
             project: Some(
-                crate::Project::create(directory.join("benchmark.cleanslate"), vec![]).unwrap(),
+                synchronized_project(directory.join("benchmark.cleanslate"), vec![]).unwrap(),
             ),
             ..Default::default()
         };
@@ -1020,7 +1029,7 @@ mod tests {
         write_wav(&old_a, &[0.0; 16]);
         write_wav(&old_b, &[0.0; 16]);
         let saved = directory.join("session.cleanslate");
-        crate::Project::create(&saved, vec![old_a.clone(), old_b.clone()]).unwrap();
+        synchronized_project(&saved, vec![old_a.clone(), old_b.clone()]).unwrap();
         std::fs::rename(old_a, &new_a).unwrap();
         std::fs::rename(old_b, &new_b).unwrap();
         let mut app = super::CleanSlateApp::default();
@@ -1090,7 +1099,7 @@ mod tests {
         write_wav(&source, &[0.0; 100]);
         let mut app = super::CleanSlateApp {
             project: Some(
-                crate::Project::create(directory.join("episode.cleanslate"), vec![source.clone()])
+                synchronized_project(directory.join("episode.cleanslate"), vec![source.clone()])
                     .unwrap(),
             ),
             ..Default::default()
@@ -1137,7 +1146,7 @@ mod tests {
         frames.end().unwrap();
         std::fs::write(&report, br#"{"output":{"stems":["01-voice.wav"]}}"#).unwrap();
         let mut project =
-            crate::Project::create(directory.join("episode.cleanslate"), vec![source.clone()])
+            synchronized_project(directory.join("episode.cleanslate"), vec![source.clone()])
                 .unwrap();
         project.mark_render_current(&report).unwrap();
         let mut app = super::CleanSlateApp {
@@ -1456,6 +1465,7 @@ enum Message {
     DownloadModel,
     VerifyModel,
     CancelModelDownload,
+    SuppliedAlignment(bool),
     ImportStems,
     OpenProject,
     FileDropped(PathBuf),
@@ -1717,7 +1727,12 @@ impl CleanSlateApp {
     fn import_stems(&mut self) {
         let Some(paths) = rfd::FileDialog::new()
             .set_directory(dialog_start_directory())
-            .add_filter("WAV audio", &["wav"])
+            .add_filter(
+                "Mono audio",
+                &[
+                    "wav", "bwf", "aif", "aiff", "flac", "mp3", "m4a", "mp4", "ogg",
+                ],
+            )
             .pick_files()
         else {
             return;
@@ -1804,6 +1819,10 @@ impl CleanSlateApp {
             return;
         }
         let Some(project) = &self.project else { return };
+        if let Err(error) = project.require_alignment() {
+            self.messages = vec![format!("Final render blocked: {error}")];
+            return;
+        }
         let snapshot = match RenderSnapshot::read(project) {
             Ok(snapshot) => snapshot,
             Err(error) => {
@@ -1839,6 +1858,7 @@ impl CleanSlateApp {
                 .and_then(|_| {
                     run_with_ownership(
                         RunRequest {
+                            supplied_alignment: source_project.supplied_alignment(),
                             stems,
                             output_dir,
                             regions: vec![],
@@ -1907,6 +1927,10 @@ impl CleanSlateApp {
         self.preview_pending = None;
         self.preview_generation += 1;
         let Some(project) = &self.project else { return };
+        if let Err(error) = project.require_alignment() {
+            self.preview_error = Some(error.to_string());
+            return;
+        }
         let stems = project.source_paths();
         let sources = match source_stamps(&stems) {
             Ok(sources) => sources,
@@ -1923,6 +1947,7 @@ impl CleanSlateApp {
         let cancelled = Arc::new(AtomicBool::new(false));
         let worker_cancelled = Arc::clone(&cancelled);
         let mut cache = self.preview_cache.clone();
+        cache.set_supplied_alignment(project.supplied_alignment());
         let source_project = project.clone();
         let (sender, result) = mpsc::channel();
         std::thread::spawn(move || {
@@ -2322,10 +2347,13 @@ impl CleanSlateApp {
             Message::ImportStems => self.import_stems(),
             Message::OpenProject => self.open_project(),
             Message::FileDropped(path) => {
-                if path
-                    .extension()
-                    .is_some_and(|extension| extension.eq_ignore_ascii_case("wav"))
-                {
+                if path.extension().is_some_and(|extension| {
+                    [
+                        "wav", "bwf", "aif", "aiff", "flac", "mp3", "m4a", "mp4", "ogg",
+                    ]
+                    .iter()
+                    .any(|supported| extension.eq_ignore_ascii_case(supported))
+                }) {
                     self.add_stems([path]);
                 } else {
                     self.messages = vec![format!("Ignored non-WAV file: {}", path.display())];
@@ -2341,13 +2369,27 @@ impl CleanSlateApp {
                     .unwrap_or_else(dialog_start_directory);
                 if let Some(path) = rfd::FileDialog::new()
                     .set_directory(start)
-                    .add_filter("WAV audio", &["wav"])
+                    .add_filter(
+                        "Mono audio",
+                        &[
+                            "wav", "bwf", "aif", "aiff", "flac", "mp3", "m4a", "mp4", "ogg",
+                        ],
+                    )
                     .pick_file()
                 {
                     self.begin_source_loading(SourceRequest::Relink(index, path));
                 }
             }
             Message::Validate => self.validate(),
+            Message::SuppliedAlignment(declared) => {
+                if let Some(project) = &mut self.project {
+                    if let Err(error) = project.set_supplied_alignment(declared) {
+                        self.messages = vec![error.to_string()];
+                    } else {
+                        self.start_preview();
+                    }
+                }
+            }
             Message::Process => self.start_processing(),
             Message::Cancel => {
                 if let Some(processing) = &self.processing {
@@ -2882,6 +2924,14 @@ impl CleanSlateApp {
                     .width(Fill)
                     .style(container::bordered_box),
                 );
+            }
+            timeline_content = timeline_content.push(
+                iced::widget::checkbox(project.supplied_alignment())
+                    .label("I supplied synchronized tracks")
+                    .on_toggle(Message::SuppliedAlignment),
+            );
+            if let Err(error) = project.require_alignment() {
+                timeline_content = timeline_content.push(text(error.to_string()));
             }
             match current {
                 WorkflowStep::Import => {}
