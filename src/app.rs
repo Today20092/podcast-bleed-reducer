@@ -1,7 +1,7 @@
 use crate::{
-    AnalysisPreview, AutomixParameters, CalibrationExample, CalibrationKind, Comparison,
-    OwnershipSettings, PreviewCache, Project, RenderState, ReviewState, ReviewWorkspace,
-    RunRequest, WorkflowStep,
+    AnalysisPreview, AutomixParameters, CalibrationKind, Comparison, OwnershipSettings,
+    PreviewCache, Project, RenderState, ReviewState, ReviewWorkspace, RunRequest, SpeakerId,
+    TimeRange, WorkflowStep,
     audition::{AuditionMode, AuditionPreparation, LiveAudition},
     export,
     prepared_analysis::source_stamps,
@@ -69,6 +69,71 @@ mod tests {
         project.set_supplied_alignment(true)?;
         Ok(project)
     }
+    #[test]
+    fn explicit_reference_analyze_can_start_without_a_completed_preview() {
+        let directory = std::env::temp_dir().join(format!(
+            "cleanslate-first-label-preview-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&directory).unwrap();
+        let source = directory.join("speaker.wav");
+        write_wav(&source, &vec![0.0; 48_000]);
+        let mut app = super::CleanSlateApp {
+            project: Some(
+                crate::Project::create(directory.join("session.cleanslate"), vec![source]).unwrap(),
+            ),
+            ..Default::default()
+        };
+        app.project
+            .as_mut()
+            .unwrap()
+            .set_supplied_alignment(true)
+            .unwrap();
+        app.mark_reference_edit();
+        app.start_preview();
+        assert!(app.preview_processing.is_none() && app.preview_pending.is_none());
+        let _ = app.update(super::Message::AnalyzeReferences);
+        assert!(app.preview_processing.is_some() || app.preview_pending.is_some());
+        assert!(
+            app.reference_stale,
+            "An Analyze request must not declare success before completion"
+        );
+        if let Some(job) = app.preview_processing.take() {
+            job.cancelled.store(true, super::Ordering::Relaxed);
+        }
+        let project = app.project.as_mut().unwrap();
+        project
+            .add_reference_label(
+                crate::TimeRange::new(0, crate::TICKS_PER_SECOND / 4).unwrap(),
+                vec![],
+                &[],
+            )
+            .unwrap();
+        let project_path = project.path().to_path_buf();
+        app.install_waveforms(vec![]);
+        assert!(
+            app.reference_stale,
+            "Source installation must preserve authoritative label staleness"
+        );
+        app.project = Some(crate::Project::open(project_path).unwrap());
+        app.reference_stale = false; // Simulate a freshly bootstrapped controller.
+        let _ = app.update(super::Message::Process);
+        assert!(
+            app.processing.is_none(),
+            "Reopened labels cannot enable retained-detector final rendering"
+        );
+        assert!(
+            app.messages
+                .iter()
+                .any(|message| message.contains("not current"))
+        );
+        // The worker owns these temporary inputs until it exits.
+    }
+
     #[test]
     fn completed_render_cannot_replace_changed_session() {
         for change in 0..8 {
@@ -284,7 +349,8 @@ mod tests {
             }]
         );
         assert!(app.project.as_ref().unwrap().protections().is_empty());
-        assert!(app.preview_processing.is_some() || app.preview_pending.is_some());
+        assert!(app.reference_stale);
+        assert!(app.preview_pending.is_none());
         let _ = app.update(super::Message::SaveCalibration(
             crate::CalibrationKind::SoloSpeech,
             0,
@@ -721,6 +787,9 @@ mod tests {
         for enabled in [false, true] {
             let before = app.preview_cache.stats().ownership_derivations;
             let _ = app.update(super::Message::OwnershipMode(enabled));
+            assert!(app.reference_stale);
+            assert_eq!(app.preview_cache.stats().ownership_derivations, before);
+            let _ = app.update(super::Message::AnalyzeReferences);
             wait(&mut app);
             assert_eq!(app.preview_cache.stats().ownership_derivations, before + 1);
         }
@@ -731,9 +800,13 @@ mod tests {
             crate::CalibrationKind::RoomTone,
             0,
         ));
+        assert_eq!(app.preview_cache.stats().ownership_derivations, before);
+        let _ = app.update(super::Message::AnalyzeReferences);
         wait(&mut app);
         assert_eq!(app.preview_cache.stats().ownership_derivations, before + 1);
         let _ = app.update(super::Message::RemoveCalibration(0));
+        assert_eq!(app.preview_cache.stats().ownership_derivations, before + 1);
+        let _ = app.update(super::Message::AnalyzeReferences);
         wait(&mut app);
         assert_eq!(app.preview_cache.stats().ownership_derivations, before + 2);
         assert_eq!(app.preview_cache.stats().preparations, 1);
@@ -787,6 +860,7 @@ mod tests {
         let cancelled = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
         let (_sender, result) = super::mpsc::channel();
         app.preview_processing = Some(super::PreviewProcessing {
+            ownership: Default::default(),
             progress: Default::default(),
             cancelled: cancelled.clone(),
             generation: 0,
@@ -1203,6 +1277,10 @@ pub struct CleanSlateApp {
     calibration_start: String,
     calibration_end: String,
     calibration_error: Option<String>,
+    reference_speakers: Vec<SpeakerId>,
+    reference_stale: bool,
+    reference_analyze_requested: bool,
+    preview_ownership: Option<OwnershipSettings>,
     waveforms: Vec<WaveformCache>,
     timeline: TimelineViewport,
     preview_parameters: AutomixParameters,
@@ -1239,6 +1317,10 @@ impl Default for CleanSlateApp {
             calibration_start: String::new(),
             calibration_end: String::new(),
             calibration_error: None,
+            reference_speakers: vec![],
+            reference_stale: false,
+            reference_analyze_requested: false,
+            preview_ownership: None,
             waveforms: vec![],
             timeline: TimelineViewport::default(),
             preview_parameters: AutomixParameters::default(),
@@ -1451,6 +1533,7 @@ struct PreviewProcessing {
     generation: u64,
     source_generation: u64,
     sources: Vec<waveform::SourceStamp>,
+    ownership: OwnershipSettings,
     result: Receiver<(Result<AnalysisPreview, String>, PreviewCache)>,
 }
 
@@ -1492,6 +1575,7 @@ enum Message {
     MonitorGain(f32),
     KeyPressed(keyboard::Key),
     RangeModifier(bool),
+    #[cfg(test)]
     OwnershipMode(bool),
     CalibrationMode(bool),
     CalibrationTiming(bool),
@@ -1501,7 +1585,14 @@ enum Message {
     CalibrationEndAtPlayhead,
     CalibrationFromSelection,
     SaveCalibration(CalibrationKind, usize),
+    #[cfg(test)]
     RemoveCalibration(usize),
+    ReferenceSpeaker(SpeakerId, bool),
+    SaveReference(bool),
+    RemoveReference(u64),
+    UndoReferences,
+    RedoReferences,
+    AnalyzeReferences,
     ToggleReviewed,
     ProtectRegion,
     ProtectTrack(usize),
@@ -1542,6 +1633,13 @@ impl CleanSlateApp {
         self.calibration_start.clear();
         self.calibration_end.clear();
         self.calibration_error = None;
+        self.reference_speakers.clear();
+        self.reference_stale = self.project.as_ref().is_some_and(|project| {
+            !project.reference_labels().is_empty()
+                || matches!(project.result(), crate::ResultState::Stale { .. })
+        });
+        self.reference_analyze_requested = false;
+        self.preview_ownership = None;
         self.audition_preparation.invalidate();
         self.audition_range = None;
         if let Some(audition) = self.audition.take() {
@@ -1895,6 +1993,9 @@ impl CleanSlateApp {
     }
 
     fn queue_preview(&mut self, delay: Duration) {
+        if self.reference_stale && self.preview.is_none() && !self.reference_analyze_requested {
+            return;
+        }
         if self.project.is_none() {
             return;
         }
@@ -1941,7 +2042,12 @@ impl CleanSlateApp {
         };
         let protections = project.protections().to_vec();
         let parameters = self.preview_parameters;
-        let ownership = project.ownership_settings().clone();
+        let ownership = if self.reference_stale && !self.reference_analyze_requested {
+            self.preview_ownership.clone().unwrap_or_default()
+        } else {
+            project.ownership_settings().clone()
+        };
+        let snapshot_ownership = ownership.clone();
         let progress = Arc::new(AtomicU8::new(0));
         let worker_progress = Arc::clone(&progress);
         let cancelled = Arc::new(AtomicBool::new(false));
@@ -1978,6 +2084,7 @@ impl CleanSlateApp {
             let _ = sender.send((result, cache));
         });
         self.preview_processing = Some(PreviewProcessing {
+            ownership: snapshot_ownership,
             progress,
             cancelled,
             result,
@@ -2067,6 +2174,12 @@ impl CleanSlateApp {
                 });
                 match result {
                     Ok(preview) => {
+                        if self.reference_analyze_requested {
+                            // Retained-detector preview does not satisfy the new
+                            // supervised recipe. Ticket 12 owns that commit gate.
+                            self.reference_analyze_requested = false;
+                        }
+                        self.preview_ownership = Some(processing.ownership.clone());
                         if self.preview_sources != processing.sources {
                             self.audition_preparation.invalidate();
                             self.audition_range = None;
@@ -2217,47 +2330,74 @@ impl CleanSlateApp {
         self.project.is_some() && self.timeline.selection().is_some()
     }
 
-    fn save_ownership(&mut self, settings: OwnershipSettings) {
-        let Some(project) = &mut self.project else {
+    fn save_calibration(&mut self, kind: CalibrationKind, track: usize) {
+        let Some(project) = &self.project else {
+            self.calibration_error = Some("Import sources before labeling.".into());
             return;
         };
-        match project.set_ownership_settings(settings) {
-            Ok(()) => {
-                self.calibration_error = None;
-                self.start_preview();
-            }
-            Err(error) => self.calibration_error = Some(error.to_string()),
+        if !project.ownership_settings().enabled {
+            self.calibration_error = Some("Enable joint ownership before adding examples.".into());
+            return;
         }
+        let Some(source) = project.sources.get(track) else {
+            return;
+        };
+        self.reference_speakers = if kind == CalibrationKind::SoloSpeech {
+            vec![source.speaker_id]
+        } else {
+            vec![]
+        };
+        self.save_reference(false);
     }
 
-    fn save_calibration(&mut self, kind: CalibrationKind, track: usize) {
+    fn mark_reference_edit(&mut self) {
+        self.reference_stale = true;
+        self.reference_analyze_requested = false;
+        self.preview_generation = self.preview_generation.wrapping_add(1);
+        self.preview_pending = None;
+        self.calibration_error = None;
+        // Fixed evidence may finish and be retained; only obsolete derivation
+        // is cancelled by the existing generation check once progress reaches 70.
+    }
+    fn reference_conflicts(&self) -> Vec<u64> {
+        let Ok((start, end)) = self.calibration_range() else {
+            return vec![];
+        };
+        let mut active = self.reference_speakers.clone();
+        active.sort_unstable();
+        self.project.as_ref().map_or_else(Vec::new, |project| {
+            project
+                .reference_labels()
+                .iter()
+                .filter(|label| {
+                    let mut previous = label.active_speakers.clone();
+                    previous.sort_unstable();
+                    label.range.start < end && start < label.range.end && active != previous
+                })
+                .map(|label| label.id)
+                .collect()
+        })
+    }
+    fn save_reference(&mut self, replace_conflicts: bool) {
         let result = (|| {
-            let project = self
-                .project
-                .as_ref()
-                .ok_or("Import sources before calibrating.")?;
-            if !project.ownership_settings().enabled {
-                return Err("Enable joint ownership before adding examples.".to_string());
-            }
             let (start, end) = self.calibration_range()?;
-            let example = CalibrationExample {
-                kind,
-                track,
-                start,
-                end,
+            let replacing = if replace_conflicts {
+                self.reference_conflicts()
+            } else {
+                vec![]
             };
-            let mut settings = project.ownership_settings().clone();
-            if settings.examples.is_empty() {
-                settings.sources =
-                    source_stamps(&project.source_paths()).map_err(|error| error.to_string())?;
-            }
-            if !settings.examples.contains(&example) {
-                settings.examples.push(example);
-            }
-            Ok(settings)
+            self.project
+                .as_mut()
+                .ok_or("Import sources before labeling.")?
+                .add_reference_label(
+                    TimeRange { start, end },
+                    self.reference_speakers.clone(),
+                    &replacing,
+                )
+                .map_err(|error| error.to_string())
         })();
         match result {
-            Ok(settings) => self.save_ownership(settings),
+            Ok(_) => self.mark_reference_edit(),
             Err(error) => self.calibration_error = Some(error),
         }
     }
@@ -2390,7 +2530,18 @@ impl CleanSlateApp {
                     }
                 }
             }
-            Message::Process => self.start_processing(),
+            Message::Process => {
+                if self.reference_stale
+                    || self
+                        .project
+                        .as_ref()
+                        .is_some_and(|project| !project.reference_labels().is_empty())
+                {
+                    self.messages = vec!["Supervised analysis is not current. Final export requires current supervised analysis.".into()];
+                } else {
+                    self.start_processing();
+                }
+            }
             Message::Cancel => {
                 if let Some(processing) = &self.processing {
                     processing.cancelled.store(true, Ordering::Relaxed);
@@ -2476,14 +2627,16 @@ impl CleanSlateApp {
                 _ => {}
             },
             Message::RangeModifier(selecting) => self.selecting_range = selecting,
+            #[cfg(test)]
             Message::OwnershipMode(enabled) => {
                 if !enabled {
                     self.calibrating = false;
                 }
-                if let Some(project) = &self.project {
-                    let mut settings = project.ownership_settings().clone();
-                    settings.enabled = enabled;
-                    self.save_ownership(settings);
+                if let Some(project) = &mut self.project {
+                    match project.set_ownership_enabled(enabled) {
+                        Ok(()) => self.mark_reference_edit(),
+                        Err(error) => self.calibration_error = Some(error.to_string()),
+                    }
                 }
             }
             Message::CalibrationMode(enabled) => self.calibrating = enabled,
@@ -2514,15 +2667,52 @@ impl CleanSlateApp {
                 }
             }
             Message::SaveCalibration(kind, track) => self.save_calibration(kind, track),
+            Message::ReferenceSpeaker(speaker, active) => {
+                self.reference_speakers.retain(|id| *id != speaker);
+                if active {
+                    self.reference_speakers.push(speaker);
+                }
+            }
+            Message::SaveReference(replace) => self.save_reference(replace),
+            Message::RemoveReference(id) => {
+                if let Some(project) = &mut self.project {
+                    match project.remove_reference_label(id) {
+                        Ok(()) => self.mark_reference_edit(),
+                        Err(error) => self.calibration_error = Some(error.to_string()),
+                    }
+                }
+            }
+            Message::UndoReferences | Message::RedoReferences => {
+                if let Some(project) = &mut self.project {
+                    let result = if matches!(message, Message::UndoReferences) {
+                        project.undo_reference_labels()
+                    } else {
+                        project.redo_reference_labels()
+                    };
+                    match result {
+                        Ok(true) => self.mark_reference_edit(),
+                        Ok(false) => {}
+                        Err(error) => self.calibration_error = Some(error.to_string()),
+                    }
+                }
+            }
+            Message::AnalyzeReferences => {
+                self.reference_analyze_requested = true;
+                self.start_preview();
+            }
+            #[cfg(test)]
             Message::RemoveCalibration(index) => {
-                if let Some(project) = &self.project {
-                    let mut settings = project.ownership_settings().clone();
-                    if index < settings.examples.len() {
-                        settings.examples.remove(index);
-                        if settings.examples.is_empty() {
-                            settings.sources.clear();
-                        }
-                        self.save_ownership(settings);
+                let id = self
+                    .project
+                    .as_ref()
+                    .and_then(|project| project.reference_labels().get(index))
+                    .map(|label| label.id);
+                if let Some(id) = id
+                    && let Some(project) = &mut self.project
+                {
+                    match project.remove_reference_label(id) {
+                        Ok(()) => self.mark_reference_edit(),
+                        Err(error) => self.calibration_error = Some(error.to_string()),
                     }
                 }
             }
@@ -2672,21 +2862,47 @@ impl CleanSlateApp {
         let Some(project) = &self.project else {
             return column![].into();
         };
-        let settings = project.ownership_settings();
         let mut controls = column![
-            text("Microphone calibration").size(18),
-            text(if settings.enabled { "Microphone comparison is on" } else { "Legacy detection: examples are disabled" }),
-            button(if settings.enabled { "Use legacy detection" } else { "Enable microphone comparison" }).on_press(Message::OwnershipMode(!settings.enabled)),
-            text("Optional examples help distinguish direct speech from its quieter copies on other microphones.").size(12),
-            button(if self.calibrating { "Finish selecting" } else { "1. Select an example" }).on_press_maybe(settings.enabled.then_some(Message::CalibrationMode(!self.calibrating))),
-            text("Drag across a waveform. The highlighted time range applies to all tracks.").size(12),
-            text("2. Save the example under the intended track").size(14),
-            text("Room tone: nobody is speaking. Solo speech: only this track's participant is speaking; their voice may bleed into other tracks.").size(12),
-            text("These examples guide detection. They do not mute or protect the selected audio.").size(12),
-        ].spacing(8);
-        controls = controls.push(text(if !settings.enabled {
-            "Enable microphone comparison above to save examples.".into()
-        } else {
+            text("Speaker references").size(18),
+            text(
+                "Required: solo speech for each speaker and room tone. Overlap labels are optional."
+            )
+            .size(12),
+            button(if self.calibrating {
+                "Finish selecting"
+            } else {
+                "Select a reference"
+            })
+            .on_press(Message::CalibrationMode(!self.calibrating)),
+            text("Drag across a waveform. Select everyone speaking; select nobody for room tone.")
+                .size(12),
+            text("Labels teach analysis. Manual gain edits remain authoritative.").size(12),
+        ]
+        .spacing(8);
+        for source in &project.sources {
+            let speaker = source.speaker_id;
+            controls = controls.push(
+                iced::widget::checkbox(self.reference_speakers.contains(&speaker))
+                    .label(format!("Speaker {}", speaker.0))
+                    .on_toggle(move |active| Message::ReferenceSpeaker(speaker, active)),
+            );
+        }
+        controls = controls.push(button("Save reference").on_press(Message::SaveReference(false)));
+        if !self.reference_conflicts().is_empty() {
+            controls = controls.push(
+                button("Replace conflicting whole labels").on_press(Message::SaveReference(true)),
+            );
+        }
+        controls = controls.push(
+            row![
+                button("Undo label").on_press(Message::UndoReferences),
+                button("Redo label").on_press(Message::RedoReferences)
+            ]
+            .spacing(8),
+        );
+        controls = controls.push(button("Analyze preview").on_press(Message::AnalyzeReferences));
+        controls = controls.push(text("Final export requires current supervised analysis. Preview playback remains available.").size(12));
+        controls = controls.push(text({
             match self.calibration_range() {
                 Ok((start, end)) => format!(
                     "Selected {:.3}–{:.3} s ({:.3} s). Use a Save button below the track.",
@@ -2722,24 +2938,29 @@ impl CleanSlateApp {
         if let Some(error) = &self.calibration_error {
             controls = controls.push(text(format!("Example not saved: {error}")));
         }
-        if settings.examples.is_empty() {
+        if project.reference_labels().is_empty() {
             controls = controls.push(text(
-                "No saved examples. With microphone comparison on, automatic estimates are used until you add examples.",
+                "No saved references. Add room tone and each speaker's solo speech.",
             ));
         }
-        for (index, example) in settings.examples.iter().enumerate() {
-            let kind = match example.kind {
-                CalibrationKind::RoomTone => "Room tone",
-                CalibrationKind::SoloSpeech => "Solo speech",
+        for label in project.reference_labels() {
+            let speakers = if label.active_speakers.is_empty() {
+                "Room tone".to_owned()
+            } else {
+                label
+                    .active_speakers
+                    .iter()
+                    .map(|speaker| format!("Speaker {}", speaker.0))
+                    .collect::<Vec<_>>()
+                    .join(" + ")
             };
             controls = controls
                 .push(text(format!(
-                    "{kind}, track {}: {:.5} to {:.5} s",
-                    example.track + 1,
-                    example.start as f64 / TICKS_PER_SECOND as f64,
-                    example.end as f64 / TICKS_PER_SECOND as f64
+                    "{speakers}: {:.5} to {:.5} s",
+                    label.range.start as f64 / TICKS_PER_SECOND as f64,
+                    label.range.end as f64 / TICKS_PER_SECOND as f64
                 )))
-                .push(button("Remove example").on_press(Message::RemoveCalibration(index)));
+                .push(button("Remove reference").on_press(Message::RemoveReference(label.id)));
         }
         controls.into()
     }
@@ -3072,6 +3293,8 @@ impl CleanSlateApp {
             }
         } else if let Some(error) = &self.preview_error {
             text(format!("Preview failed: {error}")).into()
+        } else if self.reference_stale {
+            text("Analysis stale after label edits · click Analyze; previous preview remains available").into()
         } else if let Some(preview) = &self.preview {
             text(format!(
                 "Preview ready · {} ownership regions",

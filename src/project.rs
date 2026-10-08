@@ -109,6 +109,12 @@ pub struct Project {
     #[serde(default)]
     supplied_alignment: bool,
     references: Vec<ReferenceLabel>,
+    #[serde(default)]
+    next_reference_id: u64,
+    #[serde(skip)]
+    reference_undo: Vec<Vec<ReferenceLabel>>,
+    #[serde(skip)]
+    reference_redo: Vec<Vec<ReferenceLabel>>,
     manual_edits: Vec<ManualGainEdit>,
     bound_protections: Vec<BoundProtection>,
     pending_rebind: Vec<TrackId>,
@@ -157,6 +163,9 @@ impl Project {
             sources,
             supplied_alignment: false,
             references: vec![],
+            next_reference_id: 1,
+            reference_undo: vec![],
+            reference_redo: vec![],
             manual_edits: vec![],
             bound_protections: vec![],
             pending_rebind: vec![],
@@ -564,6 +573,13 @@ impl Project {
     pub fn reference_labels(&self) -> &[ReferenceLabel] {
         &self.references
     }
+    pub fn reference_label_is_current(&self, label: &ReferenceLabel) -> bool {
+        label.sources.len() == self.sources.len()
+            && label
+                .sources
+                .iter()
+                .all(|binding| self.binding_current(binding))
+    }
     pub fn manual_gain_edits(&self) -> &[ManualGainEdit] {
         &self.manual_edits
     }
@@ -659,6 +675,13 @@ impl Project {
         Ok(())
     }
 
+    pub fn set_ownership_enabled(&mut self, enabled: bool) -> io::Result<()> {
+        self.transaction(|next| {
+            next.ownership_enabled = enabled;
+            next.invalidate("Analysis settings changed; Analyze is required.");
+            Ok(())
+        })
+    }
     pub fn set_ownership_settings(&mut self, settings: OwnershipSettings) -> io::Result<()> {
         if !settings.examples.is_empty() {
             let stamps = self
@@ -709,13 +732,121 @@ impl Project {
             .iter()
             .any(|l| !l.sources.iter().all(|b| self.binding_current(b)))
         {
-            return Err(invalid("New labels require current source bindings."));
+            return Err(invalid(
+                "Sources changed; new labels require current source bindings after relink and review.",
+            ));
         }
         self.transaction(|next| {
+            if next.references == labels {
+                return Ok(());
+            }
+            next.reference_undo.push(next.references.clone());
+            next.reference_redo.clear();
+            next.next_reference_id = next.next_reference_id.max(
+                labels
+                    .iter()
+                    .map(|label| label.id)
+                    .max()
+                    .unwrap_or(0)
+                    .checked_add(1)
+                    .ok_or_else(|| invalid("Reference ID overflow."))?,
+            );
             next.references = labels;
             next.invalidate("Reference labels changed; Analyze is required.");
             Ok(())
         })
+    }
+    pub fn add_reference_label(
+        &mut self,
+        range: TimeRange,
+        mut active_speakers: Vec<SpeakerId>,
+        replacing: &[u64],
+    ) -> io::Result<u64> {
+        if replacing.iter().collect::<HashSet<_>>().len() != replacing.len()
+            || replacing
+                .iter()
+                .any(|id| !self.references.iter().any(|label| label.id == *id))
+        {
+            return Err(invalid(
+                "Reference replacement must name existing unique label IDs.",
+            ));
+        }
+        active_speakers.sort_unstable();
+        let id = self.next_reference_id.max(
+            self.references
+                .iter()
+                .map(|label| label.id)
+                .max()
+                .unwrap_or(0)
+                .checked_add(1)
+                .ok_or_else(|| invalid("Reference ID overflow."))?,
+        );
+        let mut labels: Vec<_> = self
+            .references
+            .iter()
+            .filter(|label| !replacing.contains(&label.id))
+            .cloned()
+            .collect();
+        labels.push(ReferenceLabel {
+            id,
+            range,
+            active_speakers,
+            sources: self.bindings(),
+            reference_track: None,
+        });
+        self.replace_reference_labels(labels)?;
+        Ok(id)
+    }
+    pub fn remove_reference_label(&mut self, id: u64) -> io::Result<()> {
+        if !self.references.iter().any(|label| label.id == id) {
+            return Err(invalid("Unknown reference label."));
+        }
+        self.replace_reference_labels(
+            self.references
+                .iter()
+                .filter(|label| label.id != id)
+                .cloned()
+                .collect(),
+        )
+    }
+    pub fn undo_reference_labels(&mut self) -> io::Result<bool> {
+        self.restore_reference_history(false)
+    }
+    pub fn redo_reference_labels(&mut self) -> io::Result<bool> {
+        self.restore_reference_history(true)
+    }
+    fn restore_reference_history(&mut self, redo: bool) -> io::Result<bool> {
+        let history = if redo {
+            &self.reference_redo
+        } else {
+            &self.reference_undo
+        };
+        let Some(labels) = history.last().cloned() else {
+            return Ok(false);
+        };
+        if labels.iter().any(|label| {
+            !label
+                .sources
+                .iter()
+                .all(|binding| self.binding_current(binding))
+        }) {
+            return Err(invalid(
+                "Source recordings changed; review before undoing bound labels.",
+            ));
+        }
+        self.transaction(|next| {
+            if redo {
+                next.reference_redo.pop();
+                next.reference_undo.push(next.references.clone());
+            } else {
+                next.reference_undo.pop();
+                next.reference_redo.push(next.references.clone());
+            }
+            next.references = labels;
+            next.invalidate("Reference labels changed; Analyze is required.");
+            Ok(())
+        })?;
+        Ok(true)
     }
     pub fn replace_manual_gain_edits(&mut self, edits: Vec<ManualGainEdit>) -> io::Result<()> {
         if edits.iter().any(|e| !self.binding_current(&e.source)) {

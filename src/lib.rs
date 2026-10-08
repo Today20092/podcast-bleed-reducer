@@ -11,6 +11,7 @@ mod media;
 pub mod model;
 mod prepared_analysis;
 mod project;
+mod references;
 pub mod release_gate;
 mod review;
 mod timebase;
@@ -29,6 +30,10 @@ pub use engine::*;
 pub use export::*;
 pub use prepared_analysis::{JointDiagnostics, PreviewCache, PreviewCacheStats, preview_stage};
 pub use project::*;
+pub use references::{
+    IdentityReview, REFERENCE_MAPPING_RECIPE, ReferenceReadiness, SpeakerMapping,
+    reference_readiness, resolve_speaker_mapping,
+};
 pub use review::*;
 pub use timebase::{
     Rounding, SourceTimebase, TICKS_PER_SECOND, TimePosition, TimeRange, time_from_seconds,

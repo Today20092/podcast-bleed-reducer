@@ -492,7 +492,7 @@ impl ProbabilityHistory {
         self.verify_cancelled(&AtomicBool::new(false))
     }
 
-    fn verify_cancelled(&self, cancel: &AtomicBool) -> Result<(), String> {
+    pub(crate) fn verify_cancelled(&self, cancel: &AtomicBool) -> Result<(), String> {
         if self.verify_payload(cancel)? {
             Ok(())
         } else {
