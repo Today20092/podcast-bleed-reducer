@@ -2906,7 +2906,7 @@ impl CleanSlateApp {
                     1.0 - parameters.speech_sensitivity,
                     Message::SpeechSensitivity
                 )
-                .step(0.01)
+                .step(0.01_f32)
                 .on_release(Message::RefreshPreview),
                 text("Higher sensitivity admits weaker speech evidence.").size(12),
                 text(format!(
@@ -2918,7 +2918,7 @@ impl CleanSlateApp {
                     parameters.bleed_discrimination_db,
                     Message::BleedDiscrimination
                 )
-                .step(0.5)
+                .step(0.5_f32)
                 .on_release(Message::RefreshPreview),
                 text("Required margin above each track's own noise floor.").size(12),
                 text(format!("Attenuation: {:.1} dB", parameters.attenuation_db)),
@@ -2927,7 +2927,7 @@ impl CleanSlateApp {
                     parameters.attenuation_db,
                     Message::Attenuation
                 )
-                .step(1.0)
+                .step(1.0_f32)
                 .on_release(Message::RefreshPreview),
                 text(format!(
                     "Speech padding: {:.0} ms effective",
@@ -2938,7 +2938,7 @@ impl CleanSlateApp {
                     effective_padding_ms(parameters.speech_padding_ms),
                     Message::SpeechPadding
                 )
-                .step(32.0)
+                .step(32.0_f32)
                 .on_release(Message::RefreshPreview),
                 text("32 ms steps. Legacy stored values stay unchanged until padding is edited.").size(12),
                 text(format!(
@@ -2946,14 +2946,14 @@ impl CleanSlateApp {
                     parameters.open_ms
                 )),
                 slider(1.0..=1000.0, parameters.open_ms, Message::OpenTime)
-                    .step(1.0)
+                    .step(1.0_f32)
                     .on_release(Message::RefreshPreview),
                 text(format!(
                     "Close time: {:.0} ms",
                     parameters.close_ms
                 )),
                 slider(1.0..=2000.0, parameters.close_ms, Message::CloseTime)
-                    .step(1.0)
+                    .step(1.0_f32)
                     .on_release(Message::RefreshPreview),
                 text(
                     "Overlay: preserved solid · attenuated diagonal hatch · uncertain dotted · protected outline"
@@ -3016,7 +3016,7 @@ impl CleanSlateApp {
             .on_press(Message::Removed),
             text(format!("Monitor {:+.1} dB", self.monitor_db)),
             slider(-24.0..=6.0, self.monitor_db, Message::MonitorGain)
-                .step(1.0)
+                .step(1.0_f32)
                 .width(120),
         ]
         .spacing(8)
