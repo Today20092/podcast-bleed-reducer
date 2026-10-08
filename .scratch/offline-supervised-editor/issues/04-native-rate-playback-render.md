@@ -1,6 +1,7 @@
 # Carry native rates through playback and WAV rendering
 
-Status: ready-for-agent
+Status: claimed
+Assignee: import_implementation
 Blocked by: 03
 Spec: ../spec.md
 

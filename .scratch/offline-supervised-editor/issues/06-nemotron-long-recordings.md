@@ -1,6 +1,7 @@
 # Retain complete Nemotron evidence for long recordings
 
-Status: ready-for-agent
+Status: claimed
+Assignee: finish_runtime
 Blocked by: 03, 05
 Spec: ../spec.md
 
