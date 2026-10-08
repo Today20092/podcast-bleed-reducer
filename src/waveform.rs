@@ -1,6 +1,7 @@
 use crate::{
     AnalysisPreview, Decision, RenderBlocker,
     audio_io::Stem,
+    timebase::{Rounding, SourceTimebase, TICKS_PER_SECOND, TimePosition},
     timeline::{TimelineEvent, TimelineViewport},
 };
 use iced::{
@@ -15,6 +16,7 @@ use std::{
 };
 
 const BASE_BUCKET: usize = 256;
+const WAVEFORM_CACHE_VERSION: u32 = 1;
 const ATTENUATION_HATCH_SPACING: f32 = 20.0;
 
 fn processed_peak((min, max): (f32, f32), (low, high): (f32, f32)) -> (f32, f32) {
@@ -44,6 +46,7 @@ fn attenuation_hatches(left: f32, right: f32, height: f32) -> Vec<(Point, Point)
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub(crate) struct WaveformCache {
     pub sample_count: usize,
+    pub sample_rate: u32,
     levels: Vec<WaveformLevel>,
 }
 
@@ -55,6 +58,7 @@ struct WaveformLevel {
 
 #[derive(Deserialize, Serialize)]
 struct PersistedWaveforms {
+    version: u32,
     sources: Vec<SourceStamp>,
     waveforms: Vec<WaveformCache>,
 }
@@ -82,7 +86,7 @@ impl SourceStamp {
 }
 
 impl WaveformCache {
-    fn from_samples(samples: &[f32]) -> Self {
+    fn from_samples(samples: &[f32], sample_rate: u32) -> Self {
         let mut samples_per_bucket = BASE_BUCKET;
         let mut peaks = summarize(samples, samples_per_bucket);
         let mut levels = vec![WaveformLevel {
@@ -106,8 +110,30 @@ impl WaveformCache {
         }
         Self {
             sample_count: samples.len(),
+            sample_rate,
             levels,
         }
+    }
+
+    pub fn duration(&self) -> TimePosition {
+        self.time_at_frame(self.sample_count)
+    }
+
+    fn time_at_frame(&self, frame: usize) -> TimePosition {
+        self.grid()
+            .time_at_frame(frame as u64, Rounding::Ceil)
+            .expect("validated waveform time")
+    }
+
+    fn grid(&self) -> SourceTimebase {
+        SourceTimebase::new(self.sample_rate, self.sample_count as u64)
+            .expect("validated waveform grid")
+    }
+
+    fn frame_at_time(&self, time: TimePosition, rounding: Rounding) -> usize {
+        self.grid()
+            .frame_at_time(time.min(self.duration()), rounding)
+            .expect("bounded waveform time") as usize
     }
 
     fn level(&self, samples_per_pixel: usize) -> &WaveformLevel {
@@ -152,7 +178,13 @@ pub(crate) fn load_or_build_progress(
         .collect::<Result<Vec<_>, _>>()?;
     if let Ok(bytes) = fs::read(&cache_path)
         && let Ok(cache) = serde_json::from_slice::<PersistedWaveforms>(&bytes)
+        && cache.version == WAVEFORM_CACHE_VERSION
         && cache.sources == stamps
+        && cache.waveforms.iter().all(|waveform| {
+            SourceTimebase::new(waveform.sample_rate, waveform.sample_count as u64)
+                .and_then(|grid| grid.duration())
+                .is_ok()
+        })
     {
         for (index, waveform) in cache.waveforms.iter().enumerate() {
             ready(index, waveform);
@@ -164,7 +196,7 @@ pub(crate) fn load_or_build_progress(
         .enumerate()
         .map(|(index, path)| {
             let stem = Stem::read(path)?;
-            let waveform = WaveformCache::from_samples(&stem.samples);
+            let waveform = WaveformCache::from_samples(&stem.samples, stem.format.sample_rate);
             ready(index, &waveform);
             Ok(waveform)
         })
@@ -181,6 +213,7 @@ pub(crate) fn load_or_build_progress(
     fs::write(
         cache_path,
         serde_json::to_vec(&PersistedWaveforms {
+            version: WAVEFORM_CACHE_VERSION,
             sources: stamps,
             waveforms: waveforms.clone(),
         })
@@ -235,7 +268,7 @@ impl<'a, Message> TimelineCanvas<'a, Message> {
 #[derive(Default)]
 pub(crate) struct TimelineCanvasState {
     dragging: bool,
-    selection_anchor: Option<usize>,
+    selection_anchor: Option<TimePosition>,
     pan_x: Option<f32>,
     modifiers: keyboard::Modifiers,
 }
@@ -392,7 +425,7 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
                 let x = bounds.width * tick as f32 / 5.0;
                 let sample = self.viewport.sample_at(x, bounds.width);
                 frame.fill_text(canvas::Text {
-                    content: format!("{:.1}s", sample as f64 / 48_000.0),
+                    content: format!("{:.1}s", sample as f64 / TICKS_PER_SECOND as f64),
                     position: Point::new(x + 3.0, center + 4.0),
                     color: Color::from_rgb8(180, 185, 195),
                     size: 11.0.into(),
@@ -400,12 +433,16 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
                 });
             }
         } else if let Some(cache) = self.cache {
-            let target =
-                (self.viewport.visible_samples() / bounds.width.max(1.0) as f64).ceil() as usize;
+            let visible_start = cache.frame_at_time(self.viewport.start() as u64, Rounding::Floor);
+            let visible_end = cache.frame_at_time(
+                (self.viewport.start() + self.viewport.visible_samples()).ceil() as u64,
+                Rounding::Ceil,
+            );
+            let target = ((visible_end - visible_start) as f64 / bounds.width.max(1.0) as f64)
+                .ceil() as usize;
             let level = cache.level(target);
-            let first =
-                (self.viewport.start() as usize / level.samples_per_bucket).min(level.peaks.len());
-            let last = ((self.viewport.start() + self.viewport.visible_samples()) as usize)
+            let first = (visible_start / level.samples_per_bucket).min(level.peaks.len());
+            let last = visible_end
                 .div_ceil(level.samples_per_bucket)
                 .min(level.peaks.len());
             let scale = center * 0.9;
@@ -464,7 +501,7 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
                             .max(0.0);
                         let right = self
                             .viewport
-                            .x_for_sample(protection.end.min(cache.sample_count), bounds.width)
+                            .x_for_sample(protection.end.min(cache.duration()), bounds.width)
                             .min(bounds.width);
                         if right > left {
                             frame.stroke(
@@ -483,7 +520,9 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
             let original = canvas::Path::new(|builder| {
                 for (index, (min, max)) in level.peaks[first..last].iter().enumerate() {
                     let sample = (first + index) * level.samples_per_bucket;
-                    let x = self.viewport.x_for_sample(sample, bounds.width);
+                    let x = self
+                        .viewport
+                        .x_for_sample(cache.time_at_frame(sample), bounds.width);
                     builder.move_to(Point::new(x, center - max * scale));
                     builder.line_to(Point::new(x, center - min * scale));
                 }
@@ -500,16 +539,20 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
                 let processed = canvas::Path::new(|builder| {
                     for (index, (min, max)) in level.peaks[first..last].iter().enumerate() {
                         let sample = (first + index) * level.samples_per_bucket;
-                        let Some(gains) = envelope.gain_bounds(
-                            sample,
-                            sample
-                                .saturating_add(level.samples_per_bucket)
-                                .min(cache.sample_count),
+                        let Some(gains) = envelope.gain_bounds_time(
+                            cache.time_at_frame(sample),
+                            cache.time_at_frame(
+                                sample
+                                    .saturating_add(level.samples_per_bucket)
+                                    .min(cache.sample_count),
+                            ),
                         ) else {
                             continue;
                         };
                         let (min, max) = processed_peak((*min, *max), gains);
-                        let x = self.viewport.x_for_sample(sample, bounds.width);
+                        let x = self
+                            .viewport
+                            .x_for_sample(cache.time_at_frame(sample), bounds.width);
                         builder.move_to(Point::new(x, center - max * scale));
                         builder.line_to(Point::new(x, center - min * scale));
                     }
@@ -523,12 +566,7 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
                 let gain_path = canvas::Path::new(|builder| {
                     for x in 0..bounds.width as usize {
                         let sample = self.viewport.sample_at(x as f32, bounds.width);
-                        let y = 4.0
-                            + (1.0
-                                - envelope.gain_at(
-                                    sample.min(envelope.sample_count().saturating_sub(1)),
-                                ))
-                                * 18.0;
+                        let y = 4.0 + (1.0 - envelope.gain_at_time(sample)) * 18.0;
                         if x == 0 {
                             builder.move_to(Point::new(0.0, y));
                         } else {
@@ -629,7 +667,7 @@ mod tests {
         let mut samples = vec![0.0; BASE_BUCKET * 8];
         samples[20] = -0.75;
         samples[21] = 0.9;
-        let cache = WaveformCache::from_samples(&samples);
+        let cache = WaveformCache::from_samples(&samples, 48_000);
         assert_eq!(cache.level(BASE_BUCKET).peaks[0], (-0.75, 0.9));
         let full = cache.level(samples.len());
         assert_eq!(full.peaks, vec![(-0.75, 0.9)]);
@@ -648,6 +686,16 @@ mod tests {
         assert_eq!(
             load_or_build(&project, std::slice::from_ref(&source)).unwrap()[0].sample_count,
             4
+        );
+        let cache_path = project.with_extension("waveforms.json");
+        let mut obsolete: serde_json::Value =
+            serde_json::from_slice(&fs::read(&cache_path).unwrap()).unwrap();
+        obsolete["version"] = 99.into();
+        obsolete["waveforms"][0]["sample_rate"] = 96_000.into();
+        fs::write(&cache_path, serde_json::to_vec(&obsolete).unwrap()).unwrap();
+        assert_eq!(
+            load_or_build(&project, std::slice::from_ref(&source)).unwrap()[0].sample_rate,
+            48_000
         );
         fs::remove_file(&source).unwrap();
         wav(&source, &[0.0, 0.2]);

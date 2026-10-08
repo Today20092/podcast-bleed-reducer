@@ -1,6 +1,7 @@
 # Introduce a source-aware timebase and versioned project contract
 
-Status: ready-for-agent
+Status: claimed
+Assignee: timebase_implementation
 Blocked by: 01
 Spec: ../spec.md
 

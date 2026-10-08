@@ -78,25 +78,49 @@ fn renders_float_overlap_and_protection_and_round_trips_bext() {
             output_dir: root.join("rendered"),
             regions: vec![
                 Region {
-                    start: 0,
-                    end: 1_000,
+                    start: rust_app::SourceTimebase::new(48_000, (0) as u64)
+                        .unwrap()
+                        .duration()
+                        .unwrap(),
+                    end: rust_app::SourceTimebase::new(48_000, (1_000) as u64)
+                        .unwrap()
+                        .duration()
+                        .unwrap(),
                     decision: Decision::Owned(vec![0]),
                 },
                 Region {
-                    start: 1_000,
-                    end: 2_000,
+                    start: rust_app::SourceTimebase::new(48_000, (1_000) as u64)
+                        .unwrap()
+                        .duration()
+                        .unwrap(),
+                    end: rust_app::SourceTimebase::new(48_000, (2_000) as u64)
+                        .unwrap()
+                        .duration()
+                        .unwrap(),
                     decision: Decision::Uncertain,
                 },
                 Region {
-                    start: 2_000,
-                    end: 3_000,
+                    start: rust_app::SourceTimebase::new(48_000, (2_000) as u64)
+                        .unwrap()
+                        .duration()
+                        .unwrap(),
+                    end: rust_app::SourceTimebase::new(48_000, (3_000) as u64)
+                        .unwrap()
+                        .duration()
+                        .unwrap(),
                     decision: Decision::NoSpeech,
                 },
             ],
             protections: vec![Protection {
                 track: Some(1),
-                start: 2_500,
-                end: 3_000,
+                start: rust_app::SourceTimebase::new(48_000, (2_500) as u64)
+                    .unwrap()
+                    .duration()
+                    .unwrap(),
+                end: rust_app::SourceTimebase::new(48_000, (3_000) as u64)
+                    .unwrap()
+                    .duration()
+                    .unwrap(),
             }],
             cancelled: None,
         },
@@ -152,8 +176,14 @@ fn renders_one_pcm_stem_and_report_without_touching_source() {
         stems: vec![source.clone()],
         output_dir: root.join("rendered"),
         regions: vec![Region {
-            start: 0,
-            end: 2,
+            start: rust_app::SourceTimebase::new(48_000, (0) as u64)
+                .unwrap()
+                .duration()
+                .unwrap(),
+            end: rust_app::SourceTimebase::new(48_000, (2) as u64)
+                .unwrap()
+                .duration()
+                .unwrap(),
             decision: Decision::NoSpeech,
         }],
         protections: vec![],
@@ -245,8 +275,14 @@ fn blocks_invalid_owner_sets() {
         stems: vec![source],
         output_dir: root.join("rendered"),
         regions: vec![Region {
-            start: 0,
-            end: 10,
+            start: rust_app::SourceTimebase::new(48_000, (0) as u64)
+                .unwrap()
+                .duration()
+                .unwrap(),
+            end: rust_app::SourceTimebase::new(48_000, (10) as u64)
+                .unwrap()
+                .duration()
+                .unwrap(),
             decision: Decision::Owned(vec![1]),
         }],
         protections: vec![],

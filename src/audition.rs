@@ -1,5 +1,8 @@
 use crate::{
-    GainEnvelope, RenderBlocker, audio_io::Stem, prepared_analysis::source_stamps,
+    GainEnvelope, RenderBlocker,
+    audio_io::Stem,
+    prepared_analysis::source_stamps,
+    timebase::{Rounding, SourceTimebase, TimePosition},
     waveform::SourceStamp,
 };
 use rodio::{OutputStream, OutputStreamBuilder, Sink, Source};
@@ -13,12 +16,12 @@ use std::{
     time::Duration,
 };
 
-const SAMPLE_RATE: u32 = 48_000;
 const CONTROL_BLOCK: usize = 256;
 
 #[derive(Clone)]
 pub(crate) struct PreparedAudio {
     stamps: Vec<SourceStamp>,
+    sample_rate: u32,
     // ponytail: one full session of f32 PCM; stream when session size exceeds available memory.
     stems: Arc<Vec<Vec<f32>>>,
 }
@@ -47,16 +50,26 @@ impl PreparedAudio {
         {
             return Ok(cached);
         }
+        let mut sample_rate = None;
         let stems = paths
             .iter()
             .map(|path| {
                 check_cancelled()?;
-                Stem::read_cancellable(path, Some(cancelled)).map(|stem| stem.samples)
+                let stem = Stem::read_cancellable(path, Some(cancelled))?;
+                // shortcut: reject mixed-rate audition until ticket 04 prepares a shared device grid.
+                if sample_rate.is_some_and(|rate| rate != stem.format.sample_rate) {
+                    return Err(RenderBlocker(
+                        "mixed-rate audition requires playback preparation".into(),
+                    ));
+                }
+                sample_rate = Some(stem.format.sample_rate);
+                Ok(stem.samples)
             })
             .collect::<Result<Vec<_>, _>>()?;
         check_cancelled()?;
         let prepared = Self {
             stamps,
+            sample_rate: sample_rate.ok_or_else(|| RenderBlocker("no audio tracks".into()))?,
             stems: Arc::new(stems),
         };
         if !prepared.is_current(paths) {
@@ -223,6 +236,7 @@ impl Controls {
 }
 
 struct AuditionSource {
+    sample_rate: u32,
     stems: Arc<Vec<Vec<f32>>>,
     controls: Arc<Controls>,
     end: usize,
@@ -235,10 +249,16 @@ struct AuditionSource {
 }
 
 impl AuditionSource {
-    fn new(stems: Arc<Vec<Vec<f32>>>, controls: Arc<Controls>, end: usize) -> Self {
+    fn new(
+        stems: Arc<Vec<Vec<f32>>>,
+        controls: Arc<Controls>,
+        end: usize,
+        sample_rate: u32,
+    ) -> Self {
         let cursors = vec![usize::MAX; stems.len()];
         let position = controls.position.load(Ordering::Relaxed);
         Self {
+            sample_rate,
             stems,
             controls,
             end,
@@ -305,16 +325,17 @@ impl Source for AuditionSource {
         1
     }
     fn sample_rate(&self) -> u32 {
-        SAMPLE_RATE
+        self.sample_rate
     }
     fn total_duration(&self) -> Option<Duration> {
         Some(Duration::from_secs_f64(
-            self.current_span_len()? as f64 / SAMPLE_RATE as f64,
+            self.current_span_len()? as f64 / self.sample_rate as f64,
         ))
     }
 }
 
 pub(crate) struct LiveAudition {
+    grid: SourceTimebase,
     _stream: OutputStream,
     player: Sink,
     controls: Arc<Controls>,
@@ -327,18 +348,35 @@ impl LiveAudition {
         envelopes: Vec<GainEnvelope>,
         mode: AuditionMode,
         monitor: f32,
-        start: usize,
-        end: usize,
+        start: TimePosition,
+        end: TimePosition,
     ) -> Result<Self, RenderBlocker> {
+        let grid = SourceTimebase::new(
+            prepared.sample_rate,
+            prepared
+                .stems
+                .iter()
+                .map(Vec::len)
+                .max()
+                .unwrap_or_default() as u64,
+        )?;
+        let start = grid.frame_at_time(start.min(grid.duration()?), Rounding::Floor)? as usize;
+        let end = grid.frame_at_time(end.min(grid.duration()?), Rounding::Ceil)? as usize;
         let stream = OutputStreamBuilder::open_default_stream()
             .map_err(|error| RenderBlocker(format!("audio output unavailable: {error}")))?;
         let player = Sink::connect_new(stream.mixer());
         let stems = prepared.stems;
         let end = end.min(stems.iter().map(Vec::len).max().unwrap_or_default());
         let controls = Arc::new(Controls::new(mode, monitor, start.min(end), envelopes));
-        player.append(AuditionSource::new(stems, Arc::clone(&controls), end));
+        player.append(AuditionSource::new(
+            stems,
+            Arc::clone(&controls),
+            end,
+            grid.sample_rate,
+        ));
         player.play();
         Ok(Self {
+            grid,
             _stream: stream,
             player,
             controls,
@@ -355,14 +393,26 @@ impl LiveAudition {
     pub(crate) fn replace_envelopes(&self, envelopes: Vec<GainEnvelope>) {
         self.controls.settings.write().unwrap().envelopes = Arc::new(envelopes);
     }
-    pub(crate) fn position(&self) -> usize {
-        self.controls.position.load(Ordering::Relaxed)
+    pub(crate) fn position(&self) -> TimePosition {
+        self.grid
+            .time_at_frame(
+                self.controls.position.load(Ordering::Relaxed) as u64,
+                Rounding::Floor,
+            )
+            .expect("bounded playback position")
     }
-    pub(crate) fn seek(&self, position: usize) {
-        self.controls.settings.write().unwrap().seek = Some(position.min(self.end));
+    pub(crate) fn seek(&self, position: TimePosition) {
+        let frame = self
+            .grid
+            .frame_at_time(
+                position.min(self.grid.duration().expect("validated playback grid")),
+                Rounding::Floor,
+            )
+            .expect("bounded playback seek");
+        self.controls.settings.write().unwrap().seek = Some((frame as usize).min(self.end));
     }
     pub(crate) fn is_finished(&self) -> bool {
-        self.position() >= self.end || self.player.empty()
+        self.controls.position.load(Ordering::Relaxed) >= self.end || self.player.empty()
     }
     pub(crate) fn stop(&self) {
         self.player.stop();
@@ -432,8 +482,12 @@ mod tests {
             0,
             vec![GainEnvelope::constant(1024, 0.5)],
         ));
-        let mut source =
-            AuditionSource::new(Arc::new(vec![vec![1.0; 1024]]), Arc::clone(&controls), 1024);
+        let mut source = AuditionSource::new(
+            Arc::new(vec![vec![1.0; 1024]]),
+            Arc::clone(&controls),
+            1024,
+            48_000,
+        );
         assert!(
             source
                 .by_ref()
@@ -486,6 +540,15 @@ mod tests {
 
     #[test]
     fn cancelled_warm_requests_retain_the_shared_pcm() {
+        let directory = std::env::temp_dir().join(format!("audition-warm-{}", std::process::id()));
+        std::fs::create_dir_all(&directory).unwrap();
+        let path = directory.join("voice.wav");
+        let writer =
+            bwavfile::WaveWriter::create(&path, bwavfile::WaveFmt::new_pcm_mono(48_000, 16))
+                .unwrap();
+        let mut frames = writer.audio_frame_writer().unwrap();
+        frames.write_frames(&[0.25_f32; 512]).unwrap();
+        frames.end().unwrap();
         let mut preparation = AuditionPreparation::default();
         let wait = |preparation: &mut AuditionPreparation| {
             let deadline = std::time::Instant::now() + Duration::from_secs(5);
@@ -495,27 +558,28 @@ mod tests {
                 std::thread::yield_now();
             }
         };
-        preparation.request(vec![]);
+        preparation.request(vec![path.clone()]);
         wait(&mut preparation);
         let first = Arc::clone(&preparation.cache.as_ref().unwrap().stems);
-        preparation.request(vec![]);
+        preparation.request(vec![path.clone()]);
         preparation.cancel();
         wait(&mut preparation);
         assert!(Arc::ptr_eq(
             &first,
             &preparation.cache.as_ref().unwrap().stems
         ));
-        preparation.request(vec![]);
-        preparation.request(vec![]);
+        preparation.request(vec![path.clone()]);
+        preparation.request(vec![path.clone()]);
         wait(&mut preparation);
         assert!(Arc::ptr_eq(
             &first,
             &preparation.cache.as_ref().unwrap().stems
         ));
-        preparation.request(vec![]);
+        preparation.request(vec![path]);
         preparation.invalidate();
         wait(&mut preparation);
         assert!(preparation.cache.is_none());
+        std::fs::remove_dir_all(directory).unwrap();
     }
 
     #[test]
@@ -536,7 +600,8 @@ mod tests {
             AuditionMode::Removed,
         ] {
             let controls = Arc::new(Controls::new(mode, 0.5, 123, envelopes.clone()));
-            let mut source = AuditionSource::new(Arc::clone(&stems), Arc::clone(&controls), 1400);
+            let mut source =
+                AuditionSource::new(Arc::clone(&stems), Arc::clone(&controls), 1400, 48_000);
             for position in 123..123 + CONTROL_BLOCK {
                 let expected = stems
                     .iter()

@@ -68,7 +68,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 vec![Protection {
                     track: None,
                     start: 0,
-                    end: cold.envelopes[0].sample_count().min(48_000),
+                    end: cold.envelopes[0].duration().min(rust_app::TICKS_PER_SECOND),
                 }]
             } else {
                 vec![]

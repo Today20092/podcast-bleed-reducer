@@ -18,6 +18,14 @@ fn temp_dir() -> PathBuf {
     path
 }
 
+fn wav(path: &std::path::Path) {
+    let writer =
+        bwavfile::WaveWriter::create(path, bwavfile::WaveFmt::new_pcm_mono(48_000, 16)).unwrap();
+    let mut frames = writer.audio_frame_writer().unwrap();
+    frames.write_frames(&[0.0; 100]).unwrap();
+    frames.end().unwrap();
+}
+
 #[test]
 fn report_drives_selection_and_comparison_without_losing_context() {
     let dir = temp_dir();
@@ -34,7 +42,7 @@ fn report_drives_selection_and_comparison_without_losing_context() {
     assert_eq!(review.playhead(), 48_000);
     assert_eq!(review.selection(), Some((48_000, 96_000)));
     let source = dir.join("voice.wav");
-    fs::write(&source, b"source").unwrap();
+    wav(&source);
     let mut project = Project::create(dir.join("episode.cleanslate"), vec![source]).unwrap();
     let warning_key = review.warnings[0].key();
     project
@@ -58,28 +66,39 @@ fn report_drives_selection_and_comparison_without_losing_context() {
 fn protections_combine_and_make_the_render_stale() {
     let dir = temp_dir();
     let source = dir.join("voice.wav");
-    fs::write(&source, b"source").unwrap();
-    let mut project = Project::create(dir.join("episode.cleanslate"), vec![source]).unwrap();
+    wav(&source);
+    let guest = dir.join("guest.wav");
+    wav(&guest);
+    let third = dir.join("third.wav");
+    wav(&third);
+    let mut project =
+        Project::create(dir.join("episode.cleanslate"), vec![source, guest, third]).unwrap();
     let rendered = dir.join("render/report.json");
     fs::create_dir_all(rendered.parent().unwrap()).unwrap();
     fs::write(&rendered, b"{}").unwrap();
     project.mark_render_current(&rendered).unwrap();
 
     project.protect_track(0).unwrap();
-    project.protect_range(10, 20).unwrap();
-    project.protect_region(&[1, 2], 30, 40).unwrap();
+    project.protect_range(10 * 588, 20 * 588).unwrap();
+    project.protect_region(&[1, 2], 30 * 588, 40 * 588).unwrap();
     assert_eq!(
         project.protections()[2..],
         [
             rust_app::Protection {
                 track: Some(1),
-                start: 30,
-                end: 40
+                start: rust_app::SourceTimebase::new(48_000, (30) as u64)
+                    .unwrap()
+                    .duration()
+                    .unwrap(),
+                end: 40 * 588
             },
             rust_app::Protection {
                 track: Some(2),
-                start: 30,
-                end: 40
+                start: rust_app::SourceTimebase::new(48_000, (30) as u64)
+                    .unwrap()
+                    .duration()
+                    .unwrap(),
+                end: 40 * 588
             },
         ]
     );

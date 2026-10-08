@@ -12,7 +12,7 @@ struct Case {
     end_seconds: f64,
 }
 
-fn decision_counts(regions: &[Region], track: usize, start: usize, end: usize) -> [usize; 4] {
+fn decision_counts(regions: &[Region], track: usize, start: u64, end: u64) -> [u64; 4] {
     let mut counts = [0; 4];
     for region in regions {
         let samples = region.end.min(end).saturating_sub(region.start.max(start));
@@ -39,7 +39,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     // Deserialize directly: no project mutators, autosave, or audio output.
     let session_bytes = fs::read(&args[0])?;
-    let project: Project = serde_json::from_slice(&session_bytes)?;
+    let project = Project::open(std::path::PathBuf::from(&args[0]))?;
     let case_bytes = fs::read(&args[1])?;
     let cases: Vec<Case> = serde_json::from_slice(&case_bytes)?;
     let paths = project.source_paths();
@@ -100,9 +100,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let elapsed_ms = started.elapsed().as_millis();
         let mut rows = Vec::new();
         for case in &cases {
-            let start = (case.start_seconds * 48_000.0).round() as usize;
-            let end = (case.end_seconds * 48_000.0).round() as usize;
             let curve = &preview.envelopes[case.track];
+            let start_time =
+                rust_app::time_from_seconds(case.start_seconds, rust_app::Rounding::Floor)?;
+            let end_time = rust_app::time_from_seconds(case.end_seconds, rust_app::Rounding::Ceil)?;
+            let grid =
+                rust_app::SourceTimebase::new(curve.sample_rate(), curve.sample_count() as u64)?;
+            let range = rust_app::TimeRange::new(start_time, end_time)?.native_frames(grid)?;
+            let (start, end) = (range.start, range.end);
             if end > curve.sample_count() || start == end {
                 return Err("diagnostic interval is outside the source".into());
             }
@@ -125,13 +130,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     open = 0;
                 }
             }
-            let counts = decision_counts(&preview.regions, case.track, start, end);
+            let counts = decision_counts(&preview.regions, case.track, start_time, end_time);
             rows.push(json!({"name": case.name, "track": case.track, "start_sample": start, "end_sample": end,
-                "decision_samples": {"owned_target": counts[0], "owned_other": counts[1], "uncertain": counts[2], "no_speech": counts[3]},
+                "decision_ticks": {"owned_target": counts[0], "owned_other": counts[1], "uncertain": counts[2], "no_speech": counts[3]},
                 "unity_samples": unity, "below_minus_1_db_samples": below_1_db,
                 "minimum_gain_db": 20.0 * minimum.log10(),
                 "time_weighted_gain_db": 10.0 * (sum_squared / (end - start) as f64).log10(),
-                "longest_above_minus_0_1_db_seconds": longest_open as f64 / 48_000.0}));
+                "longest_above_minus_0_1_db_seconds": longest_open as f64 / f64::from(curve.sample_rate())}));
         }
         modes.push(json!({"name": name, "parameters": parameters, "settings": settings, "elapsed_ms": elapsed_ms, "cases": rows}));
     }

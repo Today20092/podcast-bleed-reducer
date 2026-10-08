@@ -56,6 +56,20 @@ pub struct PreviewCache {
 }
 
 impl PreviewCache {
+    pub(crate) fn requires_source_validation(
+        &self,
+        paths: &[PathBuf],
+        settings: &OwnershipSettings,
+    ) -> Result<bool, RenderBlocker> {
+        Ok(self
+            .prepared
+            .as_ref()
+            .is_none_or(|p| source_stamps(paths).as_ref().ok() != Some(&p.sources))
+            || self
+                .ownership
+                .as_ref()
+                .is_none_or(|(_, previous, _)| previous != settings))
+    }
     pub fn stats(&self) -> PreviewCacheStats {
         self.stats
     }
@@ -151,8 +165,8 @@ impl PreviewCache {
         let sample_count = prepared.facts.sample_count;
         validate_calibration(ownership, &sources, Some(sample_count))?;
         if protections.iter().any(|p| {
-            p.start > p.end
-                || (p.end != usize::MAX && p.end > sample_count)
+            p.start >= p.end
+                || (p.end != u64::MAX && p.end > crate::timebase::detector_time(sample_count))
                 || p.track.is_some_and(|track| track >= paths.len())
         }) {
             return Err(RenderBlocker("protection is outside the session".into()));
@@ -177,7 +191,10 @@ impl PreviewCache {
                 prepared.facts.regions(
                     parameters.speech_sensitivity,
                     parameters.bleed_discrimination_db,
-                    (parameters.speech_padding_ms * 48_000.0 / 1000.0 / 1_536.0).round() as usize,
+                    (parameters.speech_padding_ms * crate::timebase::DETECTOR_SAMPLE_RATE as f32
+                        / 1000.0
+                        / 1_536.0)
+                        .round() as usize,
                 )
             };
             check_cancelled(cancelled)?;
@@ -195,8 +212,10 @@ impl PreviewCache {
                 regions,
                 protections,
                 10.0_f32.powf(parameters.attenuation_db / 20.0),
-                (parameters.open_ms * 48_000.0 / 1000.0).max(1.0),
-                (parameters.close_ms * 48_000.0 / 1000.0).max(1.0),
+                (parameters.open_ms * crate::timebase::DETECTOR_SAMPLE_RATE as f32 / 1000.0)
+                    .max(1.0),
+                (parameters.close_ms * crate::timebase::DETECTOR_SAMPLE_RATE as f32 / 1000.0)
+                    .max(1.0),
             ));
         }
         check_cancelled(cancelled)?;
@@ -229,9 +248,9 @@ pub(crate) fn validate_calibration(
     sources: &[SourceStamp],
     sample_count: Option<usize>,
 ) -> Result<(), RenderBlocker> {
-    settings.validate(
+    settings.validate_durations(
         sources,
-        &vec![sample_count.unwrap_or(usize::MAX); sources.len()],
+        &vec![sample_count.map_or(u64::MAX, crate::timebase::detector_time); sources.len()],
     )
 }
 
@@ -240,9 +259,9 @@ pub(crate) fn validate_parameters(p: AutomixParameters) -> Result<(), RenderBloc
         p.speech_sensitivity,
         p.bleed_discrimination_db,
         p.attenuation_db,
-        p.speech_padding_ms * 48.0,
-        p.open_ms * 48.0,
-        p.close_ms * 48.0,
+        p.speech_padding_ms * crate::timebase::DETECTOR_SAMPLE_RATE as f32 / 1000.0,
+        p.open_ms * crate::timebase::DETECTOR_SAMPLE_RATE as f32 / 1000.0,
+        p.close_ms * crate::timebase::DETECTOR_SAMPLE_RATE as f32 / 1000.0,
     ]
     .iter()
     .all(|v| v.is_finite())

@@ -31,7 +31,8 @@ fn wav(path: &Path) {
 fn exports_current_render_with_delivery_names() {
     let dir = temp_dir();
     let source = dir.join("host.wav");
-    fs::write(&source, b"source").unwrap();
+    wav(&source);
+    let original_bytes = fs::read(&source).unwrap();
     let render = dir.join("render");
     fs::create_dir(&render).unwrap();
     wav(&render.join("01-host.wav"));
@@ -51,14 +52,14 @@ fn exports_current_render_with_delivery_names() {
 
     assert!(destination.join("host-clean.wav").is_file());
     assert!(!destination.join("report.json").exists());
-    assert_eq!(fs::read(source).unwrap(), b"source");
+    assert_eq!(fs::read(source).unwrap(), original_bytes);
     fs::remove_dir_all(dir).unwrap();
 }
 
 fn current_project(dir: &Path) -> Project {
     fs::create_dir_all(dir).unwrap();
     let source = dir.join("host.wav");
-    fs::write(&source, b"source").unwrap();
+    wav(&source);
     let render = dir.join("render");
     fs::create_dir(&render).unwrap();
     wav(&render.join("01-host.wav"));

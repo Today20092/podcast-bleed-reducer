@@ -72,36 +72,36 @@ mod preview_tests {
     fn range_protection_forces_exact_unity_during_attenuation_and_recovery() {
         let regions = vec![
             Region {
-                start: 0,
-                end: 100,
+                start: crate::timebase::detector_time(0),
+                end: crate::timebase::detector_time(100),
                 decision: Decision::Owned(vec![0]),
             },
             Region {
-                start: 100,
-                end: 200,
+                start: crate::timebase::detector_time(100),
+                end: crate::timebase::detector_time(200),
                 decision: Decision::Owned(vec![0, 1]),
             },
             Region {
-                start: 200,
-                end: 300,
+                start: crate::timebase::detector_time(200),
+                end: crate::timebase::detector_time(300),
                 decision: Decision::Owned(vec![0]),
             },
         ];
         let protections = vec![
             Protection {
                 track: Some(1),
-                start: 20,
-                end: 40,
+                start: crate::timebase::detector_time(20),
+                end: crate::timebase::detector_time(40),
             },
             Protection {
                 track: None,
-                start: 30,
-                end: 60,
+                start: crate::timebase::detector_time(30),
+                end: crate::timebase::detector_time(60),
             },
             Protection {
                 track: Some(1),
-                start: 150,
-                end: 180,
+                start: crate::timebase::detector_time(150),
+                end: crate::timebase::detector_time(180),
             },
         ];
         let envelope = gain_envelope(1, 300, &regions, &protections, 0.125, 10.0, 20.0);
@@ -142,6 +142,7 @@ mod preview_tests {
         close_samples: f32,
     ) -> GainEnvelope {
         let mut envelope = GainEnvelope {
+            sample_rate: crate::timebase::DETECTOR_SAMPLE_RATE,
             sample_count,
             points: vec![],
         };
@@ -157,7 +158,9 @@ mod preview_tests {
         });
         for sample in 1..sample_count {
             if protections.iter().any(|p| {
-                p.start <= sample && sample < p.end && p.track.is_none_or(|owner| owner == track)
+                p.start <= crate::timebase::detector_time(sample)
+                    && crate::timebase::detector_time(sample) < p.end
+                    && p.track.is_none_or(|owner| owner == track)
             }) {
                 if envelope.points.last().unwrap().gain != 1.0 || target != 1.0 {
                     envelope.points.push(GainPoint {
@@ -200,66 +203,66 @@ mod preview_tests {
         // Sorted starts, including ties, overlaps, gaps and empty intervals.
         let regions = vec![
             Region {
-                start: 3,
-                end: 18,
+                start: crate::timebase::detector_time(3),
+                end: crate::timebase::detector_time(18),
                 decision: Decision::NoSpeech,
             },
             Region {
-                start: 8,
-                end: 12,
+                start: crate::timebase::detector_time(8),
+                end: crate::timebase::detector_time(12),
                 decision: Decision::Owned(vec![0, 1]),
             },
             Region {
-                start: 8,
-                end: 10,
+                start: crate::timebase::detector_time(8),
+                end: crate::timebase::detector_time(10),
                 decision: Decision::Owned(vec![1]),
             },
             Region {
-                start: 15,
-                end: 15,
+                start: crate::timebase::detector_time(15),
+                end: crate::timebase::detector_time(15),
                 decision: Decision::NoSpeech,
             },
             Region {
-                start: 20,
-                end: 28,
+                start: crate::timebase::detector_time(20),
+                end: crate::timebase::detector_time(28),
                 decision: Decision::Uncertain,
             },
             Region {
-                start: 28,
-                end: 64,
+                start: crate::timebase::detector_time(28),
+                end: crate::timebase::detector_time(64),
                 decision: Decision::NoSpeech,
             },
         ];
         let protections = vec![
             Protection {
                 track: Some(0),
-                start: 35,
-                end: usize::MAX,
+                start: crate::timebase::detector_time(35),
+                end: u64::MAX,
             },
             Protection {
                 track: None,
-                start: 5,
-                end: 9,
+                start: crate::timebase::detector_time(5),
+                end: crate::timebase::detector_time(9),
             },
             Protection {
                 track: Some(1),
-                start: 8,
-                end: 14,
+                start: crate::timebase::detector_time(8),
+                end: crate::timebase::detector_time(14),
             },
             Protection {
                 track: None,
-                start: 9,
-                end: 11,
+                start: crate::timebase::detector_time(9),
+                end: crate::timebase::detector_time(11),
             },
             Protection {
                 track: None,
-                start: 30,
-                end: 30,
+                start: crate::timebase::detector_time(30),
+                end: crate::timebase::detector_time(30),
             },
             Protection {
                 track: Some(2),
-                start: 0,
-                end: 2,
+                start: crate::timebase::detector_time(0),
+                end: crate::timebase::detector_time(2),
             },
         ];
         for track in 0..3 {
@@ -314,8 +317,8 @@ mod preview_tests {
             .step_by(48_000)
             .enumerate()
             .map(|(index, start)| Region {
-                start,
-                end: (start + 48_000).min(count),
+                start: crate::timebase::detector_time(start),
+                end: crate::timebase::detector_time((start + 48_000).min(count)),
                 decision: if index % 2 == 0 {
                     Decision::NoSpeech
                 } else {
@@ -359,25 +362,25 @@ mod preview_tests {
     fn gain_bounds_include_internal_open_close_and_protection_edges() {
         let regions = vec![
             Region {
-                start: 0,
-                end: 20,
+                start: crate::timebase::detector_time(0),
+                end: crate::timebase::detector_time(20),
                 decision: Decision::NoSpeech,
             },
             Region {
-                start: 20,
-                end: 40,
+                start: crate::timebase::detector_time(20),
+                end: crate::timebase::detector_time(40),
                 decision: Decision::Owned(vec![0]),
             },
             Region {
-                start: 40,
-                end: 80,
+                start: crate::timebase::detector_time(40),
+                end: crate::timebase::detector_time(80),
                 decision: Decision::NoSpeech,
             },
         ];
         let protections = [Protection {
             track: Some(0),
-            start: 55,
-            end: 65,
+            start: crate::timebase::detector_time(55),
+            end: crate::timebase::detector_time(65),
         }];
         let envelope = gain_envelope(0, 80, &regions, &protections, 0.25, 4.0, 6.0);
         for (start, end) in [
@@ -410,23 +413,23 @@ mod preview_tests {
         let floor = 0.25;
         let regions = vec![
             Region {
-                start: 0,
-                end: 10,
+                start: crate::timebase::detector_time(0),
+                end: crate::timebase::detector_time(10),
                 decision: Decision::NoSpeech,
             },
             Region {
-                start: 10,
-                end: 30,
+                start: crate::timebase::detector_time(10),
+                end: crate::timebase::detector_time(30),
                 decision: Decision::Owned(vec![0]),
             },
             Region {
-                start: 30,
-                end: 40,
+                start: crate::timebase::detector_time(30),
+                end: crate::timebase::detector_time(40),
                 decision: Decision::NoSpeech,
             },
             Region {
-                start: 40,
-                end: 60,
+                start: crate::timebase::detector_time(40),
+                end: crate::timebase::detector_time(60),
                 decision: Decision::Owned(vec![0]),
             },
         ];
@@ -472,6 +475,7 @@ impl Default for AutomixParameters {
 #[derive(Clone, Debug, PartialEq)]
 pub struct GainEnvelope {
     sample_count: usize,
+    sample_rate: u32,
     points: Vec<GainPoint>,
 }
 
@@ -493,6 +497,7 @@ impl GainPoint {
 #[test]
 fn sequential_gain_matches_random_access_across_seeks() {
     let envelope = GainEnvelope {
+        sample_rate: crate::timebase::DETECTOR_SAMPLE_RATE,
         sample_count: 6000,
         points: vec![
             GainPoint {
@@ -525,6 +530,48 @@ fn sequential_gain_matches_random_access_across_seeks() {
 }
 
 impl GainEnvelope {
+    pub fn sample_rate(&self) -> u32 {
+        self.sample_rate
+    }
+    pub fn duration(&self) -> crate::TimePosition {
+        self.source_grid()
+            .duration()
+            .expect("validated envelope grid")
+    }
+    pub fn source_grid(&self) -> crate::SourceTimebase {
+        crate::SourceTimebase {
+            sample_rate: self.sample_rate,
+            frame_count: self.sample_count as u64,
+        }
+    }
+    pub fn gain_at_time(&self, time: crate::TimePosition) -> f32 {
+        self.source_grid()
+            .frame_at_time(time, crate::Rounding::Floor)
+            .ok()
+            .and_then(|sample| usize::try_from(sample).ok())
+            .filter(|&sample| sample < self.sample_count)
+            .map_or(1.0, |sample| self.gain_at(sample))
+    }
+    pub(crate) fn gain_bounds_time(
+        &self,
+        start: crate::TimePosition,
+        end: crate::TimePosition,
+    ) -> Option<(f32, f32)> {
+        let duration = self.duration();
+        let start = usize::try_from(
+            self.source_grid()
+                .frame_at_time(start.min(duration), crate::Rounding::Floor)
+                .ok()?,
+        )
+        .ok()?;
+        let end = usize::try_from(
+            self.source_grid()
+                .frame_at_time(end.min(duration), crate::Rounding::Ceil)
+                .ok()?,
+        )
+        .ok()?;
+        self.gain_bounds(start, end)
+    }
     /// Same arithmetic as random access; retain the segment index during playback.
     pub(crate) fn gain_at_sequential(&self, sample: usize, cursor: &mut usize) -> f32 {
         if self.points.is_empty() {
@@ -544,6 +591,7 @@ impl GainEnvelope {
     #[cfg(test)]
     pub(crate) fn constant(sample_count: usize, gain: f32) -> Self {
         Self {
+            sample_rate: crate::timebase::DETECTOR_SAMPLE_RATE,
             sample_count,
             points: vec![GainPoint {
                 sample: 0,
@@ -606,16 +654,16 @@ pub enum Decision {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Region {
-    pub start: usize,
-    pub end: usize,
+    pub start: crate::TimePosition,
+    pub end: crate::TimePosition,
     pub decision: Decision,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Protection {
     pub track: Option<usize>,
-    pub start: usize,
-    pub end: usize,
+    pub start: crate::TimePosition,
+    pub end: crate::TimePosition,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -697,6 +745,7 @@ pub fn run_with_ownership(
     validate_calibration(ownership, &sources, None)?;
     let (stems, validation) = load_and_validate(&request.stems)?;
     let sample_count = stems[0].samples.len();
+    let sample_rate = stems[0].format.sample_rate;
     validate_calibration(ownership, &sources, Some(sample_count))?;
     let references: Vec<Option<u64>> = stems
         .iter()
@@ -706,7 +755,7 @@ pub fn run_with_ownership(
     if request
         .regions
         .iter()
-        .any(|r| r.start > r.end || r.end > sample_count)
+        .any(|r| r.start >= r.end || r.end > crate::timebase::detector_time(sample_count))
     {
         return Err(RenderBlocker(
             "ownership region is outside the session".into(),
@@ -725,8 +774,8 @@ pub fn run_with_ownership(
         ));
     }
     if request.protections.iter().any(|p| {
-        p.start > p.end
-            || (p.end != usize::MAX && p.end > sample_count)
+        p.start >= p.end
+            || (p.end != u64::MAX && p.end > crate::timebase::detector_time(sample_count))
             || p.track.is_some_and(|track| track >= stems.len())
     }) {
         return Err(RenderBlocker("protection is outside the session".into()));
@@ -756,7 +805,10 @@ pub fn run_with_ownership(
                     .collect::<Vec<_>>(),
                 parameters.speech_sensitivity,
                 parameters.bleed_discrimination_db,
-                (parameters.speech_padding_ms * 48_000.0 / 1000.0 / 1_536.0).round() as usize,
+                (parameters.speech_padding_ms * crate::timebase::DETECTOR_SAMPLE_RATE as f32
+                    / 1000.0
+                    / 1_536.0)
+                    .round() as usize,
             )?
         } else {
             request.regions.clone()
@@ -768,17 +820,18 @@ pub fn run_with_ownership(
     }
     if automated
         && regions.iter().any(|region| {
-            region.end - region.start >= 10 * 48_000 && region.decision != Decision::Uncertain
+            region.end - region.start >= 10 * crate::TICKS_PER_SECOND
+                && region.decision != Decision::Uncertain
         })
     {
         warnings.push("review unusually broad attenuation".into());
     }
-    let uncertain_samples: usize = regions
+    let uncertain_time: u64 = regions
         .iter()
         .filter(|region| region.decision == Decision::Uncertain)
         .map(|region| region.end - region.start)
         .sum();
-    if automated && uncertain_samples > sample_count / 4 {
+    if automated && uncertain_time > crate::timebase::detector_time(sample_count) / 4 {
         warnings.push("review substantial conservative fallback".into());
     }
 
@@ -793,8 +846,8 @@ pub fn run_with_ownership(
                 &regions,
                 &request.protections,
                 10.0_f32.powf(parameters.attenuation_db / 20.0),
-                (parameters.open_ms * 48_000.0 / 1000.0).max(1.0),
-                (parameters.close_ms * 48_000.0 / 1000.0).max(1.0),
+                (parameters.open_ms * stem.format.sample_rate as f32 / 1000.0).max(1.0),
+                (parameters.close_ms * stem.format.sample_rate as f32 / 1000.0).max(1.0),
             );
             let mut rendered = Vec::with_capacity(sample_count);
             for (sample, source) in stem.samples.iter().enumerate() {
@@ -817,7 +870,7 @@ pub fn run_with_ownership(
         }
         check_cancelled(&request)?;
         let mut report = format!(
-            "{{\n  \"detector\": \"silero-vad-v5\",\n  \"model\": {{\"sha256\": \"1A153A22F4509E292A94E67D6F9B85E8DEB25B4988682B7E174C65279D8788E3\", \"license\": \"MIT\"}},\n  \"thresholds\": {{\"speech_probability\": {}, \"energy_margin_db\": {}, \"attenuation_db\": {}, \"speech_padding_ms\": {}, \"open_ms\": {}, \"close_ms\": {}}},\n  \"input\": {{\"sample_rate\": 48000, \"sample_count\": {sample_count}, \"channel_count\": 1, \"bext_time_reference\": {}, \"stems\": [{}]}},\n  \"output\": {{\"sample_rate\": 48000, \"sample_count\": {sample_count}, \"channel_count\": 1, \"stems\": [{}], \"invalid_samples\": 0, \"clipping_introduced\": false}},\n  \"regions\": [{}],\n  \"warnings\": [{}],\n  \"protections\": [{}]\n}}\n",
+            "{{\n  \"detector\": \"silero-vad-v5\",\n  \"model\": {{\"sha256\": \"1A153A22F4509E292A94E67D6F9B85E8DEB25B4988682B7E174C65279D8788E3\", \"license\": \"MIT\"}},\n  \"thresholds\": {{\"speech_probability\": {}, \"energy_margin_db\": {}, \"attenuation_db\": {}, \"speech_padding_ms\": {}, \"open_ms\": {}, \"close_ms\": {}}},\n  \"input\": {{\"sample_rate\": {sample_rate}, \"sample_count\": {sample_count}, \"channel_count\": 1, \"bext_time_reference\": {}, \"stems\": [{}]}},\n  \"output\": {{\"sample_rate\": {sample_rate}, \"sample_count\": {sample_count}, \"channel_count\": 1, \"stems\": [{}], \"invalid_samples\": 0, \"clipping_introduced\": false}},\n  \"regions\": [{}],\n  \"warnings\": [{}],\n  \"protections\": [{}]\n}}\n",
             parameters.speech_sensitivity,
             parameters.bleed_discrimination_db,
             parameters.attenuation_db,
@@ -881,7 +934,8 @@ pub fn run_with_ownership(
         report.insert_str(
             2,
             &format!(
-                "  \"ownership_settings\": {},\n  \"attenuation_values_are_targets\": true,\n",
+                "  \"timebase\": {{\"ticks_per_second\": {}, \"intervals\": \"half-open\"}},\n  \"ownership_settings\": {},\n  \"attenuation_values_are_targets\": true,\n",
+                crate::TICKS_PER_SECOND,
                 serde_json::to_string(ownership).map_err(|e| RenderBlocker(e.to_string()))?
             ),
         );
@@ -927,6 +981,7 @@ pub(crate) fn gain_envelope(
 ) -> GainEnvelope {
     if sample_count == 0 {
         return GainEnvelope {
+            sample_rate: crate::timebase::DETECTOR_SAMPLE_RATE,
             sample_count,
             points: vec![],
         };
@@ -942,15 +997,38 @@ pub(crate) fn gain_envelope(
     // ranges remain additive without scanning every protection at every edge.
     let mut edges: Vec<(usize, isize)> = regions
         .iter()
-        .flat_map(|region| [(region.start, 0), (region.end, 0)])
+        .flat_map(|region| {
+            [
+                (
+                    crate::timebase::detector_frame(region.start, crate::Rounding::Floor)
+                        .expect("validated region"),
+                    0,
+                ),
+                (
+                    crate::timebase::detector_frame(region.end, crate::Rounding::Ceil)
+                        .expect("validated region"),
+                    0,
+                ),
+            ]
+        })
         .filter(|(sample, _)| *sample < sample_count)
         .collect();
     for protection in protections.iter().filter(|p| {
-        p.start < p.end && p.start < sample_count && p.track.is_none_or(|owner| owner == track)
+        p.start < p.end
+            && p.start < crate::timebase::detector_time(sample_count)
+            && p.track.is_none_or(|owner| owner == track)
     }) {
-        edges.push((protection.start, 1));
-        if protection.end < sample_count {
-            edges.push((protection.end, -1));
+        edges.push((
+            crate::timebase::detector_frame(protection.start, crate::Rounding::Floor)
+                .expect("validated protection"),
+            1,
+        ));
+        if protection.end < crate::timebase::detector_time(sample_count) {
+            edges.push((
+                crate::timebase::detector_frame(protection.end, crate::Rounding::Ceil)
+                    .expect("validated protection"),
+                -1,
+            ));
         }
     }
     edges.sort_unstable_by_key(|&(sample, _)| sample);
@@ -1004,6 +1082,7 @@ pub(crate) fn gain_envelope(
         }
     }
     GainEnvelope {
+        sample_rate: crate::timebase::DETECTOR_SAMPLE_RATE,
         sample_count,
         points,
     }
@@ -1099,7 +1178,7 @@ fn report_regions(
             edges.windows(2).map(|span| {
             let protected = protections.iter().any(|p| (p.track.is_none() || p.track == track) && p.start <= span[0] && p.end >= span[1]);
             let reasons = if protected { "protection forces unity gain" } else { reasons };
-            let warning = if region.end - region.start >= 10 * 48_000
+            let warning = if region.end - region.start >= 10 * crate::TICKS_PER_SECOND
                 && region.decision != Decision::Uncertain
                 && !protected
             {
@@ -1156,21 +1235,32 @@ fn target_gain_with_attenuation(
     attenuation: f32,
 ) -> f32 {
     if protections.iter().any(|p| {
-        p.start <= sample && sample < p.end && p.track.is_none_or(|protected| protected == track)
+        let start = crate::timebase::detector_frame(p.start, crate::Rounding::Floor)
+            .expect("validated protection");
+        let end = if p.end == u64::MAX {
+            usize::MAX
+        } else {
+            crate::timebase::detector_frame(p.end, crate::Rounding::Ceil)
+                .expect("validated protection")
+        };
+        start <= sample && sample < end && p.track.is_none_or(|protected| protected == track)
     }) {
         return 1.0;
     }
-    match regions
-        .get(
-            regions
-                .partition_point(|region| region.start <= sample)
-                .saturating_sub(1),
-        )
-        .filter(|region| sample < region.end)
-        .map(|region| &region.decision)
-    {
-        Some(Decision::Owned(owners)) if !owners.contains(&track) => attenuation,
-        Some(Decision::NoSpeech) => attenuation,
-        _ => 1.0,
+    let start = crate::timebase::detector_time(sample);
+    let end = crate::timebase::detector_time(sample + 1);
+    let first = regions.partition_point(|region| region.end <= start);
+    let overlapping = regions[first..]
+        .iter()
+        .take_while(|region| region.start < end);
+    let mut covered = false;
+    for region in overlapping {
+        covered = true;
+        if region.decision == Decision::Uncertain
+            || matches!(&region.decision, Decision::Owned(owners) if owners.contains(&track))
+        {
+            return 1.0;
+        }
     }
+    if covered { attenuation } else { 1.0 }
 }

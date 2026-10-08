@@ -10,7 +10,11 @@ use std::{path::PathBuf, sync::atomic::AtomicU8};
 
 // The reference contract has five columns, no commas in filenames, and optional
 // quoted fields. Keep the free-text notes as one tail field, including commas.
-fn read_labels(csv: &str, paths: &[PathBuf], count: usize) -> Result<Vec<Label>, RenderBlocker> {
+fn read_labels(
+    csv: &str,
+    paths: &[PathBuf],
+    grids: &[crate::SourceTimebase],
+) -> Result<Vec<Label>, RenderBlocker> {
     let mut lines = csv.lines();
     if lines.next() != Some("track,start_seconds,end_seconds,label,notes") {
         return Err(RenderBlocker("expected reference label CSV header".into()));
@@ -30,15 +34,14 @@ fn read_labels(csv: &str, paths: &[PathBuf], count: usize) -> Result<Vec<Label>,
                 .iter()
                 .position(|path| path.file_name().and_then(|n| n.to_str()) == Some(fields[0]))
                 .ok_or_else(invalid)?;
-            let time = |field: &str| -> Result<usize, RenderBlocker> {
+            let time = |field: &str, rounding| -> Result<u64, RenderBlocker> {
                 let seconds = field.parse::<f64>().map_err(|_| invalid())?;
-                if !seconds.is_finite() || seconds < 0.0 || seconds * 48_000.0 > count as f64 {
-                    return Err(invalid());
-                }
-                Ok((seconds * 48_000.0).round() as usize)
+                crate::time_from_seconds(seconds, rounding).map_err(|_| invalid())
             };
-            let start = time(fields[1])?;
-            let end = time(fields[2])?;
+            let start = time(fields[1], crate::Rounding::Floor)?;
+            let end = time(fields[2], crate::Rounding::Ceil)?;
+            crate::TimeRange::new(start, end)?
+                .native_frames(*grids.get(track).ok_or_else(invalid)?)?;
             if start >= end {
                 return Err(invalid());
             }
@@ -68,11 +71,19 @@ fn measure(samples: &[&[f32]], envelopes: &[GainEnvelope], labels: &[Label]) -> 
             let mut changed = 0;
             let (mut input, mut output) = (0.0, 0.0);
             let mut minimum_gain = 1.0_f32;
-            for (offset, &original) in samples[label.track][label.start..label.end]
-                .iter()
-                .enumerate()
-            {
-                let gain = envelopes[label.track].gain_at(label.start + offset);
+            let grid = crate::SourceTimebase::new(
+                envelopes[label.track].sample_rate(),
+                samples[label.track].len() as u64,
+            )
+            .unwrap();
+            let frames = crate::TimeRange {
+                start: label.start,
+                end: label.end,
+            }
+            .native_frames(grid)
+            .unwrap();
+            for (offset, &original) in samples[label.track][frames.clone()].iter().enumerate() {
+                let gain = envelopes[label.track].gain_at(frames.start + offset);
                 changed += usize::from(gain != 1.0);
                 minimum_gain = minimum_gain.min(gain);
                 let original = f64::from(original);
@@ -80,25 +91,36 @@ fn measure(samples: &[&[f32]], envelopes: &[GainEnvelope], labels: &[Label]) -> 
                 output += (original * f64::from(gain)).powi(2);
             }
             if label.kind == LabelKind::Preserve {
-                preservation_samples += label.end - label.start;
+                preservation_samples += frames.len();
                 changed_preservation_samples += changed;
             } else if label.kind == LabelKind::Bleed {
                 bleed_input += input;
                 bleed_output += output;
             }
-            json!({"track": label.track, "start_sample": label.start, "end_sample": label.end,
+            json!({"track": label.track, "start_tick": label.start, "end_tick": label.end,
             "kind": format!("{:?}", label.kind), "changed_samples": changed,
             "minimum_gain": minimum_gain, "attenuation_db": attenuation(input, output)})
         })
         .collect();
     let (mut overlap_samples, mut changed_overlap_samples) = (0, 0);
     for (span, tracks) in overlap_spans(labels) {
-        overlap_samples += span[1] - span[0];
-        changed_overlap_samples += (span[0]..span[1])
+        let grid = crate::SourceTimebase::new(envelopes[0].sample_rate(), samples[0].len() as u64)
+            .unwrap();
+        let frames = crate::TimeRange {
+            start: span[0],
+            end: span[1],
+        }
+        .native_frames(grid)
+        .unwrap();
+        overlap_samples += frames.len();
+        changed_overlap_samples += frames
             .filter(|&sample| {
-                tracks
-                    .iter()
-                    .any(|&track| envelopes[track].gain_at(sample) != 1.0)
+                tracks.iter().any(|&track| {
+                    envelopes[track].gain_at_time(
+                        grid.time_at_frame(sample as u64, crate::Rounding::Floor)
+                            .unwrap(),
+                    ) != 1.0
+                })
             })
             .count();
     }
@@ -112,7 +134,7 @@ fn attenuation(input: f64, output: f64) -> Option<f64> {
     (input > 0.0 && output > 0.0).then(|| 10.0 * (output / input).log10())
 }
 
-fn overlap_spans(labels: &[Label]) -> Vec<([usize; 2], Vec<usize>)> {
+fn overlap_spans(labels: &[Label]) -> Vec<([u64; 2], Vec<usize>)> {
     let preserved: Vec<_> = labels
         .iter()
         .filter(|l| l.kind == LabelKind::Preserve)
@@ -140,7 +162,11 @@ fn overlap_spans(labels: &[Label]) -> Vec<([usize; 2], Vec<usize>)> {
 pub fn compare(paths: &[PathBuf], csv: &str) -> Result<Value, RenderBlocker> {
     let (stems, validation) = load_and_validate(paths)?;
     let count = stems[0].samples.len();
-    let labels = read_labels(csv, paths, count)?;
+    let grids = stems
+        .iter()
+        .map(|s| crate::SourceTimebase::new(s.format.sample_rate, s.samples.len() as u64))
+        .collect::<Result<Vec<_>, _>>()?;
+    let labels = read_labels(csv, paths, &grids)?;
     if !labels.iter().any(|l| l.kind == LabelKind::Preserve)
         || !labels.iter().any(|l| l.kind == LabelKind::Bleed)
     {
@@ -170,8 +196,8 @@ pub fn compare(paths: &[PathBuf], csv: &str) -> Result<Value, RenderBlocker> {
                         &regions,
                         &[],
                         10.0_f32.powf(parameters.attenuation_db / 20.0),
-                        parameters.open_ms * 48.0,
-                        parameters.close_ms * 48.0,
+                        parameters.open_ms * grids[track].sample_rate as f32 / 1000.0,
+                        parameters.close_ms * grids[track].sample_rate as f32 / 1000.0,
                     )
                 })
                 .collect();
@@ -188,12 +214,19 @@ pub fn compare(paths: &[PathBuf], csv: &str) -> Result<Value, RenderBlocker> {
         .map(|label| {
             let rms: Vec<f64> = samples
                 .iter()
-                .map(|track| {
-                    (track[label.start..label.end]
+                .enumerate()
+                .map(|(index, track)| {
+                    let frames = crate::TimeRange {
+                        start: label.start,
+                        end: label.end,
+                    }
+                    .native_frames(grids[index])
+                    .unwrap();
+                    (track[frames.clone()]
                         .iter()
                         .map(|&s| f64::from(s).powi(2))
                         .sum::<f64>()
-                        / (label.end - label.start) as f64)
+                        / frames.len() as f64)
                         .sqrt()
                 })
                 .collect();
@@ -203,12 +236,12 @@ pub fn compare(paths: &[PathBuf], csv: &str) -> Result<Value, RenderBlocker> {
                 .max_by(|a, b| a.1.total_cmp(b.1))
                 .unwrap()
                 .0;
-            json!({"track": label.track, "start_sample": label.start, "end_sample": label.end,
+            json!({"track": label.track, "start_tick": label.start, "end_tick": label.end,
             "kind": format!("{:?}", label.kind), "rms_by_track": rms, "loudest_track": loudest})
         })
         .collect();
     Ok(
-        json!({"paths": paths, "sample_count": count, "sample_rate": 48_000,
+        json!({"paths": paths, "sample_count": count, "ticks_per_second": crate::TICKS_PER_SECOND, "sample_rate": grids[0].sample_rate,
         "formats": stems.iter().map(|stem| json!({"bits_per_sample": stem.format.bits_per_sample,
             "format_tag": stem.format.tag, "bext_time_reference": stem.bext.as_ref().map(|b| b.time_reference)})).collect::<Vec<_>>(),
         "validation_warnings": validation.warnings, "comparisons": comparisons,
@@ -291,11 +324,17 @@ pub fn compare_ownership(
         ));
     }
     let count = previews[0].1.envelopes[0].sample_count();
-    let labels: Vec<_> = read_labels(csv, paths, count)?
+    let grids = previews[0]
+        .1
+        .envelopes
+        .iter()
+        .map(|e| crate::SourceTimebase::new(e.sample_rate(), e.sample_count() as u64))
+        .collect::<Result<Vec<_>, _>>()?;
+    let labels: Vec<_> = read_labels(csv, paths, &grids)?
         .into_iter()
         .filter(|l| match split {
-            "development" => l.start < 185 * 48_000,
-            "holdout" => l.start >= 185 * 48_000,
+            "development" => l.start < 185 * crate::TICKS_PER_SECOND,
+            "holdout" => l.start >= 185 * crate::TICKS_PER_SECOND,
             _ => true,
         })
         .collect();
@@ -307,22 +346,27 @@ pub fn compare_ownership(
     for (track, path) in paths.iter().enumerate() {
         let stem = Stem::read(path)?;
         for label in labels.iter().filter(|l| l.track == track) {
+            let frames = crate::TimeRange {
+                start: label.start,
+                end: label.end,
+            }
+            .native_frames(grids[track])?;
             let metrics = previews
                 .iter()
                 .map(|(name, preview)| {
                     (
                         (*name).to_owned(),
                         ownership_metrics(
-                            &stem.samples[label.start..label.end],
-                            label.start,
+                            &stem.samples[frames.clone()],
+                            frames.start,
                             &preview.envelopes[track],
                             &previews[0].1.envelopes[track],
                         ),
                     )
                 })
                 .collect::<serde_json::Map<_, _>>();
-            rows.push(json!({"track": track, "path": path, "start_seconds": label.start as f64 / 48_000.0,
-                "end_seconds": label.end as f64 / 48_000.0, "kind": format!("{:?}", label.kind), "metrics": metrics}));
+            rows.push(json!({"track": track, "path": path, "start_seconds": label.start as f64 / crate::TICKS_PER_SECOND as f64,
+                "end_seconds": label.end as f64 / crate::TICKS_PER_SECOND as f64, "kind": format!("{:?}", label.kind), "metrics": metrics}));
         }
     }
     let mut summaries = serde_json::Map::new();
@@ -382,14 +426,23 @@ pub fn compare_ownership(
                 (
                     (*name).into(),
                     json!(
-                        (span[0]..span[1])
-                            .filter(|&s| tracks.iter().any(|&t| p.envelopes[t].gain_at(s) < 1.0))
-                            .count()
+                        crate::TimeRange {
+                            start: span[0],
+                            end: span[1]
+                        }
+                        .native_frames(grids[0])
+                        .unwrap()
+                        .filter(|&s| tracks.iter().any(|&t| p.envelopes[t].gain_at_time(
+                            grids[0]
+                                .time_at_frame(s as u64, crate::Rounding::Floor)
+                                .unwrap()
+                        ) < 1.0))
+                        .count()
                     ),
                 )
             })
             .collect::<serde_json::Map<_, _>>();
-        overlap.push(json!({"start_sample": span[0], "end_sample": span[1], "tracks": tracks, "changed_samples": changed}));
+        overlap.push(json!({"start_tick": span[0], "end_tick": span[1], "tracks": tracks, "changed_samples": changed}));
     }
     if paths
         .iter()
@@ -400,7 +453,7 @@ pub fn compare_ownership(
         return Err(RenderBlocker("source changed during evaluation".into()));
     }
     Ok(
-        json!({"paths": paths, "sources": stamps, "sample_rate": 48_000, "sample_count": count,
+        json!({"paths": paths, "sources": stamps, "sample_rate": grids[0].sample_rate, "sample_count": count, "ticks_per_second": crate::TICKS_PER_SECOND,
         "split": split, "guided_settings": guided, "parameters": AutomixParameters::default(),
         "baseline_for_added_attenuation": "legacy_default", "summaries": summaries, "labels": rows, "overlap": overlap,
         "preparations": cache.stats().preparations, "human_listening_performed": false}),
@@ -415,8 +468,8 @@ mod tests {
     fn ownership_metrics_distinguish_exact_tails_from_added_damage() {
         use crate::{Decision, Region};
         let regions = [Region {
-            start: 0,
-            end: 4,
+            start: crate::timebase::detector_time(0),
+            end: crate::timebase::detector_time(4),
             decision: Decision::Owned(vec![0]),
         }];
         let unity = gain_envelope(0, 4, &regions, &[], 0.5, 1.0, 1.0);
@@ -435,8 +488,8 @@ mod tests {
         use crate::{Decision, Region};
         let samples = [vec![1.0; 10], vec![1.0; 10], vec![1.0; 10]];
         let regions = [Region {
-            start: 0,
-            end: 10,
+            start: crate::timebase::detector_time(0),
+            end: crate::timebase::detector_time(10),
             decision: Decision::Owned(vec![0]),
         }];
         let envelopes: Vec<_> = (0..3)
@@ -445,26 +498,26 @@ mod tests {
         let labels = [
             Label {
                 track: 0,
-                start: 0,
-                end: 10,
+                start: crate::timebase::detector_time(0),
+                end: crate::timebase::detector_time(10),
                 kind: LabelKind::Preserve,
             },
             Label {
                 track: 1,
-                start: 0,
-                end: 8,
+                start: crate::timebase::detector_time(0),
+                end: crate::timebase::detector_time(8),
                 kind: LabelKind::Preserve,
             },
             Label {
                 track: 2,
-                start: 2,
-                end: 6,
+                start: crate::timebase::detector_time(2),
+                end: crate::timebase::detector_time(6),
                 kind: LabelKind::Preserve,
             },
             Label {
                 track: 2,
-                start: 6,
-                end: 10,
+                start: crate::timebase::detector_time(6),
+                end: crate::timebase::detector_time(10),
                 kind: LabelKind::Bleed,
             },
         ];
@@ -487,7 +540,7 @@ mod tests {
             read_labels(
                 &format!("track,start_seconds,end_seconds,label,notes\n{row}"),
                 &paths,
-                48_000,
+                &[crate::SourceTimebase::new(48_000, 48_000).unwrap()],
             )
         };
         assert_eq!(
