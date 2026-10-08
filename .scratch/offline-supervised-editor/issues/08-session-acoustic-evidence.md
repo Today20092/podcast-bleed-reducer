@@ -1,6 +1,7 @@
 # Fit session acoustic evidence from trusted references
 
-Status: ready-for-agent
+Status: claimed
+Assignee: acoustic_evidence
 Blocked by: 03, 07
 Spec: ../spec.md
 
