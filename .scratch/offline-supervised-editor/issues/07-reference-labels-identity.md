@@ -1,6 +1,7 @@
 # Edit reference labels and resolve diarization speaker identities
 
-Status: ready-for-agent
+Status: claimed
+Assignee: reference_labels
 Blocked by: 02, 06
 Spec: ../spec.md
 
