@@ -10,6 +10,11 @@ mod acquisition;
 pub use acquisition::ModelAcquisition;
 pub use acquisition::runtime_directory;
 pub use acquisition::verify_native_runtime;
+mod diarization;
+pub use diarization::{
+    AnalysisMix, DiarizationEvidence, DiarizationInput, DiarizationRequest, ProbabilityHistory,
+    ProbabilityHistoryWriter, diarize_in_helper, prepare_diarization,
+};
 
 pub struct ModelIdentity {
     pub file_name: &'static str,

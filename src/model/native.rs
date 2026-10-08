@@ -287,6 +287,10 @@ pub struct ProbabilityFrames {
     pub probabilities: Vec<f32>,
 }
 impl NativeStream<'_> {
+    pub fn frame_count(&self) -> Result<u64, String> {
+        u64::try_from(unsafe { (self.model.runtime.count)(self.handle) })
+            .map_err(|_| "Invalid native probability frame count".into())
+    }
     pub fn push(&mut self, mono_16khz: &[f32]) -> Result<(), String> {
         if self.finished || mono_16khz.iter().any(|v| !v.is_finite()) {
             return Err("Invalid Nemotron input or finished stream".into());
