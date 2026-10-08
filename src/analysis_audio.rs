@@ -38,10 +38,15 @@ struct Manifest {
 pub struct PreparedAnalysisAudio {
     pub identity: AnalysisAudioIdentity,
     path: PathBuf,
+    audio_sha256: String,
 }
 impl PreparedAnalysisAudio {
     pub fn path(&self) -> &Path {
         &self.path
+    }
+    /// Digest verified by preparation, binding downstream inference to these bytes.
+    pub fn audio_sha256(&self) -> &str {
+        &self.audio_sha256
     }
     /// Bounded reads use the artifact's explicit rate (16 kHz for analysis,
     /// selected device rate for audition), never an implicit native grid.
@@ -268,6 +273,7 @@ fn read_cached(
     Ok(Some(PreparedAnalysisAudio {
         identity: manifest.identity,
         path,
+        audio_sha256: manifest.audio_sha256,
     }))
 }
 

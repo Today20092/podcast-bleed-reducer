@@ -83,6 +83,43 @@ fn missing_native_runtime_is_actionable_and_never_falls_back() {
 }
 
 #[test]
+fn verbose_owned_helper_keeps_its_final_verified_provenance() {
+    let mut command = std::process::Command::new(std::env::current_exe().unwrap());
+    command
+        .args([
+            "--ignored",
+            "--exact",
+            "verbose_native_fixture",
+            "--nocapture",
+        ])
+        .env("CLEANSLATE_VERBOSE_NATIVE_FIXTURE", "1");
+    let provenance =
+        rust_app::model::verify_native_runtime(command, &AtomicBool::new(false)).unwrap();
+    assert_eq!(provenance.revision, rust_app::model::RUNTIME_REVISION);
+}
+
+#[test]
+#[ignore = "owned subprocess fixture for bounded stdout transport"]
+fn verbose_native_fixture() {
+    if std::env::var_os("CLEANSLATE_VERBOSE_NATIVE_FIXTURE").is_none() {
+        return;
+    }
+    println!("{}", "x".repeat(80 * 1024));
+    let provenance = rust_app::model::RuntimeProvenance {
+        revision: rust_app::model::RUNTIME_REVISION.into(),
+        recipe_sha256: "0".repeat(64),
+        binaries: std::collections::BTreeMap::from([(
+            "nemo_speech_asr_c.dll".into(),
+            "0".repeat(64),
+        )]),
+    };
+    println!(
+        "Runtime provenance: {}",
+        serde_json::to_string(&provenance).unwrap()
+    );
+}
+
+#[test]
 fn incompatible_or_corrupt_native_package_is_rejected_without_fallback() {
     let directory =
         std::env::temp_dir().join(format!("cleanslate-invalid-native-{}", std::process::id()));

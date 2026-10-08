@@ -26,13 +26,16 @@ pub fn prepare_diarization(
     if inputs.is_empty() || inputs.len() > 8 {
         return Err("Nemotron requires one to eight dedicated mono inputs".into());
     }
+    verify_inputs(inputs, cancel)?;
     let sources: Vec<_> = inputs.iter().map(|i| i.identity.clone()).collect();
+    let payloads: Vec<_> = inputs.iter().map(|i| i.audio_sha256.clone()).collect();
     let key = format!(
         "{:x}",
         Sha256::digest(
             serde_json::to_vec(&(
-                1,
+                2,
                 &sources,
+                &payloads,
                 expected_runtime,
                 MODEL_REVISION,
                 NEMOTRON.sha256,
@@ -42,15 +45,29 @@ pub fn prepare_diarization(
             .map_err(|e| e.to_string())?
         )
     );
-    let destination = cache.join(key);
-    if destination.is_dir() {
-        let mut result = read_result(&destination)?;
-        validate_result(&result, &sources, expected_runtime)?;
-        result.history.path = destination.join("probabilities.f32");
-        result.history.verify_cancelled(cancel)?;
+    let destination = cache.join(&key);
+    if let Some(result) =
+        read_cached_evidence(&destination, &sources, &payloads, expected_runtime, cancel)?
+    {
         return Ok(result);
     }
     std::fs::create_dir_all(cache).map_err(|e| e.to_string())?;
+    let lock_path = cache.join(format!(".{key}.lock"));
+    let lock = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(&lock_path)
+        .map_err(|e| {
+            format!("Cannot acquire native evidence writer: {e}; another job may be active")
+        })?;
+    lock.try_lock().map_err(|e| {
+        format!("Cannot acquire native evidence writer: {e}; another job may be active")
+    })?;
+    // Keep the inode: deleting it could bypass a live writer. The OS releases
+    // this lock on handle close/process death, including crashed editor processes.
+    let _lock = lock;
     let stamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_err(|e| e.to_string())?
@@ -84,9 +101,10 @@ pub fn prepare_diarization(
         return Err("Native helper runtime provenance changed during analysis".into());
     }
     let mut result = read_result(&output)?;
-    validate_result(&result, &sources, expected_runtime)?;
+    validate_result(&result, &sources, &payloads, expected_runtime)?;
     result.history.path = output.join("probabilities.f32");
     result.history.verify_cancelled(cancel)?;
+    verify_inputs(inputs, cancel)?;
     // Manifest paths are rebound to this cache; helper output cannot select another file.
     result.history.path = destination.join("probabilities.f32");
     let mut manifest = File::create(output.join("result.json")).map_err(|e| e.to_string())?;
@@ -94,6 +112,20 @@ pub fn prepare_diarization(
     manifest.sync_all().map_err(|e| e.to_string())?;
     drop(manifest);
     check_cancel(cancel)?;
+    if destination.exists() {
+        if let Some(result) =
+            read_cached_evidence(&destination, &sources, &payloads, expected_runtime, cancel)?
+        {
+            return Ok(result);
+        }
+        check_cancel(cancel)?;
+        // Retain proven-invalid derived data; never quarantine an ordinary I/O error.
+        std::fs::rename(
+            &destination,
+            cache.join(format!(".invalid-{}-{stamp}", std::process::id())),
+        )
+        .map_err(|e| format!("Cannot quarantine invalid native evidence: {e}"))?;
+    }
     std::fs::rename(&output, &destination)
         .map_err(|e| format!("Cannot publish complete native evidence: {e}"))?;
     Ok(result)
@@ -108,6 +140,25 @@ fn check_cancel(cancel: &AtomicBool) -> Result<(), String> {
 }
 
 struct JobDirectory(PathBuf);
+fn verify_inputs(inputs: &[DiarizationInput], cancel: &AtomicBool) -> Result<(), String> {
+    for input in inputs {
+        check_cancel(cancel)?;
+        if input.audio_sha256.len() != 64
+            || !input.audio_sha256.bytes().all(|b| b.is_ascii_hexdigit())
+        {
+            return Err("Invalid prepared analysis payload identity".into());
+        }
+        let actual = crate::project::fingerprint_cancellable(&input.path, Some(cancel))
+            .map_err(|e| format!("Cannot verify prepared analysis: {e}"))?;
+        if actual != input.audio_sha256 {
+            return Err(
+                "Changed prepared analysis payload; reprepare source copies before inference"
+                    .into(),
+            );
+        }
+    }
+    Ok(())
+}
 impl Drop for JobDirectory {
     fn drop(&mut self) {
         let _ = std::fs::remove_dir_all(&self.0);
@@ -123,9 +174,44 @@ fn read_result(directory: &Path) -> Result<DiarizationEvidence, String> {
     serde_json::from_reader(file).map_err(|e| format!("Invalid native evidence manifest: {e}"))
 }
 
+fn read_cached_evidence(
+    directory: &Path,
+    sources: &[AnalysisAudioIdentity],
+    payloads: &[String],
+    runtime: &RuntimeProvenance,
+    cancel: &AtomicBool,
+) -> Result<Option<DiarizationEvidence>, String> {
+    check_cancel(cancel)?;
+    let file = match File::open(directory.join("result.json")) {
+        Ok(file) => file,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(e) => return Err(format!("Cannot read native evidence: {e}")),
+    };
+    let mut bytes = Vec::new();
+    file.take(1024 * 1024 + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|e| format!("Cannot read native evidence: {e}"))?;
+    if bytes.len() > 1024 * 1024 {
+        return Ok(None);
+    }
+    let mut result: DiarizationEvidence = match serde_json::from_slice(&bytes) {
+        Ok(result) => result,
+        Err(_) => return Ok(None),
+    };
+    if validate_result(&result, sources, payloads, runtime).is_err() {
+        return Ok(None);
+    }
+    result.history.path = directory.join("probabilities.f32");
+    if !result.history.verify_payload(cancel)? {
+        return Ok(None);
+    }
+    Ok(Some(result))
+}
+
 fn validate_result(
     result: &DiarizationEvidence,
     sources: &[AnalysisAudioIdentity],
+    payloads: &[String],
     runtime: &RuntimeProvenance,
 ) -> Result<(), String> {
     let samples = sources
@@ -133,8 +219,9 @@ fn validate_result(
         .map(|s| s.frame_count)
         .max()
         .ok_or("Missing native sources")?;
-    if result.schema != 1
+    if result.schema != 2
         || result.sources != sources
+        || result.input_sha256 != payloads
         || &result.runtime != runtime
         || result.model_revision != MODEL_REVISION
         || result.model_sha256 != NEMOTRON.sha256
@@ -164,6 +251,7 @@ fn validate_result(
 pub struct DiarizationInput {
     pub identity: AnalysisAudioIdentity,
     pub path: PathBuf,
+    pub audio_sha256: String,
 }
 
 /// Development comparison; the editor uses MeanGlobalPeak for its fixed recipe.
@@ -178,6 +266,7 @@ impl From<&PreparedAnalysisAudio> for DiarizationInput {
         Self {
             identity: audio.identity.clone(),
             path: audio.path().into(),
+            audio_sha256: audio.audio_sha256().into(),
         }
     }
 }
@@ -195,6 +284,7 @@ pub struct DiarizationRequest {
 pub struct DiarizationEvidence {
     pub schema: u32,
     pub sources: Vec<AnalysisAudioIdentity>,
+    pub input_sha256: Vec<String>,
     pub history: ProbabilityHistory,
     pub runtime: RuntimeProvenance,
     pub model_revision: String,
@@ -244,6 +334,7 @@ pub fn diarize_in_helper(
             return Err("Prepared analysis length changed before inference".into());
         }
         let mut bytes = [0u8; 64 * 1024];
+        let mut hash = Sha256::new();
         let mut track_peak = 0.0f32;
         let mut remaining = input.identity.frame_count * 4;
         while remaining > 0 {
@@ -251,6 +342,7 @@ pub fn diarize_in_helper(
             file.read_exact(&mut bytes[..n])
                 .map_err(|e| e.to_string())?;
             remaining -= n as u64;
+            hash.update(&bytes[..n]);
             for b in bytes[..n].as_chunks::<4>().0 {
                 let sample = f32::from_le_bytes(*b);
                 if !sample.is_finite() {
@@ -259,6 +351,9 @@ pub fn diarize_in_helper(
                 peak = peak.max(sample.abs());
                 track_peak = track_peak.max(sample.abs());
             }
+        }
+        if format!("{:x}", hash.finalize()) != input.audio_sha256 {
+            return Err("Changed prepared analysis payload before native inference".into());
         }
         file.rewind().map_err(|e| e.to_string())?;
         files.push(file);
@@ -276,15 +371,23 @@ pub fn diarize_in_helper(
     let mut compactions = 0;
     let mut maximum_retained_frames = 0;
     let mut position = 0;
+    let mut input_hashes: Vec<_> = request.inputs.iter().map(|_| Sha256::new()).collect();
     while position < frames {
         let count = (frames - position).min(16_000) as usize;
         let mut mix = vec![0.0f32; count];
-        for ((input, file), track_peak) in request.inputs.iter().zip(&mut files).zip(&track_peaks) {
+        for (((input, file), track_peak), hash) in request
+            .inputs
+            .iter()
+            .zip(&mut files)
+            .zip(&track_peaks)
+            .zip(&mut input_hashes)
+        {
             let count =
                 (input.identity.frame_count.saturating_sub(position)).min(count as u64) as usize;
             let mut bytes = vec![0u8; count * 4];
             file.read_exact(&mut bytes)
                 .map_err(|e| format!("Prepared analysis changed during inference: {e}"))?;
+            hash.update(&bytes);
             for (value, b) in mix.iter_mut().zip(bytes.as_chunks::<4>().0) {
                 let sample = f32::from_le_bytes(*b);
                 if !sample.is_finite() || sample.abs() > peak {
@@ -314,6 +417,11 @@ pub fn diarize_in_helper(
             writer.append(&window)?;
         }
     }
+    for (input, hash) in request.inputs.iter().zip(input_hashes) {
+        if format!("{:x}", hash.finalize()) != input.audio_sha256 {
+            return Err("Changed prepared analysis payload during native inference".into());
+        }
+    }
     stream.finish()?;
     let window = stream.probabilities()?;
     if window.start > previous_start {
@@ -327,8 +435,13 @@ pub fn diarize_in_helper(
         return Err("Native history does not cover the complete source timeline".into());
     }
     let evidence = DiarizationEvidence {
-        schema: 1,
+        schema: 2,
         sources: request.inputs.iter().map(|i| i.identity.clone()).collect(),
+        input_sha256: request
+            .inputs
+            .iter()
+            .map(|i| i.audio_sha256.clone())
+            .collect(),
         history,
         runtime: runtime.provenance().clone(),
         model_revision: MODEL_REVISION.into(),
@@ -380,31 +493,44 @@ impl ProbabilityHistory {
     }
 
     fn verify_cancelled(&self, cancel: &AtomicBool) -> Result<(), String> {
-        let mut file =
-            File::open(&self.path).map_err(|e| format!("Cannot open native evidence: {e}"))?;
-        let expected = self
-            .frames
-            .checked_mul(32)
-            .ok_or("Native evidence length overflow")?;
+        if self.verify_payload(cancel)? {
+            Ok(())
+        } else {
+            Err("Native evidence payload failed integrity validation".into())
+        }
+    }
+
+    fn verify_payload(&self, cancel: &AtomicBool) -> Result<bool, String> {
+        check_cancel(cancel)?;
+        let mut file = match File::open(&self.path) {
+            Ok(file) => file,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+            Err(e) => return Err(format!("Cannot open native evidence: {e}")),
+        };
+        let Some(expected) = self.frames.checked_mul(32) else {
+            return Ok(false);
+        };
         if file.metadata().map_err(|e| e.to_string())?.len() != expected {
-            return Err("Native evidence payload length disagrees with its manifest".into());
+            return Ok(false);
         }
         let mut hash = Sha256::new();
         let mut bytes = [0; 64 * 1024];
-        loop {
+        let mut remaining = expected;
+        while remaining > 0 {
             check_cancel(cancel)?;
-            let count = file
-                .read(&mut bytes)
+            let count = remaining.min(bytes.len() as u64) as usize;
+            file.read_exact(&mut bytes[..count])
                 .map_err(|e| format!("Cannot verify native evidence: {e}"))?;
-            if count == 0 {
-                break;
+            remaining -= count as u64;
+            if bytes[..count].as_chunks::<4>().0.iter().any(|b| {
+                let p = f32::from_le_bytes(*b);
+                !p.is_finite() || !(0.0..=1.0).contains(&p)
+            }) {
+                return Ok(false);
             }
             hash.update(&bytes[..count]);
         }
-        if format!("{:x}", hash.finalize()) != self.sha256 {
-            return Err("Native evidence payload failed SHA-256 validation".into());
-        }
-        Ok(())
+        Ok(format!("{:x}", hash.finalize()) == self.sha256)
     }
 
     /// Native 10 ms frames, with eight anonymous speaker columns per frame.

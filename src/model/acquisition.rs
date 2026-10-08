@@ -241,9 +241,10 @@ fn read_bounded(mut source: impl Read) -> Result<Vec<u8>, String> {
         if count == 0 {
             return Ok(output);
         }
-        // Drain excess bytes so the owned helper cannot block on a full pipe.
-        let retained = count.min((64usize * 1024).saturating_sub(output.len()));
-        output.extend_from_slice(&buffer[..retained]);
+        // Drain all output, retaining the tail where the completed summary lives.
+        output.extend_from_slice(&buffer[..count]);
+        let excess = output.len().saturating_sub(64 * 1024);
+        output.drain(..excess);
     }
 }
 

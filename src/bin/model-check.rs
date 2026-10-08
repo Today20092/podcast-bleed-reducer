@@ -20,7 +20,7 @@ fn check() -> Result<(), String> {
             "--download" => download = true,
             "--diarize" => { index += 1; diarize = Some(arguments.get(index).ok_or("--diarize needs a private request file")?.clone()); },
             "--runtime" => { index += 1; runtime = arguments.get(index).ok_or("--runtime needs a package bin directory")?.into(); },
-            _ => return Err("Usage: model-check [--download] [--runtime DIRECTORY]; default is offline verification/inference".into()),
+            _ => return Err("Usage: model-check [--download | --diarize REQUEST.json] [--runtime DIRECTORY]; default is offline verification/inference".into()),
         }
         index += 1;
     }
