@@ -40,11 +40,11 @@ fn warm_edits_match_cold_and_reuse_detector_and_ownership() {
     parameters.close_ms = 100.0;
     let protections = vec![Protection {
         track: Some(0),
-        start: rust_app::SourceTimebase::new(48_000, (23) as u64)
+        start: rust_app::SourceTimebase::new(48_000, 23)
             .unwrap()
             .duration()
             .unwrap(),
-        end: rust_app::SourceTimebase::new(48_000, (901) as u64)
+        end: rust_app::SourceTimebase::new(48_000, 901)
             .unwrap()
             .duration()
             .unwrap(),
@@ -159,7 +159,7 @@ fn cancellation_preserves_completed_cache_and_invalid_protections_are_blocked() 
     assert_eq!(cache.stats().preparations, 1);
     let invalid = [Protection {
         track: Some(1),
-        start: rust_app::SourceTimebase::new(48_000, (0) as u64)
+        start: rust_app::SourceTimebase::new(48_000, 0)
             .unwrap()
             .duration()
             .unwrap(),

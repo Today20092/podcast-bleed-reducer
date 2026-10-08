@@ -145,7 +145,7 @@ fn changed_audio_keeps_decisions_dormant_until_explicit_rebind() {
     let source = project.sources[0].clone();
     wav(&source.path, 44_100, 0.3);
     let mut project = Project::open(project.path()).unwrap();
-    assert_eq!(project.reference_labels(), &[label.clone()]);
+    assert_eq!(project.reference_labels(), std::slice::from_ref(&label));
     assert!(project.ownership_settings().examples.is_empty());
     assert!(project.protections().is_empty());
     assert_eq!(project.step(), WorkflowStep::Import);

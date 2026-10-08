@@ -26,11 +26,11 @@ fn calibration_edits_reuse_prepared_audio_and_reject_stale_sources() {
         examples: vec![CalibrationExample {
             kind: CalibrationKind::RoomTone,
             track: 0,
-            start: rust_app::SourceTimebase::new(48_000, (0) as u64)
+            start: rust_app::SourceTimebase::new(48_000, 0)
                 .unwrap()
                 .duration()
                 .unwrap(),
-            end: rust_app::SourceTimebase::new(48_000, (24_000) as u64)
+            end: rust_app::SourceTimebase::new(48_000, 24_000)
                 .unwrap()
                 .duration()
                 .unwrap(),
@@ -131,7 +131,7 @@ fn joint_render_matches_preview_gain_and_reports_settings() {
     };
     let protections = vec![Protection {
         track: Some(0),
-        start: rust_app::SourceTimebase::new(48_000, (0) as u64)
+        start: rust_app::SourceTimebase::new(48_000, 0)
             .unwrap()
             .duration()
             .unwrap(),

@@ -86,7 +86,7 @@ fn protections_combine_and_make_the_render_stale() {
         [
             rust_app::Protection {
                 track: Some(1),
-                start: rust_app::SourceTimebase::new(48_000, (30) as u64)
+                start: rust_app::SourceTimebase::new(48_000, 30)
                     .unwrap()
                     .duration()
                     .unwrap(),
@@ -94,7 +94,7 @@ fn protections_combine_and_make_the_render_stale() {
             },
             rust_app::Protection {
                 track: Some(2),
-                start: rust_app::SourceTimebase::new(48_000, (30) as u64)
+                start: rust_app::SourceTimebase::new(48_000, 30)
                     .unwrap()
                     .duration()
                     .unwrap(),

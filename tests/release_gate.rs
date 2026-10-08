@@ -7,13 +7,13 @@ fn release_gate_measures_preservation_overlap_and_bleed_independently() {
     let labels = vec![
         Label {
             track: 0,
-            start: 0 * rust_app::TICKS_PER_SECOND / 48_000,
+            start: 0,
             end: 3 * rust_app::TICKS_PER_SECOND / 48_000,
             kind: LabelKind::Preserve,
         },
         Label {
             track: 1,
-            start: 1 * rust_app::TICKS_PER_SECOND / 48_000,
+            start: rust_app::TICKS_PER_SECOND / 48_000,
             end: 2 * rust_app::TICKS_PER_SECOND / 48_000,
             kind: LabelKind::Preserve,
         },
@@ -45,13 +45,13 @@ fn duplicate_labels_on_one_track_are_not_genuine_overlap() {
     let labels = vec![
         Label {
             track: 0,
-            start: 0 * rust_app::TICKS_PER_SECOND / 48_000,
+            start: 0,
             end: 2 * rust_app::TICKS_PER_SECOND / 48_000,
             kind: LabelKind::Preserve,
         },
         Label {
             track: 0,
-            start: 1 * rust_app::TICKS_PER_SECOND / 48_000,
+            start: rust_app::TICKS_PER_SECOND / 48_000,
             end: 2 * rust_app::TICKS_PER_SECOND / 48_000,
             kind: LabelKind::Preserve,
         },
