@@ -46,6 +46,7 @@ impl JointFacts {
                 .map(|v| v.capacity() * std::mem::size_of::<Option<Leakage>>())
                 .sum::<usize>()
     }
+    #[cfg(test)]
     pub(crate) fn prepare(
         tracks: &[&[f32]],
         cancelled: Option<&AtomicBool>,

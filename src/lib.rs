@@ -23,6 +23,7 @@ pub use analysis_audio::{
     PreparedAnalysisAudio, prepare_analysis_audio, prepare_analysis_audio_in,
 };
 pub use audio_io::SourceMetadata;
+pub use audition::{AuditionMode, AuditionPlayback, PreparedAudio};
 pub use calibration::{CalibrationExample, CalibrationKind, OwnershipSettings};
 pub use engine::*;
 pub use export::*;

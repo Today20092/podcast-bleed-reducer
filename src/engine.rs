@@ -1,6 +1,6 @@
 use crate::{
     audio_io::{AtomicOutput, Stem},
-    vad::{self, ENERGY_MARGIN_DB, SPEECH_PROBABILITY},
+    vad::{ENERGY_MARGIN_DB, SPEECH_PROBABILITY},
 };
 use serde::{Deserialize, Deserializer, Serialize};
 use std::{
@@ -530,6 +530,28 @@ fn sequential_gain_matches_random_access_across_seeks() {
 }
 
 impl GainEnvelope {
+    pub fn constant_at_rate(
+        sample_count: usize,
+        sample_rate: u32,
+        gain: f32,
+    ) -> Result<Self, RenderBlocker> {
+        crate::SourceTimebase::new(sample_rate, sample_count as u64)?;
+        if !gain.is_finite() || !(0.0..=1.0).contains(&gain) {
+            return Err(RenderBlocker(
+                "envelope gain must be finite attenuation".into(),
+            ));
+        }
+        Ok(Self {
+            sample_count,
+            sample_rate,
+            points: vec![GainPoint {
+                sample: 0,
+                gain,
+                alpha: 0.0,
+                target: gain,
+            }],
+        })
+    }
     pub fn sample_rate(&self) -> u32 {
         self.sample_rate
     }
@@ -573,6 +595,7 @@ impl GainEnvelope {
         self.gain_bounds(start, end)
     }
     /// Same arithmetic as random access; retain the segment index during playback.
+    #[cfg(test)]
     pub(crate) fn gain_at_sequential(&self, sample: usize, cursor: &mut usize) -> f32 {
         if self.points.is_empty() {
             return 1.0;
@@ -759,33 +782,28 @@ pub fn run_with_ownership(
         .iter()
         .map(|path| crate::SourceMetadata::read_cancellable(path, request.cancelled.as_deref()))
         .collect::<Result<Vec<_>, _>>()?;
-    validate_source_metadata(&source_metadata)?.require_alignment(request.supplied_alignment)?;
-    if source_metadata
-        .iter()
-        .any(|source| source.grid.sample_rate != crate::timebase::DETECTOR_SAMPLE_RATE)
-    {
-        return Err(RenderBlocker(
-            "native-rate rendering requires playback/render migration (ticket 04)".into(),
-        ));
-    }
-    let (stems, validation) = load_and_validate(&request.stems)?;
+    let validation = validate_source_metadata(&source_metadata)?;
     validation.require_alignment(request.supplied_alignment)?;
-    // shortcut: ticket 04 adds native-rate rendering; never apply the retained 48 kHz renderer at another rate.
-    if stems
-        .iter()
-        .any(|stem| stem.format.sample_rate != crate::timebase::DETECTOR_SAMPLE_RATE)
-    {
-        return Err(RenderBlocker(
-            "native-rate rendering requires playback/render migration (ticket 04)".into(),
-        ));
-    }
-    let sample_count = stems[0].samples.len();
-    let sample_rate = stems[0].format.sample_rate;
+    let duration = source_metadata[0].grid.duration()?;
+    // Named detector-grid adapter for the retained automatic envelope generator.
+    let sample_count = crate::timebase::detector_frame(duration, crate::Rounding::Ceil)?;
+    let sample_rate = source_metadata[0].grid.sample_rate;
     validate_calibration(ownership, &sources, Some(sample_count))?;
-    let references: Vec<Option<u64>> = stems
+    let references: Vec<Option<u64>> = source_metadata
         .iter()
-        .map(|stem| stem.bext.as_ref().map(|bext| bext.time_reference))
-        .collect();
+        .map(|source| {
+            source
+                .timing_origin
+                .map(|time| {
+                    u64::try_from(
+                        u128::from(time) * u128::from(source.grid.sample_rate)
+                            / u128::from(crate::TICKS_PER_SECOND),
+                    )
+                    .map_err(|_| RenderBlocker("BWF reference overflow".into()))
+                })
+                .transpose()
+        })
+        .collect::<Result<_, _>>()?;
     let mut warnings = validation.warnings;
     if request
         .regions
@@ -801,7 +819,7 @@ pub fn run_with_ownership(
             return false;
         };
         owners.is_empty()
-            || owners.iter().any(|owner| *owner >= stems.len())
+            || owners.iter().any(|owner| *owner >= request.stems.len())
             || owners.iter().collect::<HashSet<_>>().len() != owners.len()
     }) {
         return Err(RenderBlocker(
@@ -811,43 +829,28 @@ pub fn run_with_ownership(
     if request.protections.iter().any(|p| {
         p.start >= p.end
             || (p.end != u64::MAX && p.end > crate::timebase::detector_time(sample_count))
-            || p.track.is_some_and(|track| track >= stems.len())
+            || p.track.is_some_and(|track| track >= request.stems.len())
     }) {
         return Err(RenderBlocker("protection is outside the session".into()));
     }
     let automated = request.regions.is_empty();
     let joint = automated && ownership.enabled;
-    let regions =
-        if joint {
-            let tracks = stems
-                .iter()
-                .map(|stem| stem.samples.as_slice())
-                .collect::<Vec<_>>();
-            let fallback_progress = AtomicU8::new(0);
-            let facts = vad::prepare(
-                &tracks,
+    let regions = if automated {
+        let fallback_progress = AtomicU8::new(0);
+        crate::PreviewCache::default()
+            .with_supplied_alignment(request.supplied_alignment)
+            .analyze_with_ownership(
+                &request.stems,
+                &request.protections,
+                parameters,
+                ownership,
                 progress.as_deref().unwrap_or(&fallback_progress),
                 request.cancelled.as_deref(),
-                vad::Preprocessing::Legacy,
-            )?;
-            crate::joint_detector::JointFacts::prepare(&tracks, request.cancelled.as_deref())?
-                .regions(&facts, parameters, ownership, request.cancelled.as_deref())?
-        } else if automated {
-            vad::analyze_with_parameters(
-                &stems
-                    .iter()
-                    .map(|stem| stem.samples.as_slice())
-                    .collect::<Vec<_>>(),
-                parameters.speech_sensitivity,
-                parameters.bleed_discrimination_db,
-                (parameters.speech_padding_ms * crate::timebase::DETECTOR_SAMPLE_RATE as f32
-                    / 1000.0
-                    / 1_536.0)
-                    .round() as usize,
             )?
-        } else {
-            request.regions.clone()
-        };
+            .regions
+    } else {
+        request.regions.clone()
+    };
     if source_stamps(&request.stems)? != sources {
         return Err(RenderBlocker(
             "source changed during render analysis; retry".into(),
@@ -873,7 +876,7 @@ pub fn run_with_ownership(
     let output = AtomicOutput::new(&request.output_dir)?;
     (|| {
         let mut names = Vec::new();
-        for (track, stem) in stems.iter().enumerate() {
+        for (track, path) in request.stems.iter().enumerate() {
             check_cancelled(&request)?;
             let envelope = gain_envelope(
                 track,
@@ -881,26 +884,30 @@ pub fn run_with_ownership(
                 &regions,
                 &request.protections,
                 10.0_f32.powf(parameters.attenuation_db / 20.0),
-                (parameters.open_ms * stem.format.sample_rate as f32 / 1000.0).max(1.0),
-                (parameters.close_ms * stem.format.sample_rate as f32 / 1000.0).max(1.0),
+                (parameters.open_ms * crate::timebase::DETECTOR_SAMPLE_RATE as f32 / 1000.0)
+                    .max(1.0),
+                (parameters.close_ms * crate::timebase::DETECTOR_SAMPLE_RATE as f32 / 1000.0)
+                    .max(1.0),
             );
-            let mut rendered = Vec::with_capacity(sample_count);
-            for (sample, source) in stem.samples.iter().enumerate() {
-                check_cancelled(&request)?;
-                rendered.push(source * envelope.gain_at(sample));
-            }
             let output_name = format!(
-                "{:02}-{}",
+                "{:02}-{}.wav",
                 track + 1,
-                stem.path
-                    .file_name()
+                path.file_stem()
                     .and_then(|name| name.to_str())
-                    .unwrap_or("stem.wav")
+                    .unwrap_or("stem")
             );
-            stem.write(&output.path(&output_name), &rendered)?;
+            crate::audio_io::render_native(
+                path,
+                &output.path(&output_name),
+                &envelope,
+                request.cancelled.as_deref(),
+            )?;
             names.push(output_name);
             if let Some(progress) = &progress {
-                progress.store(((track + 1) * 100 / stems.len()) as u8, Ordering::Relaxed);
+                progress.store(
+                    ((track + 1) * 100 / request.stems.len()) as u8,
+                    Ordering::Relaxed,
+                );
             }
         }
         check_cancelled(&request)?;
@@ -928,7 +935,7 @@ pub fn run_with_ownership(
                 .iter()
                 .flat_map(|region| report_regions(
                     region,
-                    stems.len(),
+                    request.stems.len(),
                     parameters.attenuation_db,
                     joint,
                     &request.protections
@@ -952,7 +959,20 @@ pub fn run_with_ownership(
                     protection.end
                 ))
                 .collect::<Vec<_>>()
-                .join(", ")
+                .join(", "),
+            sample_count = source_metadata[0].grid.frame_count,
+        );
+        let grids = serde_json::to_string(&source_metadata)
+            .map_err(|error| RenderBlocker(format!("native-grid report: {error}")))?;
+        report = report.replacen(
+            "\"input\": {",
+            &format!("\"input\": {{\"track_grids\": {grids}, "),
+            1,
+        );
+        report = report.replacen(
+            "\"output\": {",
+            &format!("\"output\": {{\"track_grids\": {grids}, "),
+            1,
         );
         // Preserve the established JSON formatting while adding source-bound settings.
         if ownership.enabled {

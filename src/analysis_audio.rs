@@ -43,7 +43,8 @@ impl PreparedAnalysisAudio {
     pub fn path(&self) -> &Path {
         &self.path
     }
-    /// Bounded reads are relative to the 16 kHz analysis grid, never the native source grid.
+    /// Bounded reads use the artifact's explicit rate (16 kHz for analysis,
+    /// selected device rate for audition), never an implicit native grid.
     pub fn read_frames(&self, range: Range<usize>) -> Result<Vec<f32>, RenderBlocker> {
         if range.start > range.end
             || range.len() > 65_536
@@ -92,16 +93,36 @@ pub fn prepare_analysis_audio_in(
     cache: &Path,
     cancelled: Option<&AtomicBool>,
 ) -> Result<PreparedAnalysisAudio, RenderBlocker> {
+    prepare_audio_at_rate_in(path, cache, ANALYSIS_SAMPLE_RATE, cancelled)
+}
+
+pub(crate) fn prepare_audio_at_rate_in(
+    path: &Path,
+    cache: &Path,
+    output_rate: u32,
+    cancelled: Option<&AtomicBool>,
+) -> Result<PreparedAnalysisAudio, RenderBlocker> {
+    if output_rate == 0 {
+        return Err(RenderBlocker("playback rate must be nonzero".into()));
+    }
     check_cancelled(cancelled)?;
     let fingerprint = crate::project::fingerprint_cancellable(path, cancelled)?;
     let key = format!(
         "{:x}",
         Sha256::digest(
-            format!("{fingerprint}/{AUDIO_DECODER_RECIPE}/{ANALYSIS_RESAMPLER_RECIPE}").as_bytes()
+            format!(
+                "{fingerprint}/{AUDIO_DECODER_RECIPE}/{ANALYSIS_RESAMPLER_RECIPE}{}",
+                if output_rate == ANALYSIS_SAMPLE_RATE {
+                    String::new()
+                } else {
+                    format!("/output-{output_rate}")
+                }
+            )
+            .as_bytes()
         )
     );
     let destination = cache.join(key);
-    if let Some(audio) = read_cached(&destination, &fingerprint, cancelled)? {
+    if let Some(audio) = read_cached(&destination, &fingerprint, output_rate, cancelled)? {
         return Ok(audio);
     }
     check_cancelled(cancelled)?;
@@ -117,7 +138,11 @@ pub fn prepare_analysis_audio_in(
     let mut converter = None;
     let decoded = decode_chunks(path, cancelled, |rate, packet| {
         if converter.is_none() {
-            converter = Some(StreamResampler::new(rate, writer.take().unwrap())?);
+            converter = Some(StreamResampler::new(
+                rate,
+                output_rate,
+                writer.take().unwrap(),
+            )?);
         }
         converter.as_mut().unwrap().feed(packet, cancelled)
     })?;
@@ -142,7 +167,7 @@ pub fn prepare_analysis_audio_in(
             .transpose()?,
         decoder_recipe: AUDIO_DECODER_RECIPE.into(),
         resampler_recipe: ANALYSIS_RESAMPLER_RECIPE.into(),
-        sample_rate: ANALYSIS_SAMPLE_RATE,
+        sample_rate: output_rate,
         frame_count: converter.written,
     };
     let audio_sha256 = format!("{:x}", converter.hash.finalize());
@@ -165,7 +190,7 @@ pub fn prepare_analysis_audio_in(
     check_cancelled(cancelled)?;
     // Install only a complete directory. A cancelled/failed job never replaces accepted evidence.
     if destination.exists() {
-        if let Some(audio) = read_cached(&destination, &fingerprint, cancelled)? {
+        if let Some(audio) = read_cached(&destination, &fingerprint, output_rate, cancelled)? {
             return Ok(audio);
         }
         check_cancelled(cancelled)?;
@@ -175,7 +200,7 @@ pub fn prepare_analysis_audio_in(
         fs::rename(&destination, invalid)?;
     }
     fs::rename(&staging.0, &destination)?;
-    read_cached(&destination, &fingerprint, cancelled)?
+    read_cached(&destination, &fingerprint, output_rate, cancelled)?
         .ok_or_else(|| RenderBlocker("new analysis artifact failed integrity verification".into()))
 }
 
@@ -189,6 +214,7 @@ impl Drop for Staging {
 fn read_cached(
     directory: &Path,
     source: &str,
+    output_rate: u32,
     cancelled: Option<&AtomicBool>,
 ) -> Result<Option<PreparedAnalysisAudio>, RenderBlocker> {
     check_cancelled(cancelled)?;
@@ -207,7 +233,11 @@ fn read_cached(
         Err(_) => return Ok(None),
     };
     let id = &manifest.identity;
-    let expected = match analysis_length(id.source.grid.frame_count, id.source.grid.sample_rate) {
+    let expected = match analysis_length(
+        id.source.grid.frame_count,
+        id.source.grid.sample_rate,
+        output_rate,
+    ) {
         Ok(expected) => expected,
         Err(_) => return Ok(None),
     };
@@ -222,7 +252,7 @@ fn read_cached(
     if id.source_fingerprint != source
         || id.decoder_recipe != AUDIO_DECODER_RECIPE
         || id.resampler_recipe != ANALYSIS_RESAMPLER_RECIPE
-        || id.sample_rate != ANALYSIS_SAMPLE_RATE
+        || id.sample_rate != output_rate
         || id.source.channels != 1
         || id.frame_count != expected
         || expected == 0
@@ -241,17 +271,15 @@ fn read_cached(
     }))
 }
 
-fn analysis_length(frames: u64, rate: u32) -> Result<u64, RenderBlocker> {
+fn analysis_length(frames: u64, rate: u32, output_rate: u32) -> Result<u64, RenderBlocker> {
     if rate == 0 {
         return Err(RenderBlocker("audio rate must be nonzero".into()));
     }
-    u64::try_from(
-        (u128::from(frames) * u128::from(ANALYSIS_SAMPLE_RATE)).div_ceil(u128::from(rate)),
-    )
-    .map_err(|_| RenderBlocker("analysis frame count overflow".into()))
+    u64::try_from((u128::from(frames) * u128::from(output_rate)).div_ceil(u128::from(rate)))
+        .map_err(|_| RenderBlocker("analysis frame count overflow".into()))
 }
 
-fn conversion_chunk(rate: u32) -> Result<(usize, usize), RenderBlocker> {
+fn conversion_chunk(rate: u32, output_rate: u32) -> Result<(usize, usize), RenderBlocker> {
     if rate == 0 {
         return Err(RenderBlocker("audio rate must be nonzero".into()));
     }
@@ -260,7 +288,7 @@ fn conversion_chunk(rate: u32) -> Result<(usize, usize), RenderBlocker> {
     const MAX_FFT_INPUT: usize = 1_048_576;
     const MAX_FFT_OUTPUT: usize = 65_536;
     let mut a = rate;
-    let mut b = ANALYSIS_SAMPLE_RATE;
+    let mut b = output_rate;
     while b != 0 {
         (a, b) = (b, a % b);
     }
@@ -268,7 +296,7 @@ fn conversion_chunk(rate: u32) -> Result<(usize, usize), RenderBlocker> {
         return Err(RenderBlocker("audio rate must be nonzero".into()));
     }
     let input = (rate / a) as usize;
-    let output = (ANALYSIS_SAMPLE_RATE / a) as usize;
+    let output = (output_rate / a) as usize;
     let desired = (rate as usize / 8).clamp(1, 2048);
     let maximum = (desired / input)
         .max(1)
@@ -301,6 +329,7 @@ fn conversion_chunk(rate: u32) -> Result<(usize, usize), RenderBlocker> {
 
 struct StreamResampler {
     rate: u32,
+    output_rate: u32,
     converter: Option<FftFixedIn<f32>>,
     input: Vec<f32>,
     filled: usize,
@@ -312,17 +341,16 @@ struct StreamResampler {
     hash: Sha256,
 }
 impl StreamResampler {
-    fn new(rate: u32, writer: BufWriter<File>) -> Result<Self, RenderBlocker> {
-        analysis_length(1, rate)?;
-        let converter = if rate == ANALYSIS_SAMPLE_RATE {
+    fn new(rate: u32, output_rate: u32, writer: BufWriter<File>) -> Result<Self, RenderBlocker> {
+        analysis_length(1, rate, output_rate)?;
+        let converter = if rate == output_rate {
             None
         } else {
-            let (chunk, output_max) = conversion_chunk(rate)?;
+            let (chunk, output_max) = conversion_chunk(rate, output_rate)?;
             let converter =
-                FftFixedIn::<f32>::new(rate as usize, ANALYSIS_SAMPLE_RATE as usize, chunk, 2, 1)
-                    .map_err(|error| {
-                    RenderBlocker(format!("analysis resampler could not start: {error}"))
-                })?;
+                FftFixedIn::<f32>::new(rate as usize, output_rate as usize, chunk, 2, 1).map_err(
+                    |error| RenderBlocker(format!("analysis resampler could not start: {error}")),
+                )?;
             if converter.input_frames_max() > 4096 || converter.output_frames_max() > output_max {
                 return Err(RenderBlocker(
                     "resampler geometry disagrees with checked allocation bounds".into(),
@@ -340,6 +368,7 @@ impl StreamResampler {
         ]];
         Ok(Self {
             rate,
+            output_rate,
             converter,
             input,
             filled: 0,
@@ -401,7 +430,7 @@ impl StreamResampler {
         Ok(())
     }
     fn finish(&mut self, cancelled: Option<&AtomicBool>) -> Result<(), RenderBlocker> {
-        let length = analysis_length(self.native_count, self.rate)?;
+        let length = analysis_length(self.native_count, self.rate, self.output_rate)?;
         while self.written < length {
             check_cancelled(cancelled)?;
             self.input[self.filled..].fill(0.0);
