@@ -1,6 +1,7 @@
 # Train independent supervised ownership models
 
-Status: ready-for-agent
+Status: claimed
+Assignee: ownership_models
 Blocked by: 07, 08
 Spec: ../spec.md
 
