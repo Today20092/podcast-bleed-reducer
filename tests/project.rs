@@ -1,7 +1,10 @@
-use rust_app::{AutomixParameters, Project, RenderState, ReviewState, WorkflowStep};
+use rust_app::{
+    AutomixParameters, EnvelopePoint, ManualGainEdit, Project, ReferenceLabel, RenderState,
+    ReviewState, SourceBinding, TICKS_PER_SECOND, TimeRange, WorkflowStep,
+};
 use std::{
     fs,
-    path::PathBuf,
+    path::{Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -17,274 +20,314 @@ fn temp_dir() -> PathBuf {
     fs::create_dir_all(&path).unwrap();
     path
 }
+fn wav(path: &Path, rate: u32, value: f32) {
+    let writer =
+        bwavfile::WaveWriter::create(path, bwavfile::WaveFmt::new_pcm_mono(rate, 16)).unwrap();
+    let mut frames = writer.audio_frame_writer().unwrap();
+    frames.write_frames(&vec![value; rate as usize]).unwrap();
+    frames.end().unwrap();
+}
+fn session(dir: &Path) -> Project {
+    wav(&dir.join("voice.wav"), 44_100, 0.1);
+    wav(&dir.join("guest.wav"), 96_000, 0.2);
+    Project::create(
+        dir.join("episode.cleanslate"),
+        vec![dir.join("voice.wav"), dir.join("guest.wav")],
+    )
+    .unwrap()
+}
+fn bindings(project: &Project) -> Vec<SourceBinding> {
+    project
+        .sources
+        .iter()
+        .map(|s| SourceBinding {
+            track: s.track_id,
+            fingerprint: s.fingerprint.clone(),
+        })
+        .collect()
+}
+fn label(project: &Project) -> ReferenceLabel {
+    ReferenceLabel {
+        id: 1,
+        range: TimeRange {
+            start: 0,
+            end: TICKS_PER_SECOND / 2,
+        },
+        active_speakers: vec![project.sources[0].speaker_id],
+        sources: bindings(project),
+        reference_track: None,
+    }
+}
 
 #[test]
-fn project_reopens_with_workflow_and_review_state() {
+fn saved_project_retains_confirmed_decisions_without_derived_caches() {
     let dir = temp_dir();
-    let source = dir.join("voice.wav");
-    fs::write(&source, b"source audio identity").unwrap();
-    let project_path = dir.join("episode.cleanslate");
-    let render_report = dir.join("render-1/report.json");
-    fs::create_dir(dir.join("render-1")).unwrap();
-    fs::write(&render_report, b"{}").unwrap();
-
-    let mut project = Project::create(&project_path, vec![source]).unwrap();
+    let mut project = session(&dir);
     project
-        .replace_protections(vec![rust_app::Protection {
-            track: Some(0),
-            start: 10,
-            end: 20,
-        }])
+        .replace_reference_labels(vec![label(&project)])
         .unwrap();
     project
-        .set_review_state("broad-attenuation", ReviewState::Reviewed)
+        .protect_region(&[0], TICKS_PER_SECOND / 2, 3 * TICKS_PER_SECOND / 4)
         .unwrap();
-    let parameters = AutomixParameters {
-        attenuation_db: -12.0,
-        ..AutomixParameters::default()
+    let edit = ManualGainEdit {
+        id: 1,
+        source: bindings(&project)[1].clone(),
+        points: vec![
+            EnvelopePoint { time: 0, gain: 0.2 },
+            EnvelopePoint {
+                time: TICKS_PER_SECOND / 2,
+                gain: 0.4,
+            },
+        ],
     };
+    project
+        .replace_manual_gain_edits(vec![edit.clone()])
+        .unwrap();
+    project
+        .set_review_state("uncertain:one", ReviewState::Reviewed)
+        .unwrap();
+    let mut parameters = project.parameters();
+    parameters.attenuation_db = -12.0;
     project.set_parameters(parameters).unwrap();
-    project.mark_render_current(&render_report).unwrap();
-
-    let reopened = Project::open(&project_path).unwrap();
-    assert_eq!(reopened.step(), WorkflowStep::Review);
-    assert_eq!(reopened.protections().len(), 1);
-    assert_eq!(reopened.parameters(), parameters);
+    let reopened = Project::open(project.path()).unwrap();
+    assert_eq!(reopened.reference_labels(), project.reference_labels());
+    assert_eq!(reopened.manual_gain_edits(), &[edit]);
     assert_eq!(
-        reopened.review_states()["broad-attenuation"],
+        reopened.recorded_protections(),
+        project.recorded_protections()
+    );
+    assert_eq!(
+        reopened.review_states()["uncertain:one"],
         ReviewState::Reviewed
     );
-    assert_eq!(
-        reopened.render(),
-        &RenderState::Current {
-            identity: render_report
-        }
-    );
-    assert!(reopened.sources[0].available);
-
+    assert_eq!(reopened.parameters(), parameters);
+    assert_eq!(reopened.sources[0].metadata.grid.sample_rate, 44_100);
+    assert_eq!(reopened.sources[1].metadata.grid.sample_rate, 96_000);
     fs::remove_dir_all(dir).unwrap();
 }
 
 #[test]
-fn changed_source_requires_relink_and_full_revalidation() {
+fn reordering_and_identical_relink_preserve_track_and_speaker_bindings() {
     let dir = temp_dir();
-    let source = dir.join("voice.wav");
-    let unchanged = dir.join("guest.wav");
-    fs::write(&source, b"original").unwrap();
-    fs::write(&unchanged, b"unchanged").unwrap();
-    let project_path = dir.join("episode.cleanslate");
-    let mut project = Project::create(&project_path, vec![source.clone(), unchanged]).unwrap();
+    let mut project = session(&dir);
+    let original = project.sources[0].clone();
     project
-        .mark_render_current(dir.join("missing-report.json"))
+        .replace_reference_labels(vec![label(&project)])
         .unwrap();
-
-    fs::write(&source, b"changed source").unwrap();
-    let reopened = Project::open(&project_path).unwrap();
-
-    assert!(!reopened.sources[0].available);
-    assert!(reopened.sources[1].available);
-    assert_eq!(reopened.step(), WorkflowStep::Import);
-    assert_eq!(reopened.render(), &RenderState::Stale);
-
-    fs::remove_dir_all(dir).unwrap();
-}
-
-#[test]
-fn missing_committed_render_reopens_stale() {
-    let dir = temp_dir();
-    let source = dir.join("voice.wav");
-    fs::write(&source, b"original").unwrap();
-    let project_path = dir.join("episode.cleanslate");
-    let mut project = Project::create(&project_path, vec![source]).unwrap();
     project
-        .mark_render_current(dir.join("removed-render/report.json"))
+        .protect_region(&[0], TICKS_PER_SECOND / 2, TICKS_PER_SECOND)
         .unwrap();
-
-    let reopened = Project::open(&project_path).unwrap();
-    assert_eq!(reopened.step(), WorkflowStep::Process);
-    assert_eq!(reopened.render(), &RenderState::Stale);
-
-    fs::remove_dir_all(dir).unwrap();
-}
-
-#[test]
-fn ownership_mode_is_joint_for_new_projects_and_legacy_when_absent() {
-    let dir = temp_dir();
-    let source = dir.join("voice.wav");
-    fs::write(&source, b"source").unwrap();
-    let path = dir.join("episode.cleanslate");
-    let project = Project::create(&path, vec![source]).unwrap();
-    assert!(project.ownership_settings().enabled);
-    assert!(Project::open(&path).unwrap().ownership_settings().enabled);
-    let mut json: serde_json::Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
-    json.as_object_mut().unwrap().remove("ownership");
-    fs::write(&path, serde_json::to_vec(&json).unwrap()).unwrap();
-    let mut legacy = Project::open(&path).unwrap();
-    assert!(!legacy.ownership_settings().enabled);
-    legacy
-        .set_ownership_settings(rust_app::OwnershipSettings {
-            enabled: true,
-            ..Default::default()
-        })
-        .unwrap();
-    assert!(Project::open(&path).unwrap().ownership_settings().enabled);
-    fs::remove_dir_all(dir).unwrap();
-}
-
-fn calibration_project(dir: &std::path::Path) -> (Project, rust_app::OwnershipSettings) {
-    let source = dir.join("voice.wav");
-    let writer =
-        bwavfile::WaveWriter::create(&source, bwavfile::WaveFmt::new_pcm_mono(48_000, 16)).unwrap();
-    let mut frames = writer.audio_frame_writer().unwrap();
-    frames.write_frames(&vec![0.0_f32; 48_000]).unwrap();
-    frames.end().unwrap();
-    let project = Project::create(dir.join("episode.cleanslate"), vec![source.clone()]).unwrap();
-    let settings = rust_app::OwnershipSettings {
-        enabled: true,
-        sources: vec![rust_app::SourceStamp::read(&source).unwrap()],
-        examples: vec![rust_app::CalibrationExample {
-            kind: rust_app::CalibrationKind::RoomTone,
-            track: 0,
-            start: 0,
-            end: 12_000,
-        }],
-    };
-    (project, settings)
-}
-
-#[test]
-fn calibration_round_trips_removes_and_rejects_invalid_examples_without_mutation() {
-    let dir = temp_dir();
-    let (mut project, settings) = calibration_project(&dir);
-    project.set_ownership_settings(settings.clone()).unwrap();
-    project
-        .mark_render_current(dir.join("report.json"))
-        .unwrap();
-    for (track, start, end) in [
-        (1, 0, 12_000),
-        (0, 0, 11_999),
-        (0, 24_000, 12_000),
-        (0, 40_000, 52_000),
-    ] {
-        let mut invalid = settings.clone();
-        invalid.examples[0].track = track;
-        invalid.examples[0].start = start;
-        invalid.examples[0].end = end;
-        assert!(project.set_ownership_settings(invalid).is_err());
-        assert_eq!(project.ownership_settings(), &settings);
-        assert!(matches!(project.render(), RenderState::Current { .. }));
-    }
-    let mut invalid = settings.clone();
-    invalid.sources.clear();
-    assert!(project.set_ownership_settings(invalid).is_err());
-    assert_eq!(
-        Project::open(project.path()).unwrap().ownership_settings(),
-        &settings
-    );
-    let mut removed = settings.clone();
-    removed.examples.clear();
-    removed.sources.clear();
-    project.set_ownership_settings(removed.clone()).unwrap();
-    assert_eq!(project.render(), &RenderState::Stale);
-    assert_eq!(
-        Project::open(project.path()).unwrap().ownership_settings(),
-        &removed
-    );
-    fs::remove_dir_all(dir).unwrap();
-}
-
-#[test]
-fn source_changes_relink_and_additions_invalidate_examples() {
-    let dir = temp_dir();
-    let (mut project, settings) = calibration_project(&dir);
-    project.set_ownership_settings(settings.clone()).unwrap();
-    let source = project.source_paths()[0].clone();
-    fs::write(&source, b"changed").unwrap();
-    assert!(project.set_ownership_settings(settings).is_err());
+    let moved = dir.join("moved.wav");
+    fs::rename(&original.path, &moved).unwrap();
+    let mut project = Project::open(project.path()).unwrap();
+    assert!(!project.sources[0].available);
+    project.relink(0, moved).unwrap();
+    assert!(project.pending_source_reviews().is_empty());
+    assert_eq!(project.ownership_settings().examples.len(), 1);
+    let other = project.sources[1].track_id;
+    project.reorder_tracks(&[other, original.track_id]).unwrap();
     let reopened = Project::open(project.path()).unwrap();
-    assert!(reopened.ownership_settings().examples.is_empty());
-    assert!(reopened.calibration_notice().is_some());
-    assert_eq!(reopened.render(), &RenderState::Stale);
+    assert_eq!(reopened.sources[1].speaker_id, original.speaker_id);
+    assert_eq!(reopened.protections()[0].track, Some(1));
+    assert_eq!(reopened.ownership_settings().examples[0].track, 1);
+    fs::remove_dir_all(dir).unwrap();
+}
 
-    let (mut project, settings) = calibration_project(&dir);
-    project.set_ownership_settings(settings.clone()).unwrap();
-    project.relink(0, source.clone()).unwrap();
+#[test]
+fn changed_audio_keeps_decisions_dormant_until_explicit_rebind() {
+    let dir = temp_dir();
+    let mut project = session(&dir);
+    let label = label(&project);
+    project
+        .replace_reference_labels(vec![label.clone()])
+        .unwrap();
+    project.protect_track(0).unwrap();
+    let source = project.sources[0].clone();
+    wav(&source.path, 44_100, 0.3);
+    let mut project = Project::open(project.path()).unwrap();
+    assert_eq!(project.reference_labels(), std::slice::from_ref(&label));
     assert!(project.ownership_settings().examples.is_empty());
-    assert!(project.calibration_notice().is_some());
-    project.set_ownership_settings(settings).unwrap();
-    project.add_sources(vec![source]).unwrap();
-    assert!(project.ownership_settings().examples.is_empty());
-    assert!(
+    assert!(project.protections().is_empty());
+    assert_eq!(project.step(), WorkflowStep::Import);
+    project.relink(0, source.path).unwrap();
+    assert_eq!(project.pending_source_reviews(), &[source.track_id]);
+    assert_eq!(project.reference_labels(), &[label]);
+    assert!(project.protections().is_empty());
+    project.review_and_rebind_source(source.track_id).unwrap();
+    assert_eq!(project.protections().len(), 1);
+    assert_eq!(project.ownership_settings().examples.len(), 1);
+    assert_eq!(
         Project::open(project.path())
             .unwrap()
-            .ownership_settings()
-            .examples
-            .is_empty()
+            .recorded_protections(),
+        project.recorded_protections()
     );
     fs::remove_dir_all(dir).unwrap();
 }
 
 #[test]
-fn malformed_saved_calibration_is_cleared_and_failed_save_is_transactional() {
+fn a_source_changed_while_open_cannot_receive_old_protections_or_new_edits() {
     let dir = temp_dir();
-    let (mut project, settings) = calibration_project(&dir);
-    project.set_ownership_settings(settings.clone()).unwrap();
-    let mut json: serde_json::Value =
-        serde_json::from_slice(&fs::read(project.path()).unwrap()).unwrap();
-    json["ownership"]["examples"][0]["end"] = 99_000.into();
-    fs::write(project.path(), serde_json::to_vec(&json).unwrap()).unwrap();
-    let reopened = Project::open(project.path()).unwrap();
-    assert!(reopened.ownership_settings().examples.is_empty());
-    assert!(reopened.calibration_notice().is_some());
-    fs::remove_file(project.path()).unwrap();
-    fs::create_dir(project.path()).unwrap();
-    assert!(project.set_ownership_settings(Default::default()).is_err());
-    assert_eq!(project.ownership_settings(), &settings);
+    let mut project = session(&dir);
+    project.protect_track(0).unwrap();
+    wav(&project.sources[0].path, 44_100, 0.8);
+    assert!(project.protections().is_empty());
+    assert!(project.protect_range(0, TICKS_PER_SECOND / 2).is_err());
     fs::remove_dir_all(dir).unwrap();
 }
 
 #[test]
-fn calibration_is_bound_to_ordered_sources_even_when_mode_is_disabled() {
+fn invalid_decisions_and_parameters_do_not_mutate_saved_project() {
     let dir = temp_dir();
-    let (project, mut settings) = calibration_project(&dir);
-    let other = dir.join("guest.wav");
-    fs::write(&other, b"other source").unwrap();
-    settings
-        .sources
-        .push(rust_app::SourceStamp::read(&other).unwrap());
-    settings.enabled = false;
+    let mut project = session(&dir);
+    let good = label(&project);
+    project
+        .replace_reference_labels(vec![good.clone()])
+        .unwrap();
+    let before = fs::read(project.path()).unwrap();
+    let mut contrary = good.clone();
+    contrary.id = 2;
+    contrary.active_speakers = vec![project.sources[1].speaker_id];
     assert!(
-        settings
-            .validate(&settings.sources, &[48_000, 48_000])
-            .is_ok()
-    );
-    let mut reversed = settings.sources.clone();
-    reversed.reverse();
-    assert!(settings.validate(&reversed, &[48_000, 48_000]).is_err());
-    settings.examples[0].kind = rust_app::CalibrationKind::SoloSpeech;
-    assert!(
-        settings
-            .validate(&settings.sources, &[48_000, 8_000])
+        project
+            .replace_reference_labels(vec![good, contrary])
             .is_err()
     );
-    drop(project);
+    assert!(project.protect_range(0, 2 * TICKS_PER_SECOND).is_err());
+    assert!(
+        project
+            .set_parameters(AutomixParameters {
+                attenuation_db: f32::NAN,
+                ..Default::default()
+            })
+            .is_err()
+    );
+    assert_eq!(fs::read(project.path()).unwrap(), before);
     fs::remove_dir_all(dir).unwrap();
 }
 
 #[test]
-fn first_example_rejects_a_recording_changed_after_project_load() {
+fn malformed_versions_ids_bounds_and_nonfinite_gain_are_rejected() {
     let dir = temp_dir();
-    let (mut project, mut settings) = calibration_project(&dir);
-    let source = project.source_paths()[0].clone();
-    let writer =
-        bwavfile::WaveWriter::create(&source, bwavfile::WaveFmt::new_pcm_mono(48_000, 16)).unwrap();
-    let mut frames = writer.audio_frame_writer().unwrap();
-    frames.write_frames(&vec![0.0_f32; 96_000]).unwrap();
-    frames.end().unwrap();
-    settings.sources = vec![rust_app::SourceStamp::read(&source).unwrap()];
-    assert!(project.set_ownership_settings(settings.clone()).is_err());
-    assert!(project.ownership_settings().examples.is_empty());
-    project.relink(0, source).unwrap();
-    project.set_ownership_settings(settings).unwrap();
+    let project = session(&dir);
+    let original: serde_json::Value =
+        serde_json::from_slice(&fs::read(project.path()).unwrap()).unwrap();
+    for pointer in [
+        "/schema_version",
+        "/ticks_per_second",
+        "/sources/0/track_id",
+        "/sources/0/metadata/grid/sample_rate",
+    ] {
+        let mut json = original.clone();
+        *json.pointer_mut(pointer).unwrap() = 0.into();
+        fs::write(project.path(), serde_json::to_vec(&json).unwrap()).unwrap();
+        assert!(Project::open(project.path()).is_err(), "{pointer}");
+    }
+    let mut json = original.clone();
+    json["sources"][1]["speaker_id"] = json["sources"][0]["speaker_id"].clone();
+    fs::write(project.path(), serde_json::to_vec(&json).unwrap()).unwrap();
+    assert!(Project::open(project.path()).is_err());
+    fs::remove_dir_all(dir).unwrap();
+}
+
+#[cfg(windows)]
+#[test]
+fn failed_atomic_replace_retains_prior_data_and_memory() {
+    use std::os::windows::fs::OpenOptionsExt;
+    let dir = temp_dir();
+    let mut project = session(&dir);
+    let before = fs::read(project.path()).unwrap();
+    let parameters = project.parameters();
+    let lock = fs::OpenOptions::new()
+        .read(true)
+        .share_mode(1)
+        .open(project.path())
+        .unwrap();
+    assert!(
+        project
+            .set_parameters(AutomixParameters {
+                attenuation_db: -10.0,
+                ..parameters
+            })
+            .is_err()
+    );
+    assert_eq!(project.parameters(), parameters);
+    assert_eq!(fs::read(project.path()).unwrap(), before);
+    drop(lock);
+    assert_eq!(fs::read_dir(&dir).unwrap().count(), 3);
+    fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn missing_render_marks_only_deliverable_stale_and_project_stays_editable() {
+    let dir = temp_dir();
+    let mut project = session(&dir);
+    project
+        .mark_render_current(dir.join("missing/report.json"))
+        .unwrap();
+    let reopened = Project::open(project.path()).unwrap();
+    assert_eq!(reopened.render(), &RenderState::Stale);
+    assert_eq!(reopened.step(), WorkflowStep::Process);
+    fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn manual_curve_validation_rejects_unordered_boosts_and_constraint_conflicts() {
+    let dir = temp_dir();
+    let mut project = session(&dir);
+    let binding = bindings(&project)[0].clone();
+    for points in [
+        vec![
+            EnvelopePoint {
+                time: TICKS_PER_SECOND / 2,
+                gain: 0.5,
+            },
+            EnvelopePoint { time: 0, gain: 0.2 },
+        ],
+        vec![
+            EnvelopePoint {
+                time: 0,
+                gain: f32::INFINITY,
+            },
+            EnvelopePoint {
+                time: TICKS_PER_SECOND / 2,
+                gain: 1.0,
+            },
+        ],
+        vec![
+            EnvelopePoint { time: 0, gain: 1.1 },
+            EnvelopePoint {
+                time: TICKS_PER_SECOND / 2,
+                gain: 1.0,
+            },
+        ],
+    ] {
+        assert!(
+            project
+                .replace_manual_gain_edits(vec![ManualGainEdit {
+                    id: 1,
+                    source: binding.clone(),
+                    points
+                }])
+                .is_err()
+        );
+    }
+    project.protect_track(0).unwrap();
+    assert!(
+        project
+            .replace_manual_gain_edits(vec![ManualGainEdit {
+                id: 1,
+                source: binding,
+                points: vec![
+                    EnvelopePoint { time: 0, gain: 0.5 },
+                    EnvelopePoint {
+                        time: TICKS_PER_SECOND / 2,
+                        gain: 0.5
+                    }
+                ]
+            }])
+            .is_err()
+    );
+    assert_eq!(project.recorded_protections().len(), 1);
     fs::remove_dir_all(dir).unwrap();
 }

@@ -22,6 +22,7 @@ pub fn export(
     destination: &Path,
     cancelled: Option<&AtomicBool>,
 ) -> Result<(), RenderBlocker> {
+    project.validate_sources()?;
     let plan = delivery_plan(project)?;
     if destination.exists() && fs::read_dir(destination)?.next().is_some() {
         return Err(RenderBlocker("export destination is not empty".into()));
@@ -36,6 +37,7 @@ pub fn export(
     if cancelled.is_some_and(|flag| flag.load(Ordering::Relaxed)) {
         return Err(RenderBlocker("cancelled".into()));
     }
+    project.validate_sources()?;
     output.commit()
 }
 

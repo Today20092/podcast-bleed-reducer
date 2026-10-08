@@ -1,17 +1,26 @@
-use rust_app::timeline::TimelineViewport;
+use rust_app::{SourceTimebase, TICKS_PER_SECOND, timeline::TimelineViewport};
+
+#[test]
+fn minimum_zoom_is_one_tenth_second_in_common_time() {
+    let mut viewport = TimelineViewport::new(28_224_000);
+    for _ in 0..100 {
+        viewport.zoom_at(500.0, 1_000.0, 1.0);
+    }
+    assert_eq!(viewport.visible_samples(), 2_822_400.0);
+}
 
 #[test]
 fn click_and_continuous_drag_seek_in_session_time() {
-    let mut viewport = TimelineViewport::new(48_000);
+    let mut viewport = TimelineViewport::new(TICKS_PER_SECOND);
     for x in [750.0, 600.0, 425.0, 250.0] {
         viewport.seek(viewport.sample_at(x, 1_000.0));
     }
-    assert_eq!(viewport.playhead(), 12_000);
+    assert_eq!(viewport.playhead(), TICKS_PER_SECOND / 4);
 }
 
 #[test]
 fn wheel_zoom_keeps_the_time_beneath_the_cursor() {
-    let mut viewport = TimelineViewport::new(480_000);
+    let mut viewport = TimelineViewport::new(10 * TICKS_PER_SECOND);
     let before = viewport.sample_at(725.0, 1_000.0);
     viewport.zoom_at(725.0, 1_000.0, 1.0);
     let after = viewport.sample_at(725.0, 1_000.0);
@@ -20,7 +29,7 @@ fn wheel_zoom_keeps_the_time_beneath_the_cursor() {
 
 #[test]
 fn horizontal_pan_preserves_zoom_and_clamps_to_session() {
-    let mut viewport = TimelineViewport::new(480_000);
+    let mut viewport = TimelineViewport::new(10 * TICKS_PER_SECOND);
     viewport.zoom_at(500.0, 1_000.0, 1.0);
     let visible = viewport.visible_samples();
 
@@ -31,18 +40,21 @@ fn horizontal_pan_preserves_zoom_and_clamps_to_session() {
     viewport.pan_by_pixels(f32::MAX, 1_000.0);
     assert_eq!(viewport.start(), 0.0);
     viewport.pan_by_pixels(-f32::MAX, 1_000.0);
-    assert_eq!(viewport.start(), 480_000.0 - visible);
+    assert_eq!(viewport.start(), 10.0 * TICKS_PER_SECOND as f64 - visible);
 }
 
 #[test]
 fn ruler_waveforms_playhead_and_selection_share_one_transform() {
-    let mut viewport = TimelineViewport::new(480_000);
+    let mut viewport = TimelineViewport::new(10 * TICKS_PER_SECOND);
     viewport.zoom_at(500.0, 1_000.0, 1.0);
     let sample = viewport.sample_at(300.0, 1_000.0);
     viewport.seek(sample);
-    viewport.set_selection(Some((sample, sample + 48_000)));
+    viewport.set_selection(Some((sample, sample + TICKS_PER_SECOND)));
     assert!((viewport.x_for_sample(viewport.playhead(), 1_000.0) - 300.0).abs() < 0.01);
-    assert_eq!(viewport.selection(), Some((sample, sample + 48_000)));
+    assert_eq!(
+        viewport.selection(),
+        Some((sample, sample + TICKS_PER_SECOND))
+    );
 }
 
 #[test]
@@ -55,7 +67,12 @@ fn canonical_session_navigation_stays_responsive() {
     ];
     let sizes = sources.map(|path| std::fs::metadata(path).unwrap().len());
     assert_eq!(sizes, [sizes[0]; 3]);
-    let mut viewport = TimelineViewport::new(((sizes[0] - 44) / 2) as usize);
+    let mut viewport = TimelineViewport::new(
+        SourceTimebase::new(48_000, (sizes[0] - 44) / 2)
+            .unwrap()
+            .duration()
+            .unwrap(),
+    );
     let started = std::time::Instant::now();
     for step in 0..10_000 {
         let x = (step % 1_280) as f32;

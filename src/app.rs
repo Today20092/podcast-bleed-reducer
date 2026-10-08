@@ -6,6 +6,7 @@ use crate::{
     export,
     prepared_analysis::source_stamps,
     preview_stage, run_with_ownership,
+    timebase::{Rounding, TICKS_PER_SECOND, TimePosition, time_from_seconds},
     timeline::{TimelineEvent, TimelineViewport},
     validate, validate_export,
     waveform::{self, TimelineCanvas, WaveformCache},
@@ -93,7 +94,15 @@ mod tests {
                     parameters.attenuation_db = -12.0;
                     project.set_parameters(parameters).unwrap();
                 }
-                1 => app.project.as_mut().unwrap().protect_range(0, 100).unwrap(),
+                1 => app
+                    .project
+                    .as_mut()
+                    .unwrap()
+                    .protect_range(
+                        crate::timebase::detector_time(0),
+                        crate::timebase::detector_time(100),
+                    )
+                    .unwrap(),
                 2 => write_wav(&source, &[0.0; 3073]),
                 3 => app.project = None,
                 4 => {
@@ -120,8 +129,8 @@ mod tests {
                         settings.examples.push(crate::CalibrationExample {
                             kind: crate::CalibrationKind::RoomTone,
                             track: 0,
-                            start: 0,
-                            end: 24_000,
+                            start: crate::timebase::detector_time(0),
+                            end: crate::timebase::detector_time(24_000),
                         });
                     }
                     project.set_ownership_settings(settings).unwrap();
@@ -164,7 +173,8 @@ mod tests {
             ),
             ..Default::default()
         };
-        app.timeline.set_total_samples(48_000);
+        app.timeline
+            .set_total_samples(crate::timebase::detector_time(48_000));
         for input in ["NaN", "inf", "-0.01", "1e99", "", "not a time"] {
             let _ = app.update(super::Message::CalibrationStart(input.into()));
             let _ = app.update(super::Message::CalibrationEnd("1".into()));
@@ -190,7 +200,10 @@ mod tests {
         let start = app.calibration_start.clone();
         let end = app.calibration_end.clone();
         let _ = app.update(super::Message::Timeline(
-            crate::timeline::TimelineEvent::Select(100, 30_000),
+            crate::timeline::TimelineEvent::Select(
+                crate::timebase::detector_time(100),
+                crate::timebase::detector_time(30_000),
+            ),
         ));
         assert_eq!(app.calibration_start, start);
         assert_eq!(app.calibration_end, end);
@@ -223,7 +236,7 @@ mod tests {
     }
 
     #[test]
-    fn calibration_drag_saves_exact_examples_without_protection_and_refreshes_preview() {
+    fn calibration_drag_saves_outward_examples_without_protection_and_refreshes_preview() {
         let directory =
             std::env::temp_dir().join(format!("calibration-editor-{}", std::process::id()));
         std::fs::create_dir_all(&directory).unwrap();
@@ -235,10 +248,14 @@ mod tests {
             ),
             ..Default::default()
         };
-        app.timeline.set_total_samples(48_000);
+        app.timeline
+            .set_total_samples(crate::timebase::detector_time(48_000));
         let _ = app.update(super::Message::CalibrationMode(true));
         let _ = app.update(super::Message::Timeline(
-            crate::timeline::TimelineEvent::Select(24_001, 1),
+            crate::timeline::TimelineEvent::Select(
+                crate::timebase::detector_time(24_001),
+                crate::timebase::detector_time(1),
+            ),
         ));
         let _ = app.update(super::Message::SaveCalibration(
             crate::CalibrationKind::RoomTone,
@@ -254,8 +271,8 @@ mod tests {
             vec![crate::CalibrationExample {
                 kind: crate::CalibrationKind::RoomTone,
                 track: 0,
-                start: 1,
-                end: 24_001,
+                start: 587,
+                end: crate::timebase::detector_time(24_001),
             }]
         );
         assert!(app.project.as_ref().unwrap().protections().is_empty());
@@ -264,6 +281,10 @@ mod tests {
             crate::CalibrationKind::SoloSpeech,
             0,
         ));
+        assert!(
+            app.calibration_error.is_some(),
+            "contradictory truth must be rejected"
+        );
         assert_eq!(
             app.project
                 .as_ref()
@@ -271,12 +292,16 @@ mod tests {
                 .ownership_settings()
                 .examples
                 .len(),
-            2
+            1
         );
         let _ = app.update(super::Message::RemoveCalibration(0));
-        assert_eq!(
-            app.project.as_ref().unwrap().ownership_settings().examples[0].kind,
-            crate::CalibrationKind::SoloSpeech
+        assert!(
+            app.project
+                .as_ref()
+                .unwrap()
+                .ownership_settings()
+                .examples
+                .is_empty()
         );
         let _ = app.update(super::Message::OwnershipMode(false));
         assert!(
@@ -304,7 +329,12 @@ mod tests {
         let mut project =
             crate::Project::create(directory.join("episode.cleanslate"), vec![path.clone()])
                 .unwrap();
-        project.protect_range(1600, 3000).unwrap();
+        project
+            .protect_range(
+                crate::timebase::detector_time(1600),
+                crate::timebase::detector_time(3000),
+            )
+            .unwrap();
         let mut app = super::CleanSlateApp {
             project: Some(project),
             ..Default::default()
@@ -324,8 +354,13 @@ mod tests {
         write_wav(&path, &[0.0; 1537]);
         app.start_preview();
         drain(&mut app);
-        assert!(app.preview_error.as_deref().unwrap().contains("protection"));
-        assert_eq!(app.preview_cache.stats().preparations, 2);
+        assert!(
+            app.preview_error
+                .as_deref()
+                .unwrap()
+                .contains("relink and review")
+        );
+        assert_eq!(app.preview_cache.stats().preparations, 1);
         assert_eq!(
             app.preview.as_ref().unwrap().envelopes[0].sample_count(),
             3073
@@ -335,7 +370,8 @@ mod tests {
             app.preview_sources,
             vec![super::waveform::SourceStamp::read(&path).unwrap()]
         );
-        app.timeline.set_total_samples(3073);
+        app.timeline
+            .set_total_samples(crate::timebase::detector_time(3073));
         app.audition(false);
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
         while app.audition_preparation.is_busy() {
@@ -484,6 +520,22 @@ mod tests {
             assert!(std::time::Instant::now() < deadline);
             std::thread::sleep(std::time::Duration::from_millis(1));
         }
+        assert!(
+            app.preview_error
+                .as_deref()
+                .unwrap()
+                .contains("relink and review")
+        );
+        let project = app.project.as_mut().unwrap();
+        let track = project.sources[0].track_id;
+        project.relink(0, path.clone()).unwrap();
+        project.review_and_rebind_source(track).unwrap();
+        app.start_preview();
+        while app.preview_processing.is_some() || app.preview_pending.is_some() {
+            app.poll_processing();
+            assert!(std::time::Instant::now() < deadline);
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
         assert_eq!(
             app.preview.as_ref().unwrap().envelopes[0].sample_count(),
             3073
@@ -547,7 +599,8 @@ mod tests {
             parameters: Default::default(),
         };
         app.preview = Some(preview.clone());
-        app.timeline.set_total_samples(1537);
+        app.timeline
+            .set_total_samples(crate::timebase::detector_time(1537));
         app.timeline.set_selection(Some((17, 600)));
         let drain = |app: &mut super::CleanSlateApp| {
             let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
@@ -636,7 +689,8 @@ mod tests {
             ),
             ..Default::default()
         };
-        app.timeline.set_total_samples(48_000);
+        app.timeline
+            .set_total_samples(crate::timebase::detector_time(48_000));
         let wait = |app: &mut super::CleanSlateApp| {
             let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
             while app.preview_processing.is_some() {
@@ -676,6 +730,24 @@ mod tests {
         assert_eq!(app.preview_cache.stats().ownership_derivations, before + 2);
         assert_eq!(app.preview_cache.stats().preparations, 1);
         write_wav(&path, &[0.0; 3073]);
+        app.start_preview();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+        while app.preview_processing.is_some() || app.preview_pending.is_some() {
+            app.poll_processing();
+            assert!(std::time::Instant::now() < deadline);
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+        assert!(
+            app.preview_error
+                .as_deref()
+                .unwrap()
+                .contains("relink and review")
+        );
+        assert_eq!(app.preview_cache.stats().preparations, 1);
+        let project = app.project.as_mut().unwrap();
+        let track = project.sources[0].track_id;
+        project.relink(0, path.clone()).unwrap();
+        project.review_and_rebind_source(track).unwrap();
         app.start_preview();
         wait(&mut app);
         assert_eq!(app.preview_cache.stats().preparations, 2);
@@ -894,21 +966,37 @@ mod tests {
     #[test]
     fn calibration_range_explains_clicks_and_short_or_reversed_ranges() {
         let mut app = super::CleanSlateApp::default();
-        app.timeline.set_total_samples(48_000);
-        app.capture_calibration_range(24_000, 24_000);
+        app.timeline
+            .set_total_samples(crate::timebase::detector_time(48_000));
+        app.capture_calibration_range(
+            crate::timebase::detector_time(24_000),
+            crate::timebase::detector_time(24_000),
+        );
         assert!(
             app.calibration_range()
                 .unwrap_err()
                 .contains("end must be after")
         );
-        app.capture_calibration_range(24_000, 24_001);
+        app.capture_calibration_range(
+            crate::timebase::detector_time(24_000),
+            crate::timebase::detector_time(24_001),
+        );
         assert!(
             app.calibration_range()
                 .unwrap_err()
                 .contains("0.25 seconds")
         );
-        app.capture_calibration_range(48_000, 12_000);
-        assert_eq!(app.calibration_range().unwrap(), (12_000, 48_000));
+        app.capture_calibration_range(
+            crate::timebase::detector_time(48_000),
+            crate::timebase::detector_time(12_000),
+        );
+        assert_eq!(
+            app.calibration_range().unwrap(),
+            (
+                crate::timebase::detector_time(12_000),
+                crate::timebase::detector_time(48_000)
+            )
+        );
         app.calibration_start = "2".into();
         app.calibration_end = "1".into();
         assert!(app.calibration_range().is_err());
@@ -999,7 +1087,7 @@ mod tests {
             std::env::temp_dir().join(format!("cleanslate-editor-test-{}", std::process::id()));
         std::fs::create_dir_all(&directory).unwrap();
         let source = directory.join("voice.wav");
-        std::fs::write(&source, b"source").unwrap();
+        write_wav(&source, &[0.0; 100]);
         let mut app = super::CleanSlateApp {
             project: Some(
                 crate::Project::create(directory.join("episode.cleanslate"), vec![source.clone()])
@@ -1007,20 +1095,25 @@ mod tests {
             ),
             ..Default::default()
         };
-        std::fs::remove_file(source).unwrap();
         let _ = app.update(super::Message::Timeline(
             crate::timeline::TimelineEvent::Select(40, 10),
         ));
         assert!(app.can_protect_selection());
         let _ = app.update(super::Message::ProtectSelection);
         assert_eq!(
-            app.project.unwrap().protections(),
+            app.project.as_ref().unwrap().protections(),
             &[crate::Protection {
                 track: None,
                 start: 10,
                 end: 40
             }]
         );
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+        while app.preview_processing.is_some() || app.preview_pending.is_some() {
+            app.poll_processing();
+            assert!(std::time::Instant::now() < deadline);
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
         std::fs::remove_dir_all(directory).unwrap();
     }
 
@@ -1034,7 +1127,7 @@ mod tests {
         let source = directory.join("voice.wav");
         let rendered = directory.join("render/01-voice.wav");
         let report = directory.join("render/report.json");
-        std::fs::write(&source, b"source").unwrap();
+        write_wav(&source, &[0.0; 100]);
         std::fs::create_dir_all(report.parent().unwrap()).unwrap();
         let writer =
             bwavfile::WaveWriter::create(&rendered, bwavfile::WaveFmt::new_pcm_mono(48_000, 16))
@@ -1092,7 +1185,7 @@ pub struct CleanSlateApp {
     review: Option<ReviewWorkspace>,
     audition: Option<LiveAudition>,
     audition_preparation: AuditionPreparation,
-    audition_range: Option<(usize, usize)>,
+    audition_range: Option<(TimePosition, TimePosition)>,
     audition_mode: AuditionMode,
     monitor_db: f32,
     selecting_range: bool,
@@ -1454,7 +1547,7 @@ impl CleanSlateApp {
             processing.cancelled.store(true, Ordering::Relaxed);
         }
         if let Some(cache) = waveforms.first() {
-            self.timeline.set_total_samples(cache.sample_count);
+            self.timeline.set_total_samples(cache.duration());
         }
         self.waveforms = waveforms;
     }
@@ -1564,7 +1657,7 @@ impl CleanSlateApp {
                 Ok(SourceEvent::Waveform(index, waveform)) => {
                     if index == loading.waveforms.len() {
                         if index == 0 {
-                            loading.timeline.set_total_samples(waveform.sample_count);
+                            loading.timeline.set_total_samples(waveform.duration());
                         }
                         loading.waveforms.push(waveform);
                     }
@@ -1738,21 +1831,33 @@ impl CleanSlateApp {
         let request_cancelled = Arc::clone(&cancelled);
         let request_progress = Arc::clone(&progress);
         let (sender, result) = mpsc::channel();
+        let source_project = project.clone();
         std::thread::spawn(move || {
-            let outcome = run_with_ownership(
-                RunRequest {
-                    stems,
-                    output_dir,
-                    regions: vec![],
-                    protections,
-                    cancelled: Some(request_cancelled),
-                },
-                Some(request_progress),
-                parameters,
-                &ownership,
-            )
-            .map(|_| report.display().to_string())
-            .map_err(|error| error.to_string());
+            let outcome = source_project
+                .validate_sources_cancellable(Some(&request_cancelled))
+                .map_err(|e| e.to_string())
+                .and_then(|_| {
+                    run_with_ownership(
+                        RunRequest {
+                            stems,
+                            output_dir,
+                            regions: vec![],
+                            protections,
+                            cancelled: Some(request_cancelled),
+                        },
+                        Some(request_progress),
+                        parameters,
+                        &ownership,
+                    )
+                    .map(|_| report.display().to_string())
+                    .map_err(|error| error.to_string())
+                })
+                .and_then(|report| {
+                    source_project
+                        .validate_sources()
+                        .map(|_| report)
+                        .map_err(|e| e.to_string())
+                });
             let _ = sender.send(outcome);
         });
         self.messages = vec!["Final render started".into()];
@@ -1818,18 +1923,33 @@ impl CleanSlateApp {
         let cancelled = Arc::new(AtomicBool::new(false));
         let worker_cancelled = Arc::clone(&cancelled);
         let mut cache = self.preview_cache.clone();
+        let source_project = project.clone();
         let (sender, result) = mpsc::channel();
         std::thread::spawn(move || {
             let result = cache
-                .analyze_with_ownership(
-                    &stems,
-                    &protections,
-                    parameters,
-                    &ownership,
-                    &worker_progress,
-                    Some(&worker_cancelled),
-                )
-                .map_err(|error| error.to_string());
+                .requires_source_validation(&stems, &ownership)
+                .map_err(|error| error.to_string())
+                .and_then(|required| {
+                    if required {
+                        source_project
+                            .validate_sources_cancellable(Some(&worker_cancelled))
+                            .map_err(|error| error.to_string())
+                    } else {
+                        Ok(())
+                    }
+                })
+                .and_then(|_| {
+                    cache
+                        .analyze_with_ownership(
+                            &stems,
+                            &protections,
+                            parameters,
+                            &ownership,
+                            &worker_progress,
+                            Some(&worker_cancelled),
+                        )
+                        .map_err(|error| error.to_string())
+                });
             let _ = sender.send((result, cache));
         });
         self.preview_processing = Some(PreviewProcessing {
@@ -1869,7 +1989,7 @@ impl CleanSlateApp {
                 preview
                     .envelopes
                     .iter()
-                    .map(|envelope| envelope.sample_count())
+                    .map(|envelope| envelope.duration())
                     .max()
                     .unwrap_or(start)
             },
@@ -2117,29 +2237,33 @@ impl CleanSlateApp {
         }
     }
 
-    fn capture_calibration_range(&mut self, start: usize, end: usize) {
-        self.calibration_start = format!("{:.8}", start.min(end) as f64 / 48_000.0);
-        self.calibration_end = format!("{:.8}", start.max(end) as f64 / 48_000.0);
+    fn capture_calibration_range(&mut self, start: TimePosition, end: TimePosition) {
+        self.calibration_start = format!("{:.8}", start.min(end) as f64 / TICKS_PER_SECOND as f64);
+        self.calibration_end = format!("{:.8}", start.max(end) as f64 / TICKS_PER_SECOND as f64);
         self.calibration_error = None;
     }
 
-    fn calibration_range(&self) -> Result<(usize, usize), String> {
-        let sample = |value: &str| {
+    fn calibration_range(&self) -> Result<(TimePosition, TimePosition), String> {
+        let sample = |value: &str, round_up: bool| {
             let seconds = value.trim().parse::<f64>().map_err(
                 |_| "Drag across a waveform to select an example, or enter start and end seconds.",
             )?;
-            let samples = seconds * 48_000.0;
-            if !samples.is_finite() || samples < 0.0 || samples >= usize::MAX as f64 {
-                return Err("Times must be finite, nonnegative seconds within the recording.");
-            }
-            Ok(samples.round() as usize)
+            time_from_seconds(
+                seconds,
+                if round_up {
+                    Rounding::Ceil
+                } else {
+                    Rounding::Floor
+                },
+            )
+            .map_err(|_| "Times must be finite, nonnegative seconds within the recording.")
         };
-        let start = sample(&self.calibration_start)?;
-        let end = sample(&self.calibration_end)?;
+        let start = sample(&self.calibration_start, false)?;
+        let end = sample(&self.calibration_end, true)?;
         if end <= start {
             return Err("No usable range: the end must be after the start. Drag across the waveform rather than clicking once.".into());
         }
-        if end - start < 12_000 {
+        if end - start < TICKS_PER_SECOND / 4 {
             return Err(
                 "Select at least 0.25 seconds. A few seconds is easier to judge by listening."
                     .into(),
@@ -2331,11 +2455,16 @@ impl CleanSlateApp {
                 self.calibration_error = None;
             }
             Message::CalibrationStartAtPlayhead => {
-                self.calibration_start =
-                    format!("{:.8}", self.timeline.playhead() as f64 / 48_000.0);
+                self.calibration_start = format!(
+                    "{:.8}",
+                    self.timeline.playhead() as f64 / TICKS_PER_SECOND as f64
+                );
             }
             Message::CalibrationEndAtPlayhead => {
-                self.calibration_end = format!("{:.8}", self.timeline.playhead() as f64 / 48_000.0);
+                self.calibration_end = format!(
+                    "{:.8}",
+                    self.timeline.playhead() as f64 / TICKS_PER_SECOND as f64
+                );
             }
             Message::CalibrationFromSelection => {
                 if let Some((start, end)) = self.timeline.selection() {
@@ -2519,9 +2648,9 @@ impl CleanSlateApp {
             match self.calibration_range() {
                 Ok((start, end)) => format!(
                     "Selected {:.3}–{:.3} s ({:.3} s). Use a Save button below the track.",
-                    start as f64 / 48_000.0,
-                    end as f64 / 48_000.0,
-                    (end - start) as f64 / 48_000.0
+                    start as f64 / TICKS_PER_SECOND as f64,
+                    end as f64 / TICKS_PER_SECOND as f64,
+                    (end - start) as f64 / TICKS_PER_SECOND as f64
                 ),
                 Err(error) => error,
             }
@@ -2565,8 +2694,8 @@ impl CleanSlateApp {
                 .push(text(format!(
                     "{kind}, track {}: {:.5} to {:.5} s",
                     example.track + 1,
-                    example.start as f64 / 48_000.0,
-                    example.end as f64 / 48_000.0
+                    example.start as f64 / TICKS_PER_SECOND as f64,
+                    example.end as f64 / TICKS_PER_SECOND as f64
                 )))
                 .push(button("Remove example").on_press(Message::RemoveCalibration(index)));
         }
@@ -2822,8 +2951,8 @@ impl CleanSlateApp {
                                     if reviewed { "✓ " } else { "" },
                                     warning.label,
                                     tracks,
-                                    warning.start as f64 / 48_000.0,
-                                    warning.end as f64 / 48_000.0,
+                                    warning.start as f64 / TICKS_PER_SECOND as f64,
+                                    warning.end as f64 / TICKS_PER_SECOND as f64,
                                 )))
                                 .on_press(Message::SelectWarning(index)),
                             );
@@ -2991,8 +3120,9 @@ impl CleanSlateApp {
         let transport = row![
             text(format!(
                 "{:02}:{:06.3}",
-                self.timeline.playhead() / 48_000 / 60,
-                (self.timeline.playhead() % (48_000 * 60)) as f64 / 48_000.0
+                self.timeline.playhead() / TICKS_PER_SECOND / 60,
+                (self.timeline.playhead() % (TICKS_PER_SECOND * 60)) as f64
+                    / TICKS_PER_SECOND as f64
             )),
             Space::new().width(Fill),
             button("Previous").on_press(Message::Previous),

@@ -1,4 +1,5 @@
 use crate::RenderBlocker;
+use crate::SourceTimebase;
 use bwavfile::{Bext, CommonFormat, WaveFmt, WaveReader, WaveWriter};
 use std::{
     fs,
@@ -49,6 +50,23 @@ impl Drop for AtomicOutput {
         if !self.committed {
             let _ = fs::remove_dir_all(&self.staging);
         }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct SourceMetadata {
+    pub grid: SourceTimebase,
+    pub channels: u16,
+}
+
+impl SourceMetadata {
+    pub fn read(path: &Path) -> Result<Self, RenderBlocker> {
+        let mut reader = WaveReader::open(path)?;
+        let format = reader.format()?;
+        Ok(Self {
+            grid: SourceTimebase::new(format.sample_rate, reader.frame_length()?)?,
+            channels: format.channel_count,
+        })
     }
 }
 

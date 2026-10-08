@@ -1,8 +1,8 @@
 use bwavfile::WaveReader;
 use rust_app::{
-    RunRequest,
+    Rounding, RunRequest, SourceTimebase,
     release_gate::{Label, LabelKind, evaluate},
-    run,
+    run, time_from_seconds,
 };
 use std::{
     fs,
@@ -77,8 +77,8 @@ fn read_labels(path: &Path, stems: &[PathBuf]) -> Result<Vec<Label>, Box<dyn std
         };
         result.push(Label {
             track,
-            start: (fields[1].parse::<f64>()? * 48_000.0).round() as usize,
-            end: (fields[2].parse::<f64>()? * 48_000.0).round() as usize,
+            start: time_from_seconds(fields[1].parse::<f64>()?, Rounding::Floor)?,
+            end: time_from_seconds(fields[2].parse::<f64>()?, Rounding::Ceil)?,
             kind,
         });
     }
@@ -166,6 +166,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if integrity_passed { "pass" } else { "fail" }
     );
     if !input_inspections.is_empty() {
+        let grids = input_inspections
+            .iter()
+            .map(|input| SourceTimebase::new(input.format.2, input.samples.len() as u64))
+            .collect::<Result<Vec<_>, _>>()?;
         let input_samples = input_inspections
             .into_iter()
             .map(|stem| stem.samples)
@@ -178,7 +182,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             &input_samples,
             &output_samples,
             &read_labels(label_path, &stems)?,
-        );
+            &grids,
+        )?;
         evidence.push_str(&format!("- preservation_samples: {}\n- changed_preservation_samples: {}\n- overlap_samples: {}\n- changed_overlap_samples: {}\n- bleed_input_rms: {:.9}\n- bleed_output_rms: {:.9}\n", measured.preservation_samples, measured.changed_preservation_samples, measured.overlap_samples, measured.changed_overlap_samples, measured.bleed_input_rms, measured.bleed_output_rms));
         let passed = integrity_passed
             && measured.preservation_samples != 0

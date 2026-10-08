@@ -51,8 +51,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             examples.push(CalibrationExample {
                 kind,
                 track,
-                start: offset + (start * 48_000.0_f64).round() as usize,
-                end: offset + (end * 48_000.0_f64).round() as usize,
+                start: rust_app::SourceTimebase::new(48_000, offset)
+                    .unwrap()
+                    .duration()?
+                    + rust_app::time_from_seconds(start, rust_app::Rounding::Floor)?,
+                end: rust_app::SourceTimebase::new(48_000, offset)
+                    .unwrap()
+                    .duration()?
+                    + rust_app::time_from_seconds(end, rust_app::Rounding::Ceil)?,
             });
         }
         OwnershipSettings {

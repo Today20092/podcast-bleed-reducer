@@ -183,11 +183,11 @@ impl DetectorFacts {
             if let Some(previous) = regions.last_mut()
                 && previous.decision == decision
             {
-                previous.end = end;
+                previous.end = crate::timebase::detector_time(end);
             } else {
                 regions.push(Region {
-                    start,
-                    end,
+                    start: crate::timebase::detector_time(start),
+                    end: crate::timebase::detector_time(end),
                     decision,
                 });
             }

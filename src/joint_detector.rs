@@ -172,7 +172,9 @@ impl JointFacts {
         let mut solo = vec![Vec::new(); tracks];
         // Engine/cache boundaries validate source identity and ranges before this call.
         for example in &settings.examples {
-            let selected = example.start.div_ceil(FRAME)..example.end / FRAME;
+            let start = crate::timebase::detector_frame(example.start, crate::Rounding::Ceil)?;
+            let end = crate::timebase::detector_frame(example.end, crate::Rounding::Floor)?;
+            let selected = start.div_ceil(FRAME)..end / FRAME;
             match example.kind {
                 crate::CalibrationKind::RoomTone => {
                     room[example.track].extend(selected.map(|f| self.levels[example.track][f]))
@@ -328,11 +330,11 @@ impl JointFacts {
             if let Some(previous) = regions.last_mut()
                 && previous.decision == decision
             {
-                previous.end = end;
+                previous.end = crate::timebase::detector_time(end);
             } else {
                 regions.push(Region {
-                    start: frame * FRAME,
-                    end,
+                    start: crate::timebase::detector_time(frame * FRAME),
+                    end: crate::timebase::detector_time(end),
                     decision,
                 });
             }
@@ -477,7 +479,8 @@ mod tests {
         assert_eq!(
             regions
                 .iter()
-                .find(|r| r.start <= 96_000 && r.end > 96_000)
+                .find(|r| r.start <= crate::timebase::detector_time(96_000)
+                    && r.end > crate::timebase::detector_time(96_000))
                 .unwrap()
                 .decision,
             Decision::Owned(vec![0])
@@ -505,8 +508,8 @@ mod tests {
             examples: vec![CalibrationExample {
                 kind: CalibrationKind::SoloSpeech,
                 track: 0,
-                start: 60_000,
-                end: 120_000,
+                start: crate::timebase::detector_time(60_000),
+                end: crate::timebase::detector_time(120_000),
             }],
             ..Default::default()
         };
@@ -519,7 +522,10 @@ mod tests {
         let at = |sample| {
             &regions
                 .iter()
-                .find(|r| r.start <= sample && r.end > sample)
+                .find(|r| {
+                    r.start <= crate::timebase::detector_time(sample)
+                        && r.end > crate::timebase::detector_time(sample)
+                })
                 .unwrap()
                 .decision
         };
@@ -554,8 +560,8 @@ mod tests {
             examples: vec![CalibrationExample {
                 kind: CalibrationKind::SoloSpeech,
                 track: 0,
-                start: 60_000,
-                end: 84_000,
+                start: crate::timebase::detector_time(60_000),
+                end: crate::timebase::detector_time(84_000),
             }],
             ..Default::default()
         };
@@ -570,7 +576,8 @@ mod tests {
         assert_eq!(
             regions
                 .iter()
-                .find(|r| r.start <= 96_000 && r.end > 96_000)
+                .find(|r| r.start <= crate::timebase::detector_time(96_000)
+                    && r.end > crate::timebase::detector_time(96_000))
                 .unwrap()
                 .decision,
             Decision::Owned(vec![0, 2])
@@ -590,15 +597,18 @@ mod tests {
             examples: vec![CalibrationExample {
                 kind: CalibrationKind::RoomTone,
                 track: 0,
-                start: 0,
-                end: 12_000,
+                start: crate::timebase::detector_time(0),
+                end: crate::timebase::detector_time(12_000),
             }],
             ..Default::default()
         };
         let at = |regions: Vec<Region>| {
             regions
                 .into_iter()
-                .find(|r| r.start <= 96_000 && r.end > 96_000)
+                .find(|r| {
+                    r.start <= crate::timebase::detector_time(96_000)
+                        && r.end > crate::timebase::detector_time(96_000)
+                })
                 .unwrap()
                 .decision
         };
@@ -671,7 +681,8 @@ mod tests {
         assert_eq!(
             regions
                 .iter()
-                .find(|r| r.start <= 96_000 && r.end > 96_000)
+                .find(|r| r.start <= crate::timebase::detector_time(96_000)
+                    && r.end > crate::timebase::detector_time(96_000))
                 .unwrap()
                 .decision,
             Decision::Owned(vec![0, 1])
@@ -717,8 +728,8 @@ mod tests {
                 examples: vec![CalibrationExample {
                     kind: CalibrationKind::SoloSpeech,
                     track: 0,
-                    start: 60_000,
-                    end: 84_000,
+                    start: crate::timebase::detector_time(60_000),
+                    end: crate::timebase::detector_time(84_000),
                 }],
                 ..Default::default()
             };
@@ -729,7 +740,10 @@ mod tests {
             let at = |sample| {
                 &regions
                     .iter()
-                    .find(|r| r.start <= sample && r.end > sample)
+                    .find(|r| {
+                        r.start <= crate::timebase::detector_time(sample)
+                            && r.end > crate::timebase::detector_time(sample)
+                    })
                     .unwrap()
                     .decision
             };
@@ -770,8 +784,8 @@ mod tests {
             examples: vec![CalibrationExample {
                 kind: CalibrationKind::SoloSpeech,
                 track: 0,
-                start: 60_000,
-                end: 84_000,
+                start: crate::timebase::detector_time(60_000),
+                end: crate::timebase::detector_time(84_000),
             }],
             ..Default::default()
         };
@@ -811,7 +825,8 @@ mod tests {
         assert_eq!(
             regions
                 .iter()
-                .find(|r| r.start <= 144_000 && r.end > 144_000)
+                .find(|r| r.start <= crate::timebase::detector_time(144_000)
+                    && r.end > crate::timebase::detector_time(144_000))
                 .unwrap()
                 .decision,
             Decision::Owned(vec![0])
@@ -844,8 +859,8 @@ mod tests {
                     examples: vec![CalibrationExample {
                         kind: CalibrationKind::SoloSpeech,
                         track: 0,
-                        start: 60_000,
-                        end: 84_000,
+                        start: crate::timebase::detector_time(60_000),
+                        end: crate::timebase::detector_time(84_000),
                     }],
                     ..Default::default()
                 };
@@ -881,8 +896,8 @@ mod tests {
                     &regions,
                     &[crate::Protection {
                         track: Some(1),
-                        start: 144_000,
-                        end,
+                        start: crate::timebase::detector_time(144_000),
+                        end: crate::timebase::detector_time(end),
                     }],
                     10.0_f32.powf(-18.0 / 20.0),
                     50.0 * 48.0,
@@ -913,8 +928,8 @@ mod tests {
             examples: vec![CalibrationExample {
                 kind: CalibrationKind::SoloSpeech,
                 track: 0,
-                start: 48_000,
-                end: 67_200,
+                start: crate::timebase::detector_time(48_000),
+                end: crate::timebase::detector_time(67_200),
             }],
             ..Default::default()
         };
@@ -930,7 +945,8 @@ mod tests {
         assert_eq!(
             regions
                 .iter()
-                .find(|r| r.start <= 108_000 && r.end > 108_000)
+                .find(|r| r.start <= crate::timebase::detector_time(108_000)
+                    && r.end > crate::timebase::detector_time(108_000))
                 .unwrap()
                 .decision,
             Decision::Owned(vec![0, 1])
@@ -938,7 +954,8 @@ mod tests {
         assert_eq!(
             regions
                 .iter()
-                .find(|r| r.start <= 168_000 && r.end > 168_000)
+                .find(|r| r.start <= crate::timebase::detector_time(168_000)
+                    && r.end > crate::timebase::detector_time(168_000))
                 .unwrap()
                 .decision,
             Decision::Owned(vec![0])
@@ -973,8 +990,8 @@ mod tests {
             |(track, start, end)| CalibrationExample {
                 kind: CalibrationKind::SoloSpeech,
                 track,
-                start: offset + (start * 48000.0) as usize,
-                end: offset + (end * 48000.0) as usize,
+                start: crate::timebase::detector_time(offset + (start * 48000.0) as usize),
+                end: crate::timebase::detector_time(offset + (end * 48000.0) as usize),
             },
         );
         println!("floors {:?}", joint.floors);
@@ -986,7 +1003,12 @@ mod tests {
                         pair,
                         source,
                         target,
-                        example.start.div_ceil(FRAME)..example.end / FRAME,
+                        crate::timebase::detector_frame(example.start, crate::Rounding::Ceil)
+                            .unwrap()
+                            .div_ceil(FRAME)
+                            ..crate::timebase::detector_frame(example.end, crate::Rounding::Floor)
+                                .unwrap()
+                                / FRAME,
                     )
                     .unwrap();
                 println!("model {source}->{target}: {model:?}");
