@@ -1,6 +1,7 @@
 # Install and verify the required Nemotron model and native runtime
 
-Status: ready-for-agent
+Status: claimed
+Assignee: runtime_implementation
 Blocked by: 01
 Spec: ../spec.md
 

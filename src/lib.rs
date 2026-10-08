@@ -6,6 +6,7 @@ pub mod detector_quality;
 mod engine;
 mod export;
 mod joint_detector;
+pub mod model;
 mod prepared_analysis;
 mod project;
 pub mod release_gate;

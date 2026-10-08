@@ -21,7 +21,11 @@ cargo clippy --all-targets --all-features --locked -- -D warnings
 cargo build --release --locked
 ```
 
-Run `target/release/rust-app.exe`. `scripts/package.ps1` packages the release app as `dist/CleanSlate-windows-x64/CleanSlate.exe`; `scripts/check-package.ps1` checks that package's contents.
+Run `target/release/rust-app.exe`. The required Nemotron model is acquired explicitly through the editor's Download / verify action; installed-model verification remains offline. Identity, size and distinct weights/runtime licenses are displayed before acquisition. This adds native model acquisition/loading; integration into ownership analysis follows ticket 06.
+
+For native Windows development, install Visual Studio 2022 C++ Build Tools with Windows SDK, CMake >=3.26 and Ninja, then run `pwsh -File scripts/build-native-runtime.ps1 -Jobs 2`. The recipe freezes NeMo-Speech.cpp, ggml and vcpkg revisions, applies the recorded PATH deduplication fix and builds the CPU diarization SDK with AVX2/FMA/F16C (no AVX-512, OpenMP or GPU). Outputs stay in ignored `native-runtime/`; native-source caches stay in ignored `.native-build/`. End users need none of these build tools, Python, keys or a GPU.
+
+`cargo run --bin model-check -- --download` explicitly acquires/verifies the model and exercises native CPU inference. Subsequent `cargo run --bin model-check` invocations use only local bytes. `scripts/package.ps1` requires the built native package and includes its DLL dependency closure, binary manifest, licenses and headless checker beside the app. `scripts/check-package.ps1` verifies package identity and offline native inference. See [runtime/model notices](docs/runtime-notices.md).
 
 ## Audio behavior
 

@@ -2,3 +2,5 @@
 /dist/
 /.ruff_cache/
 /test-audio/
+/.native-build/
+/native-runtime/

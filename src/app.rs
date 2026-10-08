@@ -1082,6 +1082,7 @@ mod tests {
 }
 
 pub struct CleanSlateApp {
+    model_acquisition: crate::model::ModelAcquisition,
     project: Option<Project>,
     pending_imports: Vec<PathBuf>,
     import_due: Option<Instant>,
@@ -1117,6 +1118,7 @@ pub struct CleanSlateApp {
 impl Default for CleanSlateApp {
     fn default() -> Self {
         Self {
+            model_acquisition: crate::model::ModelAcquisition::default(),
             project: None,
             pending_imports: vec![],
             import_due: None,
@@ -1358,6 +1360,9 @@ impl Drop for PreviewProcessing {
 
 #[derive(Debug, Clone)]
 enum Message {
+    DownloadModel,
+    VerifyModel,
+    CancelModelDownload,
     ImportStems,
     OpenProject,
     FileDropped(PathBuf),
@@ -2173,6 +2178,9 @@ impl CleanSlateApp {
             && !matches!(
                 message,
                 Message::FileDropped(_)
+                    | Message::DownloadModel
+                    | Message::VerifyModel
+                    | Message::CancelModelDownload
                     | Message::ImportStems
                     | Message::Tick
                     | Message::Stop
@@ -2184,6 +2192,9 @@ impl CleanSlateApp {
         }
         let previous_parameters = self.preview_parameters;
         match message {
+            Message::DownloadModel => self.model_acquisition.begin(true),
+            Message::VerifyModel => self.model_acquisition.begin(false),
+            Message::CancelModelDownload => self.model_acquisition.cancel(),
             Message::ImportStems => self.import_stems(),
             Message::OpenProject => self.open_project(),
             Message::FileDropped(path) => {
@@ -2220,6 +2231,7 @@ impl CleanSlateApp {
                 }
             }
             Message::Tick => {
+                self.model_acquisition.poll();
                 self.poll_sources();
                 if !self.sources_busy() {
                     self.poll_processing();
@@ -2459,6 +2471,7 @@ impl CleanSlateApp {
             _ => None,
         });
         let processing = if self.processing.is_some()
+            || self.model_acquisition.is_busy()
             || self.sources_busy()
             || self.preview_processing.is_some()
             || self.preview_pending.is_some()
@@ -3027,7 +3040,26 @@ impl CleanSlateApp {
             row![timeline, inspector].spacing(12).into()
         };
 
-        container(column![header, editor, transport].spacing(12))
+        let model_actions = if self.model_acquisition.is_busy() {
+            row![
+                container(progress_bar(0.0..=1.0, self.model_acquisition.progress())).width(160),
+                button("Cancel model acquisition").on_press(Message::CancelModelDownload)
+            ]
+        } else {
+            row![
+                button("Download / verify Nemotron").on_press(Message::DownloadModel),
+                button("Verify installed model offline").on_press(Message::VerifyModel)
+            ]
+        }
+        .spacing(8);
+        let model_status = column![
+            text(self.model_acquisition.status()).size(12),
+            text("Nemotron-3-Diarization q8_0 · 107 MB · weights: OpenMDW 1.1 · native runtime: Apache-2.0").size(12),
+            text(format!("Pinned model {} · SHA-256 {}", crate::model::MODEL_REVISION, crate::model::NEMOTRON.sha256)).size(10),
+            text("Download uses NVIDIA's Hugging Face repository. Agreement: https://openmdw.ai/license/1-1/; local notices accompany installed materials.").size(10),
+            model_actions,
+        ].spacing(4);
+        container(column![header, model_status, editor, transport].spacing(12))
             .padding(12)
             .width(Fill)
             .height(Fill)
