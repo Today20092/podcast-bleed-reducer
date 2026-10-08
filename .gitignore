@@ -1,1 +1,3 @@
 /target
+/dist/
+/.ruff_cache/

@@ -2,35 +2,45 @@
 
 CleanSlate is a local, non-destructive automixer for synchronized mono podcast stems. Its language favors preservation when evidence is ambiguous.
 
+These terms describe the accepted migration target. Historical code may still follow earlier contracts; see [ADR-0006](docs/adr/0006-offline-supervised-editable-envelopes.md) and the [decision map](.scratch/offline-supervised-migration/map.md).
+
 ## Language
 
-**Room-tone example**:
-A user-marked interval on one microphone containing background sound without intended speech. It teaches that microphone's background level.
-_Avoid_: Silence threshold, mute range
-
-**Solo-speech example**:
-A user-marked interval where one participant speaks alone into their assigned microphone. It teaches the relationship between direct speech and its copies on the other microphones.
-_Avoid_: Voiceprint, transcript
-
-**Calibration**:
-The editable, source-bound collection of room-tone and solo-speech examples used to interpret a session. It is separate from protections and does not modify the recordings.
-_Avoid_: Normalization, automatic leveling
-
 **Session**:
-One or more synchronized 48 kHz mono WAV stems imported for a single automix. Every stem has the same sample count. Matching BEXT time references establish alignment when present on every stem; absent BEXT is allowed with an unverified-alignment warning, while mixed or conflicting BEXT blocks rendering.
+One to eight synchronized mono speaker tracks imported for a single automix, with one dedicated track per speaker. Tracks may have different native rates and supported formats; synchronization is a shared physical timeline rather than equal sample counts.
 _Avoid_: Multitrack file, two-track minimum
 
 **Project**:
-The durable record of a session's source identities, protections, review states, and current or stale render identity. It autosaves review decisions; moved or changed sources must be relinked and revalidated.
+The durable record of a session's source identities, speaker assignments, reference labels, manual edits, protections, review states and current or stale results. Moved or changed sources must be relinked and revalidated before bound decisions apply.
 _Avoid_: Render report, audio source
 
 **Release acceptance gate**:
-The combined automated and listening evidence required before the MVP is releasable: preservation ranges and intended overlap remain at unity, bleed improves measurably, outputs preserve structure and integrity, transitions pass listening review, and the full reference session completes safely.
+The combined independent automated and listening evidence required before release: wanted speech and overlap remain at unity absent intentional edits, bleed improves measurably, outputs preserve integrity, transitions pass listening review and full-session operation completes safely.
 _Avoid_: Python parity, detector benchmark
 
 **Ownership decision**:
-A categorical analysis result: `Owned(track set)`, `Uncertain`, or `NoSpeech`. It may carry short evidence reasons but never a numeric confidence.
-_Avoid_: Confidence score, winner
+A timeline conclusion identifying the locally speaking track set, no speech or uncertainty. It is distinct from the underlying probability estimates and can retain multiple simultaneous owners.
+_Avoid_: Single winner, VAD probability
+
+**Speaker activity**:
+Evidence about which person is speaking at a time, regardless of which microphones hear their voice.
+_Avoid_: Microphone ownership, gain target
+
+**Local ownership**:
+The presence of a track's assigned person speaking directly into that track's microphone. That person's voice on another track as bleed does not make the other track an owner.
+_Avoid_: Speech presence, loudest microphone
+
+**Ownership estimate**:
+A probability estimate that a track's assigned person is speaking locally. Estimates are independent across tracks, so overlap is allowed; an estimate is not a guarantee of calibrated confidence.
+_Avoid_: VAD score, speaker winner
+
+**Reference label**:
+A trusted, source-bound time interval identifying an active speaker set or room tone. Solo and overlap references describe known dialogue; room tone describes background without speakers.
+_Avoid_: Predicted label, gain edit
+
+**Session calibration**:
+Knowledge of the current recording's noise and microphone relationships learned from trusted references. Multiple references can describe small changes during one recording.
+_Avoid_: Global model training, neural fine-tuning
 
 **Attenuation region**:
 A contiguous span sharing one applied attenuation decision, presented as the primary unit of inspection with its timing, affected track, attenuation, ownership decision, evidence reasons, and warning.
@@ -61,7 +71,7 @@ An unsafe input or output condition that prevents rendering, such as misalignmen
 _Avoid_: Warning
 
 **Protection**:
-A persisted, non-destructive project decision that forces unity gain for an entire track or a selected time range across all tracks. Protections combine additively and always take precedence over attenuation.
+A persisted manual preserve constraint that forces unity gain for a track or selected time range instead of automatic attenuation. Conflicting manual constraints require explicit replacement.
 _Avoid_: Rejection, envelope edit, owner reassignment
 
 **Protect this region**:
@@ -89,7 +99,7 @@ The single persistent, synchronized multitrack workspace for importing, analyzin
 _Avoid_: Review workspace, workflow rail, staged wizard, restoration suite
 
 **Analysis preview**:
-The current ownership overlays and parameter-derived gain curves shown without rendering audio. Parameter changes update this preview while making any existing final render stale.
+The completed ownership overlays and effective gain curves shown without rendering audio. Label/source changes leave it visibly stale until Analyze completes, while gain edits update it immediately.
 _Avoid_: Export render
 
 **Final render**:
@@ -97,8 +107,20 @@ The deliberate creation and validation of deliverable processed WAV files after 
 _Avoid_: Preview render, playback cache
 
 **Gain-envelope preview**:
-The read-only gain curve derived from current automix parameters and protections, drawn over a track waveform. It is not arbitrary DAW automation.
-_Avoid_: Automation lane, editable fade
+The displayed effective gain curve over a track waveform, with automatic gain and protected manual edits distinguishable. It can be edited without changing source audio.
+_Avoid_: Rendered audio, source waveform edit
+
+**Automatic envelope**:
+The attenuation curve generated from ownership decisions and gain settings before manual constraints apply.
+_Avoid_: Final sound, manual automation
+
+**Manual gain edit**:
+A persisted source-bound gain decision that remains authoritative until removed, even when later labels or analysis disagree.
+_Avoid_: Training label, temporary preview adjustment
+
+**Effective envelope**:
+The final gain curve after automatic gain and manual constraints are combined. It is the common decision used for preview, audition and rendering.
+_Avoid_: Detector probability, alternate preview curve
 
 **Processed waveform**:
 The source waveform reshaped by the current live gain envelope. It appears brightly over a faint Original waveform so parameter effects are visible without losing the source reference.
@@ -120,17 +142,17 @@ _Avoid_: Energy margin, gate threshold
 The preserved time before and after detected speech that prevents word boundaries from being attenuated.
 _Avoid_: Preservation frames, preroll
 
-**Open time**:
-The one-pole time constant used when gain chases the preserved target. It controls recovery toward unity without defining a finite linear fade duration.
-_Avoid_: Fade-in duration, transition samples
+**Fade-in duration**:
+The explicit duration of the exponential-shaped recovery toward preserved gain, ending at the target before preserved speech.
+_Avoid_: Asymptotic Open time, speech onset detector
 
-**Close time**:
-The one-pole time constant used when gain chases the attenuated target. It controls reduction toward the attenuation floor without defining a finite linear fade duration.
-_Avoid_: Fade-out duration, transition samples
+**Fade-out duration**:
+The explicit duration of the exponential-shaped reduction toward attenuated gain outside preserved speech.
+_Avoid_: Asymptotic Close time, silence classifier
 
-**One-pole gain transition**:
-The exponential target-chasing behavior shared by preview, audition, and final render. Gain moves by a fixed fraction of its remaining distance each analysis step and retargets from its current value.
-_Avoid_: Linear ramp, fixed transition phases, fade automation
+**Exponential-shaped fade**:
+A curved transition with an explicit start, end and exact target gain. It retains an exponential feel without an indefinitely approaching endpoint.
+_Avoid_: Linear-only fade, one-pole time constant
 
 **Review state**:
 The persisted reviewed or unreviewed status of a review warning; reviewed warnings remain visible and reopenable.

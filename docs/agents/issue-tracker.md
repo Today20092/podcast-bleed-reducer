@@ -2,6 +2,8 @@
 
 Issues and specs for this repo live as markdown files in `.scratch/`.
 
+The sole active roadmap is `.scratch/offline-supervised-migration/map.md`. Its resolved architecture decisions lead to implementation issues in `.scratch/offline-supervised-editor/issues/`.
+
 ## Conventions
 
 - One feature per directory: `.scratch/<feature-slug>/`
@@ -9,6 +11,7 @@ Issues and specs for this repo live as markdown files in `.scratch/`.
 - Implementation issues are one file per ticket at `.scratch/<feature-slug>/issues/<NN>-<slug>.md`, numbered from `01` — never a single combined tickets file
 - Triage state is recorded as a `Status:` line near the top of each issue file (see `triage-labels.md` for the role strings)
 - Comments and conversation history append to the bottom of the file under a `## Comments` heading
+- Implementation readiness uses the canonical triage labels. Claim an unblocked ticket with `Status: claimed` and an assignee before work; use `Status: done` only after its scoped acceptance checks pass. `Blocked by: NN, NN` refers to sibling implementation tickets and requires all to be `done`. Readiness alone does not clear dependencies.
 
 ## When a skill says "publish to the issue tracker"
 

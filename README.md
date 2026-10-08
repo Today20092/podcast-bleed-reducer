@@ -1,10 +1,18 @@
 # CleanSlate
 
-CleanSlate is a standalone Windows podcast automixer written in Rust with Iced. Import synchronized 48 kHz mono WAV stems, inspect ownership and gain curves, audition Original/Processed/Removed signal, protect regions, and export validated processed WAVs.
+CleanSlate is a Rust/Iced podcast editor being migrated to offline, human-supervised multitrack ownership analysis and protected editable gain envelopes.
 
-The `codex/cleanslate-responsive` branch integrates the responsive-preview work. Its implementation and acceptance record are in [.scratch/responsive-preview](.scratch/responsive-preview/spec.md). Completion evidence is recorded per ticket; the integration ticket tracks the final build.
+The [decision map](.scratch/offline-supervised-migration/map.md) is the sole active roadmap. All six planning decisions are resolved; the [accepted architecture](.scratch/offline-supervised-migration/spec.md) and [15 implementation tickets](.scratch/offline-supervised-migration/implementation.md) define the work ahead.
+
+## Current implementation and target
+
+The retained implementation imports synchronized 48 kHz mono WAVs, provides waveform review and Original/Processed/Removed audition, supports unity protections, and renders validated individual WAVs. Its detector has not passed the new independent quality gate.
+
+The accepted target adds common mono formats and mixed native rates, 16 kHz analysis copies, required local Nemotron diarization, human reference labels, session ownership learning, and protected editable envelopes. Windows is the first release, tested for eight speakers and two-hour recordings. These are planned capabilities until their implementation tickets pass.
 
 ## Build and test
+
+Use `codex/offline-supervised`. `main` contains the same cleaned starting point. Read [AGENTS.md](AGENTS.md) before choosing a ticket.
 
 ```powershell
 cargo test --all-targets --locked
@@ -17,16 +25,12 @@ Run `target/release/rust-app.exe`. `scripts/package.ps1` packages the release ap
 
 ## Audio behavior
 
-Source audio stays unchanged. An analysis preview and live audition are separate from a final WAV render. A changed parameter can make an existing render stale without disabling audition. Protections and uncertain evidence favor preservation.
-
-Saved sensitivity values retain the legacy speech-threshold meaning. The responsive editor presents higher sensitivity as admitting weaker evidence. Gain-aware waveform summaries are conservative display approximations; audition and render use the shared actual envelope.
+Source audio stays unchanged. Analysis preview and live audition are separate from final WAV rendering. The migration retains conservative preservation, source identity checks and safe output transactions. See the accepted specification for new label, edit and stale-result behavior.
 
 ## Development records
 
 - [Domain glossary](CONTEXT.md)
-- [Architectural decisions](docs/adr)
-- [Responsive preview specification](.scratch/responsive-preview/spec.md)
-- [Delegated design decisions](.scratch/responsive-preview/decisions.md)
-- [Integration acceptance](.scratch/responsive-preview/issues/07-integration.md)
+- [Accepted architecture decision](docs/adr/0006-offline-supervised-editable-envelopes.md)
+- [Implementation sequence](.scratch/offline-supervised-migration/implementation.md)
 
-Benchmarks and automated checks do not replace listening review of a newly built application.
+Generated builds are ignored by Git. Listening and measured model/quality acceptance remain required before release.

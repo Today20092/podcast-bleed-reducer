@@ -1,0 +1,105 @@
+# Offline supervised CleanSlate architecture
+
+Status: accepted architecture, 2026-10-08
+
+This is the target architecture, not a description of completed code. Decision detail lives in the [map's child tickets](map.md); documentation findings live in [feasibility notes](feasibility-notes.md). Implementation begins after planning is settled.
+
+## Product and release scope
+
+CleanSlate is a standalone, local editor for synchronized mono podcast tracks. Each speaker has one dedicated track. The first release targets Windows, up to eight speakers, and recordings up to two hours for acceptance testing. Preserve portable Rust boundaries for later macOS/Linux releases.
+
+Use ownership baseline `6a60cc2bfe187ea889fd2d8bcc3344311cfd706b` and retain Iced. Keep earlier responsive code and rejected experiments recoverable; do not promote existing detector quality by inheritance. Start a fresh versioned project format. No existing saved project migration is required.
+
+Required workflow: import and validate, assign speakers, mark solo references for each speaker and room tone, Analyze, review uncertainty, correct labels or gain, audition, save an editable project, and export individual processed WAVs. Overlap labels are optional. Labels can include any active speaker set. One calibration setup covers a recording, with multiple examples across the show to handle small microphone movements. Poorly explained acoustic relationships become review warnings.
+
+Required first-release diarization is Nemotron. The native runtime ships with the app; the pinned model is downloaded once on first use, verified and stored locally. Inference is local and CPU-capable without Python or a GPU requirement. A failed required model cannot silently become an alternate detector.
+
+## Architectural boundaries
+
+Keep the existing Rust library and Iced application. Add focused modules only where a real responsibility is missing; do not pre-create the ten-crate workspace sketched in the source chat. The analysis API does not depend on GUI widgets. The same library supports the editor and a small headless evaluation entry point.
+
+The pipeline is:
+
+1. Native-rate source decoding and validation.
+2. Cached waveforms and 16 kHz analysis copies.
+3. Required Nemotron speaker activity and per-track fixed speech/acoustic measurements.
+4. Human-reference speaker mapping, room calibration and directed bleed evidence.
+5. A small supervised session classifier producing independent local-speaker probability estimates per track.
+6. Whole-timeline temporal optimization with human truth constraints and conservative uncertainty.
+7. Automatic gain-envelope generation.
+8. Protected manual edit composition into one effective envelope.
+9. Display, Original/Processed/Removed audition and final WAV rendering.
+
+Nemotron describes who speaks when. Per-track ownership describes whether a microphone's assigned person is speaking locally rather than being heard as bleed. Multiple tracks can own speech simultaneously. VAD probabilities are speech-presence evidence, not owner probabilities. Model estimates are not presented as proven calibrated confidence.
+
+The original signal is never replaced by resampled analysis audio or bleed-subtracted audio. This product applies attenuation envelopes to decoded native-rate sources. Monitoring headroom remains a playback-only adjustment.
+
+## Inputs and time coordinates
+
+Support mono audio at decoded native sample rates, including 44.1, 48 and 96 kHz and mixed-rate sessions. Initial format profiles are WAV/BWF PCM, AIFF PCM, FLAC, MP3, M4A/MP4 AAC-LC or ALAC, and Ogg Vorbis. Use Symphonia with the required features for general decoding while retaining the existing WAV/BWF metadata path. Do not advertise Opus, HE-AAC or arbitrary codecs. Validate actual decoded channels/profile, not extensions. Reject corrupt/truncated data, invalid rates, nonfinite samples and unsupported profiles clearly.
+
+Sources are supplied synchronized. There is no automatic alignment. Compare durations and timing metadata in physical time, not equal sample counts or raw BEXT integers. Matching BEXT values at different rates must normalize to matching times. Contradictory available timing blocks analysis/export. Missing metadata cannot establish synchronization: show alignment unverified and require the supplied-alignment declaration. Use at most one native-sample rounding tolerance for duration agreement; never silently stretch, trim or pad delivered sources to match.
+
+Use a common integer time coordinate in the project and analysis API, with checked conversions to each source's sample grid. Native rates/sample counts stay explicit. Preserve half-open intervals and conservatively round preserved-region edges so quantization cannot shorten wanted speech. Display may use seconds. No module may use 48 kHz as an implicit global timebase.
+
+Analysis copies are antialiased resamples at 16 kHz. Account for resampler startup delay, flush the tail and verify reference/feature positions against source time. Playback preparation resamples tracks to a common device rate outside the audio callback. Exports use each source's native rate and decoded frame count. Preserve WAV/BWF timing metadata where present and verified. Lossy inputs require decoded onset/duration checks; container support is not a gapless-timing guarantee.
+
+## References and ownership analysis
+
+A reference label is a source-bound time interval with an active speaker set. Solo labels identify one speaker; overlap labels identify multiple; room-tone references identify no speaker and supply noise calibration. Validate membership, bounds, source bindings, duration, usable speech/noise and finite feature values. A contradictory overlap between human labels requires an explicit replacement/edit; do not silently select the newest truth.
+
+One valid solo reference per assigned speaker and a room-tone reference are required to run supervised analysis. Multiple references are encouraged when acoustic evidence changes. Insufficient or inconsistent examples block training with a specific correction request. Fixed neural feature extractors are not fine-tuned from labels. Do not automatically turn predictions into training truth in this release.
+
+Use human solo references to map Nemotron's first-arrival speaker channels to assigned speakers. Require one-to-one evidence with ambiguity checks; unmatched or inconsistent channels remain unresolved and cause review/preservation, not a guessed assignment. Keep one native diarization stream across the recording. Copy probability frames after bounded input pushes using global frame positions before the runtime compacts old values. Persist the complete required probability history, including the final tail. Full-attention one-shot inference is not the two-hour processing route.
+
+Build a deterministic nonclipping analysis-only mono mix. Compare candidate downmix recipes on development fixtures and freeze the chosen recipe before independent acceptance evaluation. The documentation does not establish one optimal multitrack mix.
+
+Reuse existing room-floor, directed scalar leakage and pairwise evidence as the initial acoustic baseline. Add regularized offline FIR/transfer evidence only if development validation shows improvement without wanted-speech loss. A poor or changing acoustic fit must reduce trust in that feature. It must not suppress a speaker simply to make bleed prediction fit. No acoustic estimator subtracts from delivered audio.
+
+The first learned ownership model is independent binary logistic regression per assigned track. Use a maintained pure Rust implementation for nontrivial training rather than writing a new optimizer. Features combine mapped Nemotron activity, raw VAD, local noise-relative energy, relative dominance, bleed explanation/residual evidence and fit reliability. Freeze normalization, feature recipe and regularization through development validation. More complex classifier families and blind source separation are outside this release.
+
+Temporal optimization uses whole-track context to remove unstable decisions while treating human active-speaker labels as constraints. It may retain multiple owners. It must not discard brief independent speech or override a label to satisfy a minimum-duration heuristic. Missing, ambiguous, poorly supported or contradictory evidence yields an uncertain region kept at unity and queued for review.
+
+## Cache, jobs and invalidation
+
+Cache independently: source identity/decoded metadata and waveform; fixed 16 kHz/VAD/Nemotron evidence; reference-derived calibration and model; owner probabilities; optimized regions; automatic envelopes; effective edited envelopes. Keys include source identity, rates/decoded lengths, decoder/resampler recipe, model/runtime hashes, analysis mix, label set, speaker mapping and relevant parameters.
+
+Changing labels or speaker assignment marks analysis stale and waits for explicit Analyze. Reuse compatible fixed evidence; retrain the small model and regenerate derived results. Gain/fade/protection/manual-edit changes update the effective envelope immediately without neural reinference. Source or fixed-model changes invalidate their dependent evidence. Do not silently upgrade model versions for an existing project.
+
+Keep the last completed preview marked stale while a replacement is pending or required. Original playback and editing remain available. Final rendering/export requires current analysis and effective envelope. Cancelled, failed or obsolete jobs cannot install their results, invalidate a newer result or overwrite an accepted deliverable. Use bounded worker processing and check cancellation between chunks. Avoid retaining multiple full-session PCM/resampled/residual copies.
+
+## Editable envelopes and persistence
+
+Labels teach detection. Manual gain edits control final sound and remain authoritative until explicitly removed, even when later analysis disagrees. Represent automatic and manual data separately. A unity protection is a manual preserve constraint; it is not an arbitrary curve edit. Whole-track protections override automatic attenuation. Creating a conflicting manual edit or protection requires explicit replacement of the overlapping manual constraint, rather than an invisible precedence rule.
+
+Provide draggable points and fades plus Preserve/Attenuate region actions. Group one drag or region action as one undoable command. The default is attenuation-only, with unity as the maximum; boosting and full DAW automation are not added. Empty overrides expose the regenerated automatic envelope. Finite/bounded values, ordered times, endpoint behavior and source binding are validated on load and edit.
+
+Confirmed transition decision: exponential-shaped automatic fades with explicit start/end times and exact target endpoints; keep curved behavior and defer a fade-shape selector. Preserve wanted/overlap/uncertain spans at exact unity absent manual overrides. Schedule fades in available surrounding time; short gaps may remain preserved instead of cutting speech to fit a fade. Manual edits may intentionally change labeled speech.
+
+Store project schema version, stable track/speaker identities, source fingerprints/metadata, reference labels, settings, manual edits/protections, review state, analysis recipe/model provenance, current or stale result identity and render identity. Derived cache files are versioned and rebuildable; a project must remain editable if a cache is missing. Save atomically and retain prior data on failure. A moved identical source can relink; a changed source requires revalidation and explicit review of bound labels/edits before they apply. Never silently transfer decisions to different audio.
+
+One effective envelope evaluator drives waveform/gain display, audition, removed-signal calculation, headless evaluation and final rendering. Final output is a deliberate safe transaction; keep existing destination collision checks, cancellation, validation and atomic completion.
+
+## Editor behavior
+
+Retain one synchronized Iced workspace, waveform cache and transport. Add speaker assignment, label selection with active-speaker checkboxes, reference readiness, Analyze progress/cancellation, stale-state display, ownership estimates, uncertainty review navigation and a separate manual gain tool. Do not make users navigate a staged wizard. Model acquisition is an explicit first-use action with progress, expected identity/license information and actionable errors.
+
+Review items show affected time/tracks and reasons such as uncertain identity or poor bleed fit. Clicking seeks/selects without losing transport context. Show numerical estimates as analysis evidence rather than a claim of guaranteed confidence. Retain Original, Processed and Removed comparison. Distinguish automatic envelopes, protected manual edits and active labels visually. Provide keyboard operations for core selection/label/edit actions.
+
+## Release acceptance
+
+Acceptance data is local and source-authorized; do not publish recordings. Freeze development/training/tuning data separately from independent test sessions/regions, including the historical screenshot failure, quiet speech, interjections, laughter, overlap, room tone, movement and changing bleed delay. Adjacent frames from the same labeled episode cannot create an artificial train/test split.
+
+On independent labels, wanted speech and overlap retain exact unity unless intentionally manually edited. Any detected loss is a release failure. Compare bleed attenuation against the frozen current detector on the same test material and require measurable improvement without trading away preservation. Keep numerical metrics separate from listening approval. The owner signs off on transitions, removed-signal audition and natural overlap before release. This is a bounded acceptance claim, not proof of perfect behavior on every recording.
+
+Verify every advertised input profile; mixed native rates; metadata agreement/conflict/missing cases; first/last sample timing; per-source WAV frame/rate integrity; shared envelope parity; label invalidation; source relinking; protected edits and undo/save/reload; stale/cancelled jobs; corrupt/missing models; native runtime loading; and network-disabled analysis after the first download.
+
+Measure cold/model-load/full analysis time, peak memory, disk cache growth, cancellation response and warm gain-edit latency on the owner's Ryzen 9 3950X / 32 GB Windows machine. Exercise eight tracks and two hours, including native Nemotron probability compaction and long-gap speaker recurrence. No hard cold-analysis deadline has been agreed; obtain the owner's timing acceptance from measured results before release. Warm gain edits must reuse evidence and avoid inference; long-session UI/transport must remain usable.
+
+## Deferred work
+
+Live/DAW plugins, automatic alignment, shared microphones or speaker track switching, more than eight speakers, mixed-master/DAW automation export, macOS/Linux release qualification, a fade-shape selector, alternative classifier families, blind source separation and neural fine-tuning are deferred. Unlisted codecs are not implicitly supported. These boundaries do not prohibit extending the shared engine after this release is accepted.
+
+## Implementation sequence
+
+The [implementation index](implementation.md) links individual build tickets. They identify affected modules, dependencies and meaningful acceptance checks; they do not mark any implementation as complete.
