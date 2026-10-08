@@ -94,7 +94,6 @@ impl SourceMetadata {
 }
 
 pub(crate) struct Stem {
-    pub path: PathBuf,
     pub format: WaveFmt,
     pub bext: Option<Bext>,
     pub samples: Vec<f32>,
@@ -119,34 +118,11 @@ impl Stem {
             Ok(())
         })?;
         Ok(Self {
-            path: path.into(),
             format: decoded.format,
             bext: decoded.bext,
             samples,
             metadata: decoded.metadata,
         })
-    }
-
-    pub(crate) fn write(&self, path: &Path, samples: &[f32]) -> Result<(), RenderBlocker> {
-        // The engine is f32. bwavfile cannot write float64 frames; export these
-        // decoded sources as explicit native-rate float32 WAV, preserving BEXT.
-        let format = if matches!(self.format.common_format(), CommonFormat::IeeeFloatPCM)
-            && self.format.bits_per_sample == 64
-        {
-            let mut format = WaveFmt::new_pcm_mono(self.format.sample_rate, 32);
-            format.tag = 3;
-            format
-        } else {
-            self.format
-        };
-        let mut writer = WaveWriter::create(path, format)?;
-        if let Some(bext) = &self.bext {
-            writer.write_broadcast_metadata(bext)?;
-        }
-        let mut frames = writer.audio_frame_writer()?;
-        frames.write_frames(samples)?;
-        frames.end()?;
-        Ok(())
     }
 }
 
@@ -154,6 +130,72 @@ pub(crate) struct DecodedMetadata {
     pub metadata: SourceMetadata,
     pub format: WaveFmt,
     pub bext: Option<Bext>,
+}
+
+pub(crate) fn render_native(
+    source: &Path,
+    destination: &Path,
+    envelope: &crate::GainEnvelope,
+    cancelled: Option<&std::sync::atomic::AtomicBool>,
+) -> Result<SourceMetadata, RenderBlocker> {
+    // Validation is bounded; it never retains a native PCM session.
+    let decoded = decode_chunks(source, cancelled, |_, _| Ok(()))?;
+    let mut format = decoded.format;
+    if format.common_format() == CommonFormat::IeeeFloatPCM && format.bits_per_sample == 64 {
+        format = WaveFmt::new_pcm_mono(format.sample_rate, 32);
+        format.tag = 3;
+    }
+    let metadata_bytes = decoded
+        .bext
+        .as_ref()
+        .map_or(0, |bext| 610_u64 + bext.coding_history.len() as u64);
+    let data_bytes = decoded
+        .metadata
+        .grid
+        .frame_count
+        .checked_mul(u64::from(format.block_alignment))
+        .ok_or_else(|| RenderBlocker("WAV output size overflow".into()))?;
+    if data_bytes
+        .checked_add(metadata_bytes)
+        .and_then(|bytes| bytes.checked_add(128))
+        .is_none_or(|bytes| bytes > u64::from(u32::MAX))
+    {
+        return Err(RenderBlocker(
+            "native WAV output exceeds the supported 32-bit RIFF size; choose a shorter source"
+                .into(),
+        ));
+    }
+    let mut writer = WaveWriter::create(destination, format)?;
+    if let Some(bext) = &decoded.bext {
+        writer.write_broadcast_metadata(bext)?;
+    }
+    let mut writer = writer.audio_frame_writer()?;
+    let mut frame = 0_u64;
+    let mut output = Vec::with_capacity(65_536);
+    let actual = decode_chunks(source, cancelled, |_, samples| {
+        output.clear();
+        for &sample in samples {
+            let time = decoded
+                .metadata
+                .grid
+                .time_at_frame(frame, crate::Rounding::Floor)?;
+            let sample = sample * envelope.gain_at_time(time);
+            if !sample.is_finite() {
+                return Err(RenderBlocker("render produced invalid samples".into()));
+            }
+            output.push(sample);
+            frame += 1;
+        }
+        writer.write_frames(&output)?;
+        Ok(())
+    })?;
+    if actual.metadata != decoded.metadata || frame != decoded.metadata.grid.frame_count {
+        return Err(RenderBlocker(
+            "source changed during native rendering".into(),
+        ));
+    }
+    writer.end()?;
+    Ok(decoded.metadata)
 }
 
 pub(crate) fn decode_chunks(

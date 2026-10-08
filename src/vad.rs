@@ -68,21 +68,6 @@ impl AntiAlias {
     }
 }
 
-pub(crate) fn analyze_with_parameters(
-    tracks: &[&[f32]],
-    speech_probability: f32,
-    energy_margin_db: f32,
-    preservation_frames: usize,
-) -> Result<Vec<Region>, RenderBlocker> {
-    Ok(
-        prepare(tracks, &AtomicU8::new(0), None, Preprocessing::Legacy)?.regions(
-            speech_probability,
-            energy_margin_db,
-            preservation_frames,
-        ),
-    )
-}
-
 pub(crate) fn prepare(
     tracks: &[&[f32]],
     progress: &AtomicU8,
