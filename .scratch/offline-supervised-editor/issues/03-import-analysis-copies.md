@@ -1,6 +1,7 @@
 # Decode common mono formats and prepare aligned analysis copies
 
-Status: ready-for-agent
+Status: claimed
+Assignee: import_implementation
 Blocked by: 02
 Spec: ../spec.md
 
