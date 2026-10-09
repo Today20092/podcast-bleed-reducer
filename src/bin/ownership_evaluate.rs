@@ -3,6 +3,10 @@ use rust_app::{CalibrationExample, CalibrationKind, OwnershipSettings, SourceSta
 use std::{fs, io::Write, path::PathBuf};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let project_args: Vec<_> = std::env::args_os().skip(1).collect();
+    if project_args.first().is_some_and(|arg| arg == "--project") {
+        return rust_app::release_gate::evaluate_project_command(&project_args);
+    }
     let mut args = std::env::args_os().skip(1);
     let usage = "ownership_evaluate <labels.csv> <excerpt|full|settings.json> <development|holdout|all|settings> <new-output.json> <stem.wav> ...";
     let labels = args.next().ok_or(usage)?;

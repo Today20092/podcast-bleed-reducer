@@ -4,6 +4,74 @@ use rust_app::release_gate::{Label, LabelKind, evaluate};
 mod fixture;
 
 #[test]
+fn accepted_evaluation_reuses_editor_analysis_without_installing_or_training_on_truth() {
+    let (root, mut project, audio, neural) = fixture::session();
+    let frozen = serde_json::json!({"version":1,"claim":"controlled","provenance":"scripted held-out mechanics","prior_use":["controlled"],"reference_identity":rust_app::release_gate::FrozenEvaluationManifest::reference_identity(&project),"sources":project.sources.iter().map(|s|serde_json::json!({"track":s.track_id,"fingerprint":s.fingerprint,"grid":s.metadata.grid})).collect::<Vec<_>>(),"labels":[{"track":project.sources[0].track_id,"start":3*rust_app::TICKS_PER_SECOND,"end":4*rust_app::TICKS_PER_SECOND,"kind":"preserve","case":"quiet_speech"}]});
+    let manifest =
+        rust_app::release_gate::FrozenEvaluationManifest::read(&project, &frozen.to_string(), None)
+            .unwrap();
+    let before = std::fs::read(project.path()).unwrap();
+    let cancel = std::sync::atomic::AtomicBool::new(false);
+    let mut worker = rust_app::EditorAnalysisWorker::default();
+    let analysis = worker
+        .analyze_verified_evidence(
+            &project,
+            &audio,
+            &neural,
+            &std::sync::atomic::AtomicU8::new(0),
+            &cancel,
+        )
+        .unwrap();
+    let stats = worker.stats();
+    let report =
+        rust_app::release_gate::measure_editor_result(&project, &manifest, &analysis, &cancel)
+            .unwrap();
+    assert_eq!(report.effective.preservation_samples, 16000);
+    assert_eq!(
+        report.ownership.iter().map(|s| s.samples).sum::<u64>(),
+        16000
+    );
+    assert_eq!(worker.stats().model_fits, stats.model_fits);
+    assert_eq!(
+        worker.stats().fixed_vad_preparations,
+        stats.fixed_vad_preparations
+    );
+    assert_eq!(worker.stats().probability_passes, stats.probability_passes);
+    assert_eq!(std::fs::read(project.path()).unwrap(), before);
+    project
+        .replace_manual_gain_edits(vec![rust_app::ManualGainEdit {
+            id: 1,
+            source: rust_app::SourceBinding {
+                track: project.sources[0].track_id,
+                fingerprint: project.sources[0].fingerprint.clone(),
+            },
+            interpolation: rust_app::ManualInterpolation::Linear,
+            points: vec![
+                rust_app::EnvelopePoint {
+                    time: 3 * rust_app::TICKS_PER_SECOND,
+                    gain: 0.5,
+                },
+                rust_app::EnvelopePoint {
+                    time: 4 * rust_app::TICKS_PER_SECOND,
+                    gain: 0.5,
+                },
+            ],
+        }])
+        .unwrap();
+    let edited =
+        rust_app::release_gate::measure_editor_result(&project, &manifest, &analysis, &cancel)
+            .unwrap();
+    assert_eq!(
+        edited.automatic.attenuated_preservation_samples,
+        report.automatic.attenuated_preservation_samples
+    );
+    assert_eq!(edited.effective.attenuated_preservation_samples, 16000);
+    assert_eq!(worker.stats().model_fits, stats.model_fits);
+    assert_eq!(worker.stats().probability_passes, stats.probability_passes);
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn streaming_native_scores_keep_track_denominators_and_common_time_overlap() {
     let (root, _, _, _) = fixture::session();
     let paths: Vec<_> = [2, 4]
@@ -90,6 +158,25 @@ fn applied_gain_counts_attenuated_zero_samples_and_unique_truth() {
     assert_eq!(measured.preservation_samples, 4);
     assert_eq!(measured.attenuated_preservation_samples, 4);
     assert_eq!(measured.overlap_ticks, 0);
+    let preserved = rust_app::release_gate::measure_applied_gain(
+        &project,
+        &manifest,
+        &[rust_app::GainEnvelope::constant_at_rate(4, 4, 1.0).unwrap()],
+        None,
+    )
+    .unwrap();
+    let report = rust_app::release_gate::EditorGainEvidence {
+        analysis_identity: "controlled".into(),
+        automatic: measured,
+        effective: preserved,
+        ownership: vec![],
+    };
+    assert_eq!(report.effective.attenuated_preservation_samples, 0);
+    assert_eq!(
+        report.release_status(),
+        "failed",
+        "manual preservation cannot hide automatic loss"
+    );
     std::fs::remove_dir_all(root).unwrap();
 }
 

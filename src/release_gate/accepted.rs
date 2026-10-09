@@ -4,6 +4,222 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{collections::BTreeSet, sync::atomic::AtomicBool};
 
+/// Score the same completed analysis used by the editor without installing a project result.
+/// Held-out truth is consumed only after analysis has completed.
+#[derive(Debug, Serialize)]
+pub struct EditorGainEvidence {
+    pub analysis_identity: String,
+    pub automatic: AppliedGainEvidence,
+    pub effective: AppliedGainEvidence,
+    pub ownership: Vec<HeldOutOwnershipEvidence>,
+}
+impl EditorGainEvidence {
+    pub fn release_status(&self) -> &'static str {
+        if self.automatic.attenuated_preservation_samples > 0
+            || self.automatic.attenuated_overlap_ticks > 0
+        {
+            "failed"
+        } else {
+            "incomplete"
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub struct HeldOutOwnershipEvidence {
+    pub track: TrackId,
+    pub kind: EvaluationKind,
+    pub samples: u64,
+    pub probability_samples: u64,
+    pub mean_probability: Option<f64>,
+    pub owned_samples: u64,
+    pub absent_samples: u64,
+    pub uncertain_unity_samples: u64,
+}
+
+fn measure_ownership(
+    project: &Project,
+    manifest: &FrozenEvaluationManifest,
+    analysis: &crate::EditorAnalysisResult,
+    cancel: &AtomicBool,
+) -> Result<Vec<HeldOutOwnershipEvidence>, RenderBlocker> {
+    let mut result = Vec::new();
+    for source in &project.sources {
+        let index = analysis
+            .temporal
+            .tracks
+            .iter()
+            .position(|track| *track == source.track_id)
+            .ok_or_else(|| {
+                RenderBlocker("Evaluation analysis is missing a source track.".into())
+            })?;
+        let intervals = native_intervals(&manifest.labels, source.track_id, source.metadata.grid)?;
+        for kind in [EvaluationKind::Preserve, EvaluationKind::Bleed] {
+            let mut row = HeldOutOwnershipEvidence {
+                track: source.track_id,
+                kind,
+                samples: 0,
+                probability_samples: 0,
+                mean_probability: None,
+                owned_samples: 0,
+                absent_samples: 0,
+                uncertain_unity_samples: 0,
+            };
+            let mut weighted = 0.0_f64;
+            for (range, _) in intervals.iter().filter(|(_, k)| *k == kind) {
+                let mut position = range.start as u64;
+                while position < range.end as u64 {
+                    crate::prepared_analysis::check_cancelled(Some(cancel))?;
+                    let time = source
+                        .metadata
+                        .grid
+                        .time_at_frame(position, crate::Rounding::Floor)?;
+                    let boundary = ((time / crate::OWNERSHIP_FRAME_TICKS + 1)
+                        * crate::OWNERSHIP_FRAME_TICKS)
+                        .min(source.metadata.grid.duration()?);
+                    let end = source
+                        .metadata
+                        .grid
+                        .frame_at_time(boundary, crate::Rounding::Ceil)?
+                        .max(position + 1)
+                        .min(range.end as u64);
+                    let count = end - position;
+                    row.samples += count;
+                    if time < analysis.temporal.duration {
+                        let probability = analysis
+                            .ownership
+                            .estimates_at(time)?
+                            .into_iter()
+                            .find(|e| e.track == source.track_id)
+                            .and_then(|e| e.probability);
+                        if let Some(p) = probability {
+                            row.probability_samples += count;
+                            weighted += f64::from(p) * count as f64;
+                        }
+                        match analysis.temporal.states_at(time)?[index] {
+                            crate::TemporalTrackState::Owned => row.owned_samples += count,
+                            crate::TemporalTrackState::Absent => row.absent_samples += count,
+                            crate::TemporalTrackState::UncertainUnity => {
+                                row.uncertain_unity_samples += count
+                            }
+                        }
+                    } else {
+                        row.uncertain_unity_samples += count;
+                    }
+                    position = end;
+                }
+            }
+            if row.probability_samples > 0 {
+                row.mean_probability = Some(weighted / row.probability_samples as f64);
+            }
+            if row.samples > 0 {
+                result.push(row);
+            }
+        }
+    }
+    Ok(result)
+}
+
+/// Existing headless entry points share the editor's required-model worker.
+/// This command produces evidence; it cannot grant listening or release approval.
+pub fn evaluate_project_command(
+    args: &[std::ffi::OsString],
+) -> Result<(), Box<dyn std::error::Error>> {
+    if args.len() != 5 || args[0] != "--project" {
+        return Err("--project <project.cleanslate> <frozen-manifest.json> <new-output.json> <cache-directory>".into());
+    }
+    let project = Project::open(std::path::PathBuf::from(&args[1]))?;
+    let saved_project = std::fs::read(project.path())?;
+    if std::path::Path::new(&args[3]).exists() {
+        return Err("Evaluation report already exists; choose a new output path.".into());
+    }
+    let cancel = AtomicBool::new(false);
+    let manifest = FrozenEvaluationManifest::read(
+        &project,
+        &std::fs::read_to_string(&args[2])?,
+        Some(&cancel),
+    )?;
+    let helper = std::env::current_exe()?.with_file_name(if cfg!(windows) {
+        "model-check.exe"
+    } else {
+        "model-check"
+    });
+    let mut verification = std::process::Command::new(helper);
+    verification
+        .arg("--verify-only")
+        .arg("--runtime")
+        .arg(crate::model::runtime_directory().map_err(RenderBlocker)?);
+    let runtime =
+        crate::model::verify_native_runtime(verification, &cancel).map_err(RenderBlocker)?;
+    let mut worker = crate::EditorAnalysisWorker::default();
+    let analysis = worker.analyze(
+        &project,
+        std::path::Path::new(&args[4]),
+        Some(&runtime),
+        &std::sync::atomic::AtomicU8::new(0),
+        &cancel,
+    )?;
+    let score = measure_editor_result(&project, &manifest, &analysis, &cancel)?;
+    manifest.validate(&project, Some(&cancel))?;
+    crate::verify_installed_editor_runtime(&runtime, &cancel)?;
+    if std::fs::read(project.path())? != saved_project {
+        return Err("Saved project changed during evaluation; no report published.".into());
+    }
+    let report = serde_json::json!({
+        "version":1,"manifest_sha256":manifest.digest(),"claim":manifest.claim(),
+        "analysis_recipe":analysis.recipe,"runtime":analysis.runtime,"gain":score,
+        "parameters":project.parameters(),"manual_constraints":project.gain_constraints(),
+        "release_status":score.release_status(),"human_listening_performed":false,
+        "pending":["frozen baseline comparison","independent real truth","owner listening and timing approval"]
+    });
+    use std::io::Write;
+    std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&args[3])?
+        .write_all(serde_json::to_string_pretty(&report)?.as_bytes())?;
+    Ok(())
+}
+
+pub fn measure_editor_result(
+    project: &Project,
+    manifest: &FrozenEvaluationManifest,
+    analysis: &crate::EditorAnalysisResult,
+    cancel: &AtomicBool,
+) -> Result<EditorGainEvidence, RenderBlocker> {
+    manifest.validate(project, Some(cancel))?;
+    if !analysis.snapshot.matches(project) {
+        return Err(RenderBlocker(
+            "Analysis no longer matches frozen evaluation sources and references.".into(),
+        ));
+    }
+    let effective = crate::EffectiveEnvelopeCache::default().update(
+        project,
+        &analysis.temporal,
+        crate::editor_workflow::project_fade_settings(project)?,
+        Some(cancel),
+    )?;
+    if !effective.analysis_current {
+        return Err(RenderBlocker(
+            "Evaluation requires current supervised analysis.".into(),
+        ));
+    }
+    let automatic = measure_gain_query(project, manifest, Some(cancel), |track, sample| {
+        let time = project.sources[track]
+            .metadata
+            .grid
+            .time_at_frame(sample as u64, crate::Rounding::Floor)?;
+        Ok(effective.automatic[track].gain_at_time(time))
+    })?;
+    let applied = measure_applied_gain(project, manifest, &effective.envelopes, Some(cancel))?;
+    Ok(EditorGainEvidence {
+        analysis_identity: analysis.snapshot.key.clone(),
+        automatic,
+        effective: applied,
+        ownership: measure_ownership(project, manifest, analysis, cancel)?,
+    })
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum EvaluationClaim {
@@ -274,6 +490,18 @@ pub fn measure_applied_gain(
             "Evaluation envelopes do not match the frozen native sources.".into(),
         ));
     }
+    measure_gain_query(project, manifest, cancelled, |track, position| {
+        Ok(envelopes[track].gain_at(position))
+    })
+}
+
+fn measure_gain_query(
+    project: &Project,
+    manifest: &FrozenEvaluationManifest,
+    cancelled: Option<&AtomicBool>,
+    gain_at: impl Fn(usize, usize) -> Result<f32, RenderBlocker>,
+) -> Result<AppliedGainEvidence, RenderBlocker> {
+    manifest.validate(project, cancelled)?;
     let mut result = AppliedGainEvidence::default();
     let (mut input_square, mut output_square) = (0.0_f64, 0.0_f64);
     let mut changed = Vec::<TimeRange>::new();
@@ -309,7 +537,7 @@ pub fn measure_applied_gain(
                     .map(|(_, kind)| *kind);
                 let mut attenuated = false;
                 if let Some(kind) = kind {
-                    let gain = envelopes[track].gain_at(position);
+                    let gain = gain_at(track, position)?;
                     if !gain.is_finite() || !(0.0..=1.0).contains(&gain) {
                         return Err(RenderBlocker(
                             "Evaluation gain is not finite attenuation.".into(),

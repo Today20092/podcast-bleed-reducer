@@ -86,6 +86,10 @@ fn read_labels(path: &Path, stems: &[PathBuf]) -> Result<Vec<Label>, Box<dyn std
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let project_args: Vec<_> = std::env::args_os().skip(1).collect();
+    if project_args.first().is_some_and(|arg| arg == "--project") {
+        return rust_app::release_gate::evaluate_project_command(&project_args);
+    }
     let args: Vec<_> = std::env::args_os().skip(1).map(PathBuf::from).collect();
     if args.first().is_some_and(|arg| arg == "--cancel") {
         if args.len() < 4 {
