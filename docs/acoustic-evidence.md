@@ -1,8 +1,91 @@
-# Session acoustic evidence
+# How CleanSlate measures room noise and microphone bleed
 
-Ticket 08 separates fixed acoustic measurements from trusted-reference fitting. These features never decide ownership or alter delivered PCM. Ticket 09 combines them with mapped Nemotron activity and VAD; tickets 10/14 retain conservative ownership and independent quality gates.
+When one person speaks, several microphones can record their voice. CleanSlate compares the synchronized tracks to estimate which sound is direct speech and which sound may be bleed.
 
-## Frozen development recipe
+This document explains the audio measurements. The [ownership guide](ownership-explained.md) explains how the learned model uses them to decide which sections to attenuate.
+
+## A simple example
+
+Suppose you label a section "Speaker 3 only."
+
+- Track 3 records Speaker 3's direct speech.
+- Tracks 1 and 2 record leakage from Speaker 3, plus their background noise.
+- CleanSlate compares these tracks to learn the normal leakage into each microphone.
+
+You do not need a separate "bleed" label. Your solo label identifies where the other microphones can provide bleed examples.
+
+A room-tone label identifies a section where nobody speaks. It supplies the background-noise level for each microphone.
+
+## What the tool learns
+
+CleanSlate learns each microphone relationship separately. Speaker 3 leaking into microphone 1 can differ from Speaker 1 leaking into microphone 3.
+
+It starts with a simple estimate of the leakage level. It also checks how closely the signals match after allowing for a short delay. Sound reaches different microphones at different times.
+
+A more detailed filter can account for a small change in the sound as it travels between microphones. The tool uses that filter only when it passes checks on separate parts of the solo examples. Those checks do not prove that it works well on an unseen podcast.
+
+Only solo references fit the bleed relationships. During overlap, the receiving microphone can contain its own speaker too. That makes it unsuitable as a pure bleed example. Overlap labels still teach the ownership model.
+
+```mermaid
+flowchart TD
+    L["Your solo and room-tone examples"] --> C["Learn noise levels<br/>and microphone bleed relationships"]
+    A["Audio from the synchronized tracks"] --> M["Measure levels<br/>and how the signals match"]
+    C --> E["Estimate expected bleed<br/>and sound it does not explain"]
+    M --> E
+    E --> O["Give these measurements<br/>to the ownership model"]
+
+    classDef examples fill:#493267,stroke:#C4A7E7,color:#FFFFFF,stroke-width:2px
+    classDef measurements fill:#245968,stroke:#B5DFE8,color:#FFFFFF,stroke-width:2px
+    classDef output fill:#246732,stroke:#A2FFB0,color:#FFFFFF,stroke-width:2px
+    class L,C examples
+    class A,M,E measurements
+    class O output
+```
+
+## What it measures in the rest of the recording
+
+Every 32 milliseconds, CleanSlate supplies these measurements:
+
+| Measurement | Question it helps answer |
+| --- | --- |
+| Level above room noise | Is this track louder than its normal background? |
+| Level compared with the other microphones | Is this microphone louder than the strongest other microphone? |
+| Bleed explanation | How closely does its sound match another microphone after allowing for delay? |
+| Expected bleed level | How much leakage does the learned relationship predict? |
+| Excess residual | Is there sound that the expected leakage does not explain? |
+| Fit reliability | How well did the bleed relationship fit the examples? |
+| Calibration availability | Was there enough usable evidence to estimate that relationship? |
+
+"Residual" means sound left unexplained by the bleed estimate. Additional direct speech can increase it. Noise or a changed microphone position can also increase it. The ownership model must consider the other measurements too.
+
+Fit reliability describes the acoustic fit. It is not the probability that a person is speaking.
+
+These measurements do not decide ownership by themselves. Acoustic mode combines them with Silero speech activity in a learned model for each track. Experimental Nemotron can add speaker-activity evidence, but it is off by default and its benefit is unproven.
+
+## What happens if the examples are poor?
+
+The tool checks whether the solo source is loud enough above room noise and whether the relationship is consistent.
+
+If it cannot fit a useful relationship, it marks that measurement as unavailable. It does not treat missing evidence as proof of silence. The ownership pipeline still has the other available inputs and its missing-evidence checks.
+
+Microphone movement, level changes and room acoustics can make an earlier estimate less useful. Add clear solo examples of the changed conditions and run Analyze again.
+
+Label changes rebuild the learned relationships. Compatible fixed audio measurements can be reused.
+
+## Does it remove a voice from the audio?
+
+The bleed measurements do not change the source samples. They help the ownership model decide when to reduce gain.
+
+CleanSlate does not subtract a predicted voice from the delivered track. It applies the final gain curve to the original decoded audio. Manual gain edits and protection can correct that result.
+
+## Technical recipe and development evidence
+
+The section below preserves the numerical recipe and fixture results for developers. These are development measurements, not proof of recording quality.
+
+<details>
+<summary>Show thresholds, feature units, filter fitting and test results</summary>
+
+### Frozen development recipe
 
 `speechband32ms-trusted-scalar-or-heldout-ridge2tap-lag12ms-v2` reuses existing 150–3000 Hz filtering, 8 kHz decimation and 32 ms level frames. Power/correlation accumulate in f64 to avoid finite float32 squared overflow. Analysis remains 16 kHz with integer source-time conversions. Feature queries are half-open inside every actual native source and stop at the earliest native EOF. A ceil-resampled uneven terminal interval or missing acoustic frame explicitly requests preservation, never another ownership sample. Source samples are never clipped or subtracted.
 
@@ -14,7 +97,7 @@ The offline FIR candidate has two taps, bounded lag +/-12 ms and relative ridge 
 
 Comparison uses a trained delay-compensated scalar, rather than an unfair zero-delay baseline. FIR needs held-out explained fraction >=0.85, worst reference >=0.7, and residual improvement >=3 dB. Too few above-floor source frames or a below-floor target veto it even with perfect correlation. Plain leakage/small movement retain scalar. Selected FIRs generate immutable per-frame excess residual arrays in bounded 4096-sample multitrack blocks. Feature queries perform no file I/O and retain no full-session PCM/residual waveform.
 
-## Feature units and missing values
+### Feature units and missing values
 
 The API returns a row per stable track at its covering 32 ms common-time frame.
 
@@ -32,7 +115,7 @@ Scalar excess compares current source-relative unexplained band power with its t
 
 Order is local energy, dominance, then five incoming features for each other source in project order (two features for one track; 37 for eight). Actual prepared-payload hashes, source identities, labels, assignments and recipe key fits. SHA is checked cancellably before warm reuse and again before new fits install. Cancellation, I/O failure or source changes retain the accepted cache. Label edits rebuild fits but preserve compatible fixed facts. Final learned-model keys must additionally include ticket 07 mapping and ticket 06 neural provenance.
 
-## Actual development measurements
+### Historical development measurements
 
 Four-second, two-track float32 fixtures use exact synthetic solo/room truth and neutral stable IDs. Private recording labels and listening judgment were not inferred.
 
@@ -49,6 +132,8 @@ Four-second, two-track float32 fixtures use exact synthetic solo/room truth and 
 | Finite samples scaled by 1e20 | Finite normalized features; samples remain unclipped |
 | Same-length finite payload tamper | Reuse rejected; previous fit retained |
 
-These ideal fixtures establish mechanics and a limited useful candidate. Two taps/fixed lag cannot cover arbitrary reverberation, nonlinear processing or large microphone changes. The large ideal residual improvement is not real-speech quality. Long-session performance and independent speech/bleed/listening acceptance remain ticket 14; supervised GUI composition remains ticket 12.
+These ideal fixtures establish mechanics and a limited useful candidate. Two taps/fixed lag cannot cover arbitrary reverberation, nonlinear processing or large microphone changes. The large ideal residual improvement is not real-speech quality. Long-session performance and independent speech/bleed/listening acceptance remain ticket 14. These measurements describe the acoustic development fixtures, not the current GUI's quality.
 
 Primary solver references: [Nalgebra decompositions](https://github.com/dimforge/nalgebra/blob/main/_autodocs/api-reference/03-linear-algebra-decompositions.md), [error handling](https://github.com/dimforge/nalgebra/blob/main/_autodocs/errors.md), [pinned package](https://crates.io/crates/nalgebra/0.35.0).
+
+</details>
