@@ -102,13 +102,18 @@ fn staged_delivery_rechecks_cancellation_generation_saved_edits_and_copied_bytes
     fs::remove_dir_all(dir).unwrap();
 }
 fn current_project(dir: &Path) -> Project {
+    current_project_names(dir, ["speaker-0.wav", "speaker-1.wav"])
+}
+fn current_project_names(dir: &Path, names: [&str; 2]) -> Project {
     fs::create_dir_all(dir).unwrap();
     let (fixture_root, old_project, audio, evidence) = fixture::session();
     let paths = old_project
         .sources
         .iter()
-        .map(|source| {
-            let path = dir.join(source.path.file_name().unwrap());
+        .enumerate()
+        .map(|(index, source)| {
+            let path = dir.join(names[index]);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
             fs::copy(&source.path, &path).unwrap();
             path
         })
@@ -163,6 +168,21 @@ fn current_project(dir: &Path) -> Project {
     .unwrap();
     fs::remove_dir_all(fixture_root).unwrap();
     project
+}
+
+#[test]
+fn delivery_rejects_case_colliding_source_names_before_copying() {
+    let dir = temp_dir();
+    let project = current_project_names(&dir, ["a/Foo.wav", "b/foo.wav"]);
+    let destination = dir.join("delivery");
+    let error = rust_app::prepare_export(&project, &destination, None)
+        .err()
+        .expect("Case aliases cannot share a delivery path");
+    assert!(error.to_string().contains("names collide"));
+    assert!(!destination.exists());
+    assert!(dir.join("render/01-Foo.wav").exists());
+    assert!(dir.join("render/02-foo.wav").exists());
+    fs::remove_dir_all(dir).unwrap();
 }
 #[test]
 fn a_legacy_report_path_cannot_establish_current_supervised_delivery() {

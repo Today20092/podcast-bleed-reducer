@@ -38,7 +38,10 @@ pub fn prepare_export(
         {
             use std::io::{Read, Write};
             let mut input = fs::File::open(&rendered)?;
-            let mut destination = fs::File::create(output.path(&name))?;
+            let mut destination = fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(output.path(&name))?;
             let mut block = [0; 65_536];
             loop {
                 crate::prepared_analysis::check_cancelled(cancelled)?;
@@ -183,7 +186,13 @@ fn delivery_plan(
                 .ok_or_else(|| RenderBlocker("source has no usable file name".into()))
         })
         .collect::<Result<Vec<_>, _>>()?;
-    if names.iter().collect::<HashSet<_>>().len() != names.len() {
+    if names
+        .iter()
+        .map(|name| name.to_lowercase())
+        .collect::<HashSet<_>>()
+        .len()
+        != names.len()
+    {
         return Err(RenderBlocker("source names collide at export".into()));
     }
     let rendered = report
