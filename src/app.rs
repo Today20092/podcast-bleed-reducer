@@ -1,6 +1,8 @@
+#[cfg(test)]
+use crate::CalibrationKind;
 use crate::{
-    AnalysisPreview, AutomixParameters, CalibrationKind, Comparison, Project, RenderState,
-    ReviewState, ReviewWorkspace, SpeakerId, TimeRange, WorkflowStep,
+    AnalysisPreview, AutomixParameters, Comparison, Project, RenderState, ReviewState,
+    ReviewWorkspace, SpeakerId, TimeRange,
     audition::{AuditionMode, AuditionPreparation, LiveAudition},
     prepared_analysis::source_stamps,
     timebase::{Rounding, TICKS_PER_SECOND, TimePosition, time_from_seconds},
@@ -59,6 +61,23 @@ fn available_project_path(directory: &std::path::Path) -> PathBuf {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn imported_tracks_report_required_model_and_reference_setup() {
+        let directory =
+            std::env::temp_dir().join(format!("cleanslate-ui-status-{}", std::process::id()));
+        std::fs::create_dir(&directory).unwrap();
+        let source = directory.join("voice.wav");
+        write_wav(&source, &vec![0.0; 48000]);
+        let app = super::CleanSlateApp {
+            project: Some(
+                synchronized_project(directory.join("session.cleanslate"), vec![source]).unwrap(),
+            ),
+            ..Default::default()
+        };
+        assert_eq!(app.workspace_status(), "VERIFY MODEL · ADD REFERENCES");
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
     #[test]
     fn fresh_original_playback_and_transient_gain_feedback_do_not_require_analysis() {
         let root =
@@ -1216,7 +1235,6 @@ enum Message {
     OpenTime(f32),
     CloseTime(f32),
     RefreshPreview,
-    SelectWarning(usize),
     Original,
     Processed,
     Removed,
@@ -1236,6 +1254,7 @@ enum Message {
     CalibrationStartAtPlayhead,
     CalibrationEndAtPlayhead,
     CalibrationFromSelection,
+    #[cfg(test)]
     SaveCalibration(CalibrationKind, usize),
     #[cfg(test)]
     RemoveCalibration(usize),
@@ -1276,7 +1295,7 @@ pub fn run() -> iced::Result {
     .subscription(CleanSlateApp::subscription)
     .window(window::Settings {
         maximized: true,
-        min_size: Some(iced::Size::new(960.0, 640.0)),
+        min_size: Some(iced::Size::new(960.0, 900.0)),
         ..window::Settings::default()
     })
     .run()
@@ -2252,6 +2271,7 @@ impl CleanSlateApp {
         self.project.is_some() && self.timeline.selection().is_some()
     }
 
+    #[cfg(test)]
     fn save_calibration(&mut self, kind: CalibrationKind, track: usize) {
         let Some(project) = &self.project else {
             self.calibration_error = Some("Import sources before labeling.".into());
@@ -2422,7 +2442,6 @@ impl CleanSlateApp {
                 | Message::RemoveReference(_)
                 | Message::UndoReferences
                 | Message::RedoReferences
-                | Message::SaveCalibration(_, _)
                 | Message::SuppliedAlignment(_)
                 | Message::RebindSource(_)
                 | Message::ProtectTrack(_)
@@ -2523,14 +2542,6 @@ impl CleanSlateApp {
                 }
                 self.start_preview();
             }
-            Message::SelectWarning(index) => {
-                if let Some(review) = &mut self.review {
-                    review.select_warning(index);
-                    self.timeline.seek(review.playhead());
-                    self.timeline.set_selection(review.selection());
-                }
-                self.audition(true);
-            }
             Message::Original | Message::Processed | Message::Removed => {
                 let mode = match message {
                     Message::Original => AuditionMode::Original,
@@ -2623,6 +2634,7 @@ impl CleanSlateApp {
                     self.capture_calibration_range(start, end);
                 }
             }
+            #[cfg(test)]
             Message::SaveCalibration(kind, track) => self.save_calibration(kind, track),
             Message::ReferenceSpeaker(speaker, active) => {
                 self.reference_speakers.retain(|id| *id != speaker);
@@ -2918,7 +2930,79 @@ impl CleanSlateApp {
     }
 
     fn view(&self) -> Element<'_, Message> {
-        responsive(|size| self.workspace(compact_workspace(size.width), size.height)).into()
+        responsive(|size| {
+            let count = self
+                .project
+                .as_ref()
+                .map_or(0, |project| project.sources.len());
+            self.workspace(compact_workspace(size.width) && count <= 3, size.height)
+        })
+        .into()
+    }
+
+    fn missing_references(&self) -> (Vec<String>, bool) {
+        let Some(project) = &self.project else {
+            return (vec![], false);
+        };
+        let missing = project
+            .sources
+            .iter()
+            .filter(|source| {
+                !project.reference_labels().iter().any(|label| {
+                    label.active_speakers == vec![source.speaker_id]
+                        && project.reference_label_is_current(label)
+                })
+            })
+            .map(|source| format!("Speaker {} solo", source.speaker_id.0))
+            .collect();
+        let room = project.reference_labels().iter().any(|label| {
+            label.active_speakers.is_empty() && project.reference_label_is_current(label)
+        });
+        (missing, room)
+    }
+
+    fn workspace_status(&self) -> String {
+        if self.sources_busy() {
+            return "LOADING TRACKS".into();
+        }
+        let Some(project) = &self.project else {
+            return "IMPORT TRACKS".into();
+        };
+        if self.preview_processing.is_some() {
+            return "ANALYZING".into();
+        }
+        if self.model_acquisition.is_busy() {
+            return "MODEL SETUP".into();
+        }
+        let (missing, room) = self.missing_references();
+        if self.model_acquisition.provenance().is_none() {
+            return if missing.is_empty() && room {
+                "VERIFY MODEL"
+            } else {
+                "VERIFY MODEL · ADD REFERENCES"
+            }
+            .into();
+        }
+        if !missing.is_empty() || !room {
+            return "ADD SPEAKER / ROOM REFERENCES".into();
+        }
+        if let Some(result) = &self.supervised_result {
+            if !result.snapshot.matches(project)
+                || self.model_acquisition.provenance() != Some(&result.runtime)
+            {
+                return "ANALYSIS OUT OF DATE".into();
+            }
+            let warnings = self
+                .review
+                .as_ref()
+                .map_or(0, |review| review.warnings.len());
+            return if warnings == 0 {
+                "ANALYSIS COMPLETE".into()
+            } else {
+                format!("ANALYSIS COMPLETE · {warnings} REVIEW REGIONS")
+            };
+        }
+        "REFERENCES SAVED · ANALYZE TO VALIDATE".into()
     }
 
     fn calibration_controls(&self) -> Element<'_, Message> {
@@ -2951,6 +3035,13 @@ impl CleanSlateApp {
             );
         }
         controls = controls.push(button("Save reference").on_press(Message::SaveReference(false)));
+        controls = controls.push(
+            button("Listen to selected range").on_press_maybe(
+                self.timeline
+                    .selection()
+                    .map(|_| Message::AuditionSelection),
+            ),
+        );
         if !self.reference_conflicts().is_empty() {
             controls = controls.push(
                 button("Replace conflicting whole labels").on_press(Message::SaveReference(true)),
@@ -2964,7 +3055,7 @@ impl CleanSlateApp {
             .spacing(8),
         );
         controls = controls.push(
-            row![
+            column![
                 button("Analyze").on_press(Message::AnalyzeReferences),
                 button("Cancel analysis").on_press_maybe(
                     self.preview_processing
@@ -2990,7 +3081,7 @@ impl CleanSlateApp {
                 .spacing(6),
             );
             controls = controls.push(
-                row![
+                column![
                     button("Add point at cursor").on_press(Message::InsertGainPoint),
                     button("Remove selected override").on_press(Message::DeleteGain)
                 ]
@@ -3002,20 +3093,7 @@ impl CleanSlateApp {
                     .on_toggle(Message::ReplaceGainConstraints),
             );
         }
-        let missing: Vec<_> = project
-            .sources
-            .iter()
-            .filter(|source| {
-                !project.reference_labels().iter().any(|label| {
-                    label.active_speakers == vec![source.speaker_id]
-                        && project.reference_label_is_current(label)
-                })
-            })
-            .map(|source| format!("Speaker {} solo", source.speaker_id.0))
-            .collect();
-        let room = project.reference_labels().iter().any(|label| {
-            label.active_speakers.is_empty() && project.reference_label_is_current(label)
-        });
+        let (missing, room) = self.missing_references();
         controls = controls.push(
             text(if missing.is_empty() && room {
                 "References supplied; Analyze checks usable speech and room tone.".into()
@@ -3049,7 +3127,7 @@ impl CleanSlateApp {
                     .on_press(Message::SelectSupervisedWarning(selected)),
                 );
                 controls = controls.push(
-                    row![
+                    column![
                         button("Previous review").on_press_maybe(
                             selected
                                 .checked_sub(1)
@@ -3071,7 +3149,7 @@ impl CleanSlateApp {
         controls = controls.push(text({
             match self.calibration_range() {
                 Ok((start, end)) => format!(
-                    "Selected {:.3}–{:.3} s ({:.3} s). Use a Save button below the track.",
+                    "Selected {:.3}–{:.3} s ({:.3} s). Choose the speakers above and Save reference.",
                     start as f64 / TICKS_PER_SECOND as f64,
                     end as f64 / TICKS_PER_SECOND as f64,
                     (end - start) as f64 / TICKS_PER_SECOND as f64
@@ -3098,7 +3176,13 @@ impl CleanSlateApp {
                 .push(button("Copy highlighted timeline range").on_press_maybe(self.timeline.selection().map(|_| Message::CalibrationFromSelection)))
                 .push(text("Copies the current highlight into these times. Start/end at playhead copies the white cursor's position.").size(12));
         }
-        if let Some(notice) = project.calibration_notice() {
+        if let Some(notice) = project.calibration_notice()
+            && (!project.pending_source_reviews().is_empty()
+                || self
+                    .supervised_result
+                    .as_ref()
+                    .is_none_or(|result| !result.snapshot.matches(project)))
+        {
             controls = controls.push(text(notice));
         }
         if let Some(error) = &self.calibration_error {
@@ -3131,30 +3215,129 @@ impl CleanSlateApp {
         controls.into()
     }
 
+    fn model_controls(&self) -> Element<'_, Message> {
+        let actions = if self.model_acquisition.is_busy() {
+            column![
+                progress_bar(0.0..=1.0, self.model_acquisition.progress()),
+                button("Cancel model acquisition").on_press(Message::CancelModelDownload),
+            ]
+        } else {
+            column![
+                button("Download / verify Nemotron").on_press(Message::DownloadModel),
+                button("Verify installed model offline").on_press(Message::VerifyModel),
+            ]
+        }
+        .spacing(6);
+        column![
+            text(self.model_acquisition.status()).size(12),
+            iced::widget::tooltip(
+                text("Nemotron q8_0 · 107 MB · CPU / offline").size(12),
+                text(format!("Pinned {} · SHA-256 {}",crate::model::MODEL_REVISION,crate::model::NEMOTRON.sha256)).size(12),
+                iced::widget::tooltip::Position::Bottom,
+            ),
+            text("Weights: OpenMDW 1.1 · runtime: Apache-2.0").size(11),
+            text("Download: NVIDIA / Hugging Face. Agreement: https://openmdw.ai/license/1-1/. Notices accompany the installed files.").size(11),
+            actions,
+        ].spacing(6).into()
+    }
+
+    fn session_controls(&self) -> Element<'_, Message> {
+        let Some(project) = &self.project else {
+            return column![].into();
+        };
+        let mut controls = column![
+            iced::widget::checkbox(project.supplied_alignment())
+                .label("I supplied synchronized tracks")
+                .on_toggle(Message::SuppliedAlignment),
+            button("Recheck source files").on_press(Message::Validate),
+        ]
+        .spacing(8);
+        if let Err(error) = project.require_alignment() {
+            controls = controls.push(text(error.to_string()));
+        }
+        for (index, source) in project.sources.iter().enumerate() {
+            let mut source_controls =
+                column![text(format!("Speaker {} source", source.speaker_id.0)).size(12)]
+                    .spacing(4);
+            if !source.available {
+                source_controls =
+                    source_controls.push(button("Relink source").on_press(Message::Relink(index)));
+            }
+            if project.pending_source_reviews().contains(&source.track_id) {
+                source_controls = source_controls.push(
+                    button("Accept changed source bindings").on_press(Message::RebindSource(index)),
+                );
+            }
+            if self.preview.is_some() {
+                source_controls = source_controls
+                    .push(button("Protect entire track").on_press(Message::ProtectTrack(index)));
+            }
+            if !source.available
+                || project.pending_source_reviews().contains(&source.track_id)
+                || self.preview.is_some()
+            {
+                controls = controls.push(source_controls);
+            }
+        }
+        if let Some(processing) = &self.processing {
+            controls = controls
+                .push(text(format!(
+                    "Final render: {}%",
+                    processing.progress.load(Ordering::Relaxed)
+                )))
+                .push(button("Cancel final render").on_press(Message::Cancel));
+        } else {
+            controls = controls.push(
+                button("Create current final WAV render")
+                    .on_press_maybe(self.supervised_result.as_ref().map(|_| Message::Process)),
+            );
+        }
+        if self.export_ready() {
+            controls = controls.push(button("Export current render").on_press(Message::Export));
+        }
+        if let Some(error) = &self.export_error {
+            controls = controls.push(text(format!("Export blocked: {error}")));
+        }
+        if self.exporting.is_some() {
+            controls = controls
+                .push(text("Verifying and copying current delivery…"))
+                .push(button("Cancel delivery").on_press(Message::Cancel));
+        }
+        if self.can_protect_selection() {
+            controls = controls.push(
+                button("Protect selection across all tracks").on_press(Message::ProtectSelection),
+            );
+        }
+        if self.review.as_ref().is_some_and(|review| {
+            review.selected_region().is_some() || review.selected_warning().is_some()
+        }) {
+            controls =
+                controls.push(button("Protect reviewed region").on_press(Message::ProtectRegion));
+        }
+        for message in &self.messages {
+            controls = controls.push(text(message));
+        }
+        controls.into()
+    }
+
     fn workspace(&self, compact: bool, height: f32) -> Element<'_, Message> {
-        let current = self
-            .project
-            .as_ref()
-            .map_or(WorkflowStep::Import, Project::step);
         let header = row![
             column![
                 text("CLEANSLATE").size(24),
-                text("UNTITLED SESSION").size(12)
+                text(
+                    self.project
+                        .as_ref()
+                        .and_then(|project| project.path().file_stem())
+                        .map_or_else(
+                            || "UNTITLED SESSION".into(),
+                            |name| name.to_string_lossy().into_owned()
+                        )
+                )
+                .size(12)
             ]
             .spacing(2),
             Space::new().width(Fill),
-            text(if self.sources_busy() {
-                "LOADING TRACKS"
-            } else {
-                match current {
-                    WorkflowStep::Import => "READY TO IMPORT",
-                    WorkflowStep::Validate => "READY TO VALIDATE",
-                    WorkflowStep::Process => "READY TO ANALYZE",
-                    WorkflowStep::Review => "ANALYSIS COMPLETE",
-                    WorkflowStep::Export => "EXPORT COMPLETE",
-                }
-            })
-            .size(12),
+            text(self.workspace_status()).size(12),
             button("Import stems").on_press(Message::ImportStems),
             button("Open session").on_press_maybe(
                 (!self.sources_busy() && self.processing.is_none()).then_some(Message::OpenProject)
@@ -3163,7 +3346,7 @@ impl CleanSlateApp {
         .spacing(12)
         .align_y(iced::Center);
 
-        let mut timeline_content = column![].spacing(10).height(Fill);
+        let mut timeline_content = column![].spacing(6).height(Fill);
         if self.sources_busy() {
             let paths = self.loading_paths();
             let track_height = waveform_height(height, paths.len().max(1), compact);
@@ -3228,7 +3411,6 @@ impl CleanSlateApp {
                 .height(Fill),
             );
         } else if let Some(project) = &self.project {
-            let waveform_height = waveform_height(height, project.sources.len(), compact);
             timeline_content = timeline_content.push(
                 container(
                     canvas(TimelineCanvas::ruler(
@@ -3242,27 +3424,48 @@ impl CleanSlateApp {
                 .padding([0, 12]),
             );
             for (index, source) in project.sources.iter().enumerate() {
-                let mut header = row![text(format!(
-                    "Track {}: {}",
-                    index + 1,
-                    source.path.display()
-                ))];
+                let filename = source
+                    .path
+                    .file_name()
+                    .unwrap_or(source.path.as_os_str())
+                    .to_string_lossy();
+                let mut short_name = filename.chars().take(24).collect::<String>();
+                if filename.chars().count() > 24 {
+                    short_name.push('…');
+                }
+                let mut header = row![
+                    iced::widget::tooltip(
+                        text(format!("Speaker {} · {short_name}", source.speaker_id.0))
+                            .size(13)
+                            .width(Fill),
+                        text(source.path.display().to_string()).size(12),
+                        iced::widget::tooltip::Position::Bottom,
+                    ),
+                    button(text("Preserve").size(12)).on_press_maybe(
+                        self.timeline
+                            .selection()
+                            .map(|_| Message::GainAction(index, true))
+                    ),
+                    button(text("Attenuate").size(12)).on_press_maybe(
+                        self.timeline
+                            .selection()
+                            .map(|_| Message::GainAction(index, false))
+                    ),
+                ]
+                .spacing(8)
+                .align_y(iced::Center);
                 if self
                     .review
                     .as_ref()
                     .is_some_and(|review| review.highlighted_tracks().contains(&index))
                 {
-                    header = header.push(text("REVIEW TARGET"));
+                    header = header.push(text("REVIEW").size(12));
                 }
                 if !source.available {
-                    header = header.push(button("Relink source").on_press(Message::Relink(index)));
+                    header = header.push(text("Missing source").size(12));
                 }
-                header = header.push(text(format!("Speaker {}", source.speaker_id.0)).size(12));
                 if project.pending_source_reviews().contains(&source.track_id) {
-                    header = header.push(
-                        button("Accept changed source bindings")
-                            .on_press(Message::RebindSource(index)),
-                    );
+                    header = header.push(text("Review source").size(12));
                 }
                 if let Some(analysis) = &self.supervised_result
                     && let Ok(estimates) = analysis.ownership.estimates_at(self.timeline.playhead())
@@ -3272,28 +3475,16 @@ impl CleanSlateApp {
                 {
                     header = header.push(
                         text(estimate.probability.map_or_else(
-                            || "Ownership unresolved · preserved".into(),
-                            |p| format!("Ownership estimate {p:.2}"),
+                            || "Unresolved · unity".into(),
+                            |p| format!("Ownership {p:.2}"),
                         ))
                         .size(12),
-                    );
-                }
-                if self
-                    .review
-                    .as_ref()
-                    .is_some_and(|review| review.highlighted_tracks().contains(&index))
-                {
-                    header = header.push(text("REVIEW TARGET"));
-                }
-                if matches!(current, WorkflowStep::Review | WorkflowStep::Export) {
-                    header = header.push(
-                        button("Protect entire track").on_press(Message::ProtectTrack(index)),
                     );
                 }
                 let waveform: Element<'_, Message> = self.waveforms.get(index).map_or_else(
                     || {
                         container(text("Waveform loading…"))
-                            .height(waveform_height)
+                            .height(Fill)
                             .center_y(Fill)
                             .into()
                     },
@@ -3313,7 +3504,7 @@ impl CleanSlateApp {
                             ),
                         )
                         .width(Fill)
-                        .height(waveform_height)
+                        .height(Fill)
                         .into()
                     },
                 );
@@ -3345,175 +3536,28 @@ impl CleanSlateApp {
                                 on_event: Box::new(move |event| Message::GainEvent(index, event)),
                             })
                             .width(Fill)
-                            .height(64),
-                            row![
-                                button("Preserve selection").on_press_maybe(
-                                    self.timeline
-                                        .selection()
-                                        .map(|_| Message::GainAction(index, true))
-                                ),
-                                button("Attenuate selection").on_press_maybe(
-                                    self.timeline
-                                        .selection()
-                                        .map(|_| Message::GainAction(index, false))
-                                )
-                            ]
-                            .spacing(8),
-                            row![
-                                button("Save room tone").on_press_maybe(
-                                    (project.ownership_settings().enabled
-                                        && self.calibration_range().is_ok())
-                                    .then_some(Message::SaveCalibration(
-                                        CalibrationKind::RoomTone,
-                                        index
-                                    ))
-                                ),
-                                button("Save solo speech").on_press_maybe(
-                                    (project.ownership_settings().enabled
-                                        && self.calibration_range().is_ok())
-                                    .then_some(Message::SaveCalibration(
-                                        CalibrationKind::SoloSpeech,
-                                        index
-                                    ))
-                                ),
-                            ]
-                            .spacing(8)
+                            .height(20),
                         ]
-                        .spacing(8),
+                        .spacing(3)
+                        .height(Fill),
                     )
-                    .padding(12)
+                    .padding(4)
+                    .height(Length::FillPortion(1))
                     .width(Fill)
                     .style(container::bordered_box),
                 );
             }
-            timeline_content = timeline_content.push(
-                iced::widget::checkbox(project.supplied_alignment())
-                    .label("I supplied synchronized tracks")
-                    .on_toggle(Message::SuppliedAlignment),
-            );
-            if let Err(error) = project.require_alignment() {
-                timeline_content = timeline_content.push(text(error.to_string()));
-            }
-            match current {
-                WorkflowStep::Import => {}
-                WorkflowStep::Validate => {
-                    timeline_content = timeline_content
-                        .push(button("Validate session").on_press(Message::Validate));
-                }
-                WorkflowStep::Process => {
-                    timeline_content = if let Some(processing) = &self.processing {
-                        timeline_content
-                            .push(text(format!(
-                                "Final render: {}%",
-                                processing.progress.load(Ordering::Relaxed)
-                            )))
-                            .push(button("Cancel final render").on_press(Message::Cancel))
-                    } else {
-                        timeline_content
-                            .push(button("Create final WAV render").on_press(Message::Process))
-                    };
-                }
-                WorkflowStep::Review => {
-                    let stale = matches!(project.render(), RenderState::Stale);
-                    if let Some(processing) = &self.processing {
-                        timeline_content = timeline_content
-                            .push(text(format!(
-                                "Final render: {}%",
-                                processing.progress.load(Ordering::Relaxed)
-                            )))
-                            .push(button("Cancel final render").on_press(Message::Cancel));
-                    } else if stale {
-                        timeline_content = timeline_content
-                            .push(text("Final render stale · live audition remains available"))
-                            .push(
-                                button("Create current final WAV render")
-                                    .on_press(Message::Process),
-                            );
-                    } else if let Some(error) = &self.export_error {
-                        timeline_content = timeline_content.push(text(format!(
-                            "Final render current · Export blocked: {error}"
-                        )));
-                    } else {
-                        timeline_content =
-                            timeline_content.push(text("Final render current · WAV export ready"));
-                    }
-                    if let Some(review) = &self.review {
-                        timeline_content = timeline_content.push(
-                            row![
-                                button("Original").on_press(Message::Original),
-                                button("Processed").on_press(Message::Processed),
-                                button("Removed").on_press(Message::Removed),
-                                button("Audition selection").on_press(Message::AuditionSelection),
-                            ]
-                            .spacing(8),
-                        );
-                        for (index, warning) in review.warnings.iter().enumerate() {
-                            let reviewed = project.review_states().get(&warning.key())
-                                == Some(&ReviewState::Reviewed);
-                            let tracks = warning
-                                .affected_tracks
-                                .iter()
-                                .map(|track| (track + 1).to_string())
-                                .collect::<Vec<_>>()
-                                .join(", ");
-                            timeline_content = timeline_content.push(
-                                button(text(format!(
-                                    "{}{} · tracks {} · {:.2}s–{:.2}s",
-                                    if reviewed { "✓ " } else { "" },
-                                    warning.label,
-                                    tracks,
-                                    warning.start as f64 / TICKS_PER_SECOND as f64,
-                                    warning.end as f64 / TICKS_PER_SECOND as f64,
-                                )))
-                                .on_press(Message::SelectWarning(index)),
-                            );
-                        }
-                        if review.selected_region().is_some() {
-                            let reviewed = review.selected_key().is_some_and(|key| {
-                                project.review_states().get(&key) == Some(&ReviewState::Reviewed)
-                            });
-                            let actions = row![
-                                button(if reviewed {
-                                    "Mark unreviewed"
-                                } else {
-                                    "Mark reviewed"
-                                })
-                                .on_press(Message::ToggleReviewed),
-                                button("Protect this region").on_press(Message::ProtectRegion),
-                            ]
-                            .spacing(8);
-                            timeline_content = timeline_content.push(actions);
-                        }
-                        if self.can_protect_selection() {
-                            timeline_content = timeline_content.push(
-                                button("Protect selected range across all tracks")
-                                    .on_press(Message::ProtectSelection),
-                            );
-                        }
-                    }
-                    if self.export_ready() {
-                        timeline_content = timeline_content
-                            .push(button("Export current render").on_press(Message::Export));
-                    }
-                    if self.exporting.is_some() {
-                        timeline_content = timeline_content
-                            .push(text("Verifying and copying current delivery…"))
-                            .push(button("Cancel delivery").on_press(Message::Cancel));
-                    }
-                }
-                WorkflowStep::Export => {
-                    timeline_content = timeline_content.push(text("Export complete."));
-                }
-            }
-        }
-        for message in &self.messages {
-            timeline_content = timeline_content.push(text(message));
         }
 
+        let tracks: Element<'_, Message> = if self.sources_busy() || self.project.is_none() {
+            scrollable(timeline_content).height(Fill).into()
+        } else {
+            timeline_content.into()
+        };
         let timeline = column![
             text("SESSION TIMELINE").size(12),
-            text(if self.calibrating { "Calibration selection: drag a waveform, then save an example on the intended track. No protection is added." } else { "Shift-drag selects a range. Use Protect selected range to protect it, or enable calibration selection to save examples." }).size(11),
-            scrollable(timeline_content).height(Fill),
+            text(if self.calibrating { "Reference selection: drag across a waveform, choose the speakers, then Save reference." } else { "Click to seek. Select a reference to highlight a range; wheel to zoom, Ctrl-wheel or middle-drag to pan." }).size(11),
+            tracks,
         ]
         .spacing(10)
         .width(Fill)
@@ -3560,11 +3604,13 @@ impl CleanSlateApp {
         let parameters = &self.preview_parameters;
         let inspector = container(
             column![
+                self.model_controls(),
                 text("ANALYSIS PREVIEW").size(12),
                 text("Session parameters").size(20),
                 text("Gain settings update preview and audition immediately. Analyze uses your reference labels."),
                 preview_state,
                 self.calibration_controls(),
+                self.session_controls(),
                 text(format!("Attenuation: {:.1} dB", parameters.attenuation_db)),
                 slider(
                     -30.0..=-3.0,
@@ -3663,31 +3709,12 @@ impl CleanSlateApp {
         .spacing(8)
         .align_y(iced::Center);
         let editor: Element<'_, Message> = if compact {
-            column![timeline, inspector].spacing(12).into()
+            column![timeline, inspector].spacing(12).height(Fill).into()
         } else {
-            row![timeline, inspector].spacing(12).into()
+            row![timeline, inspector].spacing(12).height(Fill).into()
         };
 
-        let model_actions = if self.model_acquisition.is_busy() {
-            row![
-                container(progress_bar(0.0..=1.0, self.model_acquisition.progress())).width(160),
-                button("Cancel model acquisition").on_press(Message::CancelModelDownload)
-            ]
-        } else {
-            row![
-                button("Download / verify Nemotron").on_press(Message::DownloadModel),
-                button("Verify installed model offline").on_press(Message::VerifyModel)
-            ]
-        }
-        .spacing(8);
-        let model_status = column![
-            text(self.model_acquisition.status()).size(12),
-            text("Nemotron-3-Diarization q8_0 · 107 MB · weights: OpenMDW 1.1 · native runtime: Apache-2.0").size(12),
-            text(format!("Pinned model {} · SHA-256 {}", crate::model::MODEL_REVISION, crate::model::NEMOTRON.sha256)).size(10),
-            text("Download uses NVIDIA's Hugging Face repository. Agreement: https://openmdw.ai/license/1-1/; local notices accompany installed materials.").size(10),
-            model_actions,
-        ].spacing(4);
-        container(column![header, model_status, editor, transport].spacing(12))
+        container(column![header, editor, transport].spacing(12))
             .padding(12)
             .width(Fill)
             .height(Fill)
