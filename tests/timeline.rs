@@ -1,6 +1,78 @@
 use rust_app::{SourceTimebase, TICKS_PER_SECOND, timeline::TimelineViewport};
 
 #[test]
+fn captured_lock_survives_seeks_zoom_resize_and_session_edges() {
+    use rust_app::timeline::PlaybackScroll;
+    let mut viewport = TimelineViewport::new(100 * TICKS_PER_SECOND);
+    for _ in 0..6 {
+        viewport.zoom_at(0.0, 1000.0, 1.0);
+    }
+    viewport.seek(viewport.sample_at(300.0, 1000.0));
+    let start = viewport.start();
+    let visible = viewport.visible_samples();
+    viewport.lock_playhead();
+    viewport.follow_playhead(PlaybackScroll::Locked);
+    assert!((viewport.start() - start).abs() < 1.0);
+    viewport.seek(50 * TICKS_PER_SECOND);
+    viewport.follow_playhead(PlaybackScroll::Locked);
+    assert!((viewport.x_for_sample(viewport.playhead(), 1000.0) - 300.0).abs() < 0.01);
+    assert!((viewport.x_for_sample(viewport.playhead(), 2000.0) - 600.0).abs() < 0.01);
+    assert_eq!(viewport.visible_samples(), visible);
+    viewport.zoom_at(800.0, 1000.0, 1.0);
+    viewport.follow_playhead(PlaybackScroll::Locked);
+    assert!((viewport.x_for_sample(viewport.playhead(), 1000.0) - 300.0).abs() < 0.01);
+    viewport.center_playhead();
+    assert!((viewport.x_for_sample(viewport.playhead(), 1000.0) - 500.0).abs() < 0.01);
+    viewport.seek(0);
+    viewport.follow_playhead(PlaybackScroll::Locked);
+    assert_eq!(viewport.start(), 0.0);
+    viewport.seek(100 * TICKS_PER_SECOND);
+    viewport.follow_playhead(PlaybackScroll::Locked);
+    assert_eq!(
+        viewport.start(),
+        100.0 * TICKS_PER_SECOND as f64 - viewport.visible_samples()
+    );
+}
+
+#[test]
+fn playback_follow_pages_at_the_edge_and_locks_without_changing_zoom_or_selection() {
+    use rust_app::timeline::PlaybackScroll;
+    let mut viewport = TimelineViewport::new(100 * TICKS_PER_SECOND);
+    for _ in 0..5 {
+        viewport.zoom_at(0.0, 1000.0, 1.0);
+    }
+    let visible = viewport.visible_samples();
+    viewport.set_selection(Some((TICKS_PER_SECOND, 2 * TICKS_PER_SECOND)));
+    viewport.seek(visible.floor() as u64 - 1);
+    assert!(!viewport.follow_playhead(PlaybackScroll::Page));
+    viewport.seek(visible.ceil() as u64);
+    assert!(viewport.follow_playhead(PlaybackScroll::Page));
+    assert_eq!(viewport.start(), viewport.playhead() as f64);
+    assert!(!viewport.follow_playhead(PlaybackScroll::Page));
+    viewport.seek(0);
+    assert!(viewport.follow_playhead(PlaybackScroll::Page));
+    assert_eq!(viewport.start(), 0.0);
+    viewport.seek(50 * TICKS_PER_SECOND);
+    assert!(viewport.follow_playhead(PlaybackScroll::Locked));
+    assert!((viewport.x_for_sample(viewport.playhead(), 1000.0) - 500.0).abs() < 0.01);
+    let start = viewport.start();
+    viewport.seek(80 * TICKS_PER_SECOND);
+    assert!(!viewport.follow_playhead(PlaybackScroll::Off));
+    assert_eq!(viewport.start(), start);
+    viewport.seek(100 * TICKS_PER_SECOND);
+    assert!(viewport.follow_playhead(PlaybackScroll::Locked));
+    assert_eq!(viewport.start(), 100.0 * TICKS_PER_SECOND as f64 - visible);
+    viewport.seek(0);
+    viewport.follow_playhead(PlaybackScroll::Locked);
+    assert_eq!(viewport.start(), 0.0);
+    assert_eq!(viewport.visible_samples(), visible);
+    assert_eq!(
+        viewport.selection(),
+        Some((TICKS_PER_SECOND, 2 * TICKS_PER_SECOND))
+    );
+}
+
+#[test]
 fn minimum_zoom_is_one_tenth_second_in_common_time() {
     let mut viewport = TimelineViewport::new(28_224_000);
     for _ in 0..100 {

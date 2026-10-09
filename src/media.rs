@@ -17,6 +17,15 @@ use symphonia::core::{
 pub(crate) fn decode(
     path: &Path,
     cancelled: Option<&AtomicBool>,
+    consume: impl FnMut(u32, &[f32]) -> Result<(), RenderBlocker>,
+) -> Result<SourceMetadata, RenderBlocker> {
+    decode_channel(path, None, cancelled, consume)
+}
+
+pub(crate) fn decode_channel(
+    path: &Path,
+    channel: Option<u16>,
+    cancelled: Option<&AtomicBool>,
     mut consume: impl FnMut(u32, &[f32]) -> Result<(), RenderBlocker>,
 ) -> Result<SourceMetadata, RenderBlocker> {
     crate::prepared_analysis::check_cancelled(cancelled)?;
@@ -84,11 +93,12 @@ pub(crate) fn decode(
     let rate = parameters
         .sample_rate
         .ok_or_else(|| RenderBlocker("audio sample rate is missing".into()))?;
-    if parameters
+    let channels = parameters
         .channels
         .as_ref()
-        .is_some_and(|channels| channels.count() != 1)
-    {
+        .map_or(0, |channels| channels.count());
+    let selected = usize::from(channel.unwrap_or(0));
+    if channels == 0 || selected >= channels || (channel.is_none() && channels != 1) {
         return Err(RenderBlocker(format!(
             "{}: requires actual mono audio",
             path.display()
@@ -115,7 +125,7 @@ pub(crate) fn decode(
         let decoded = decoder
             .decode(&packet)
             .map_err(|error| failure(path, error))?;
-        if decoded.spec().rate() != rate || decoded.spec().channels().count() != 1 {
+        if decoded.spec().rate() != rate || decoded.spec().channels().count() != channels {
             return Err(RenderBlocker(
                 "audio rate/channels change within the source".into(),
             ));
@@ -125,13 +135,17 @@ pub(crate) fn decode(
             .try_reserve_exact(decoded.frames())
             .map_err(|_| RenderBlocker("not enough memory to decode audio packet".into()))?;
         decoded.copy_to_vec_interleaved(&mut buffer);
-        if buffer.iter().any(|sample| !sample.is_finite()) {
+        let mono: Vec<_> = buffer
+            .chunks_exact(channels)
+            .map(|frame| frame[selected])
+            .collect();
+        if mono.iter().any(|sample| !sample.is_finite()) {
             return Err(RenderBlocker("audio contains invalid samples".into()));
         }
         frame_count = frame_count
-            .checked_add(buffer.len() as u64)
+            .checked_add(mono.len() as u64)
             .ok_or_else(|| RenderBlocker("decoded frame count overflow".into()))?;
-        consume(rate, &buffer)?;
+        consume(rate, &mono)?;
     }
     // AAC-LC does not guarantee gapless timing. Retain every decoded frame; session validation
     // compares that duration and requires the supplied-alignment declaration, never padding/trim.

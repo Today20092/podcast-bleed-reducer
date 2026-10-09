@@ -44,6 +44,10 @@ pub struct SourceIdentity {
     pub track_id: TrackId,
     pub speaker_id: SpeakerId,
     pub path: PathBuf,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub channel: Option<u16>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
     pub fingerprint: String,
     pub metadata: SourceMetadata,
     #[serde(skip, default)]
@@ -179,7 +183,17 @@ fn valid_hash(value: &str) -> bool {
 
 impl Project {
     pub fn create(path: impl Into<PathBuf>, paths: Vec<PathBuf>) -> io::Result<Self> {
-        let sources = paths
+        Self::create_from_sources(
+            path,
+            paths.into_iter().map(crate::AudioSource::mono).collect(),
+        )
+    }
+
+    pub fn create_from_sources(
+        path: impl Into<PathBuf>,
+        inputs: Vec<crate::AudioSource>,
+    ) -> io::Result<Self> {
+        let sources = inputs
             .into_iter()
             .enumerate()
             .map(|(index, path)| {
@@ -244,7 +258,7 @@ impl Project {
             project.invalidate("Saved analysis uses different evidence; Analyze with the selected Nemotron setting.");
         }
         for source in &mut project.sources {
-            source.loaded_stamp = SourceStamp::read(&source.path).ok();
+            source.loaded_stamp = SourceStamp::read_source(&source.audio_source()).ok();
             source.available = source.matches_disk();
         }
         if project.sources.iter().any(|source| !source.available) {
@@ -346,6 +360,7 @@ impl Project {
         }
         let mut tracks = HashSet::new();
         let mut speakers = HashSet::new();
+        let mut audio_sources = HashSet::new();
         for source in &self.sources {
             if source.track_id.0 == 0
                 || source.speaker_id.0 == 0
@@ -365,6 +380,16 @@ impl Project {
                 ));
             }
             source.metadata.grid.duration().map_err(io_error)?;
+            if source.channel.is_some() && !audio_sources.insert((&source.path, source.channel)) {
+                return Err(invalid("A source channel may only be imported once."));
+            }
+            if source.name.as_ref().is_some_and(|name| {
+                name.trim().is_empty() || name.len() > 256 || name.chars().any(char::is_control)
+            }) {
+                return Err(invalid(
+                    "Track names require 1 to 256 bytes without control characters.",
+                ));
+            }
         }
         if self.pending_rebind.iter().any(|id| !tracks.contains(id))
             || self.pending_rebind.iter().collect::<HashSet<_>>().len() != self.pending_rebind.len()
@@ -602,12 +627,43 @@ impl Project {
     pub fn source_paths(&self) -> Vec<PathBuf> {
         self.sources.iter().map(|s| s.path.clone()).collect()
     }
+    pub fn audio_sources(&self) -> Vec<crate::AudioSource> {
+        self.sources
+            .iter()
+            .map(SourceIdentity::audio_source)
+            .collect()
+    }
+
+    pub(crate) fn source_stamps(&self) -> Result<Vec<SourceStamp>, crate::RenderBlocker> {
+        self.sources
+            .iter()
+            .map(|s| SourceStamp::read_source(&s.audio_source()))
+            .collect()
+    }
+
+    pub fn rename_track(&mut self, index: usize, name: String) -> io::Result<()> {
+        let name = name.trim().to_owned();
+        if name.is_empty() || name.len() > 256 || name.chars().any(char::is_control) {
+            return Err(invalid(
+                "Track names require 1 to 256 bytes without control characters.",
+            ));
+        }
+        self.transaction(|next| {
+            next.sources
+                .get_mut(index)
+                .ok_or_else(|| invalid("Unknown source track."))?
+                .name = Some(name);
+            next.invalidate("Track name changed; Analyze before final export.");
+            Ok(())
+        })
+    }
     pub fn path(&self) -> &Path {
         &self.path
     }
 
     pub(crate) fn sound_identity(&self) -> io::Result<String> {
         let data = serde_json::to_vec(&(
+            crate::effective_envelope::EFFECTIVE_ENVELOPE_RECIPE,
             &self.sources,
             self.supplied_alignment,
             self.nemotron_enabled,
@@ -741,7 +797,15 @@ impl Project {
                 .map(|source| source.metadata)
                 .collect::<Vec<_>>(),
         )
-        .and_then(|validation| validation.require_alignment(self.supplied_alignment))
+        .and_then(|validation| {
+            validation.require_alignment(
+                self.supplied_alignment
+                    || self
+                        .sources
+                        .iter()
+                        .all(|s| s.channel.is_some() && s.path == self.sources[0].path),
+            )
+        })
         .map_err(io_error)
     }
     pub fn review_states(&self) -> &BTreeMap<String, ReviewState> {
@@ -793,8 +857,11 @@ impl Project {
         }
         for source in &self.sources {
             if !source.available
-                || fingerprint_cancellable(&source.path, cancelled)? != source.fingerprint
-                || SourceMetadata::read_cancellable(&source.path, cancelled).map_err(io_error)?
+                || source.audio_source().fingerprint(cancelled)? != source.fingerprint
+                || source
+                    .audio_source()
+                    .metadata(cancelled)
+                    .map_err(io_error)?
                     != source.metadata
             {
                 return Err(invalid(
@@ -817,7 +884,7 @@ impl Project {
             let stamps = self
                 .sources
                 .iter()
-                .map(|s| SourceStamp::read(&s.path).map_err(io_error))
+                .map(|s| SourceStamp::read_source(&s.audio_source()).map_err(io_error))
                 .collect::<io::Result<Vec<_>>>()?;
             if settings.sources != stamps
                 || self
@@ -1291,7 +1358,15 @@ impl Project {
             .sources
             .get(index)
             .ok_or_else(|| invalid("Unknown source track."))?;
-        let replacement = SourceIdentity::read(path, old.track_id, old.speaker_id)?;
+        let replacement = SourceIdentity::read(
+            crate::AudioSource {
+                path,
+                channel: old.channel,
+                name: old.name.clone(),
+            },
+            old.track_id,
+            old.speaker_id,
+        )?;
         let changed =
             replacement.fingerprint != old.fingerprint || replacement.metadata != old.metadata;
         self.transaction(|next|{
@@ -1350,6 +1425,10 @@ impl Project {
         })
     }
     pub fn add_sources(&mut self, paths: Vec<PathBuf>) -> io::Result<()> {
+        self.add_audio_sources(paths.into_iter().map(crate::AudioSource::mono).collect())
+    }
+
+    pub fn add_audio_sources(&mut self, inputs: Vec<crate::AudioSource>) -> io::Result<()> {
         let first = self
             .sources
             .iter()
@@ -1358,7 +1437,7 @@ impl Project {
             .unwrap_or(0)
             .checked_add(1)
             .ok_or_else(|| invalid("Track ID overflow."))?;
-        let sources = paths
+        let sources = inputs
             .into_iter()
             .enumerate()
             .map(|(index, path)| {
@@ -1379,22 +1458,40 @@ impl Project {
 }
 
 impl SourceIdentity {
+    pub fn audio_source(&self) -> crate::AudioSource {
+        crate::AudioSource {
+            path: self.path.clone(),
+            channel: self.channel,
+            name: self.name.clone(),
+        }
+    }
+
+    pub fn display_name(&self) -> String {
+        self.audio_source().display_name()
+    }
+
     fn stamp_is_current(&self) -> bool {
         self.loaded_stamp.as_ref().is_some_and(|stamp| {
-            SourceStamp::read(&self.path).is_ok_and(|current| current == *stamp)
+            SourceStamp::read_source(&self.audio_source()).is_ok_and(|current| current == *stamp)
         })
     }
-    fn read(path: PathBuf, track_id: TrackId, speaker_id: SpeakerId) -> io::Result<Self> {
-        let stamp = SourceStamp::read(&path).map_err(io_error)?;
-        let metadata = SourceMetadata::read(&path).map_err(io_error)?;
-        let fingerprint = fingerprint(&path)?;
-        if SourceStamp::read(&path).map_err(io_error)? != stamp {
+    fn read(
+        source: crate::AudioSource,
+        track_id: TrackId,
+        speaker_id: SpeakerId,
+    ) -> io::Result<Self> {
+        let stamp = SourceStamp::read_source(&source).map_err(io_error)?;
+        let metadata = source.metadata(None).map_err(io_error)?;
+        let fingerprint = source.fingerprint(None)?;
+        if SourceStamp::read_source(&source).map_err(io_error)? != stamp {
             return Err(invalid("Source changed while recording its identity."));
         }
         Ok(Self {
             track_id,
             speaker_id,
-            path,
+            path: source.path,
+            channel: source.channel,
+            name: source.name,
             fingerprint,
             metadata,
             available: true,
@@ -1402,15 +1499,17 @@ impl SourceIdentity {
         })
     }
     fn matches_disk(&self) -> bool {
-        fingerprint(&self.path).is_ok_and(|h| h == self.fingerprint)
-            && SourceMetadata::read(&self.path).is_ok_and(|m| m == self.metadata)
+        self.audio_source()
+            .fingerprint(None)
+            .is_ok_and(|h| h == self.fingerprint)
+            && self
+                .audio_source()
+                .metadata(None)
+                .is_ok_and(|m| m == self.metadata)
     }
 }
 fn invalid_json(error: serde_json::Error) -> io::Error {
     invalid(error.to_string())
-}
-fn fingerprint(path: &Path) -> io::Result<String> {
-    fingerprint_cancellable(path, None)
 }
 pub(crate) fn fingerprint_cancellable(
     path: &Path,

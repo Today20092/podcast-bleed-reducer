@@ -8,7 +8,7 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
 pub const EFFECTIVE_ENVELOPE_RECIPE: &str =
-    "finite-exp4-live-bounded-gap-source-time-halfopen-linear-manual-v3";
+    "finite-smootherstep5-live-bounded-gap-source-time-halfopen-linear-manual-v4";
 
 #[cfg(test)]
 mod zoom_tests {
@@ -124,8 +124,57 @@ impl FadeSegment {
             return self.from;
         }
         let u = (time - self.start) as f64 / (self.end - self.start) as f64;
-        let shape = (-4.0 * u).exp_m1() / (-4.0_f64).exp_m1();
+        // Zero endpoint slope and curvature soften joins to constant gain and adjacent fades.
+        let shape = (u * u * u * (u * (6.0 * u - 15.0) + 10.0)).clamp(0.0, 1.0);
         (f64::from(self.from) + (f64::from(self.to) - f64::from(self.from)) * shape) as f32
+    }
+}
+#[cfg(test)]
+mod fade_tests {
+    use super::FadeSegment;
+
+    #[test]
+    fn s_fades_are_bounded_monotonic_and_flat_at_both_endpoints() {
+        for (from, to) in [(1.0, 0.0), (0.0, 1.0), (1.0, 0.17), (0.17, 1.0)] {
+            let fade = FadeSegment {
+                start: 100,
+                end: 1_000_100,
+                from,
+                to,
+            };
+            assert_eq!(fade.gain(0), from);
+            assert_eq!(fade.gain(fade.start), from);
+            assert_eq!(fade.gain(fade.end), to);
+            assert_eq!(fade.gain(fade.end + 1), to);
+            assert_eq!(fade.gain(fade.start + 500_000), (from + to) / 2.0);
+            let mut previous = from;
+            for offset in (0..=1_000_000).step_by(100) {
+                let gain = fade.gain(fade.start + offset);
+                assert!(gain.is_finite() && (from.min(to)..=from.max(to)).contains(&gain));
+                assert!((gain - previous) * (to - from) >= 0.0);
+                previous = gain;
+            }
+            let h = 1_000;
+            let first = fade.gain(fade.start + h);
+            let second = fade.gain(fade.start + 2 * h);
+            let penultimate = fade.gain(fade.end - h);
+            let before_penultimate = fade.gain(fade.end - 2 * h);
+            assert!((first - from).abs() < 1e-7);
+            assert!((to - penultimate).abs() < 1e-7);
+            assert!((second - 2.0 * first + from).abs() < 2e-7);
+            assert!((to - 2.0 * penultimate + before_penultimate).abs() < 2e-7);
+            assert!(
+                (fade.gain(fade.start + 250_000) - (from + (to - from) * 0.103_515_625)).abs()
+                    < 1e-7
+            );
+        }
+        let flat = FadeSegment {
+            start: 100,
+            end: 200,
+            from: 0.17,
+            to: 0.17,
+        };
+        assert_eq!(flat.gain(150), 0.17);
     }
 }
 #[derive(Clone, Debug, PartialEq)]

@@ -10,6 +10,8 @@ These terms describe the accepted migration target. Historical code may still fo
 One to eight synchronized mono speaker tracks imported for a single automix, with one dedicated track per speaker. Tracks may have different native rates and supported formats; synchronization is a shared physical timeline rather than equal sample counts.
 _Avoid_: Multitrack file, two-track minimum
 
+Tracks may also reference individually selected channels of one multichannel WAV/BWF. A file path plus its zero-based interleave channel identifies that audio source; recorder channel names are editable labels, not speaker identities. Those channels already share timing. Mixing them with independent mono files retains the session synchronization checks. Import never writes split source WAVs.
+
 **Project**:
 The durable record of a session's source identities, speaker assignments, reference labels, manual edits, protections, review states and current or stale results. Moved or changed sources must be relinked and revalidated before bound decisions apply.
 _Avoid_: Render report, audio source
@@ -143,16 +145,16 @@ The preserved time before and after detected speech that prevents word boundarie
 _Avoid_: Preservation frames, preroll
 
 **Fade-in duration**:
-The explicit duration of the exponential-shaped recovery toward preserved gain, ending at the target before preserved speech.
+The maximum duration of the S-shaped recovery toward preserved gain, ending at full volume before preserved speech. It shortens to fit the available non-speaking gap.
 _Avoid_: Asymptotic Open time, speech onset detector
 
 **Fade-out duration**:
-The explicit duration of the exponential-shaped reduction toward attenuated gain outside preserved speech.
+The maximum duration of the S-shaped reduction toward attenuated gain outside preserved speech. It shortens to fit the available non-speaking gap.
 _Avoid_: Asymptotic Close time, silence classifier
 
-**Exponential-shaped fade**:
-A curved transition with an explicit start, end and exact target gain. It retains an exponential feel without an indefinitely approaching endpoint.
-_Avoid_: Linear-only fade, one-pole time constant
+**S-shaped fade**:
+An automatic gain transition with an explicit start, end and exact target. Gain changes gently at both ends and fastest in the middle. Manual gain points retain straight-line transitions.
+_Avoid_: Exponential-shaped fade, one-pole time constant
 
 **Review state**:
 The persisted reviewed or unreviewed status of a review warning; reviewed warnings remain visible and reopenable.

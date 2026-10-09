@@ -1,7 +1,5 @@
 //! Bounded native decoding into verified, disk-backed analysis-only copies.
-use crate::{
-    RenderBlocker, SourceMetadata, audio_io::decode_chunks, prepared_analysis::check_cancelled,
-};
+use crate::{RenderBlocker, SourceMetadata, prepared_analysis::check_cancelled};
 use rubato::{FftFixedIn, Resampler};
 use sha2::{Digest, Sha256};
 use std::{
@@ -107,11 +105,33 @@ pub(crate) fn prepare_audio_at_rate_in(
     output_rate: u32,
     cancelled: Option<&AtomicBool>,
 ) -> Result<PreparedAnalysisAudio, RenderBlocker> {
+    prepare_source_at_rate_in(
+        &crate::AudioSource::mono(path.into()),
+        cache,
+        output_rate,
+        cancelled,
+    )
+}
+
+pub fn prepare_source_analysis_audio_in(
+    source: &crate::AudioSource,
+    cache: &Path,
+    cancelled: Option<&AtomicBool>,
+) -> Result<PreparedAnalysisAudio, RenderBlocker> {
+    prepare_source_at_rate_in(source, cache, ANALYSIS_SAMPLE_RATE, cancelled)
+}
+
+pub(crate) fn prepare_source_at_rate_in(
+    source: &crate::AudioSource,
+    cache: &Path,
+    output_rate: u32,
+    cancelled: Option<&AtomicBool>,
+) -> Result<PreparedAnalysisAudio, RenderBlocker> {
     if output_rate == 0 {
         return Err(RenderBlocker("playback rate must be nonzero".into()));
     }
     check_cancelled(cancelled)?;
-    let fingerprint = crate::project::fingerprint_cancellable(path, cancelled)?;
+    let fingerprint = source.fingerprint(cancelled)?;
     let key = format!(
         "{:x}",
         Sha256::digest(
@@ -141,7 +161,7 @@ pub(crate) fn prepare_audio_at_rate_in(
     fs::create_dir(&staging.0)?;
     let mut writer = Some(BufWriter::new(File::create(staging.0.join("audio.f32"))?));
     let mut converter = None;
-    let decoded = decode_chunks(path, cancelled, |rate, packet| {
+    let decoded = crate::audio_io::decode_source_chunks(source, cancelled, |rate, packet| {
         if converter.is_none() {
             converter = Some(StreamResampler::new(
                 rate,
@@ -178,7 +198,7 @@ pub(crate) fn prepare_audio_at_rate_in(
     let audio_sha256 = format!("{:x}", converter.hash.finalize());
     drop(converter.writer);
     check_cancelled(cancelled)?;
-    if crate::project::fingerprint_cancellable(path, cancelled)? != fingerprint {
+    if source.fingerprint(cancelled)? != fingerprint {
         return Err(RenderBlocker(
             "source changed during analysis audio preparation".into(),
         ));

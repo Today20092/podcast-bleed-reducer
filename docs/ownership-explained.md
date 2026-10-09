@@ -123,12 +123,16 @@ Consecutive decisions form sections to preserve or attenuate. The gain controls 
 | --- | --- |
 | Attenuation | Sets how much quieter an attenuated section becomes |
 | Ignore gaps shorter than | Keeps brief pauses between preserved sections from becoming attenuation gaps |
-| Open and close fades | Make gain changes gradual |
+| Open and close fades | Set the maximum duration of S-shaped gain transitions |
 | Manual gain edits and protection | Apply your direct corrections to the result |
 
 The gap control ranges from 10 to 5000 ms, with a default of 768 ms. A gap exactly as long as the selected value can still be attenuated. The control does not erase an explicit room-tone label.
 
-Your manual gain edits remain in effect after reanalysis until you remove them. Missing or invalid analysis evidence retains internal protection.
+Automatic fades start gently, change fastest in the middle, then settle gently at the exact target gain. Both their slope and curvature are zero at the endpoints. Requested durations are maxima: when a non-speaking gap is shorter, closing and opening fit proportionally inside it. Fades never shorten preserved speech, and opening reaches full volume before that speech starts.
+
+Processing multiplies the source samples by the gain curve. A constant gain reduces volume without reshaping the waveform; transitions change that gain over time. The goal is transparent attenuation without audible clicks, pumping or obvious ducking. The S-curve softens transitions, but listening is still needed to judge whether removing background sound or bleed is noticeable.
+
+Your manual gain points use straight-line interpolation and remain in effect after reanalysis until you remove them. Manual edits override automatic gain, while unity protection preserves full volume. Missing or invalid analysis evidence retains internal protection. See the [gain-envelope contract](effective-envelopes.md) for exact composition and endpoint behavior.
 
 Display, Processed audition and export use the same final gain curve. Removed audition plays what processing takes away.
 

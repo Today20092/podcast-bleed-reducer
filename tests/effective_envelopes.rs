@@ -66,7 +66,7 @@ fn default_gap_hold_preserves_brief_absence_between_speech() {
         )
         .unwrap();
         assert!(
-            short_hold.gain_at_time(OWNERSHIP_FRAME_TICKS * 42) < 0.3,
+            short_hold.gain_at_time(OWNERSHIP_FRAME_TICKS * 42) < 0.55,
             "lowering the hold to 10 ms must expose the same 128 ms gap"
         );
         let equal_hold = AutomaticEnvelope::from_ownership(
@@ -81,7 +81,7 @@ fn default_gap_hold_preserves_brief_absence_between_speech() {
         )
         .unwrap();
         assert!(
-            equal_hold.gain_at_time(OWNERSHIP_FRAME_TICKS * 42) < 0.3,
+            equal_hold.gain_at_time(OWNERSHIP_FRAME_TICKS * 42) < 0.55,
             "a gap exactly the selected duration qualifies for attenuation"
         );
     }
@@ -111,10 +111,7 @@ fn finite_fades_fit_short_absent_gaps_and_preserve_speech_endpoints() {
     assert_eq!(envelope.gain_at_time(OWNERSHIP_FRAME_TICKS * 44), 1.0);
     assert_eq!(envelope.gain_at_time(OWNERSHIP_FRAME_TICKS * 54), 0.25);
     let interior = envelope.gain_at_time(settings.fade_out / 2);
-    assert!(
-        interior > 0.25 && interior < 0.5,
-        "exponential easing remains curved: {interior}"
-    );
+    assert_eq!(interior, 0.625, "S-shaped easing has a symmetric midpoint");
     assert!(
         envelope.segment_count() < 12,
         "representation must scale with edges, not samples"
@@ -224,7 +221,7 @@ fn live_gap_setting_persists_and_human_absence_and_manual_gain_remain_authoritat
             None,
         )
         .unwrap();
-    assert!(after.envelopes[0].gain_at_time(middle) < 0.3);
+    assert!(after.envelopes[0].gain_at_time(middle) < 0.55);
     assert_ne!(before.cache_key, after.cache_key);
     assert!(
         after.analysis_current,

@@ -4,11 +4,10 @@ use crate::{
     AnalysisPreview, AutomixParameters, Comparison, Project, RenderState, ReviewWorkspace,
     SpeakerId, TimeRange,
     audition::{AuditionMode, AuditionPreparation, LiveAudition},
-    prepared_analysis::source_stamps,
-    timebase::{Rounding, TICKS_PER_SECOND, TimePosition, time_from_seconds},
-    timeline::{TimelineEvent, TimelineViewport},
-    validate, validate_export,
-    waveform::{self, TimelineCanvas, WaveformCache},
+    timebase::{TICKS_PER_SECOND, TimePosition},
+    timeline::{PlaybackScroll, TimelineEvent, TimelineViewport},
+    validate_export,
+    waveform::{self, ExampleEvent, TimelineCanvas, WaveformCache},
 };
 use iced::{
     Element, Fill, Length, Subscription, Task, Theme, keyboard,
@@ -92,8 +91,307 @@ fn ownership_summary(speakers: &[SpeakerId], states: &[crate::TemporalTrackState
     summary
 }
 
+fn edit_contains(edit: &crate::ManualGainEdit, time: u64) -> bool {
+    edit.points.first().is_some_and(|point| point.time <= time)
+        && edit.points.last().is_some_and(|point| time < point.time)
+}
+
+fn region_marked(constraints: &crate::GainConstraints, track: crate::TrackId, time: u64) -> bool {
+    constraints
+        .manual_edits
+        .iter()
+        .any(|edit| edit.source.track == track && edit_contains(edit, time))
+        || constraints.protections.iter().any(|protection| {
+            protection.track == Some(track)
+                && protection.range.start <= time
+                && time < protection.range.end
+        })
+}
+
+fn ownership_meter_left(playhead_x: f32, width: f32, meter_width: f32) -> f32 {
+    (playhead_x - meter_width / 2.0).clamp(0.0, (width - meter_width).max(0.0))
+}
+
+fn example_time(time: TimePosition) -> String {
+    let hundredths = (time as u128 * 100 + TICKS_PER_SECOND as u128 / 2) / TICKS_PER_SECOND as u128;
+    format!(
+        "{}:{:02}.{:02}",
+        hundredths / 6000,
+        hundredths / 100 % 60,
+        hundredths % 100
+    )
+}
+
+fn example_speakers(label: &crate::ReferenceLabel) -> String {
+    if label.active_speakers.is_empty() {
+        "Room tone".to_owned()
+    } else {
+        label
+            .active_speakers
+            .iter()
+            .map(|speaker| format!("Speaker {}", speaker.0))
+            .collect::<Vec<_>>()
+            .join(" + ")
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn saved_examples_edit_exact_endpoints_speakers_and_history() {
+        use super::{ExampleEvent, Message};
+        let root =
+            std::env::temp_dir().join(format!("cleanslate-example-edit-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let sources = (0..2)
+            .map(|index| {
+                let path = root.join(format!("speaker-{index}.wav"));
+                write_wav(&path, &vec![0.0; 192_000]);
+                path
+            })
+            .collect();
+        let mut project = synchronized_project(root.join("session.cleanslate"), sources).unwrap();
+        let speakers: Vec<_> = project
+            .sources
+            .iter()
+            .map(|source| source.speaker_id)
+            .collect();
+        let ticks = crate::TICKS_PER_SECOND;
+        let initial = crate::TimeRange::new(ticks / 2 + 1, ticks + 7).unwrap();
+        let id = project
+            .add_reference_label(initial, vec![speakers[0]], &[])
+            .unwrap();
+        project
+            .add_reference_label(
+                crate::TimeRange::new(2 * ticks, 3 * ticks).unwrap(),
+                vec![speakers[1]],
+                &[],
+            )
+            .unwrap();
+        let mut app = super::CleanSlateApp {
+            project: Some(project),
+            timeline: crate::timeline::TimelineViewport::new(4 * ticks),
+            ..Default::default()
+        };
+        let before = app.project.as_ref().unwrap().reference_labels().to_vec();
+        let _ = app.update(Message::ShowExample(id));
+        assert_eq!(app.selected_example, Some(id));
+        assert!(app.timeline.start() <= initial.start as f64);
+        assert!(app.timeline.start() + app.timeline.visible_samples() >= initial.end as f64);
+        assert_eq!(
+            app.calibration_range().unwrap(),
+            (initial.start, initial.end)
+        );
+        let changed = crate::TimeRange::new(ticks / 4 + 3, ticks + 23).unwrap();
+        let _ = app.update(Message::Example(ExampleEvent::Resize(id, changed, false)));
+        assert_eq!(app.project.as_ref().unwrap().reference_labels(), before);
+        let _ = app.update(Message::Example(ExampleEvent::CancelResize));
+        assert_eq!(app.timeline.selection(), Some((initial.start, initial.end)));
+        let _ = app.update(Message::Example(ExampleEvent::Resize(id, changed, true)));
+        assert!(app.reference_stale);
+        assert_eq!(
+            app.project.as_ref().unwrap().reference_labels()[0].range,
+            changed
+        );
+        let _ = app.update(Message::UndoReferences);
+        assert_eq!(app.project.as_ref().unwrap().reference_labels(), before);
+        let _ = app.update(Message::RedoReferences);
+        assert_eq!(
+            app.project.as_ref().unwrap().reference_labels()[0].range,
+            changed
+        );
+        let conflict = crate::TimeRange::new(changed.start, 5 * ticks / 2).unwrap();
+        let _ = app.update(Message::Example(ExampleEvent::Resize(id, conflict, true)));
+        assert!(app.calibration_error.is_some());
+        assert_eq!(
+            app.project.as_ref().unwrap().reference_labels()[0].range,
+            changed
+        );
+        let _ = app.update(Message::OpenTimelineMenu(
+            1,
+            changed.start,
+            iced::Point::ORIGIN,
+        ));
+        assert!(app.reference_menu.is_some());
+        assert_eq!(app.reference_speakers, vec![speakers[0]]);
+        let _ = app.update(Message::ContextReference(
+            vec![speakers[0], speakers[1]],
+            false,
+        ));
+        let edited = &app.project.as_ref().unwrap().reference_labels()[0];
+        assert_eq!(edited.id, id);
+        assert_eq!(edited.range, changed);
+        assert_eq!(edited.active_speakers, speakers);
+        assert_eq!(edited.sources, before[0].sources);
+        let reopened = crate::Project::open(app.project.as_ref().unwrap().path()).unwrap();
+        assert_eq!(
+            reopened.reference_labels(),
+            app.project.as_ref().unwrap().reference_labels()
+        );
+        let _ = app.update(Message::RemoveReference(id));
+        assert!(app.selected_example.is_none());
+        assert_eq!(app.project.as_ref().unwrap().reference_labels().len(), 1);
+        let _ = app.update(Message::UndoReferences);
+        assert_eq!(app.project.as_ref().unwrap().reference_labels().len(), 2);
+        assert_eq!(super::example_time(148 * ticks + ticks / 10), "2:28.10");
+        assert_eq!(super::example_time(60 * ticks - 1), "1:00.00");
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn lock_buttons_keep_seek_anchor_and_meter_trial_can_be_reverted() {
+        use super::Message;
+        use crate::timeline::{PlaybackScroll, TimelineEvent, TimelineViewport};
+        let mut app = super::CleanSlateApp {
+            timeline: TimelineViewport::new(100 * crate::TICKS_PER_SECOND),
+            ..Default::default()
+        };
+        for _ in 0..6 {
+            app.timeline.zoom_at(0.0, 1000.0, 1.0);
+        }
+        app.timeline.seek(app.timeline.sample_at(250.0, 1000.0));
+        let _ = app.update(Message::LockPlayhead);
+        let _ = app.update(Message::Timeline(TimelineEvent::Seek(
+            50 * crate::TICKS_PER_SECOND,
+        )));
+        assert!((app.timeline.x_for_sample(app.timeline.playhead(), 1000.0) - 250.0).abs() < 0.01);
+        assert_eq!(app.playback_scroll, PlaybackScroll::Locked);
+        let _ = app.update(Message::CenterPlayhead);
+        assert!((app.timeline.x_for_sample(app.timeline.playhead(), 1000.0) - 500.0).abs() < 0.01);
+        assert_eq!(app.playback_scroll, PlaybackScroll::Locked);
+        let _ = app.update(Message::LockPlayhead);
+        assert_eq!(app.playback_scroll, PlaybackScroll::Off);
+        let _ = app.update(Message::CenterPlayhead);
+        assert_eq!(app.playback_scroll, PlaybackScroll::Off);
+        assert!(app.meters_at_playhead);
+        let _ = app.update(Message::ToggleMeterPlacement);
+        assert!(!app.meters_at_playhead);
+        let _ = app.update(Message::ToggleMeterPlacement);
+        assert!(app.meters_at_playhead);
+        assert_eq!(super::ownership_meter_left(500.0, 1000.0, 170.0), 415.0);
+        assert_eq!(super::ownership_meter_left(-10.0, 1000.0, 170.0), 0.0);
+        assert_eq!(super::ownership_meter_left(1100.0, 1000.0, 170.0), 830.0);
+        assert_eq!(super::ownership_meter_left(50.0, 100.0, 170.0), 0.0);
+    }
+
+    #[test]
+    fn right_click_removes_only_the_pointed_track_mark_with_undo() {
+        use super::Message;
+        let root =
+            std::env::temp_dir().join(format!("cleanslate-delete-region-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let sources = (0..2)
+            .map(|i| {
+                let path = root.join(format!("track-{i}.wav"));
+                write_wav(&path, &vec![0.0; 48000]);
+                path
+            })
+            .collect();
+        let mut project = synchronized_project(root.join("session.cleanslate"), sources).unwrap();
+        let range = crate::TimeRange::new(0, crate::TICKS_PER_SECOND / 2).unwrap();
+        for (track, action) in [
+            (0, crate::GainRegionAction::Preserve),
+            (1, crate::GainRegionAction::Attenuate(0.1)),
+        ] {
+            let draft = project
+                .region_gain_edit(project.sources[track].track_id, range, action)
+                .unwrap();
+            project.commit_gain_edit(draft).unwrap();
+        }
+        let before = project.gain_constraints();
+        let mut app = super::CleanSlateApp {
+            project: Some(project),
+            ..Default::default()
+        };
+        let time = crate::TICKS_PER_SECOND / 4;
+        for track in 0..2 {
+            let _ = app.update(Message::OpenGainMenu(track, time, iced::Point::ORIGIN));
+            assert!(app.gain_menu.is_some());
+            let _ = app.update(Message::DeleteRegion(track, time));
+            let after = app.project.as_ref().unwrap().gain_constraints();
+            assert!(!super::region_marked(
+                &after,
+                app.project.as_ref().unwrap().sources[track].track_id,
+                time
+            ));
+            assert!(super::region_marked(
+                &after,
+                app.project.as_ref().unwrap().sources[1 - track].track_id,
+                time
+            ));
+            let project = app.project.as_mut().unwrap();
+            assert!(project.undo_gain_edit().unwrap());
+            assert_eq!(project.gain_constraints(), before);
+            assert!(project.redo_gain_edit().unwrap());
+            assert_eq!(project.gain_constraints(), after);
+            assert!(project.undo_gain_edit().unwrap());
+        }
+        let _ = app.update(Message::OpenGainMenu(0, range.end, iced::Point::ORIGIN));
+        assert!(app.gain_menu.is_none());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn solo_buttons_combine_and_do_not_change_the_saved_project() {
+        use super::Message;
+        let root =
+            std::env::temp_dir().join(format!("cleanslate-solo-buttons-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let sources = (0..3)
+            .map(|i| {
+                let path = root.join(format!("track-{i}.wav"));
+                write_wav(&path, &[0.0; 512]);
+                path
+            })
+            .collect();
+        let path = root.join("session.cleanslate");
+        let project = crate::Project::create(&path, sources).unwrap();
+        let saved = std::fs::read(&path).unwrap();
+        let constraints = project.gain_constraints();
+        let mut app = super::CleanSlateApp {
+            project: Some(project),
+            ..Default::default()
+        };
+        for (track, expected) in [(0, 1), (2, 5), (0, 4), (usize::MAX, 4), (2, 0)] {
+            let _ = app.update(Message::SoloTrack(track));
+            assert_eq!(app.solo_tracks, expected);
+        }
+        assert_eq!(
+            app.project.as_ref().unwrap().gain_constraints(),
+            constraints
+        );
+        assert_eq!(std::fs::read(path).unwrap(), saved);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn manual_pan_disables_playback_follow_and_follow_controls_invalidate_drawing() {
+        let mut app = super::CleanSlateApp {
+            timeline: crate::timeline::TimelineViewport::new(100 * crate::TICKS_PER_SECOND),
+            ..Default::default()
+        };
+        app.timeline.zoom_at(0.0, 1000.0, 1.0);
+        app.timeline.zoom_at(0.0, 1000.0, 1.0);
+        app.timeline.seek(50 * crate::TICKS_PER_SECOND);
+        let visible = app.timeline.visible_samples();
+        let _ = app.update(super::Message::LockPlayhead);
+        assert_eq!(app.timeline.start(), 0.0);
+        assert_eq!(app.drawing_revision, 1);
+        let _ = app.update(super::Message::Timeline(
+            crate::timeline::TimelineEvent::Pan {
+                delta_x: 40.0,
+                width: 1000.0,
+            },
+        ));
+        assert_eq!(app.playback_scroll, crate::timeline::PlaybackScroll::Off);
+        assert_eq!(app.timeline.visible_samples(), visible);
+        assert_eq!(app.drawing_revision, 2);
+        let start = app.timeline.start();
+        let _ = app.update(super::Message::PlaybackFrame);
+        assert_eq!(app.timeline.start(), start);
+        assert_eq!(app.drawing_revision, 2);
+    }
+
     #[test]
     fn playback_frames_reuse_drawing_without_polling_background_jobs() {
         let mut app = super::CleanSlateApp::default();
@@ -256,12 +554,12 @@ mod tests {
         let _ = app.update(Message::CompleteTrackSelection(0, start, end, point));
         assert_eq!(app.reference_menu, Some((0, point)));
         assert!(
-            !app.calibration_timing,
-            "Popup removes the exact-times input focus"
+            app.calibration_timing,
+            "Popup keeps the saved-example list visible"
         );
-        let captured_start = app.calibration_start.clone();
-        let _ = app.update(Message::CalibrationStart("999".into()));
-        assert_eq!(app.calibration_start, captured_start);
+        let captured_range = app.calibration_selection;
+        let _ = app.update(Message::Timeline(TimelineEvent::Select(0, 1)));
+        assert_eq!(app.calibration_selection, captured_range);
         assert_eq!(app.reference_speakers, vec![speakers[0]]);
         let _ = app.update(Message::KeyPressed(
             iced::keyboard::Key::Character("2".into()),
@@ -538,7 +836,7 @@ mod tests {
     }
 
     #[test]
-    fn calibration_time_controls_reject_invalid_input_and_capture_playhead() {
+    fn timeline_examples_reject_changed_sources() {
         let directory =
             std::env::temp_dir().join(format!("calibration-times-{}", std::process::id()));
         std::fs::create_dir_all(&directory).unwrap();
@@ -552,41 +850,10 @@ mod tests {
         };
         app.timeline
             .set_total_samples(crate::timebase::detector_time(48_000));
-        for input in ["NaN", "inf", "-0.01", "1e99", "", "not a time"] {
-            let _ = app.update(super::Message::CalibrationStart(input.into()));
-            let _ = app.update(super::Message::CalibrationEnd("1".into()));
-            let _ = app.update(super::Message::SaveCalibration(
-                crate::CalibrationKind::RoomTone,
-                0,
-            ));
-            assert!(app.calibration_error.is_some(), "{input}");
-            assert!(
-                app.project
-                    .as_ref()
-                    .unwrap()
-                    .ownership_settings()
-                    .examples
-                    .is_empty()
-            );
-            assert!(app.preview_processing.is_none());
-        }
-        app.timeline.seek(17);
-        let _ = app.update(super::Message::CalibrationStartAtPlayhead);
-        app.timeline.seek(24_017);
-        let _ = app.update(super::Message::CalibrationEndAtPlayhead);
-        let start = app.calibration_start.clone();
-        let end = app.calibration_end.clone();
-        let _ = app.update(super::Message::Timeline(
-            crate::timeline::TimelineEvent::Select(
-                crate::timebase::detector_time(100),
-                crate::timebase::detector_time(30_000),
-            ),
-        ));
-        assert_eq!(app.calibration_start, start);
-        assert_eq!(app.calibration_end, end);
-        let _ = app.update(super::Message::CalibrationFromSelection);
-        assert_eq!(app.calibration_start, "0.00208333");
-        assert_eq!(app.calibration_end, "0.62500000");
+        app.capture_calibration_range(
+            crate::timebase::detector_time(100),
+            crate::timebase::detector_time(30_000),
+        );
         assert!(app.project.as_ref().unwrap().protections().is_empty());
         let source = app.project.as_ref().unwrap().source_paths()[0].clone();
         write_wav(&source, &vec![0.0; 96_000]);
@@ -648,7 +915,7 @@ mod tests {
             vec![crate::CalibrationExample {
                 kind: crate::CalibrationKind::RoomTone,
                 track: 0,
-                start: 587,
+                start: crate::timebase::detector_time(1),
                 end: crate::timebase::detector_time(24_001),
             }]
         );
@@ -894,6 +1161,146 @@ mod tests {
         std::fs::remove_dir_all(directory).unwrap();
     }
 
+    #[test]
+    fn multichannel_picker_selects_names_mixes_mono_and_preserves_session_on_cancel_or_failure() {
+        let root = crate::audio_io::multichannel_tests::root();
+        let poly = root.join("poly.wav");
+        crate::audio_io::multichannel_tests::write_poly(&poly, 3, 32, 4800);
+        let mono = root.join("mono.wav");
+        write_wav(&mono, &[0.125; 4800]);
+        let mut app = super::CleanSlateApp::default();
+        app.add_stems([poly.clone(), mono]);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+        while app.import_choices.is_empty() {
+            app.import_due = Some(std::time::Instant::now());
+            app.poll_sources();
+            assert!(
+                std::time::Instant::now() < deadline,
+                "picker did not appear"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+        assert_eq!(app.import_choices.len(), 4);
+        assert!(app.import_choices.iter().all(|c| c.selected));
+        assert!(app.project.is_none());
+        let omitted = app
+            .import_choices
+            .iter()
+            .position(|c| c.source.channel == Some(1))
+            .unwrap();
+        let renamed = app
+            .import_choices
+            .iter()
+            .position(|c| c.source.channel == Some(2))
+            .unwrap();
+        let _ = app.update(super::Message::ImportChannel(omitted, false));
+        let _ = app.update(super::Message::ImportChannelName(renamed, "Alice".into()));
+        let _ = app.update(super::Message::ConfirmChannels);
+        finish_import(&mut app);
+        assert_eq!(app.waveforms.len(), 3);
+        let project = app.project.as_ref().unwrap();
+        assert_eq!(project.sources.len(), 3);
+        assert!(
+            project
+                .sources
+                .iter()
+                .any(|s| s.channel == Some(2) && s.display_name() == "Alice")
+        );
+        assert!(
+            project
+                .sources
+                .iter()
+                .all(|s| s.metadata.grid.frame_count == 4800)
+        );
+        assert!(
+            project.require_alignment().is_err(),
+            "mixed files still need synchronization confirmation"
+        );
+        let saved = std::fs::read(project.path()).unwrap();
+        app.import_choices = crate::wav_channel_sources(&poly)
+            .unwrap()
+            .into_iter()
+            .map(|source| super::ImportChoice {
+                source,
+                selected: true,
+            })
+            .collect();
+        let _ = app.update(super::Message::CancelChannels);
+        assert_eq!(
+            std::fs::read(app.project.as_ref().unwrap().path()).unwrap(),
+            saved
+        );
+        let bad = root.join("different-duration.wav");
+        write_wav(&bad, &[0.0; 16]);
+        app.add_stems([bad]);
+        finish_import(&mut app);
+        assert_eq!(
+            std::fs::read(app.project.as_ref().unwrap().path()).unwrap(),
+            saved
+        );
+        assert_eq!(app.waveforms.len(), 3);
+        assert!(app.messages[0].contains("Import blocked"));
+        app.stop_audition();
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    #[ignore = "reads the owner's full 1.85 GB Zoom poly WAV"]
+    fn full_multichannel_zoom_import() {
+        let path =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("test-audio/261005-T001.WAV");
+        let before = crate::project::fingerprint_cancellable(&path, None).unwrap();
+        let inputs = crate::wav_channel_sources(&path).unwrap();
+        assert_eq!(
+            inputs
+                .iter()
+                .map(crate::AudioSource::display_name)
+                .collect::<Vec<_>>(),
+            ["Tr5", "Tr6", "Tr7"]
+        );
+        let root = crate::audio_io::multichannel_tests::root();
+        let project =
+            crate::Project::create_from_sources(root.join("zoom.cleanslate"), inputs).unwrap();
+        let (sender, events) = std::sync::mpsc::channel();
+        let started = std::time::Instant::now();
+        let loaded = super::load_sources(
+            super::SourceRequest::Validate,
+            Some(project),
+            crate::AutomixParameters::default(),
+            &sender,
+        )
+        .unwrap();
+        let waveforms: Vec<_> = events
+            .try_iter()
+            .filter_map(|event| {
+                if let super::SourceEvent::Waveform(_, waveform) = event {
+                    Some(waveform)
+                } else {
+                    None
+                }
+            })
+            .collect();
+        assert_eq!(waveforms.len(), 3);
+        for waveform in &waveforms {
+            assert_eq!(waveform.sample_rate, 48_000);
+            assert_eq!(waveform.sample_count, 154_128_376);
+        }
+        loaded.project.require_alignment().unwrap();
+        crate::Project::open(loaded.project.path())
+            .unwrap()
+            .validate_sources()
+            .unwrap();
+        assert_eq!(
+            crate::project::fingerprint_cancellable(&path, None).unwrap(),
+            before
+        );
+        eprintln!(
+            "Zoom full import, waveforms, validation and reopen: {:.2}s",
+            started.elapsed().as_secs_f64()
+        );
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
     fn finish_import(app: &mut super::CleanSlateApp) {
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
         while app.sources_busy() {
@@ -972,7 +1379,7 @@ mod tests {
         app.add_stems([a.clone()]);
         app.import_due = Some(std::time::Instant::now());
         app.poll_sources();
-        assert!(app.source_loading.is_some());
+        assert!(app.source_loading.is_some() || app.source_inspection.is_some());
         app.add_stems([a.clone(), b.clone()]);
         assert_eq!(app.pending_imports, std::slice::from_ref(&b));
         assert_eq!(app.loading_paths(), [a.clone(), b.clone()]);
@@ -1039,11 +1446,10 @@ mod tests {
                 crate::timebase::detector_time(48_000)
             )
         );
-        app.calibration_start = "2".into();
-        app.calibration_end = "1".into();
+        app.calibration_selection = Some((2 * crate::TICKS_PER_SECOND, crate::TICKS_PER_SECOND));
         assert!(app.calibration_range().is_err());
-        app.calibration_start = "100".into();
-        app.calibration_end = "101".into();
+        app.calibration_selection =
+            Some((100 * crate::TICKS_PER_SECOND, 101 * crate::TICKS_PER_SECOND));
         assert!(
             app.calibration_range().is_err(),
             "Save must reject ranges beyond the recording before a click"
@@ -1253,6 +1659,9 @@ pub struct CleanSlateApp {
     model_acquisition: crate::model::ModelAcquisition,
     project: Option<Project>,
     pending_imports: Vec<PathBuf>,
+    source_inspection: Option<SourceInspection>,
+    import_choices: Vec<ImportChoice>,
+    track_name_draft: Option<(usize, String)>,
     import_due: Option<Instant>,
     source_loading: Option<SourceLoading>,
     messages: Vec<String>,
@@ -1269,17 +1678,23 @@ pub struct CleanSlateApp {
     selecting_range: bool,
     calibrating: bool,
     calibration_timing: bool,
-    calibration_start: String,
-    calibration_end: String,
+    calibration_selection: Option<(TimePosition, TimePosition)>,
     calibration_error: Option<String>,
     reference_speakers: Vec<SpeakerId>,
     selection_track: Option<usize>,
     reference_menu: Option<(usize, iced::Point)>,
+    selected_example: Option<u64>,
+    example_draft: Option<TimeRange>,
+    gain_menu: Option<(usize, u64, iced::Point)>,
     model_details: bool,
+    setup_details: bool,
     reference_stale: bool,
     reference_analyze_requested: bool,
     waveforms: Vec<WaveformCache>,
     timeline: TimelineViewport,
+    playback_scroll: PlaybackScroll,
+    meters_at_playhead: bool,
+    solo_tracks: u64,
     drawing_revision: u64,
     preview_parameters: AutomixParameters,
     preview: Option<AnalysisPreview>,
@@ -1307,6 +1722,9 @@ impl Default for CleanSlateApp {
             model_acquisition: crate::model::ModelAcquisition::default(),
             project: None,
             pending_imports: vec![],
+            source_inspection: None,
+            import_choices: vec![],
+            track_name_draft: None,
             import_due: None,
             source_loading: None,
             messages: vec![],
@@ -1323,17 +1741,23 @@ impl Default for CleanSlateApp {
             selecting_range: false,
             calibrating: false,
             calibration_timing: false,
-            calibration_start: String::new(),
-            calibration_end: String::new(),
+            calibration_selection: None,
             calibration_error: None,
             reference_speakers: vec![],
             selection_track: None,
             reference_menu: None,
+            selected_example: None,
+            example_draft: None,
+            gain_menu: None,
             model_details: false,
+            setup_details: false,
             reference_stale: false,
             reference_analyze_requested: false,
             waveforms: vec![],
             timeline: TimelineViewport::default(),
+            playback_scroll: PlaybackScroll::default(),
+            meters_at_playhead: true,
+            solo_tracks: 0,
             drawing_revision: 0,
             preview_parameters: AutomixParameters::default(),
             preview: None,
@@ -1361,10 +1785,20 @@ impl Default for CleanSlateApp {
 }
 
 enum SourceRequest {
-    Add(Vec<PathBuf>),
+    AddChannels(Vec<crate::AudioSource>),
     Open(PathBuf),
     Relink(usize, PathBuf),
     Validate,
+}
+
+struct ImportChoice {
+    source: crate::AudioSource,
+    selected: bool,
+}
+
+struct SourceInspection {
+    paths: Vec<PathBuf>,
+    result: Receiver<Result<Vec<crate::AudioSource>, String>>,
 }
 
 struct LoadedSession {
@@ -1402,7 +1836,14 @@ fn load_sources(
     let partial_relink = if let SourceRequest::Relink(index, path) = &request {
         // A replacement can be checked independently while other missing or
         // changed sources still await the user's relink decisions.
-        validate(std::slice::from_ref(path)).map_err(|error| format!("Import blocked: {error}"))?;
+        let mut source = project
+            .as_ref()
+            .and_then(|p| p.sources.get(*index))
+            .ok_or("Unknown source track")?
+            .audio_source();
+        source.path = path.clone();
+        crate::validate_audio_sources(&[source])
+            .map_err(|error| format!("Import blocked: {error}"))?;
         project.as_ref().is_some_and(|project| {
             project
                 .sources
@@ -1416,21 +1857,26 @@ fn load_sources(
     if let SourceRequest::Open(path) = &request {
         project = Some(Project::open(path).map_err(|error| error.to_string())?);
     }
-    let mut paths = project
+    let mut inputs = project
         .as_ref()
-        .map_or_else(Vec::new, Project::source_paths);
+        .map_or_else(Vec::new, Project::audio_sources);
     match &request {
-        SourceRequest::Add(additions) => paths.extend(additions.iter().cloned()),
+        SourceRequest::AddChannels(additions) => inputs.extend(additions.iter().cloned()),
         SourceRequest::Relink(index, path) => {
-            *paths
+            inputs
                 .get_mut(*index)
-                .ok_or("Source track is not in this session.")? = path.clone();
+                .ok_or("Source track is not in this session.")?
+                .path = path.clone();
         }
         _ => {}
     }
+    let paths: Vec<_> = inputs.iter().map(|s| s.path.clone()).collect();
     let _ = sender.send(SourceEvent::Paths(paths.clone()));
     if paths.is_empty() {
         return Err("No source tracks were selected.".into());
+    }
+    if inputs.len() > 8 {
+        return Err("Import blocked: session requires one to eight speaker tracks.".into());
     }
     let project_path = project.as_ref().map_or_else(
         || {
@@ -1443,10 +1889,9 @@ fn load_sources(
         |project| project.path().to_owned(),
     );
     let _ = sender.send(SourceEvent::Stage("Loading waveforms"));
-    let waveform_result =
-        waveform::load_or_build_progress(&project_path, &paths, |index, waveform| {
-            let _ = sender.send(SourceEvent::Waveform(index, waveform.clone()));
-        });
+    let waveform_result = waveform::load_source_waveforms(&inputs, |index, waveform| {
+        let _ = sender.send(SourceEvent::Waveform(index, waveform.clone()));
+    });
     let mut warnings = Vec::new();
     // A saved session with missing sources must still open so it can be relinked.
     if opening || partial_relink {
@@ -1456,20 +1901,20 @@ fn load_sources(
     } else {
         waveform_result.map_err(|error| format!("Import blocked: {error}"))?;
         let _ = sender.send(SourceEvent::Stage("Validating audio"));
-        warnings = validate(&paths)
+        warnings = crate::validate_audio_sources(&inputs)
             .map_err(|error| format!("Import blocked: {error}"))?
             .warnings;
     }
     let _ = sender.send(SourceEvent::Stage("Saving source identities"));
     match request {
-        SourceRequest::Add(additions) => {
+        SourceRequest::AddChannels(additions) => {
             if let Some(project) = &mut project {
                 project
-                    .add_sources(additions)
+                    .add_audio_sources(additions)
                     .map_err(|error| error.to_string())?;
             } else {
-                let mut created =
-                    Project::create(project_path, additions).map_err(|error| error.to_string())?;
+                let mut created = Project::create_from_sources(project_path, additions)
+                    .map_err(|error| error.to_string())?;
                 created
                     .set_parameters(parameters)
                     .map_err(|error| error.to_string())?;
@@ -1566,9 +2011,23 @@ impl Drop for PreviewProcessing {
 
 #[derive(Debug, Clone)]
 enum Message {
+    ImportChannel(usize, bool),
+    ImportChannelName(usize, String),
+    ConfirmChannels,
+    CancelChannels,
+    EditTrackName(usize),
+    TrackName(String),
+    SaveTrackName,
+    CancelTrackName,
+    Example(ExampleEvent),
+    ShowExample(u64),
+    PlayExample(u64),
     TrackTimeline(usize, TimelineEvent),
     CompleteTrackSelection(usize, TimePosition, TimePosition, iced::Point),
     OpenReferenceMenu(usize, iced::Point),
+    OpenTimelineMenu(usize, u64, iced::Point),
+    OpenGainMenu(usize, u64, iced::Point),
+    DeleteRegion(usize, u64),
     DismissReferenceMenu,
     ContextReference(Vec<SpeakerId>, bool),
     ModelDetails(bool),
@@ -1586,6 +2045,11 @@ enum Message {
     Cancel,
     Tick,
     PlaybackFrame,
+    LockPlayhead,
+    CenterPlayhead,
+    ToggleMeterPlacement,
+    SoloTrack(usize),
+    SetupDetails(bool),
     #[cfg(test)]
     SpeechSensitivity(f32),
     Attenuation(f32),
@@ -1599,7 +2063,6 @@ enum Message {
     Processed,
     Removed,
     Audition,
-    AuditionSelection,
     Stop,
     Previous,
     MonitorGain(f32),
@@ -1610,11 +2073,6 @@ enum Message {
     #[cfg(test)]
     CalibrationMode(bool),
     CalibrationTiming(bool),
-    CalibrationStart(String),
-    CalibrationEnd(String),
-    CalibrationStartAtPlayhead,
-    CalibrationEndAtPlayhead,
-    CalibrationFromSelection,
     #[cfg(test)]
     SaveCalibration(CalibrationKind, usize),
     #[cfg(test)]
@@ -1638,7 +2096,6 @@ enum Message {
     #[cfg(test)]
     SelectSupervisedWarning(usize),
     SaveProject,
-    ProtectTrack(usize),
     ProtectSelection,
     Export,
     Timeline(TimelineEvent),
@@ -1706,11 +2163,13 @@ impl CleanSlateApp {
             .and_then(|_| self.model_acquisition.provenance())
     }
     fn install_waveforms(&mut self, waveforms: Vec<WaveformCache>) {
+        self.selected_example = None;
+        self.example_draft = None;
+        self.gain_menu = None;
         self.reference_menu = None;
         self.selection_track = None;
         self.calibrating = false;
-        self.calibration_start.clear();
-        self.calibration_end.clear();
+        self.calibration_selection = None;
         self.calibration_error = None;
         self.reference_speakers.clear();
         self.reference_stale = self.project.as_ref().is_some_and(|project| {
@@ -1749,7 +2208,9 @@ impl CleanSlateApp {
         self.waveforms = waveforms;
         if let Some(project) = &self.project {
             match crate::original_envelopes(project) {
-                Ok(_) => self.audition_preparation.request(project.source_paths()),
+                Ok(_) => self
+                    .audition_preparation
+                    .request_sources(project.audio_sources()),
                 Err(error) => self.messages.push(format!("Playback unavailable: {error}")),
             }
         }
@@ -1777,6 +2238,13 @@ impl CleanSlateApp {
                 !existing.iter().any(|old| {
                     old.to_string_lossy()
                         .eq_ignore_ascii_case(&path.to_string_lossy())
+                }) || self.project.as_ref().is_some_and(|p| {
+                    p.sources.iter().any(|s| {
+                        s.channel.is_some()
+                            && s.path
+                                .to_string_lossy()
+                                .eq_ignore_ascii_case(&path.to_string_lossy())
+                    })
                 })
             })
             .collect();
@@ -1786,7 +2254,7 @@ impl CleanSlateApp {
                 .eq_ignore_ascii_case(&b.to_string_lossy())
         });
         if additions.is_empty() {
-            self.messages = vec!["No new supported mono tracks were selected".into()];
+            self.messages = vec!["No new supported audio tracks were selected".into()];
             return;
         }
 
@@ -1804,10 +2272,18 @@ impl CleanSlateApp {
     }
 
     fn sources_busy(&self) -> bool {
-        self.source_loading.is_some() || !self.pending_imports.is_empty()
+        self.source_loading.is_some()
+            || self.source_inspection.is_some()
+            || !self.pending_imports.is_empty()
+            || !self.import_choices.is_empty()
     }
 
     fn loading_paths(&self) -> Vec<PathBuf> {
+        if let Some(inspection) = &self.source_inspection {
+            let mut paths = inspection.paths.clone();
+            paths.extend(self.pending_imports.iter().cloned());
+            return paths;
+        }
         let mut paths = self.source_loading.as_ref().map_or_else(
             || {
                 self.project
@@ -1834,7 +2310,9 @@ impl CleanSlateApp {
             .as_ref()
             .map_or_else(Vec::new, Project::source_paths);
         match &request {
-            SourceRequest::Add(additions) => paths.extend(additions.iter().cloned()),
+            SourceRequest::AddChannels(additions) => {
+                paths.extend(additions.iter().map(|s| s.path.clone()))
+            }
             SourceRequest::Open(_) => paths.clear(),
             SourceRequest::Relink(index, path) => {
                 if let Some(source) = paths.get_mut(*index) {
@@ -1858,6 +2336,40 @@ impl CleanSlateApp {
     }
 
     fn poll_sources(&mut self) {
+        if let Some(inspection) = &self.source_inspection {
+            let result = match inspection.result.try_recv() {
+                Ok(result) => Some(result),
+                Err(mpsc::TryRecvError::Empty) => None,
+                Err(mpsc::TryRecvError::Disconnected) => {
+                    Some(Err("Source inspection stopped unexpectedly.".into()))
+                }
+            };
+            if let Some(result) = result {
+                self.source_inspection = None;
+                match result {
+                    Ok(inputs) if inputs.iter().any(|s| s.channel.is_some()) => {
+                        self.import_choices = inputs
+                            .into_iter()
+                            .map(|mut source| {
+                                if source.name.is_none() {
+                                    source.name = Some(source.display_name());
+                                }
+                                ImportChoice {
+                                    selected: !self.project.as_ref().is_some_and(|p| {
+                                        p.sources.iter().any(|s| {
+                                            s.path == source.path && s.channel == source.channel
+                                        })
+                                    }),
+                                    source,
+                                }
+                            })
+                            .collect();
+                    }
+                    Ok(inputs) => self.begin_source_loading(SourceRequest::AddChannels(inputs)),
+                    Err(error) => self.messages = vec![error],
+                }
+            }
+        }
         while let Some(loading) = &mut self.source_loading {
             match loading.events.try_recv() {
                 Ok(SourceEvent::Paths(paths)) => loading.paths = paths,
@@ -1884,6 +2396,7 @@ impl CleanSlateApp {
                         Ok(loaded) => {
                             self.preview_parameters = loaded.project.parameters();
                             self.project = Some(loaded.project);
+                            self.solo_tracks = 0;
                             self.messages = loaded.warnings;
                             self.install_waveforms(loading.waveforms);
                             self.review = loaded.review;
@@ -1898,7 +2411,10 @@ impl CleanSlateApp {
                 }
             }
         }
-        if self.source_loading.is_none() && self.import_due.is_some_and(|due| Instant::now() >= due)
+        if self.source_loading.is_none()
+            && self.source_inspection.is_none()
+            && self.import_choices.is_empty()
+            && self.import_due.is_some_and(|due| Instant::now() >= due)
         {
             self.import_due = None;
             let existing = self
@@ -1911,11 +2427,40 @@ impl CleanSlateApp {
                     !existing.iter().any(|old| {
                         old.to_string_lossy()
                             .eq_ignore_ascii_case(&path.to_string_lossy())
+                    }) || self.project.as_ref().is_some_and(|p| {
+                        p.sources.iter().any(|s| {
+                            s.channel.is_some()
+                                && s.path
+                                    .to_string_lossy()
+                                    .eq_ignore_ascii_case(&path.to_string_lossy())
+                        })
                     })
                 })
                 .collect();
             if !additions.is_empty() {
-                self.begin_source_loading(SourceRequest::Add(additions));
+                let (sender, result) = mpsc::channel();
+                let mut paths = self
+                    .project
+                    .as_ref()
+                    .map_or_else(Vec::new, Project::source_paths);
+                paths.extend(additions.iter().cloned());
+                std::thread::spawn(move || {
+                    let inputs = additions
+                        .into_iter()
+                        .map(|path| {
+                            let metadata =
+                                crate::SourceMetadata::read(&path).map_err(|e| e.to_string())?;
+                            if metadata.channels > 1 {
+                                crate::wav_channel_sources(&path).map_err(|e| e.to_string())
+                            } else {
+                                Ok(vec![crate::AudioSource::mono(path)])
+                            }
+                        })
+                        .collect::<Result<Vec<_>, String>>()
+                        .map(|inputs| inputs.into_iter().flatten().collect());
+                    let _ = sender.send(inputs);
+                });
+                self.source_inspection = Some(SourceInspection { paths, result });
             } else {
                 self.start_preview();
             }
@@ -1926,7 +2471,7 @@ impl CleanSlateApp {
         let Some(paths) = rfd::FileDialog::new()
             .set_directory(dialog_start_directory())
             .add_filter(
-                "Mono audio",
+                "Audio / multichannel WAV",
                 &[
                     "wav", "bwf", "aif", "aiff", "flac", "mp3", "m4a", "mp4", "ogg",
                 ],
@@ -2169,7 +2714,7 @@ impl CleanSlateApp {
         self.preview_pending = Some(self.preview_pending.map_or(due, |old| old.min(due)));
         self.preview_error = None;
         if let Some(processing) = &self.preview_processing {
-            let sources = source_stamps(&self.project.as_ref().unwrap().source_paths());
+            let sources = self.project.as_ref().unwrap().source_stamps();
             // Parameter edits must not cancel initial source inference. At 70,
             // analyze has retained its facts and cancellation can preserve them.
             if sources.as_ref().ok() != Some(&processing.sources)
@@ -2201,7 +2746,7 @@ impl CleanSlateApp {
             }
         };
         self.preview_generation += 1;
-        let sources = match source_stamps(&project.source_paths()) {
+        let sources = match project.source_stamps() {
             Ok(sources) => sources,
             Err(error) => {
                 self.preview_error = Some(error.to_string());
@@ -2304,7 +2849,8 @@ impl CleanSlateApp {
         self.audition.take().inspect(|playing| playing.stop());
         self.audition_range = Some((start, end));
         if !self.audition_preparation.is_requested() {
-            self.audition_preparation.request(project.source_paths());
+            self.audition_preparation
+                .request_sources(project.audio_sources());
         }
     }
 
@@ -2431,6 +2977,12 @@ impl CleanSlateApp {
     }
 
     fn handle_edit_key(&mut self, key: &keyboard::Key, modifiers: keyboard::Modifiers) -> bool {
+        if self.gain_menu.is_some() {
+            if matches!(key, keyboard::Key::Named(keyboard::key::Named::Escape)) {
+                self.gain_menu = None;
+            }
+            return true;
+        }
         if self.reference_menu.is_some() {
             let message = match key.as_ref() {
                 keyboard::Key::Named(keyboard::key::Named::Escape) => {
@@ -2634,10 +3186,10 @@ impl CleanSlateApp {
                             );
                             match envelopes {
                                 Ok(envelopes)
-                                    if prepared.is_current(&project.source_paths())
-                                        && source_stamps(&project.source_paths()).is_ok_and(
-                                            |sources| prepared.matches_sources(&sources),
-                                        ) =>
+                                    if prepared.is_current_sources(&project.audio_sources())
+                                        && project.source_stamps().is_ok_and(|sources| {
+                                            prepared.matches_sources(&sources)
+                                        }) =>
                                 {
                                     match LiveAudition::start(
                                         prepared,
@@ -2646,6 +3198,7 @@ impl CleanSlateApp {
                                         10.0_f32.powf(self.monitor_db / 20.0),
                                         start,
                                         end,
+                                        self.solo_tracks,
                                     ) {
                                         Ok(audition) => self.audition = Some(audition),
                                         Err(error) => self.messages = vec![error.to_string()],
@@ -2675,6 +3228,9 @@ impl CleanSlateApp {
             return;
         };
         self.timeline.seek(audition.position());
+        if self.timeline.follow_playhead(self.playback_scroll) {
+            self.drawing_revision = self.drawing_revision.wrapping_add(1);
+        }
         if let Some(review) = &mut self.review {
             review.seek(self.timeline.playhead());
         }
@@ -2706,6 +3262,7 @@ impl CleanSlateApp {
             .selection()
             .map_or(0, |range| range.0.min(range.1));
         self.timeline.seek(start);
+        self.timeline.follow_playhead(self.playback_scroll);
         if let Some(range) = &mut self.audition_range {
             range.0 = start.min(range.1);
         }
@@ -2750,6 +3307,27 @@ impl CleanSlateApp {
         self.calibration_error = None;
         // Completed fixed evidence can be reused; this generation cannot install.
     }
+    fn select_example(&mut self, id: u64) {
+        self.example_draft = None;
+        let Some(project) = &self.project else {
+            return;
+        };
+        let Some(label) = project
+            .reference_labels()
+            .iter()
+            .find(|label| label.id == id)
+        else {
+            self.selected_example = None;
+            self.timeline.set_selection(None);
+            return;
+        };
+        let range = label.range;
+        self.reference_speakers = label.active_speakers.clone();
+        self.selection_track = Some(0);
+        self.selected_example = Some(id);
+        self.capture_calibration_range(range.start, range.end);
+        self.timeline.set_selection(Some((range.start, range.end)));
+    }
     fn reference_conflicts(&self) -> Vec<u64> {
         let Ok((start, end)) = self.calibration_range() else {
             return vec![];
@@ -2763,7 +3341,10 @@ impl CleanSlateApp {
                 .filter(|label| {
                     let mut previous = label.active_speakers.clone();
                     previous.sort_unstable();
-                    label.range.start < end && start < label.range.end && active != previous
+                    Some(label.id) != self.selected_example
+                        && label.range.start < end
+                        && start < label.range.end
+                        && active != previous
                 })
                 .map(|label| label.id)
                 .collect()
@@ -2777,15 +3358,33 @@ impl CleanSlateApp {
             } else {
                 vec![]
             };
-            self.project
+            let project = self
+                .project
                 .as_mut()
-                .ok_or("Import sources before labeling.")?
-                .add_reference_label(
-                    TimeRange { start, end },
-                    self.reference_speakers.clone(),
-                    &replacing,
-                )
-                .map_err(|error| error.to_string())
+                .ok_or("Import sources before labeling.")?;
+            if let Some(id) = self.selected_example {
+                let mut labels = project.reference_labels().to_vec();
+                labels.retain(|label| !replacing.contains(&label.id));
+                let label = labels
+                    .iter_mut()
+                    .find(|label| label.id == id)
+                    .ok_or("Example no longer exists.")?;
+                label.range = TimeRange { start, end };
+                label.active_speakers = self.reference_speakers.clone();
+                label.active_speakers.sort_unstable();
+                project
+                    .replace_reference_labels(labels)
+                    .map(|()| id)
+                    .map_err(|error| error.to_string())
+            } else {
+                project
+                    .add_reference_label(
+                        TimeRange { start, end },
+                        self.reference_speakers.clone(),
+                        &replacing,
+                    )
+                    .map_err(|error| error.to_string())
+            }
         })();
         match result {
             Ok(_) => self.mark_reference_edit(),
@@ -2794,28 +3393,14 @@ impl CleanSlateApp {
     }
 
     fn capture_calibration_range(&mut self, start: TimePosition, end: TimePosition) {
-        self.calibration_start = format!("{:.8}", start.min(end) as f64 / TICKS_PER_SECOND as f64);
-        self.calibration_end = format!("{:.8}", start.max(end) as f64 / TICKS_PER_SECOND as f64);
+        self.calibration_selection = Some((start.min(end), start.max(end)));
         self.calibration_error = None;
     }
 
     fn calibration_range(&self) -> Result<(TimePosition, TimePosition), String> {
-        let sample = |value: &str, round_up: bool| {
-            let seconds = value.trim().parse::<f64>().map_err(
-                |_| "Drag across a waveform to select an example, or enter start and end seconds.",
-            )?;
-            time_from_seconds(
-                seconds,
-                if round_up {
-                    Rounding::Ceil
-                } else {
-                    Rounding::Floor
-                },
-            )
-            .map_err(|_| "Times must be finite, nonnegative seconds within the recording.")
-        };
-        let start = sample(&self.calibration_start, false)?;
-        let end = sample(&self.calibration_end, true)?;
+        let (start, end) = self
+            .calibration_selection
+            .ok_or("Drag across a waveform to select an example.")?;
         if end <= start {
             return Err("No usable range: the end must be after the start. Drag across the waveform rather than clicking once.".into());
         }
@@ -2840,15 +3425,14 @@ impl CleanSlateApp {
         }
         // Playback changes only the cursor; controller/job updates can change cached geometry.
         self.drawing_revision = self.drawing_revision.wrapping_add(1);
-        if self.reference_menu.is_some()
+        if (self.reference_menu.is_some() || self.gain_menu.is_some())
             && matches!(
                 message,
                 Message::TrackTimeline(_, _)
                     | Message::CompleteTrackSelection(_, _, _, _)
                     | Message::Timeline(_)
                     | Message::GainEvent(_, _)
-                    | Message::CalibrationStart(_)
-                    | Message::CalibrationEnd(_)
+                    | Message::Example(_)
             )
         {
             return Task::none();
@@ -2877,6 +3461,10 @@ impl CleanSlateApp {
             && !matches!(
                 message,
                 Message::FileDropped(_)
+                    | Message::ImportChannel(_, _)
+                    | Message::ImportChannelName(_, _)
+                    | Message::ConfirmChannels
+                    | Message::CancelChannels
                     | Message::DownloadModel
                     | Message::VerifyModel
                     | Message::CancelModelDownload
@@ -2910,12 +3498,12 @@ impl CleanSlateApp {
                 | Message::DeleteGain
                 | Message::InsertGainPoint
                 | Message::SaveReference(_)
+                | Message::Example(ExampleEvent::Resize(_, _, true))
                 | Message::RemoveReference(_)
                 | Message::UndoReferences
                 | Message::RedoReferences
                 | Message::SuppliedAlignment(_)
                 | Message::RebindSource(_)
-                | Message::ProtectTrack(_)
                 | Message::ProtectSelection
                 | Message::ImportStems
                 | Message::OpenProject
@@ -2926,6 +3514,140 @@ impl CleanSlateApp {
         }
         let previous_parameters = self.preview_parameters;
         match message {
+            Message::ImportChannel(index, selected) => {
+                if let Some(choice) = self.import_choices.get_mut(index) {
+                    choice.selected = selected;
+                }
+            }
+            Message::ImportChannelName(index, name) => {
+                if let Some(choice) = self.import_choices.get_mut(index) {
+                    choice.source.name = Some(name);
+                }
+            }
+            Message::ConfirmChannels => {
+                let additions: Vec<_> = self
+                    .import_choices
+                    .iter()
+                    .filter(|c| c.selected)
+                    .filter(|c| {
+                        !self.project.as_ref().is_some_and(|p| {
+                            p.sources
+                                .iter()
+                                .any(|s| s.path == c.source.path && s.channel == c.source.channel)
+                        })
+                    })
+                    .map(|c| c.source.clone())
+                    .collect();
+                let count = self.project.as_ref().map_or(0, |p| p.sources.len()) + additions.len();
+                if additions.is_empty() || count > 8 {
+                    self.messages = vec![
+                        "Select at least one channel, with at most eight tracks in the project."
+                            .into(),
+                    ];
+                } else if additions.iter().any(|s| {
+                    s.name.as_ref().is_some_and(|name| {
+                        name.trim().is_empty()
+                            || name.len() > 256
+                            || name.chars().any(char::is_control)
+                    })
+                }) {
+                    self.messages = vec![
+                        "Track names require 1 to 256 bytes without control characters.".into(),
+                    ];
+                } else {
+                    self.import_choices.clear();
+                    self.messages.clear();
+                    self.begin_source_loading(SourceRequest::AddChannels(additions));
+                }
+            }
+            Message::CancelChannels => {
+                self.import_choices.clear();
+                self.messages.clear();
+            }
+            Message::EditTrackName(index) => {
+                if let Some(source) = self.project.as_ref().and_then(|p| p.sources.get(index)) {
+                    self.track_name_draft = Some((index, source.display_name()));
+                }
+            }
+            Message::TrackName(name) => {
+                if let Some((_, draft)) = &mut self.track_name_draft {
+                    *draft = name;
+                }
+            }
+            Message::SaveTrackName => {
+                if let Some((index, name)) = self.track_name_draft.clone() {
+                    match self.project.as_mut().unwrap().rename_track(index, name) {
+                        Ok(()) => {
+                            self.track_name_draft = None;
+                            self.render_generation.invalidate();
+                            self.mark_reference_edit();
+                        }
+                        Err(error) => self.messages = vec![error.to_string()],
+                    }
+                }
+            }
+            Message::CancelTrackName => self.track_name_draft = None,
+            Message::ShowExample(id) | Message::PlayExample(id) => {
+                let play = matches!(message, Message::PlayExample(_));
+                self.stop_audition();
+                self.select_example(id);
+                if self.selected_example == Some(id) {
+                    if let Some((start, end)) = self.timeline.selection() {
+                        self.timeline.show_range(start, end);
+                        self.playback_scroll = PlaybackScroll::Off;
+                        self.timeline.seek(start);
+                    }
+                    if play {
+                        self.audition(true);
+                    }
+                }
+            }
+            Message::Example(ExampleEvent::Select(id)) => self.select_example(id),
+            Message::Example(ExampleEvent::CancelResize) => {
+                self.example_draft = None;
+                if let Some(id) = self.selected_example {
+                    self.select_example(id);
+                }
+            }
+            Message::Example(ExampleEvent::Resize(id, range, commit)) => {
+                if self.selected_example == Some(id) {
+                    if commit {
+                        let result = (|| {
+                            if range.end <= range.start
+                                || range.end - range.start < TICKS_PER_SECOND / 4
+                            {
+                                return Err("Select at least 0.25 seconds.".to_owned());
+                            }
+                            let project = self
+                                .project
+                                .as_mut()
+                                .ok_or("Import sources before labeling.")?;
+                            let mut labels = project.reference_labels().to_vec();
+                            let label = labels
+                                .iter_mut()
+                                .find(|label| label.id == id)
+                                .ok_or("Example no longer exists.")?;
+                            label.range = range;
+                            project
+                                .replace_reference_labels(labels)
+                                .map_err(|error| error.to_string())
+                        })();
+                        self.example_draft = None;
+                        self.select_example(id);
+                        match result {
+                            Ok(()) => self.mark_reference_edit(),
+                            Err(error) => self.calibration_error = Some(error),
+                        }
+                    } else {
+                        if self.example_draft.is_none() {
+                            self.stop_audition();
+                            self.playback_scroll = PlaybackScroll::Off;
+                        }
+                        self.example_draft = Some(range);
+                        self.timeline.set_selection(Some((range.start, range.end)));
+                    }
+                }
+            }
             Message::CompleteTrackSelection(track, start, end, point) => {
                 let _ = self.update(Message::TrackTimeline(
                     track,
@@ -2934,6 +3656,9 @@ impl CleanSlateApp {
                 return self.update(Message::OpenReferenceMenu(track, point));
             }
             Message::TrackTimeline(track, event) => {
+                self.selected_example = None;
+                self.example_draft = None;
+                self.gain_menu = None;
                 self.reference_menu = None;
                 if let TimelineEvent::Select(start, end) = event
                     && start == end
@@ -2948,6 +3673,9 @@ impl CleanSlateApp {
                 return task;
             }
             Message::OpenReferenceMenu(track, point) => {
+                self.selected_example = None;
+                self.example_draft = None;
+                self.gain_menu = None;
                 self.reference_menu = None;
                 if self.selection_track == Some(track)
                     && self
@@ -2961,12 +3689,90 @@ impl CleanSlateApp {
                     self.reference_speakers =
                         vec![self.project.as_ref().unwrap().sources[track].speaker_id];
                     self.calibration_error = None;
-                    self.calibration_timing = false;
                     self.reference_menu = Some((track, point));
                 }
             }
-            Message::DismissReferenceMenu => self.reference_menu = None,
+            Message::OpenTimelineMenu(track, time, point) => {
+                self.reference_menu = None;
+                if let Some(id) = self.project.as_ref().and_then(|project| {
+                    project
+                        .reference_labels()
+                        .iter()
+                        .rev()
+                        .find(|label| label.range.start <= time && time < label.range.end)
+                        .map(|label| label.id)
+                }) {
+                    self.select_example(id);
+                    self.selection_track = Some(track);
+                    self.gain_menu = None;
+                    self.reference_menu = Some((track, point));
+                    return Task::none();
+                }
+                return self.update(Message::OpenGainMenu(track, time, point));
+            }
+            Message::OpenGainMenu(track, time, point) => {
+                self.reference_menu = None;
+                self.gain_menu = self.project.as_ref().and_then(|project| {
+                    let track_id = project.sources.get(track)?.track_id;
+                    region_marked(&project.gain_constraints(), track_id, time)
+                        .then_some((track, time, point))
+                });
+                if self.gain_menu.is_none() {
+                    return self.update(Message::OpenReferenceMenu(track, point));
+                }
+            }
+            Message::DeleteRegion(track, time) => {
+                self.gain_menu = None;
+                if let Some(project) = &mut self.project
+                    && let Some(source) = project.sources.get(track)
+                {
+                    let track_id = source.track_id;
+                    let mut constraints = project.gain_constraints();
+                    constraints
+                        .manual_edits
+                        .retain(|edit| edit.source.track != track_id || !edit_contains(edit, time));
+                    constraints.protections.retain(|protection| {
+                        protection.track != Some(track_id)
+                            || time < protection.range.start
+                            || time >= protection.range.end
+                    });
+                    self.selected_gain_point = None;
+                    self.preview_error = project
+                        .replace_gain_constraints(constraints)
+                        .err()
+                        .map(|error| error.to_string());
+                    self.rebuild_effective();
+                }
+            }
+            Message::DismissReferenceMenu => {
+                self.reference_menu = None;
+                self.gain_menu = None;
+            }
             Message::ModelDetails(show) => self.model_details = show,
+            Message::SetupDetails(show) => self.setup_details = show,
+            Message::LockPlayhead => {
+                if self.playback_scroll == PlaybackScroll::Locked {
+                    self.playback_scroll = PlaybackScroll::Off;
+                } else {
+                    self.timeline.lock_playhead();
+                    self.playback_scroll = PlaybackScroll::Locked;
+                    self.timeline.follow_playhead(self.playback_scroll);
+                }
+            }
+            Message::CenterPlayhead => self.timeline.center_playhead(),
+            Message::ToggleMeterPlacement => self.meters_at_playhead = !self.meters_at_playhead,
+            Message::SoloTrack(track) => {
+                if self
+                    .project
+                    .as_ref()
+                    .is_some_and(|p| track < p.sources.len())
+                {
+                    self.solo_tracks ^= 1u64 << track;
+                    if let Some(audition) = &self.audition {
+                        audition.set_solo(self.solo_tracks);
+                    }
+                }
+            }
             Message::NemotronEnabled(enabled) => {
                 if let Some(project) = &mut self.project {
                     match project.set_nemotron_enabled(enabled) {
@@ -3100,7 +3906,6 @@ impl CleanSlateApp {
                 }
             }
             Message::Audition => self.audition(false),
-            Message::AuditionSelection => self.audition(true),
             Message::Stop => {
                 self.stop_audition();
             }
@@ -3150,31 +3955,6 @@ impl CleanSlateApp {
             #[cfg(test)]
             Message::CalibrationMode(enabled) => self.calibrating = enabled,
             Message::CalibrationTiming(enabled) => self.calibration_timing = enabled,
-            Message::CalibrationStart(value) => {
-                self.calibration_start = value;
-                self.calibration_error = None;
-            }
-            Message::CalibrationEnd(value) => {
-                self.calibration_end = value;
-                self.calibration_error = None;
-            }
-            Message::CalibrationStartAtPlayhead => {
-                self.calibration_start = format!(
-                    "{:.8}",
-                    self.timeline.playhead() as f64 / TICKS_PER_SECOND as f64
-                );
-            }
-            Message::CalibrationEndAtPlayhead => {
-                self.calibration_end = format!(
-                    "{:.8}",
-                    self.timeline.playhead() as f64 / TICKS_PER_SECOND as f64
-                );
-            }
-            Message::CalibrationFromSelection => {
-                if let Some((start, end)) = self.timeline.selection() {
-                    self.capture_calibration_range(start, end);
-                }
-            }
             #[cfg(test)]
             Message::SaveCalibration(kind, track) => self.save_calibration(kind, track),
             Message::ReferenceSpeaker(speaker, active) => {
@@ -3187,7 +3967,15 @@ impl CleanSlateApp {
             Message::RemoveReference(id) => {
                 if let Some(project) = &mut self.project {
                     match project.remove_reference_label(id) {
-                        Ok(()) => self.mark_reference_edit(),
+                        Ok(()) => {
+                            if self.selected_example == Some(id) {
+                                self.selected_example = None;
+                                self.example_draft = None;
+                                self.timeline.set_selection(None);
+                            }
+                            self.reference_menu = None;
+                            self.mark_reference_edit();
+                        }
                         Err(error) => self.calibration_error = Some(error.to_string()),
                     }
                 }
@@ -3200,7 +3988,13 @@ impl CleanSlateApp {
                         project.redo_reference_labels()
                     };
                     match result {
-                        Ok(true) => self.mark_reference_edit(),
+                        Ok(true) => {
+                            self.example_draft = None;
+                            if let Some(id) = self.selected_example {
+                                self.select_example(id);
+                            }
+                            self.mark_reference_edit();
+                        }
                         Ok(false) => {}
                         Err(error) => self.calibration_error = Some(error.to_string()),
                     }
@@ -3330,17 +4124,6 @@ impl CleanSlateApp {
                     }
                 }
             }
-            Message::ProtectTrack(track) => {
-                if let Some(project) = &mut self.project
-                    && let Err(error) = project.protect_track(track)
-                {
-                    self.messages.push(error.to_string());
-                }
-                if let Some(review) = &mut self.review {
-                    review.set_comparison(Comparison::Original);
-                }
-                self.start_preview();
-            }
             Message::ProtectSelection => {
                 if let (Some(project), Some((start, end))) =
                     (self.project.as_mut(), self.timeline.selection())
@@ -3356,6 +4139,7 @@ impl CleanSlateApp {
                 | TimelineEvent::Drag(sample)
                 | TimelineEvent::DragEnd(sample) => {
                     self.timeline.seek(sample);
+                    self.timeline.follow_playhead(self.playback_scroll);
                     if let Some(range) = &mut self.audition_range {
                         range.0 = sample.min(range.1);
                     }
@@ -3370,11 +4154,17 @@ impl CleanSlateApp {
                     cursor_x,
                     width,
                     direction,
-                } => self.timeline.zoom_at(cursor_x, width, direction),
+                } => {
+                    self.timeline.zoom_at(cursor_x, width, direction);
+                    self.timeline.follow_playhead(self.playback_scroll);
+                }
                 TimelineEvent::Pan { delta_x, width } => {
+                    self.playback_scroll = PlaybackScroll::Off;
                     self.timeline.pan_by_pixels(delta_x, width)
                 }
                 TimelineEvent::Select(start, end) => {
+                    self.selected_example = None;
+                    self.example_draft = None;
                     self.selection_track = None;
                     self.reference_menu = None;
                     if self.calibrating {
@@ -3441,6 +4231,76 @@ impl CleanSlateApp {
     }
 
     fn view(&self) -> Element<'_, Message> {
+        if !self.import_choices.is_empty() {
+            let mut choices = column![text("Choose speaker channels").size(24), text("Keep the microphone channels you want to edit. All channels keep their recording timing.")].spacing(12);
+            choices = choices.push(
+                text(format!(
+                    "{} selected · {} existing tracks · maximum 8",
+                    self.import_choices.iter().filter(|c| c.selected).count(),
+                    self.project.as_ref().map_or(0, |p| p.sources.len())
+                ))
+                .size(12),
+            );
+            for (index, choice) in self.import_choices.iter().enumerate() {
+                choices = choices.push(
+                    row![
+                        iced::widget::checkbox(choice.selected)
+                            .label(choice.source.channel.map_or_else(
+                                || "Mono".into(),
+                                |channel| format!("Channel {}", channel + 1)
+                            ))
+                            .on_toggle(move |selected| Message::ImportChannel(index, selected)),
+                        text_input("Track name", choice.source.name.as_deref().unwrap_or(""))
+                            .on_input(move |name| Message::ImportChannelName(index, name))
+                            .width(250),
+                        text(
+                            choice
+                                .source
+                                .path
+                                .file_name()
+                                .unwrap_or_default()
+                                .to_string_lossy()
+                                .to_string()
+                        )
+                        .size(12),
+                    ]
+                    .spacing(12),
+                );
+            }
+            for message in &self.messages {
+                choices = choices.push(text(message));
+            }
+            choices = choices.push(
+                row![
+                    button("Import selected channels").on_press(Message::ConfirmChannels),
+                    button("Cancel")
+                        .style(button::secondary)
+                        .on_press(Message::CancelChannels)
+                ]
+                .spacing(12),
+            );
+            return container(scrollable(choices))
+                .padding(24)
+                .width(Fill)
+                .height(Fill)
+                .into();
+        }
+        if let Some((_, name)) = &self.track_name_draft {
+            let mut form = column![
+                text("Rename track").size(24),
+                text_input("Track name", name).on_input(Message::TrackName),
+                row![
+                    button("Save name").on_press(Message::SaveTrackName),
+                    button("Cancel").on_press(Message::CancelTrackName)
+                ]
+                .spacing(12)
+            ]
+            .spacing(12);
+            for message in &self.messages {
+                form = form.push(text(message));
+            }
+            return container(form).padding(24).width(Fill).into();
+        }
         responsive(|size| {
             let count = self
                 .project
@@ -3510,7 +4370,7 @@ impl CleanSlateApp {
 
     fn next_action(&self) -> &'static str {
         let Some(project) = &self.project else {
-            return "Open a project or import mono speaker tracks.";
+            return "Open a project or import speaker tracks, including multichannel WAVs.";
         };
         if self.preview_processing.is_some() {
             return "Analyzing. Original playback remains available.";
@@ -3536,129 +4396,52 @@ impl CleanSlateApp {
             return column![].into();
         };
         let mut controls = column![
-            text("Speaker references").size(18),
+            text("Speaker examples & analysis").size(18),
             text("Drag a clear example on any track, then choose who is talking.").size(12),
             text(format!(
-                "{} saved references",
+                "{} saved examples",
                 project.reference_labels().len()
             ))
             .size(12),
         ]
         .spacing(8);
-        if self.calibration_timing {
-            for source in &project.sources {
-                let speaker = source.speaker_id;
-                controls = controls.push(
-                    iced::widget::checkbox(self.reference_speakers.contains(&speaker))
-                        .label(format!("Speaker {}", speaker.0))
-                        .on_toggle(move |active| Message::ReferenceSpeaker(speaker, active)),
-                );
-            }
-            controls =
-                controls.push(button("Save reference").on_press(Message::SaveReference(false)));
-            controls = controls.push(
-                button("Listen to selected range").on_press_maybe(
-                    self.timeline
-                        .selection()
-                        .map(|_| Message::AuditionSelection),
-                ),
-            );
-            if !self.reference_conflicts().is_empty() {
-                controls = controls.push(
-                    button("Replace conflicting whole labels")
-                        .on_press(Message::SaveReference(true)),
-                );
-            }
-        }
         controls = controls.push(
             row![
-                button("Undo label").on_press(Message::UndoReferences),
-                button("Redo label").on_press(Message::RedoReferences)
+                button("Undo label")
+                    .style(button::secondary)
+                    .on_press(Message::UndoReferences),
+                button("Redo label")
+                    .style(button::secondary)
+                    .on_press(Message::RedoReferences)
             ]
             .spacing(8),
         );
-        controls = controls.push(
-            column![
-                button("Analyze").on_press(Message::AnalyzeReferences),
-                button("Save project").on_press(Message::SaveProject),
-            ]
-            .spacing(6),
-        );
+        controls = controls.push(button("Analyze").on_press(Message::AnalyzeReferences));
         if self.preview_processing.is_some() {
             controls = controls.push(button("Cancel analysis").on_press(Message::CancelAnalysis));
-        }
-        controls = controls.push(
-            iced::widget::checkbox(self.gain_tool)
-                .label("Envelope edit tool")
-                .on_toggle(Message::GainTool),
-        );
-        if self.gain_tool {
-            controls = controls.push(text("Drag pink points to change gain or fade duration. Arrow keys move a selected point; Delete removes its override. Ctrl+Z / Ctrl+Y undo and redo.").size(12));
-            controls = controls.push(
-                row![
-                    button("Undo gain").on_press(Message::UndoGain),
-                    button("Redo gain").on_press(Message::RedoGain)
-                ]
-                .spacing(6),
-            );
-            controls = controls.push(
-                column![
-                    button("Add point at cursor").on_press(Message::InsertGainPoint),
-                    button("Remove selected override").on_press(Message::DeleteGain)
-                ]
-                .spacing(6),
-            );
-            controls = controls.push(
-                iced::widget::checkbox(self.replace_gain_constraints)
-                    .label("Replace entire overlapping overrides and protections")
-                    .on_toggle(Message::ReplaceGainConstraints),
-            );
         }
         let (missing, room) = self.missing_references();
         controls = controls.push(
             text(if missing.is_empty() && room {
-                "References supplied; Analyze checks usable speech and room tone.".into()
+                "Examples supplied. Analyze checks usable speech and room tone.".into()
             } else {
                 format!(
-                    "References needed: {}{}",
+                    "Examples needed: {}{}",
                     missing.join(", "),
                     if room { "" } else { "; room tone" }
                 )
             })
             .size(12),
         );
-        if self.calibration_timing {
-            controls = controls.push(text({
-            match self.calibration_range() {
-                Ok((start, end)) => format!(
-                    "Selected {:.3}–{:.3} s ({:.3} s). Choose the speakers above and Save reference.",
-                    start as f64 / TICKS_PER_SECOND as f64,
-                    end as f64 / TICKS_PER_SECOND as f64,
-                    (end - start) as f64 / TICKS_PER_SECOND as f64
-                ),
-                Err(error) => error,
-            }
-        }));
-        }
         controls = controls.push(
             button(if self.calibration_timing {
-                "Hide exact times"
+                "Hide speaker examples"
             } else {
-                "Exact times / saved labels"
+                "Speaker examples"
             })
+            .style(button::secondary)
             .on_press(Message::CalibrationTiming(!self.calibration_timing)),
         );
-        if self.calibration_timing {
-            controls = controls
-                .push(text("Start in seconds").size(12))
-                .push(text_input("Start seconds", &self.calibration_start).on_input(Message::CalibrationStart))
-                .push(button("Start at playhead").on_press(Message::CalibrationStartAtPlayhead))
-                .push(text("End in seconds").size(12))
-                .push(text_input("End seconds", &self.calibration_end).on_input(Message::CalibrationEnd))
-                .push(button("End at playhead").on_press(Message::CalibrationEndAtPlayhead))
-                .push(button("Copy highlighted timeline range").on_press_maybe(self.timeline.selection().map(|_| Message::CalibrationFromSelection)))
-                .push(text("Copies the current highlight into these times. Start/end at playhead copies the white cursor's position.").size(12));
-        }
         if let Some(notice) = project.calibration_notice()
             && (!project.pending_source_reviews().is_empty()
                 || self
@@ -3672,24 +4455,44 @@ impl CleanSlateApp {
             controls = controls.push(text(format!("Example not saved: {error}")));
         }
         if self.calibration_timing {
+            controls = controls.push(text("Click an example on the waveform to drag its ends. Right-click to change speakers or delete it.").size(12));
+            if project.reference_labels().is_empty() {
+                controls = controls.push(
+                    text("No examples yet. Drag across a waveform and choose who is talking.")
+                        .size(12),
+                );
+            }
             for label in project.reference_labels() {
-                let speakers = if label.active_speakers.is_empty() {
-                    "Room tone".to_owned()
-                } else {
-                    label
-                        .active_speakers
-                        .iter()
-                        .map(|speaker| format!("Speaker {}", speaker.0))
-                        .collect::<Vec<_>>()
-                        .join(" + ")
-                };
-                controls = controls
-                    .push(text(format!(
-                        "{speakers}: {:.5} to {:.5} s",
-                        label.range.start as f64 / TICKS_PER_SECOND as f64,
-                        label.range.end as f64 / TICKS_PER_SECOND as f64
-                    )))
-                    .push(button("Remove reference").on_press(Message::RemoveReference(label.id)));
+                controls = controls.push(
+                    container(
+                        column![
+                            text(example_speakers(label)).size(14),
+                            text(format!(
+                                "{}–{} · {:.2} seconds",
+                                example_time(label.range.start),
+                                example_time(label.range.end),
+                                (label.range.end - label.range.start) as f64
+                                    / TICKS_PER_SECOND as f64
+                            ))
+                            .size(12),
+                            row![
+                                button(text("Play").size(12))
+                                    .style(button::text)
+                                    .on_press(Message::PlayExample(label.id)),
+                                button(text("Show on timeline").size(12))
+                                    .style(button::text)
+                                    .on_press(Message::ShowExample(label.id)),
+                                button(text("Delete").size(11))
+                                    .style(button::text)
+                                    .on_press(Message::RemoveReference(label.id)),
+                            ]
+                            .spacing(5),
+                        ]
+                        .spacing(4),
+                    )
+                    .padding([8, 0])
+                    .width(Fill),
+                );
             }
         }
         controls.into()
@@ -3764,12 +4567,47 @@ impl CleanSlateApp {
         controls.into()
     }
 
-    fn session_controls(&self) -> Element<'_, Message> {
+    fn gain_controls(&self) -> Element<'_, Message> {
+        let mut controls = column![
+            iced::widget::checkbox(self.gain_tool)
+                .label("Edit gain points")
+                .on_toggle(Message::GainTool),
+        ]
+        .spacing(8);
+        if self.gain_tool {
+            controls = controls
+                .push(text("Drag pink points to adjust gain and fades. Arrow keys move the selected point; Delete removes its override.").size(12))
+                .push(row![
+                    button("Undo gain").style(button::secondary).on_press(Message::UndoGain),
+                    button("Redo gain").style(button::secondary).on_press(Message::RedoGain),
+                ].spacing(6))
+                .push(button("Add point at cursor").style(button::secondary).on_press(Message::InsertGainPoint))
+                .push(button("Remove selected override").style(button::secondary).on_press(Message::DeleteGain))
+                .push(iced::widget::checkbox(self.replace_gain_constraints)
+                    .label("Replace overlapping overrides and protections")
+                    .on_toggle(Message::ReplaceGainConstraints));
+            if self.can_protect_selection() {
+                controls = controls.push(
+                    button("Preserve selection on all tracks")
+                        .style(button::secondary)
+                        .on_press(Message::ProtectSelection),
+                );
+            }
+        }
+        controls.into()
+    }
+
+    fn source_controls(&self) -> Element<'_, Message> {
         let Some(project) = &self.project else {
             return column![].into();
         };
-        let mut controls =
-            column![button("Recheck source files").on_press(Message::Validate),].spacing(8);
+        let mut controls = column![
+            text("Sources").size(16),
+            button("Recheck source files")
+                .style(button::secondary)
+                .on_press(Message::Validate),
+        ]
+        .spacing(8);
         if let Err(error) = project.require_alignment() {
             controls = controls
                 .push(
@@ -3796,17 +4634,15 @@ impl CleanSlateApp {
                     button("Accept changed source bindings").on_press(Message::RebindSource(index)),
                 );
             }
-            if self.preview.is_some() {
-                source_controls = source_controls
-                    .push(button("Protect entire track").on_press(Message::ProtectTrack(index)));
-            }
-            if !source.available
-                || project.pending_source_reviews().contains(&source.track_id)
-                || self.preview.is_some()
-            {
+            if !source.available || project.pending_source_reviews().contains(&source.track_id) {
                 controls = controls.push(source_controls);
             }
         }
+        controls.into()
+    }
+
+    fn export_controls(&self) -> Element<'_, Message> {
+        let mut controls = column![text("Export").size(18)].spacing(8);
         if let Some(processing) = &self.processing {
             controls = controls
                 .push(text(format!(
@@ -3816,7 +4652,7 @@ impl CleanSlateApp {
                 .push(button("Cancel final render").on_press(Message::Cancel));
         } else {
             controls = controls.push(
-                button("Create current final WAV render")
+                button("Render WAV files")
                     .on_press_maybe(self.supervised_result.as_ref().map(|_| Message::Process)),
             );
         }
@@ -3830,11 +4666,6 @@ impl CleanSlateApp {
             controls = controls
                 .push(text("Verifying and copying current delivery…"))
                 .push(button("Cancel delivery").on_press(Message::Cancel));
-        }
-        if self.can_protect_selection() {
-            controls = controls.push(
-                button("Protect selection across all tracks").on_press(Message::ProtectSelection),
-            );
         }
         for message in &self.messages {
             controls = controls.push(text(message));
@@ -3896,6 +4727,12 @@ impl CleanSlateApp {
             button("Open session").on_press_maybe(
                 (!self.sources_busy() && self.processing.is_none()).then_some(Message::OpenProject)
             ),
+            button("Save project")
+                .style(button::secondary)
+                .on_press_maybe(
+                    (self.project.is_some() && !self.sources_busy())
+                        .then_some(Message::SaveProject)
+                ),
         ]
         .spacing(12)
         .align_y(iced::Center);
@@ -3956,9 +4793,9 @@ impl CleanSlateApp {
                     column![
                         text("NO STEMS IMPORTED").size(22),
                         text(
-                            "Import synchronized mono tracks or drop them anywhere in this window."
+                            "Import synchronized speaker tracks or a multichannel WAV, or drop them anywhere in this window."
                         ),
-                        button("Import mono tracks").on_press(Message::ImportStems),
+                        button("Import tracks").on_press(Message::ImportStems),
                     ]
                     .spacing(12)
                     .align_x(iced::Center),
@@ -3984,16 +4821,26 @@ impl CleanSlateApp {
                 .padding([0, 12]),
             );
             for (index, source) in project.sources.iter().enumerate() {
-                let filename = source
-                    .path
-                    .file_name()
-                    .unwrap_or(source.path.as_os_str())
-                    .to_string_lossy();
+                let filename = source.display_name();
                 let mut short_name = filename.chars().take(24).collect::<String>();
                 if filename.chars().count() > 24 {
                     short_name.push('…');
                 }
                 let mut header = row![
+                    button(
+                        text(if self.solo_tracks & (1u64 << index) != 0 {
+                            "Solo · on"
+                        } else {
+                            "Solo"
+                        })
+                        .size(12)
+                    )
+                    .style(if self.solo_tracks & (1u64 << index) != 0 {
+                        button::primary
+                    } else {
+                        button::secondary
+                    })
+                    .on_press(Message::SoloTrack(index)),
                     iced::widget::tooltip(
                         text(format!("Speaker {} · {short_name}", source.speaker_id.0))
                             .size(13)
@@ -4001,6 +4848,9 @@ impl CleanSlateApp {
                         text(source.path.display().to_string()).size(12),
                         iced::widget::tooltip::Position::Bottom,
                     ),
+                    button(text("Rename").size(12))
+                        .style(button::secondary)
+                        .on_press(Message::EditTrackName(index)),
                     button(text("Preserve").size(12)).on_press_maybe(
                         self.timeline
                             .selection()
@@ -4020,6 +4870,7 @@ impl CleanSlateApp {
                 if project.pending_source_reviews().contains(&source.track_id) {
                     header = header.push(text("Review source").size(12));
                 }
+                let mut moving_meter: Option<Element<'_, Message>> = None;
                 if let Some(estimates) = &ownership_estimates
                     && let Some(estimate) = estimates
                         .iter()
@@ -4042,18 +4893,18 @@ impl CleanSlateApp {
                         }
                         _ => ("Uncertain", iced::Color::from_rgb(0.9, 0.65, 0.2)),
                     };
-                    header = header.push(
+                    let meter_label = format!(
+                        "{}{label} · {}",
+                        if ownership_stale { "Stale · " } else { "" },
+                        estimate
+                            .probability
+                            .map_or_else(|| "unresolved".into(), |p| format!("{:.0}%", p * 100.0))
+                    );
+                    let probability = estimate.probability.unwrap_or(0.0);
+                    let meter = move || {
                         column![
-                            text(format!(
-                                "{}{label} · {}",
-                                if ownership_stale { "Stale · " } else { "" },
-                                estimate.probability.map_or_else(
-                                    || "unresolved".into(),
-                                    |p| format!("{:.0}%", p * 100.0)
-                                )
-                            ))
-                            .size(12),
-                            progress_bar(0.0..=1.0, estimate.probability.unwrap_or(0.0))
+                            text(meter_label.clone()).size(12),
+                            progress_bar(0.0..=1.0, probability)
                                 .girth(8)
                                 .style(move |theme| iced::widget::progress_bar::Style {
                                     bar: color.into(),
@@ -4061,8 +4912,26 @@ impl CleanSlateApp {
                                 }),
                         ]
                         .spacing(3)
-                        .width(170),
-                    );
+                        .width(170)
+                    };
+                    if self.meters_at_playhead {
+                        moving_meter = Some(
+                            responsive(move |size| {
+                                let x = self
+                                    .timeline
+                                    .x_for_sample(self.timeline.playhead(), size.width);
+                                row![
+                                    Space::new().width(ownership_meter_left(x, size.width, 170.0)),
+                                    meter(),
+                                ]
+                                .into()
+                            })
+                            .height(30)
+                            .into(),
+                        );
+                    } else {
+                        header = header.push(meter());
+                    }
                 }
                 let waveform: Element<'_, Message> = self.waveforms.get(index).map_or_else(
                     || {
@@ -4081,7 +4950,15 @@ impl CleanSlateApp {
                                 self.selecting_range || self.calibrating,
                             )
                             .with_revision(self.drawing_revision)
-                            .with_context(move |point| Message::OpenReferenceMenu(index, point))
+                            .with_context(move |point, time| {
+                                Message::OpenTimelineMenu(index, time, point)
+                            })
+                            .with_examples(
+                                project.reference_labels(),
+                                self.selected_example,
+                                self.example_draft,
+                                Message::Example,
+                            )
                             .with_selection(
                                 move |start, end, point| {
                                     Message::CompleteTrackSelection(index, start, end, point)
@@ -4093,20 +4970,22 @@ impl CleanSlateApp {
                         .into()
                     },
                 );
+                let mut track_content = column![header].spacing(3).height(Fill);
+                if let Some(meter) = moving_meter {
+                    track_content = track_content.push(meter);
+                }
                 timeline_content = timeline_content.push(
                     container(
-                        column![
-                            header,
-                            waveform,
+                        track_content.push(waveform).push(
                             canvas(crate::gain_editor::GainCanvas {
                                 revision: self.drawing_revision,
                                 project,
                                 constraints: self
                                     .gain_drag
                                     .as_ref()
-                                    .map_or(&self.gain_constraints, |drag| &drag
-                                        .draft()
-                                        .constraints),
+                                    .map_or(&self.gain_constraints, |drag| {
+                                        &drag.draft().constraints
+                                    }),
                                 track: source.track_id,
                                 viewport: &self.timeline,
                                 automatic: self
@@ -4123,9 +5002,7 @@ impl CleanSlateApp {
                             })
                             .width(Fill)
                             .height(20),
-                        ]
-                        .spacing(3)
-                        .height(Fill),
+                        ),
                     )
                     .padding(4)
                     .height(Length::FillPortion(1))
@@ -4141,7 +5018,19 @@ impl CleanSlateApp {
             timeline_content.into()
         };
         let timeline = column![
-            text("SESSION TIMELINE").size(12),
+            row![
+                text("SESSION TIMELINE").size(12),
+                Space::new().width(Fill),
+                button(text(if self.playback_scroll == PlaybackScroll::Locked {
+                    "Unlock playhead"
+                } else {
+                    "Lock playhead"
+                }).size(12)).on_press(Message::LockPlayhead)
+                    .style(if self.playback_scroll == PlaybackScroll::Locked { button::primary } else { button::secondary }),
+                button(text("Center playhead").size(12)).on_press(Message::CenterPlayhead),
+                button(text(if self.meters_at_playhead { "Meters: Playhead" } else { "Meters: Right" }).size(12))
+                    .on_press(Message::ToggleMeterPlacement),
+            ].spacing(8).align_y(iced::Center),
             text(
                 "Red background = reduced gain · Click to seek · drag to label · wheel to zoom · Ctrl-wheel or middle-drag to pan"
             )
@@ -4185,57 +5074,80 @@ impl CleanSlateApp {
                 .is_some_and(|analysis| self.analysis_runtime() != analysis.runtime.as_ref())
         {
             text("Analysis out of date · click Analyze").into()
-        } else if let Some(preview) = &self.preview {
-            text(format!(
-                "Preview ready · {} ownership regions",
-                preview.regions.len()
-            ))
-            .into()
+        } else if self.preview.is_some() {
+            text("Preview ready").into()
         } else {
             text("Preview not analyzed").into()
         };
         let parameters = &self.preview_parameters;
+        let setup_required = self.project.as_ref().is_some_and(|project| {
+            project.require_alignment().is_err()
+                || !project.pending_source_reviews().is_empty()
+                || project.sources.iter().any(|source| !source.available)
+                || project.nemotron_enabled() && self.model_acquisition.provenance().is_none()
+        });
+        let mut setup = column![
+            button(if self.setup_details || setup_required {
+                "Model & source setup ▾"
+            } else {
+                "Model & source setup ▸"
+            })
+            .style(button::secondary)
+            .on_press(Message::SetupDetails(!self.setup_details))
+        ]
+        .spacing(12);
+        if self.setup_details || setup_required || self.model_acquisition.is_busy() {
+            setup = setup
+                .push(self.model_controls())
+                .push(self.source_controls());
+        }
         let inspector = container(
             column![
-                self.model_controls(),
-                text("Next step").size(18),
-                text(self.next_action()).size(13),
                 preview_state,
-                self.calibration_controls(),
-                self.session_controls(),
-                text(format!("Attenuation: {:.1} dB", parameters.attenuation_db)),
-                slider(
-                    -30.0..=-3.0,
-                    parameters.attenuation_db,
-                    Message::Attenuation
+                text(self.next_action()).size(12),
+                container(self.calibration_controls()).width(Fill),
+                container(
+                    column![
+                        text("Sound").size(18),
+                        text(format!("Attenuation: {:.1} dB", parameters.attenuation_db)),
+                        slider(
+                            -30.0..=-3.0,
+                            parameters.attenuation_db,
+                            Message::Attenuation
+                        )
+                        .step(1.0_f32)
+                        .on_release(Message::RefreshPreview),
+                        text(format!("Open fade duration: {:.0} ms", parameters.open_ms)),
+                        slider(1.0..=1000.0, parameters.open_ms, Message::OpenTime)
+                            .step(1.0_f32)
+                            .on_release(Message::RefreshPreview),
+                        text(format!(
+                            "Close fade duration: {:.0} ms",
+                            parameters.close_ms
+                        )),
+                        slider(1.0..=2000.0, parameters.close_ms, Message::CloseTime)
+                            .step(1.0_f32)
+                            .on_release(Message::RefreshPreview),
+                        text(format!(
+                            "Ignore gaps shorter than: {:.0} ms",
+                            parameters.minimum_gap_ms
+                        )),
+                        slider(
+                            10.0..=5000.0,
+                            parameters.minimum_gap_ms,
+                            Message::MinimumGap
+                        )
+                        .step(1.0_f32)
+                        .on_release(Message::RefreshPreview),
+                        self.gain_controls(),
+                    ]
+                    .spacing(8)
                 )
-                .step(1.0_f32)
-                .on_release(Message::RefreshPreview),
-                text(format!("Open fade duration: {:.0} ms", parameters.open_ms)),
-                slider(1.0..=1000.0, parameters.open_ms, Message::OpenTime)
-                    .step(1.0_f32)
-                    .on_release(Message::RefreshPreview),
-                text(format!(
-                    "Close fade duration: {:.0} ms",
-                    parameters.close_ms
-                )),
-                slider(1.0..=2000.0, parameters.close_ms, Message::CloseTime)
-                    .step(1.0_f32)
-                    .on_release(Message::RefreshPreview),
-                text(format!(
-                    "Ignore gaps shorter than: {:.0} ms",
-                    parameters.minimum_gap_ms
-                )),
-                slider(
-                    10.0..=5000.0,
-                    parameters.minimum_gap_ms,
-                    Message::MinimumGap
-                )
-                .step(1.0_f32)
-                .on_release(Message::RefreshPreview),
-                text("Waveform / gain curve / labels and protection").size(11),
+                .width(Fill),
+                container(self.export_controls()).width(Fill),
+                setup,
             ]
-            .spacing(12),
+            .spacing(20),
         )
         .padding(18)
         .width(if compact { Fill } else { Length::Fixed(280.0) })
@@ -4243,7 +5155,7 @@ impl CleanSlateApp {
         let inspector: Element<'_, Message> = if self.sources_busy() {
             container(column![text("Loading tracks").size(20),
                 text("Waveforms appear as each track is read. Validation and source checks run in the background, then choose references and click Analyze."),
-                text("You can scroll the tracks and drop more supported mono files. Editing becomes available when the import is validated."),
+                text("You can scroll the tracks and drop more audio files. Editing becomes available when the import is validated."),
             ].spacing(12)).padding(18).width(if compact { Fill } else { Length::Fixed(280.0) }).into()
         } else {
             scrollable(inspector)
@@ -4334,10 +5246,46 @@ impl CleanSlateApp {
                 .width(Fill)
                 .height(Fill)
                 .into();
-        let Some((_, point)) = self.reference_menu else {
+        let Some(point) = self
+            .gain_menu
+            .map(|(_, _, point)| point)
+            .or_else(|| self.reference_menu.map(|(_, point)| point))
+        else {
             return base;
         };
         let overlay = responsive(move |size| {
+            if let Some((track, time, _)) = self.gain_menu {
+                let panel = container(
+                    column![
+                        button("Delete Preserve / Attenuate mark")
+                            .on_press(Message::DeleteRegion(track, time)),
+                        text("Restore automatic gain for this section.").size(12),
+                        button("Cancel").on_press(Message::DismissReferenceMenu),
+                    ]
+                    .spacing(6),
+                )
+                .padding(10)
+                .style(container::bordered_box);
+                let positioned =
+                    iced::widget::float(opaque(panel)).translate(move |bounds, viewport| {
+                        iced::Vector::new(
+                            point.x.clamp(
+                                viewport.x,
+                                (viewport.x + viewport.width - bounds.width).max(viewport.x),
+                            ) - bounds.x,
+                            point.y.clamp(
+                                viewport.y,
+                                (viewport.y + viewport.height - bounds.height).max(viewport.y),
+                            ) - bounds.y,
+                        )
+                    });
+                return opaque(
+                    mouse_area(container(positioned).width(Fill).height(Fill))
+                        .on_press(Message::DismissReferenceMenu)
+                        .on_right_press(Message::DismissReferenceMenu)
+                        .on_scroll(|_| Message::DismissReferenceMenu),
+                );
+            }
             let mut menu = column![
                 text("Who is talking?").size(16),
                 text("Select everyone speaking. None means room tone.").size(12),
@@ -4355,7 +5303,12 @@ impl CleanSlateApp {
                 }
                 menu = menu.push(
                     row![
-                        button("Save label").on_press(Message::ContextReference(
+                        button(if self.selected_example.is_some() {
+                            "Save changes"
+                        } else {
+                            "Save example"
+                        })
+                        .on_press(Message::ContextReference(
                             self.reference_speakers.clone(),
                             false
                         )),
@@ -4363,6 +5316,19 @@ impl CleanSlateApp {
                     ]
                     .spacing(8),
                 );
+                if let Some(id) = self.selected_example {
+                    menu = menu.push(
+                        text(
+                            "Drag the left or right handle on the waveform to adjust this example.",
+                        )
+                        .size(12),
+                    );
+                    menu = menu.push(
+                        button("Delete example")
+                            .style(button::secondary)
+                            .on_press(Message::RemoveReference(id)),
+                    );
+                }
             }
             if let Some(error) = &self.calibration_error {
                 menu = menu.push(iced::widget::tooltip(

@@ -35,8 +35,9 @@ pub use acoustics::*;
 pub use analysis_audio::{
     ANALYSIS_RESAMPLER_RECIPE, ANALYSIS_SAMPLE_RATE, AUDIO_DECODER_RECIPE, AnalysisAudioIdentity,
     PreparedAnalysisAudio, prepare_analysis_audio, prepare_analysis_audio_in,
+    prepare_source_analysis_audio_in,
 };
-pub use audio_io::SourceMetadata;
+pub use audio_io::{AudioSource, SourceMetadata, wav_channel_sources};
 pub use audition::{AuditionMode, AuditionPlayback, PreparedAudio};
 pub use calibration::{CalibrationExample, CalibrationKind, OwnershipSettings};
 pub use editor_benchmark::*;

@@ -184,18 +184,19 @@ impl<Message: 'static> canvas::Program<Message> for GainCanvas<'_, Message> {
                     })
                 };
                 if let Some(buckets) = buckets {
-                    for bucket in buckets {
-                        let x = self.viewport.x_for_sample(bucket.start, bounds.width);
-                        frame.stroke(
-                            &canvas::Path::line(
-                                Point::new(x, gain_y(bucket.lower, bounds.height)),
-                                Point::new(x, gain_y(bucket.upper, bounds.height)),
-                            ),
-                            canvas::Stroke::default()
-                                .with_color(color)
-                                .with_width(width),
-                        );
-                    }
+                    let bounds_path = canvas::Path::new(|builder| {
+                        for bucket in buckets {
+                            let x = self.viewport.x_for_sample(bucket.start, bounds.width);
+                            builder.move_to(Point::new(x, gain_y(bucket.lower, bounds.height)));
+                            builder.line_to(Point::new(x, gain_y(bucket.upper, bounds.height)));
+                        }
+                    });
+                    frame.stroke(
+                        &bounds_path,
+                        canvas::Stroke::default()
+                            .with_color(color)
+                            .with_width(width),
+                    );
                 }
             }
             for label in self

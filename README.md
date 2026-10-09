@@ -47,6 +47,10 @@ CleanSlate was created to make podcast microphone bleed reduction practical offl
 - Provides synchronized waveform navigation, gain controls and protected manual edits that survive reanalysis.
 - Keeps source files unchanged and uses the same effective gain envelope for display, audition and export.
 
+Automatic attenuation uses S-shaped fades: gain starts changing gently, moves fastest in the middle, then settles gently at the exact target. Open and close controls set the maximum fade durations. The fades fit inside non-speaking gaps and reach full volume before preserved speech. Short automatic gaps can be ignored with the gap control.
+
+Manual gain points use straight lines between points and remain authoritative after reanalysis. See the [gain-envelope contract](docs/effective-envelopes.md) for how these layers combine. The aim is transparent attenuation without audible clicks, pumping or obvious ducking; confirm the result by listening. Existing renders made with the previous exponential fades need to be regenerated.
+
 ## Defaults and limits
 
 Acoustic-first analysis is the default and the current development focus. It runs locally and needs no Nemotron download.

@@ -1279,6 +1279,32 @@ pub(crate) fn validate_source_metadata(
     })
 }
 
+pub fn validate_audio_sources(sources: &[crate::AudioSource]) -> Result<Validation, RenderBlocker> {
+    if sources.is_empty() || sources.len() > 8 {
+        return Err(RenderBlocker(
+            "session requires one to eight speaker tracks".into(),
+        ));
+    }
+    let metadata = sources
+        .iter()
+        .map(|source| {
+            crate::audio_io::decode_source_chunks(source, None, |_, _| Ok(()))
+                .map(|decoded| decoded.metadata)
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let mut validation = validate_source_metadata(&metadata)?;
+    if sources
+        .iter()
+        .all(|source| source.channel.is_some() && source.path == sources[0].path)
+    {
+        validation.alignment_verified = true;
+        validation
+            .warnings
+            .retain(|warning| !warning.starts_with("alignment unverified:"));
+    }
+    Ok(validation)
+}
+
 fn report_regions(
     region: &Region,
     track_count: usize,

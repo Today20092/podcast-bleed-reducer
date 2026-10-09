@@ -1,6 +1,7 @@
+#[cfg(test)]
+use crate::prepared_analysis::source_stamps;
 use crate::{
     GainEnvelope, RenderBlocker,
-    prepared_analysis::source_stamps,
     timebase::{Rounding, SourceTimebase, TimePosition},
     waveform::SourceStamp,
 };
@@ -22,6 +23,7 @@ pub struct PreparedAudio {
     stamps: Vec<SourceStamp>,
     sample_rate: u32,
     stems: Arc<Vec<crate::PreparedAnalysisAudio>>,
+    sources: Vec<crate::AudioSource>,
 }
 
 impl PreparedAudio {
@@ -113,6 +115,24 @@ impl PreparedAudio {
         rate: u32,
         cancelled: &AtomicBool,
     ) -> Result<Self, RenderBlocker> {
+        Self::prepare_sources_for_rate(
+            &paths
+                .iter()
+                .cloned()
+                .map(crate::AudioSource::mono)
+                .collect::<Vec<_>>(),
+            cached,
+            rate,
+            cancelled,
+        )
+    }
+
+    pub fn prepare_sources_for_rate(
+        inputs: &[crate::AudioSource],
+        cached: Option<Self>,
+        rate: u32,
+        cancelled: &AtomicBool,
+    ) -> Result<Self, RenderBlocker> {
         let check_cancelled = || {
             if cancelled.load(Ordering::Relaxed) {
                 Err(RenderBlocker("audio preparation cancelled".into()))
@@ -121,18 +141,21 @@ impl PreparedAudio {
             }
         };
         check_cancelled()?;
-        let stamps = source_stamps(paths)?;
+        let stamps = inputs
+            .iter()
+            .map(SourceStamp::read_source)
+            .collect::<Result<Vec<_>, _>>()?;
         if let Some(cached) = cached
             && cached.stamps == stamps
             && cached.sample_rate == rate
         {
             return Ok(cached);
         }
-        let stems = paths
+        let stems = inputs
             .iter()
             .map(|path| {
                 check_cancelled()?;
-                crate::analysis_audio::prepare_audio_at_rate_in(
+                crate::analysis_audio::prepare_source_at_rate_in(
                     path,
                     &std::env::temp_dir().join("cleanslate-playback-audio-v1"),
                     rate,
@@ -151,8 +174,9 @@ impl PreparedAudio {
             stamps,
             sample_rate: rate,
             stems: Arc::new(stems),
+            sources: inputs.to_vec(),
         };
-        if !prepared.is_current(paths) {
+        if !prepared.is_current_sources(inputs) {
             return Err(RenderBlocker(
                 "sources changed during audio preparation".into(),
             ));
@@ -160,8 +184,28 @@ impl PreparedAudio {
         Ok(prepared)
     }
 
+    #[cfg(test)]
     pub(crate) fn is_current(&self, paths: &[PathBuf]) -> bool {
-        source_stamps(paths).is_ok_and(|stamps| stamps == self.stamps)
+        self.is_current_sources(
+            &paths
+                .iter()
+                .cloned()
+                .map(crate::AudioSource::mono)
+                .collect::<Vec<_>>(),
+        )
+    }
+
+    pub(crate) fn is_current_sources(&self, inputs: &[crate::AudioSource]) -> bool {
+        self.sources
+            .iter()
+            .zip(inputs)
+            .all(|(a, b)| a.path == b.path && a.channel == b.channel)
+            && inputs.len() == self.sources.len()
+            && inputs
+                .iter()
+                .map(SourceStamp::read_source)
+                .collect::<Result<Vec<_>, _>>()
+                .is_ok_and(|stamps| stamps == self.stamps)
     }
 }
 
@@ -178,11 +222,16 @@ pub(crate) struct AuditionPreparation {
     generation: u64,
     cache: Option<PreparedAudio>,
     job: Option<PreparationJob>,
-    pending: Option<Vec<PathBuf>>,
+    pending: Option<Vec<crate::AudioSource>>,
 }
 
 impl AuditionPreparation {
+    #[cfg(test)]
     pub(crate) fn request(&mut self, paths: Vec<PathBuf>) {
+        self.request_sources(paths.into_iter().map(crate::AudioSource::mono).collect());
+    }
+
+    pub(crate) fn request_sources(&mut self, paths: Vec<crate::AudioSource>) {
         self.cancel();
         self.pending = Some(paths);
         self.launch();
@@ -245,12 +294,17 @@ impl AuditionPreparation {
                     .sample_rate()
                     .0;
                 match cached {
-                    Some(cached) if cached.is_current(&paths) && cached.sample_rate == rate => {
+                    Some(cached)
+                        if cached.is_current_sources(&paths) && cached.sample_rate == rate =>
+                    {
                         Ok(cached)
                     }
-                    cached => {
-                        PreparedAudio::prepare_at_rate(&paths, cached, rate, &worker_cancelled)
-                    }
+                    cached => PreparedAudio::prepare_sources_for_rate(
+                        &paths,
+                        cached,
+                        rate,
+                        &worker_cancelled,
+                    ),
                 }
             })();
             let _ = sender.send(prepared);
@@ -320,6 +374,7 @@ struct Controls {
 
 struct Settings {
     mode: AuditionMode,
+    solo: u64,
     monitor: f32,
     seek: Option<usize>,
     envelopes: Arc<Vec<GainEnvelope>>,
@@ -338,6 +393,7 @@ impl Controls {
             requested: AtomicUsize::new(position),
             settings: RwLock::new(Settings {
                 mode,
+                solo: 0,
                 monitor,
                 seek: None,
                 envelopes: Arc::new(envelopes),
@@ -364,6 +420,7 @@ struct AuditionSource {
     position: usize,
     remaining: usize,
     mode: AuditionMode,
+    solo: u64,
     monitor: f32,
     envelopes: Arc<Vec<GainEnvelope>>,
     failure: Option<RenderBlocker>,
@@ -487,6 +544,7 @@ impl AuditionSource {
             position,
             remaining: 0,
             mode: AuditionMode::Original,
+            solo: 0,
             monitor: 1.0,
             envelopes: Arc::new(vec![]),
             failure: None,
@@ -547,6 +605,7 @@ impl Iterator for AuditionSource {
                     self.controls.position.store(position, Ordering::Relaxed);
                 }
                 self.mode = settings.mode;
+                self.solo = settings.solo;
                 self.monitor = settings.monitor;
                 if !Arc::ptr_eq(&self.envelopes, &settings.envelopes) {
                     self.envelopes = Arc::clone(&settings.envelopes);
@@ -606,6 +665,9 @@ impl Iterator for AuditionSource {
             .iter()
             .enumerate()
             .map(|(track, samples)| {
+                if self.solo != 0 && self.solo & (1u64 << track) == 0 {
+                    return 0.0;
+                }
                 let source = samples[position - block.start];
                 let gain = self
                     .envelopes
@@ -657,6 +719,7 @@ impl LiveAudition {
         monitor: f32,
         start: TimePosition,
         end: TimePosition,
+        solo: u64,
     ) -> Result<Self, RenderBlocker> {
         let grid = SourceTimebase::new(prepared.sample_rate, prepared.frame_count() as u64)?;
         let start = grid.frame_at_time(start.min(grid.duration()?), Rounding::Floor)? as usize;
@@ -668,6 +731,7 @@ impl LiveAudition {
         let player = Sink::connect_new(stream.mixer());
         let end = end.min(prepared.frame_count());
         let controls = Arc::new(Controls::new(mode, monitor, start.min(end), envelopes));
+        controls.settings.write().unwrap().solo = solo;
         let AuditionPlayback { source, worker } =
             AuditionSource::prepare_stream(prepared, Arc::clone(&controls), end);
         player.append(source);
@@ -687,6 +751,9 @@ impl LiveAudition {
     }
     pub(crate) fn set_monitor(&self, gain: f32) {
         self.controls.settings.write().unwrap().monitor = gain;
+    }
+    pub(crate) fn set_solo(&self, solo: u64) {
+        self.controls.settings.write().unwrap().solo = solo;
     }
     pub(crate) fn replace_envelopes(&self, envelopes: Vec<GainEnvelope>) {
         self.controls.settings.write().unwrap().envelopes = Arc::new(envelopes);
@@ -834,6 +901,42 @@ mod tests {
         controls.settings.write().unwrap().mode = AuditionMode::Removed;
         assert_eq!(controls.position.load(Ordering::Relaxed), position);
         assert_eq!(next_at(&mut source, CONTROL_BLOCK * 2), Some(0.75));
+    }
+
+    #[test]
+    fn solo_combinations_update_live_without_seeking_in_all_modes() {
+        for mode in [
+            AuditionMode::Original,
+            AuditionMode::Processed,
+            AuditionMode::Removed,
+        ] {
+            let controls = Arc::new(Controls::new(
+                mode,
+                0.5,
+                0,
+                vec![GainEnvelope::constant(2048, 0.25); 3],
+            ));
+            let mut playback = AuditionSource::prepare_stream(
+                prepared_samples(
+                    &[vec![0.2; 2048], vec![0.4; 2048], vec![0.8; 2048]],
+                    &format!("solo-{mode:?}"),
+                ),
+                Arc::clone(&controls),
+                2048,
+            );
+            for (block, (solo, sum)) in [(0, 1.4), (1, 0.2), (5, 1.0), (2, 0.4), (0, 1.4)]
+                .into_iter()
+                .enumerate()
+            {
+                let position = controls.position.load(Ordering::Relaxed);
+                controls.settings.write().unwrap().solo = solo;
+                assert_eq!(controls.position.load(Ordering::Relaxed), position);
+                let expected = audition_sample(sum, 0.25, mode, 0.5);
+                for frame in block * CONTROL_BLOCK..(block + 1) * CONTROL_BLOCK {
+                    assert!((next_at(&mut playback, frame).unwrap() - expected).abs() < 1e-6);
+                }
+            }
+        }
     }
 
     #[test]

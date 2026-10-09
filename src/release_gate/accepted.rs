@@ -967,62 +967,67 @@ fn measure_gain_query(
         let mut position = 0_usize;
         let mut interval = 0_usize;
         let mut changed_start = None;
-        let decoded = crate::audio_io::decode_chunks(&source.path, cancelled, |rate, samples| {
-            if rate != source.metadata.grid.sample_rate {
-                return Err(RenderBlocker("Decoded source rate changed.".into()));
-            }
-            for &sample in samples {
-                while intervals
-                    .get(interval)
-                    .is_some_and(|(range, _)| range.end <= position)
-                {
-                    interval += 1;
+        let decoded = crate::audio_io::decode_source_chunks(
+            &source.audio_source(),
+            cancelled,
+            |rate, samples| {
+                if rate != source.metadata.grid.sample_rate {
+                    return Err(RenderBlocker("Decoded source rate changed.".into()));
                 }
-                let kind = intervals
-                    .get(interval)
-                    .filter(|(range, _)| range.contains(&position))
-                    .map(|(_, kind)| *kind);
-                let mut attenuated = false;
-                if let Some(kind) = kind {
-                    let gain = gain_at(track, position)?;
-                    if !gain.is_finite() || !(0.0..=1.0).contains(&gain) {
-                        return Err(RenderBlocker(
-                            "Evaluation gain is not finite attenuation.".into(),
-                        ));
+                for &sample in samples {
+                    while intervals
+                        .get(interval)
+                        .is_some_and(|(range, _)| range.end <= position)
+                    {
+                        interval += 1;
                     }
-                    match kind {
-                        EvaluationKind::Preserve => {
-                            measured.preservation_samples += 1;
-                            if gain != 1.0 {
-                                measured.attenuated_preservation_samples += 1;
-                                attenuated = true;
+                    let kind = intervals
+                        .get(interval)
+                        .filter(|(range, _)| range.contains(&position))
+                        .map(|(_, kind)| *kind);
+                    let mut attenuated = false;
+                    if let Some(kind) = kind {
+                        let gain = gain_at(track, position)?;
+                        if !gain.is_finite() || !(0.0..=1.0).contains(&gain) {
+                            return Err(RenderBlocker(
+                                "Evaluation gain is not finite attenuation.".into(),
+                            ));
+                        }
+                        match kind {
+                            EvaluationKind::Preserve => {
+                                measured.preservation_samples += 1;
+                                if gain != 1.0 {
+                                    measured.attenuated_preservation_samples += 1;
+                                    attenuated = true;
+                                }
+                            }
+                            EvaluationKind::Bleed => {
+                                measured.bleed_samples += 1;
+                                track_input_square += f64::from(sample).powi(2);
+                                track_output_square +=
+                                    (f64::from(sample) * f64::from(gain)).powi(2);
                             }
                         }
-                        EvaluationKind::Bleed => {
-                            measured.bleed_samples += 1;
-                            track_input_square += f64::from(sample).powi(2);
-                            track_output_square += (f64::from(sample) * f64::from(gain)).powi(2);
-                        }
                     }
+                    if attenuated {
+                        changed_start.get_or_insert(position);
+                    } else if let Some(start) = changed_start.take() {
+                        changed.push(TimeRange {
+                            start: source
+                                .metadata
+                                .grid
+                                .time_at_frame(start as u64, crate::Rounding::Floor)?,
+                            end: source
+                                .metadata
+                                .grid
+                                .time_at_frame(position as u64, crate::Rounding::Ceil)?,
+                        });
+                    }
+                    position += 1;
                 }
-                if attenuated {
-                    changed_start.get_or_insert(position);
-                } else if let Some(start) = changed_start.take() {
-                    changed.push(TimeRange {
-                        start: source
-                            .metadata
-                            .grid
-                            .time_at_frame(start as u64, crate::Rounding::Floor)?,
-                        end: source
-                            .metadata
-                            .grid
-                            .time_at_frame(position as u64, crate::Rounding::Ceil)?,
-                    });
-                }
-                position += 1;
-            }
-            Ok(())
-        })?;
+                Ok(())
+            },
+        )?;
         if decoded.metadata != source.metadata
             || position as u64 != source.metadata.grid.frame_count
         {

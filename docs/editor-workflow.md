@@ -4,7 +4,15 @@ The Iced workspace combines validated sources, 16 kHz analysis copies, human ref
 
 Import synchronized mono tracks, declare supplied synchronization when appropriate, and listen in Original mode to find solo speech and room tone. Click to seek; Space plays/stops. Drag across a waveform to open the speaker multiselect immediately. Select nobody for room tone, one person for solo speech, or several for overlap, then save the label. Supply a solo reference for each speaker and a room reference. Additional examples across the recording can improve calibration. Analyze validates reference usability; merely saving a label does not establish that it is usable. Speaker numbers are stable identities, not inferred names.
 
+Open Speaker examples to browse saved clips with readable times. Play auditions a clip; Show on timeline selects and zooms to it. Click a clip's strip on the waveform and drag its left or right handle to adjust the boundaries. Release saves one undoable change; Escape cancels the drag. Right-click the clip to change its speakers or delete it. Edits preserve exact internal timing, and conflicting labels require explicit replacement. Analyze again after changing examples.
+
 Leave Use Nemotron off for the acoustic workflow. Nemotron-assisted analysis is experimental work in progress; its benefit over acoustic-only analysis has not been established. Development setup and verification requirements are in the [experimental runtime guide](development.md#experimental-nemotron-runtime). When selected, missing or changed assets produce an actionable error and retain the previous preview; the editor does not silently switch modes.
+
+## Multichannel WAV import
+
+Import tracks and file drops also accept multichannel WAV/BWF recordings. Choose speaker channels shows the channels initially selected; deselect recorder mixes or unused inputs and edit the names before importing. Names come from iXML interleave metadata when present, with Channel N as the fallback. Each selected channel becomes an editable track backed by the original WAV, with its native sample rate, frame count and timing intact. Import does not create separate source WAVs.
+
+Channels in one WAV are internally synchronized. Separate mono files may be included in the same project, subject to the usual physical-duration and timing checks. Missing timing between files still requires a supplied-synchronization declaration. The project accepts at most eight speaker tracks. Rename in a track header changes its saved name; Analyze again before final rendering after a rename. Final export writes one processed mono WAV per track and preserves BEXT timing where present.
 
 ## Analysis and editing
 
@@ -16,7 +24,7 @@ The waveform displays source peaks and conservative processed bounds. Blue marks
 
 Switch the envelope tool on to drag manual points horizontally for fade duration or vertically for gain. A drag uses a transient draft; release commits one undo command and cancellation restores the saved curve and markers. Arrow keys move a selected point, Delete removes its whole override, and Ctrl+Z/Ctrl+Y undo/redo. Text inputs retain their captured keys. Preserve and Attenuate create region edits. Conflicts require the explicit **Replace entire overlapping overrides and protections** option; it removes the conflicting records as whole records, including the other bindings of a global protection.
 
-Open/close settings specify finite exponential-shaped fade durations with exact endpoints. Shared evaluation keeps automatic fades outside preserved speech. Manual gain remains authoritative until removed. All source-time curves stay sparse; native-rate playback and rendering use the same evaluator.
+Open/close settings specify finite S-shaped fade durations with exact endpoints and zero endpoint slope and curvature. Shared evaluation keeps automatic fades outside preserved speech. Manual gain remains authoritative until removed and retains linear interpolation. All source-time curves stay sparse; native-rate playback and rendering use the same evaluator. Transparent attenuation remains a listening requirement, not a guarantee from the curve alone.
 
 Review the waveform and audition directly. There is no uncertainty review queue. Use labels to improve detection or Preserve/Attenuate and protection to correct gain. Ignore gaps shorter than bridges brief automatic attenuation gaps between speech spans; it does not erase explicit room-tone labels. Original works before analysis. When a preview exists, Original, Processed and Removed preserve transport and seek context while using the current effective envelopes.
 

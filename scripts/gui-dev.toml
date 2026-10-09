@@ -18,6 +18,25 @@ opt-level = 2
 [profile.dev.package.digest]
 opt-level = 2
 
+# Continuous scrolling rebuilds paths every frame; optimize both renderer paths.
+[profile.dev.package.lyon_tessellation]
+opt-level = 2
+
+[profile.dev.package.lyon_path]
+opt-level = 2
+
+[profile.dev.package.tiny-skia]
+opt-level = 2
+
+[profile.dev.package.tiny-skia-path]
+opt-level = 2
+
+[profile.dev.package.iced_tiny_skia]
+opt-level = 2
+
+[profile.dev.package.iced_graphics]
+opt-level = 2
+
 [profile.dev.package.bwavfile]
 opt-level = 2
 

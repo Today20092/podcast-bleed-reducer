@@ -141,6 +141,8 @@ fn mixed_native_exports_and_monitored_playback_share_the_effective_time_evaluato
 
 #[test]
 fn accepted_envelopes_render_directly_and_obsolete_private_completion_cannot_publish() {
+    use sha2::Digest;
+
     let (root, mut project, audio, evidence) = fixture::session();
     let cancelled = std::sync::atomic::AtomicBool::new(false);
     let progress = std::sync::atomic::AtomicU8::new(0);
@@ -164,6 +166,38 @@ fn accepted_envelopes_render_directly_and_obsolete_private_completion_cannot_pub
         &evidence.runtime,
     )
     .unwrap();
+    let mut old_curve_snapshot = snapshot.clone();
+    old_curve_snapshot.sound_identity = format!(
+        "{:x}",
+        sha2::Sha256::digest(
+            serde_json::to_vec(&(
+                &project.sources,
+                project.supplied_alignment(),
+                project.nemotron_enabled(),
+                project.reference_labels(),
+                project.gain_constraints(),
+                project.parameters(),
+                project.analysis_recipe(),
+                project.result(),
+            ))
+            .unwrap()
+        )
+    );
+    assert!(snapshot.matches(&project));
+    assert!(!old_curve_snapshot.matches(&project));
+    assert!(
+        rust_app::prepare_supervised_render(
+            &project,
+            &analysis,
+            &effective,
+            &old_curve_snapshot,
+            &root.join("obsolete-curve"),
+            &progress,
+            None,
+        )
+        .is_err()
+    );
+    assert!(!root.join("obsolete-curve").exists());
     let destination = root.join("accepted-render");
     let prepared = rust_app::prepare_supervised_render(
         &project,

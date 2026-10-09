@@ -157,14 +157,18 @@ pub fn prepare_supervised_render(
             "{:02}-{}.wav",
             i + 1,
             source
-                .path
-                .file_stem()
-                .and_then(|s| s.to_str())
-                .unwrap_or("source")
+                .display_name()
+                .chars()
+                .map(|c| if c.is_alphanumeric() || "-_ ".contains(c) {
+                    c
+                } else {
+                    '_'
+                })
+                .collect::<String>()
         );
         let path = output.path(&name);
-        let metadata = crate::audio_io::render_native(
-            &source.path,
+        let metadata = crate::audio_io::render_source_native(
+            &source.audio_source(),
             &path,
             &effective.envelopes[i],
             cancelled,

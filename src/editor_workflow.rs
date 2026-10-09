@@ -223,9 +223,11 @@ impl EditorAnalysisWorker {
         progress.store(5, Ordering::Relaxed);
         let stage = std::time::Instant::now();
         let audio = project
-            .source_paths()
+            .audio_sources()
             .iter()
-            .map(|path| crate::prepare_analysis_audio_in(path, &cache.join("audio"), Some(cancel)))
+            .map(|source| {
+                crate::prepare_source_analysis_audio_in(source, &cache.join("audio"), Some(cancel))
+            })
             .collect::<Result<Vec<_>, _>>()?;
         timings.audio_preparation_ms = stage.elapsed().as_secs_f64() * 1000.0;
         let stage = std::time::Instant::now();
