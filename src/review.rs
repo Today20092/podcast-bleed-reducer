@@ -13,11 +13,18 @@ pub struct ReviewWarning {
     pub label: String,
     pub affected_tracks: Vec<usize>,
     region: usize,
+    analysis_identity: Option<String>,
 }
 
 impl ReviewWarning {
     pub fn key(&self) -> String {
-        format!("warning:{}:{}:{}", self.start, self.end, self.label)
+        match &self.analysis_identity {
+            Some(identity) => format!(
+                "warning:{identity}:{}:{}:{:?}:{}",
+                self.start, self.end, self.affected_tracks, self.label
+            ),
+            None => format!("warning:{}:{}:{}", self.start, self.end, self.label),
+        }
     }
 }
 
@@ -85,6 +92,73 @@ pub struct ReviewWorkspace {
 }
 
 impl ReviewWorkspace {
+    pub fn from_ownership(ownership: &crate::TemporalOwnership) -> Self {
+        let regions: Vec<_> = ownership
+            .regions
+            .iter()
+            .map(|region| {
+                let owners: Vec<_> = region
+                    .states
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(i, s)| (*s == crate::TemporalTrackState::Owned).then_some(i))
+                    .collect();
+                let decision = if region
+                    .states
+                    .contains(&crate::TemporalTrackState::UncertainUnity)
+                {
+                    ReportedDecision::Uncertain
+                } else if owners.is_empty() {
+                    ReportedDecision::NoSpeech
+                } else {
+                    ReportedDecision::Owned
+                };
+                ReviewRegion {
+                    start: region.start,
+                    end: region.end,
+                    decision,
+                    owners,
+                    affected_track: None,
+                    applied_attenuation_db: 0,
+                    evidence_reasons: vec![],
+                    review_warning: None,
+                }
+            })
+            .collect();
+        let mut grouped = BTreeMap::<(u64, u64, String), Vec<usize>>::new();
+        for warning in &ownership.warnings {
+            let tracks = grouped
+                .entry((warning.start, warning.end, warning.reason.clone()))
+                .or_default();
+            tracks.extend(
+                warning
+                    .tracks
+                    .iter()
+                    .filter_map(|id| ownership.tracks.iter().position(|track| track == id)),
+            );
+        }
+        let warnings = grouped
+            .into_iter()
+            .map(|((start, end, label), mut affected_tracks)| {
+                affected_tracks.sort_unstable();
+                affected_tracks.dedup();
+                let region = regions.partition_point(|region| region.end <= start);
+                ReviewWarning {
+                    start,
+                    end,
+                    label,
+                    affected_tracks,
+                    region,
+                    analysis_identity: Some(ownership.cache_key.clone()),
+                }
+            })
+            .collect();
+        Self {
+            regions,
+            warnings,
+            ..Self::default()
+        }
+    }
     pub fn open(path: &Path, sources: &[PathBuf]) -> io::Result<Self> {
         let report: Report = serde_json::from_slice(&fs::read(path)?).map_err(io::Error::other)?;
         let mut warnings = BTreeMap::<
@@ -112,6 +186,7 @@ impl ReviewWorkspace {
                     label,
                     affected_tracks,
                     region,
+                    analysis_identity: None,
                 }
             })
             .collect();

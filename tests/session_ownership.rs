@@ -180,6 +180,43 @@ fn held_out_episode_allows_two_direct_owners_and_rejects_speech_bleed() {
             > 1.4
     );
     assert_eq!(cache.stats().fixed_vad_preparations, 1);
+    let grid = result.temporal_evidence(&project).unwrap();
+    let temporal = rust_app::TemporalOwnershipCache::default()
+        .optimize(
+            &project,
+            &result,
+            rust_app::TemporalSettings::default(),
+            None,
+        )
+        .unwrap();
+    let inspection = grid.evidence_at(TICKS_PER_SECOND * 31 / 10).unwrap();
+    assert_eq!(inspection[0].probability, solo[0].probability);
+    assert!(
+        inspection
+            .iter()
+            .all(|row| row.raw_speech.is_some() && row.assigned_activity.is_some())
+    );
+    assert!(
+        temporal
+            .states_at(TICKS_PER_SECOND * 7 / 2)
+            .unwrap()
+            .iter()
+            .all(|state| *state != rust_app::TemporalTrackState::Absent)
+    );
+    let mut changed_provenance = (*result).clone();
+    changed_provenance.cache_key = "f".repeat(64);
+    let changed_temporal = rust_app::TemporalOwnershipCache::default()
+        .optimize(
+            &project,
+            &changed_provenance,
+            rust_app::TemporalSettings::default(),
+            None,
+        )
+        .unwrap();
+    assert_ne!(
+        changed_temporal.cache_key, temporal.cache_key,
+        "Upstream recipe/runtime identity remains part of the temporal artifact even with identical numeric evidence."
+    );
     std::fs::remove_dir_all(root).unwrap();
 }
 
@@ -252,6 +289,10 @@ fn labels_retrain_models_while_fixed_evidence_and_saved_models_reuse_safely() {
             None,
         )
         .unwrap();
+    assert!(
+        before.temporal_evidence(&project).is_err(),
+        "Old owner estimates must not acquire new human truth implicitly."
+    );
     assert_ne!(before.cache_key, after.cache_key);
     assert_eq!(cache.stats().fixed_vad_preparations, 1);
     for (a, b) in before

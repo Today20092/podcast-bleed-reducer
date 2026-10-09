@@ -94,8 +94,75 @@ pub struct SessionOwnership {
     probabilities: Vec<Vec<f32>>,
     warnings: Vec<Vec<u8>>,
     unresolved: Option<String>,
+    reference_identity: String,
+    raw_speech: Vec<Vec<f32>>,
+    assigned_activity: Vec<Vec<f32>>,
+    global_activity: Vec<f32>,
 }
 impl SessionOwnership {
+    /// Current trusted truth and source bindings, excluding gain or manual edits.
+    pub(crate) fn reference_identity(project: &Project) -> String {
+        hash(
+            &serde_json::json!({"sources":project.sources.iter().map(|s|(s.track_id,s.speaker_id,&s.fingerprint,s.metadata.grid)).collect::<Vec<_>>(),"references":project.reference_labels()}),
+        )
+    }
+    pub fn temporal_evidence(
+        &self,
+        project: &Project,
+    ) -> Result<crate::TemporalEvidenceGrid, RenderBlocker> {
+        self.temporal_evidence_cancellable(project, None)
+    }
+    pub fn temporal_evidence_cancellable(
+        &self,
+        project: &Project,
+        cancelled: Option<&AtomicBool>,
+    ) -> Result<crate::TemporalEvidenceGrid, RenderBlocker> {
+        crate::prepared_analysis::check_cancelled(cancelled)?;
+        if self.reference_identity != Self::reference_identity(project) {
+            return Err(RenderBlocker(
+                "Ownership analysis does not match current sources and references.".into(),
+            ));
+        }
+        let mut rows = vec![Vec::with_capacity(self.frame_count()); self.tracks.len()];
+        for frame in 0..self.frame_count() {
+            if frame % 1024 == 0 {
+                crate::prepared_analysis::check_cancelled(cancelled)?;
+            }
+            for (track, estimate) in self
+                .estimates_at(frame as u64 * OWNERSHIP_FRAME_TICKS)?
+                .into_iter()
+                .enumerate()
+            {
+                rows[track].push(crate::TemporalEvidence {
+                    probability: estimate.probability,
+                    raw_speech: self
+                        .raw_speech
+                        .get(track)
+                        .and_then(|r| r.get(frame))
+                        .copied(),
+                    assigned_activity: self
+                        .assigned_activity
+                        .get(track)
+                        .and_then(|r| r.get(frame))
+                        .copied(),
+                    preservation_reason: estimate.preservation_reason,
+                });
+            }
+        }
+        let mut result = crate::TemporalEvidenceGrid::new(
+            self.tracks.clone(),
+            self.duration,
+            rows,
+            if self.global_activity.is_empty() {
+                vec![0.0; self.frame_count()]
+            } else {
+                self.global_activity.clone()
+            },
+        )?;
+        result.bind_upstream_identity(&self.cache_key);
+        crate::prepared_analysis::check_cancelled(cancelled)?;
+        Ok(result)
+    }
     pub fn frame_count(&self) -> usize {
         self.duration.div_ceil(OWNERSHIP_FRAME_TICKS) as usize
     }
@@ -203,6 +270,10 @@ impl SessionOwnershipCache {
                     "Assigned speaker identity is missing or ambiguous; preserve for review."
                         .into(),
                 ),
+                reference_identity: SessionOwnership::reference_identity(project),
+                raw_speech: vec![],
+                assigned_activity: vec![],
+                global_activity: vec![],
             }));
         }
         if let Some(accepted) = &self.accepted
@@ -338,14 +409,23 @@ impl SessionOwnershipCache {
             probabilities: vec![Vec::with_capacity(frames); audio.len()],
             warnings: vec![Vec::with_capacity(frames); audio.len()],
             unresolved: None,
+            reference_identity: SessionOwnership::reference_identity(project),
+            raw_speech: vad.probabilities.clone(),
+            assigned_activity: vec![Vec::with_capacity(frames); audio.len()],
+            global_activity: Vec::with_capacity(frames),
         };
         for start in (0..frames).step_by(BLOCK) {
             crate::prepared_analysis::check_cancelled(cancelled)?;
             let end = (start + BLOCK).min(frames);
             let neural = neural_rows(&evidence.history, start, end)?;
             for frame in start..end {
+                result
+                    .global_activity
+                    .push(neural[frame - start].iter().copied().fold(0.0, f32::max));
                 let acoustic = acoustics.features_at(frame as u64 * OWNERSHIP_FRAME_TICKS);
                 for (track, source) in project.sources.iter().enumerate() {
+                    result.assigned_activity[track]
+                        .push(neural[frame - start][mapping.channels[&source.speaker_id].unwrap()]);
                     if let Ok(acoustic) = &acoustic {
                         let x = features(
                             track,
