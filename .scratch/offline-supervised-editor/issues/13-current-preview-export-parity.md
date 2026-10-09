@@ -1,6 +1,7 @@
 # Make audition and final exports use the same current envelope
 
-Status: ready-for-agent
+Status: claimed
+Assignee: export_parity
 Blocked by: 04, 11, 12
 Spec: ../spec.md
 
