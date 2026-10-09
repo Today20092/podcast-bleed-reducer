@@ -142,6 +142,7 @@ mod preview_tests {
         close_samples: f32,
     ) -> GainEnvelope {
         let mut envelope = GainEnvelope {
+            effective: None,
             sample_rate: crate::timebase::DETECTOR_SAMPLE_RATE,
             sample_count,
             points: vec![],
@@ -474,6 +475,7 @@ impl Default for AutomixParameters {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct GainEnvelope {
+    effective: Option<std::sync::Arc<crate::effective_envelope::EffectiveTrackEnvelope>>,
     sample_count: usize,
     sample_rate: u32,
     points: Vec<GainPoint>,
@@ -497,6 +499,7 @@ impl GainPoint {
 #[test]
 fn sequential_gain_matches_random_access_across_seeks() {
     let envelope = GainEnvelope {
+        effective: None,
         sample_rate: crate::timebase::DETECTOR_SAMPLE_RATE,
         sample_count: 6000,
         points: vec![
@@ -530,6 +533,18 @@ fn sequential_gain_matches_random_access_across_seeks() {
 }
 
 impl GainEnvelope {
+    pub(crate) fn from_effective(
+        grid: crate::SourceTimebase,
+        effective: std::sync::Arc<crate::effective_envelope::EffectiveTrackEnvelope>,
+    ) -> Result<Self, RenderBlocker> {
+        Ok(Self {
+            sample_count: usize::try_from(grid.frame_count)
+                .map_err(|_| RenderBlocker("Envelope source is too large.".into()))?,
+            sample_rate: grid.sample_rate,
+            points: vec![],
+            effective: Some(effective),
+        })
+    }
     pub fn constant_at_rate(
         sample_count: usize,
         sample_rate: u32,
@@ -542,6 +557,7 @@ impl GainEnvelope {
             ));
         }
         Ok(Self {
+            effective: None,
             sample_count,
             sample_rate,
             points: vec![GainPoint {
@@ -567,6 +583,9 @@ impl GainEnvelope {
         }
     }
     pub fn gain_at_time(&self, time: crate::TimePosition) -> f32 {
+        if let Some(effective) = &self.effective {
+            return effective.gain_at_time(time);
+        }
         self.source_grid()
             .frame_at_time(time, crate::Rounding::Floor)
             .ok()
@@ -574,7 +593,7 @@ impl GainEnvelope {
             .filter(|&sample| sample < self.sample_count)
             .map_or(1.0, |sample| self.gain_at(sample))
     }
-    pub(crate) fn gain_bounds_time(
+    pub fn gain_bounds_time(
         &self,
         start: crate::TimePosition,
         end: crate::TimePosition,
@@ -595,8 +614,16 @@ impl GainEnvelope {
         self.gain_bounds(start, end)
     }
     /// Same arithmetic as random access; retain the segment index during playback.
-    #[cfg(test)]
-    pub(crate) fn gain_at_sequential(&self, sample: usize, cursor: &mut usize) -> f32 {
+    pub fn gain_at_sequential(&self, sample: usize, cursor: &mut usize) -> f32 {
+        if let Some(effective) = &self.effective {
+            if sample >= self.sample_count {
+                return 1.0;
+            }
+            return self
+                .source_grid()
+                .time_at_frame(sample as u64, crate::Rounding::Floor)
+                .map_or(1.0, |time| effective.gain_sequential(time, cursor));
+        }
         if self.points.is_empty() {
             return 1.0;
         }
@@ -614,6 +641,7 @@ impl GainEnvelope {
     #[cfg(test)]
     pub(crate) fn constant(sample_count: usize, gain: f32) -> Self {
         Self {
+            effective: None,
             sample_rate: crate::timebase::DETECTOR_SAMPLE_RATE,
             sample_count,
             points: vec![GainPoint {
@@ -626,6 +654,15 @@ impl GainEnvelope {
     }
 
     pub fn gain_at(&self, sample: usize) -> f32 {
+        if let Some(effective) = &self.effective {
+            if sample >= self.sample_count {
+                return 1.0;
+            }
+            return self
+                .source_grid()
+                .time_at_frame(sample as u64, crate::Rounding::Floor)
+                .map_or(1.0, |time| effective.gain_at_time(time));
+        }
         let point = self.points[self
             .points
             .partition_point(|point| point.sample <= sample)
@@ -638,7 +675,10 @@ impl GainEnvelope {
     }
 
     /// Exact gain extrema in the half-open sample range, clipped to this envelope.
-    pub(crate) fn gain_bounds(&self, start: usize, end: usize) -> Option<(f32, f32)> {
+    pub fn gain_bounds(&self, start: usize, end: usize) -> Option<(f32, f32)> {
+        if let Some(effective) = &self.effective {
+            return effective.bounds(self.source_grid(), start, end);
+        }
         let end = end.min(self.sample_count);
         if start >= end {
             return None;
@@ -1058,6 +1098,7 @@ pub(crate) fn gain_envelope(
 ) -> GainEnvelope {
     if sample_count == 0 {
         return GainEnvelope {
+            effective: None,
             sample_rate: crate::timebase::DETECTOR_SAMPLE_RATE,
             sample_count,
             points: vec![],
@@ -1159,6 +1200,7 @@ pub(crate) fn gain_envelope(
         }
     }
     GainEnvelope {
+        effective: None,
         sample_rate: crate::timebase::DETECTOR_SAMPLE_RATE,
         sample_count,
         points,

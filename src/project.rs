@@ -76,6 +76,28 @@ pub struct ManualGainEdit {
     pub id: u64,
     pub source: SourceBinding,
     pub points: Vec<EnvelopePoint>,
+    #[serde(default)]
+    pub interpolation: ManualInterpolation,
+}
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ManualInterpolation {
+    #[default]
+    Linear,
+}
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct GainConstraints {
+    pub manual_edits: Vec<ManualGainEdit>,
+    pub protections: Vec<BoundProtection>,
+}
+#[derive(Clone, Debug)]
+pub struct GainEditDraft {
+    pub constraints: GainConstraints,
+    base: GainConstraints,
+}
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum GainRegionAction {
+    Preserve,
+    Attenuate(f32),
 }
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BoundProtection {
@@ -115,6 +137,10 @@ pub struct Project {
     reference_undo: Vec<Vec<ReferenceLabel>>,
     #[serde(skip)]
     reference_redo: Vec<Vec<ReferenceLabel>>,
+    #[serde(skip)]
+    gain_undo: Vec<GainConstraints>,
+    #[serde(skip)]
+    gain_redo: Vec<GainConstraints>,
     manual_edits: Vec<ManualGainEdit>,
     bound_protections: Vec<BoundProtection>,
     pending_rebind: Vec<TrackId>,
@@ -166,6 +192,8 @@ impl Project {
             next_reference_id: 1,
             reference_undo: vec![],
             reference_redo: vec![],
+            gain_undo: vec![],
+            gain_redo: vec![],
             manual_edits: vec![],
             bound_protections: vec![],
             pending_rebind: vec![],
@@ -420,6 +448,10 @@ impl Project {
             }
             for protection in &self.bound_protections {
                 if protection.track.is_none_or(|t| t == edit.source.track)
+                    && protection
+                        .sources
+                        .iter()
+                        .any(|binding| binding.track == edit.source.track)
                     && protection.range.start < range.end
                     && range.start < protection.range.end
                 {
@@ -849,14 +881,164 @@ impl Project {
         Ok(true)
     }
     pub fn replace_manual_gain_edits(&mut self, edits: Vec<ManualGainEdit>) -> io::Result<()> {
-        if edits.iter().any(|e| !self.binding_current(&e.source)) {
-            return Err(invalid("New gain edits require current source bindings."));
+        self.replace_gain_constraints(GainConstraints {
+            manual_edits: edits,
+            protections: self.bound_protections.clone(),
+        })
+    }
+    pub fn gain_constraints(&self) -> GainConstraints {
+        GainConstraints {
+            manual_edits: self.manual_edits.clone(),
+            protections: self.bound_protections.clone(),
+        }
+    }
+    pub fn begin_gain_edit(&self) -> GainEditDraft {
+        let base = self.gain_constraints();
+        GainEditDraft {
+            constraints: base.clone(),
+            base,
+        }
+    }
+    /// A region action is a draft so conflicting records can be explicitly replaced before one commit.
+    pub fn region_gain_edit(
+        &self,
+        track: TrackId,
+        range: TimeRange,
+        action: GainRegionAction,
+    ) -> io::Result<GainEditDraft> {
+        let source = self.source(track)?;
+        let binding = SourceBinding {
+            track,
+            fingerprint: source.fingerprint.clone(),
+        };
+        let mut draft = self.begin_gain_edit();
+        match action {
+            GainRegionAction::Preserve => draft.constraints.protections.push(BoundProtection {
+                track: Some(track),
+                range,
+                sources: vec![binding],
+            }),
+            GainRegionAction::Attenuate(gain) => {
+                if !gain.is_finite() || !(0.0..=1.0).contains(&gain) {
+                    return Err(invalid("Region gain must be finite attenuation."));
+                }
+                let id = draft
+                    .constraints
+                    .manual_edits
+                    .iter()
+                    .map(|edit| edit.id)
+                    .max()
+                    .unwrap_or(0)
+                    .checked_add(1)
+                    .ok_or_else(|| invalid("Manual gain edit IDs exhausted."))?;
+                draft.constraints.manual_edits.push(ManualGainEdit {
+                    id,
+                    source: binding,
+                    points: vec![
+                        EnvelopePoint {
+                            time: range.start,
+                            gain,
+                        },
+                        EnvelopePoint {
+                            time: range.end,
+                            gain,
+                        },
+                    ],
+                    interpolation: ManualInterpolation::Linear,
+                });
+            }
+        }
+        Ok(draft)
+    }
+    pub fn validate_gain_edit(&self, draft: &GainEditDraft) -> io::Result<()> {
+        if draft.base != self.gain_constraints() {
+            return Err(invalid(
+                "Gain constraints changed during this edit; start a new drag.",
+            ));
+        }
+        self.validate_gain_constraints(&draft.constraints)
+    }
+    pub fn validate_gain_constraints(&self, constraints: &GainConstraints) -> io::Result<()> {
+        if constraints
+            .manual_edits
+            .iter()
+            .any(|e| !self.binding_current(&e.source))
+            || constraints
+                .protections
+                .iter()
+                .any(|p| p.sources.iter().any(|b| !self.binding_current(b)))
+        {
+            return Err(invalid(
+                "Gain constraints require current, reviewed source bindings.",
+            ));
+        }
+        let mut next = self.clone();
+        next.manual_edits = constraints.manual_edits.clone();
+        next.bound_protections = constraints.protections.clone();
+        next.validate_contract()
+    }
+    pub(crate) fn validate_interactive_sources(&self) -> io::Result<()> {
+        if self.sources.iter().any(|s| {
+            !self.binding_current(&SourceBinding {
+                track: s.track_id,
+                fingerprint: s.fingerprint.clone(),
+            })
+        }) {
+            return Err(invalid(
+                "Sources changed; relink and review before applying envelopes.",
+            ));
+        }
+        Ok(())
+    }
+    pub fn commit_gain_edit(&mut self, draft: GainEditDraft) -> io::Result<()> {
+        self.validate_gain_edit(&draft)?;
+        self.replace_gain_constraints(draft.constraints)
+    }
+    pub fn replace_gain_constraints(&mut self, constraints: GainConstraints) -> io::Result<()> {
+        self.validate_gain_constraints(&constraints)?;
+        if self.gain_constraints() == constraints {
+            return Ok(());
         }
         self.transaction(|next| {
-            next.manual_edits = edits;
+            next.gain_undo.push(next.gain_constraints());
+            next.gain_redo.clear();
+            next.manual_edits = constraints.manual_edits;
+            next.bound_protections = constraints.protections;
             next.render = RenderState::Stale;
             Ok(())
         })
+    }
+    pub fn undo_gain_edit(&mut self) -> io::Result<bool> {
+        self.restore_gain_history(false)
+    }
+    pub fn redo_gain_edit(&mut self) -> io::Result<bool> {
+        self.restore_gain_history(true)
+    }
+    fn restore_gain_history(&mut self, redo: bool) -> io::Result<bool> {
+        let history = if redo {
+            &self.gain_redo
+        } else {
+            &self.gain_undo
+        };
+        let Some(constraints) = history.last().cloned() else {
+            return Ok(false);
+        };
+        self.validate_gain_constraints(&constraints)?;
+        self.transaction(|next| {
+            let current = next.gain_constraints();
+            if redo {
+                next.gain_redo.pop();
+                next.gain_undo.push(current);
+            } else {
+                next.gain_undo.pop();
+                next.gain_redo.push(current);
+            }
+            next.manual_edits = constraints.manual_edits;
+            next.bound_protections = constraints.protections;
+            next.render = RenderState::Stale;
+            Ok(())
+        })?;
+        Ok(true)
     }
     pub fn replace_protections(&mut self, protections: Vec<Protection>) -> io::Result<()> {
         let mut bound = vec![];
@@ -901,10 +1083,9 @@ impl Project {
                 sources: bindings,
             });
         }
-        self.transaction(|next| {
-            next.bound_protections = bound;
-            next.render = RenderState::Stale;
-            Ok(())
+        self.replace_gain_constraints(GainConstraints {
+            manual_edits: self.manual_edits.clone(),
+            protections: bound,
         })
     }
     fn add_protections(&mut self, added: Vec<Protection>) -> io::Result<()> {

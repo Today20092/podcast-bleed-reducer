@@ -100,6 +100,15 @@ pub struct SessionOwnership {
     global_activity: Vec<f32>,
 }
 impl SessionOwnership {
+    pub(crate) fn source_identity(project: &Project) -> String {
+        hash(&serde_json::json!(
+            project
+                .sources
+                .iter()
+                .map(|s| (s.track_id, &s.fingerprint, s.metadata))
+                .collect::<Vec<_>>()
+        ))
+    }
     /// Current trusted truth and source bindings, excluding gain or manual edits.
     pub(crate) fn reference_identity(project: &Project) -> String {
         hash(

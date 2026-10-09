@@ -94,7 +94,7 @@ pub struct ReviewWorkspace {
 impl ReviewWorkspace {
     pub fn from_ownership(ownership: &crate::TemporalOwnership) -> Self {
         let regions: Vec<_> = ownership
-            .regions
+            .regions()
             .iter()
             .map(|region| {
                 let owners: Vec<_> = region

@@ -70,6 +70,7 @@ fn saved_project_retains_confirmed_decisions_without_derived_caches() {
         .protect_region(&[0], TICKS_PER_SECOND / 2, 3 * TICKS_PER_SECOND / 4)
         .unwrap();
     let edit = ManualGainEdit {
+        interpolation: rust_app::ManualInterpolation::Linear,
         id: 1,
         source: bindings(&project)[1].clone(),
         points: vec![
@@ -305,6 +306,7 @@ fn manual_curve_validation_rejects_unordered_boosts_and_constraint_conflicts() {
         assert!(
             project
                 .replace_manual_gain_edits(vec![ManualGainEdit {
+                    interpolation: rust_app::ManualInterpolation::Linear,
                     id: 1,
                     source: binding.clone(),
                     points
@@ -316,6 +318,7 @@ fn manual_curve_validation_rejects_unordered_boosts_and_constraint_conflicts() {
     assert!(
         project
             .replace_manual_gain_edits(vec![ManualGainEdit {
+                interpolation: rust_app::ManualInterpolation::Linear,
                 id: 1,
                 source: binding,
                 points: vec![

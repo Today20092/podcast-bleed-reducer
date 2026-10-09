@@ -6,6 +6,7 @@ mod audio_io;
 mod audition;
 mod calibration;
 pub mod detector_quality;
+mod effective_envelope;
 mod engine;
 mod export;
 mod joint_detector;
@@ -33,6 +34,7 @@ pub use analysis_audio::{
 pub use audio_io::SourceMetadata;
 pub use audition::{AuditionMode, AuditionPlayback, PreparedAudio};
 pub use calibration::{CalibrationExample, CalibrationKind, OwnershipSettings};
+pub use effective_envelope::*;
 pub use engine::*;
 pub use export::*;
 pub use ownership_model::*;

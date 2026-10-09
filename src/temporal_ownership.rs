@@ -129,7 +129,9 @@ pub struct TemporalOwnership {
     pub tracks: Vec<TrackId>,
     states: Vec<Vec<TemporalTrackState>>,
     evidence: Arc<TemporalEvidenceGrid>,
-    pub regions: Vec<TemporalRegion>,
+    regions: Vec<TemporalRegion>,
+    source_identity: Option<String>,
+    reference_identity: Option<String>,
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TemporalRegion {
@@ -139,6 +141,29 @@ pub struct TemporalRegion {
     pub human_truth: bool,
 }
 impl TemporalOwnership {
+    pub fn regions(&self) -> &[TemporalRegion] {
+        &self.regions
+    }
+    pub fn sources_match(&self, project: &crate::Project) -> bool {
+        self.source_identity.as_ref() == Some(&crate::SessionOwnership::source_identity(project))
+            && self.tracks
+                == project
+                    .sources
+                    .iter()
+                    .map(|s| s.track_id)
+                    .collect::<Vec<_>>()
+            && project
+                .sources
+                .iter()
+                .map(|s| s.metadata.grid.duration())
+                .collect::<Result<Vec<_>, _>>()
+                .is_ok_and(|durations| durations.into_iter().max() == Some(self.duration))
+    }
+    pub fn analysis_matches(&self, project: &crate::Project) -> bool {
+        self.sources_match(project)
+            && self.reference_identity.as_ref()
+                == Some(&crate::SessionOwnership::reference_identity(project))
+    }
     pub fn states_at(&self, time: u64) -> Result<Vec<TemporalTrackState>, RenderBlocker> {
         if time >= self.duration {
             return Err(RenderBlocker(
@@ -274,6 +299,8 @@ impl TemporalOwnershipCache {
         let computed = provisional.optimize_evidence(grid, settings, cancelled)?;
         let mut result = (*computed).clone();
         result.cache_key = key;
+        result.source_identity = Some(crate::SessionOwnership::source_identity(project));
+        result.reference_identity = Some(binding);
         let mut boundaries = std::collections::BTreeSet::from([0, duration]);
         for frame in 0..grid.global_activity.len() {
             boundaries.insert(frame as u64 * OWNERSHIP_FRAME_TICKS);
@@ -538,6 +565,8 @@ impl TemporalOwnershipCache {
             states,
             evidence: Arc::new(grid.clone()),
             regions,
+            source_identity: None,
+            reference_identity: None,
         });
         crate::prepared_analysis::check_cancelled(cancelled)?;
         self.accepted = Some(result.clone());

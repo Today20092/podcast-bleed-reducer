@@ -248,6 +248,7 @@ fn labels_retrain_models_while_fixed_evidence_and_saved_models_reuse_safely() {
     project.protect_track(0).unwrap();
     project
         .replace_manual_gain_edits(vec![rust_app::ManualGainEdit {
+            interpolation: rust_app::ManualInterpolation::Linear,
             id: 1,
             source: rust_app::SourceBinding {
                 track: project.sources[1].track_id,
