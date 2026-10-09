@@ -1,6 +1,7 @@
 # Evaluate independent quality and long-session performance
 
-Status: ready-for-agent
+Status: claimed
+Assignee: release_evaluation
 Blocked by: 06, 08, 09, 10, 13
 Spec: ../spec.md
 
