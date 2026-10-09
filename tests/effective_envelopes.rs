@@ -33,12 +33,68 @@ fn ownership_with_offset(offset: usize) -> std::sync::Arc<rust_app::TemporalOwne
 }
 
 #[test]
+fn default_gap_hold_preserves_brief_absence_between_speech() {
+    let result = ownership();
+    for rate in [44100, 48000, 96000] {
+        let grid = SourceTimebase::new(rate, u64::from(rate) * 32 / 10).unwrap();
+        let envelope = AutomaticEnvelope::from_ownership(
+            &result,
+            TrackId(1),
+            grid,
+            GainFadeSettings::default(),
+            None,
+        )
+        .unwrap();
+        assert_eq!(
+            envelope.gain_at_time(OWNERSHIP_FRAME_TICKS * 42),
+            1.0,
+            "a 128 ms bounded gap must be ignored by the default hold"
+        );
+        assert!(
+            envelope.gain_at_time(OWNERSHIP_FRAME_TICKS * 85) < 0.2,
+            "long absence must still attenuate"
+        );
+        let short_hold = AutomaticEnvelope::from_ownership(
+            &result,
+            TrackId(1),
+            grid,
+            GainFadeSettings {
+                minimum_gap: rust_app::TICKS_PER_SECOND / 100,
+                ..Default::default()
+            },
+            None,
+        )
+        .unwrap();
+        assert!(
+            short_hold.gain_at_time(OWNERSHIP_FRAME_TICKS * 42) < 0.3,
+            "lowering the hold to 10 ms must expose the same 128 ms gap"
+        );
+        let equal_hold = AutomaticEnvelope::from_ownership(
+            &result,
+            TrackId(1),
+            grid,
+            GainFadeSettings {
+                minimum_gap: OWNERSHIP_FRAME_TICKS * 4,
+                ..Default::default()
+            },
+            None,
+        )
+        .unwrap();
+        assert!(
+            equal_hold.gain_at_time(OWNERSHIP_FRAME_TICKS * 42) < 0.3,
+            "a gap exactly the selected duration qualifies for attenuation"
+        );
+    }
+}
+
+#[test]
 fn finite_fades_fit_short_absent_gaps_and_preserve_speech_endpoints() {
     let result = ownership();
     let settings = GainFadeSettings {
         attenuation: 0.25,
         fade_in: OWNERSHIP_FRAME_TICKS * 4,
         fade_out: OWNERSHIP_FRAME_TICKS * 4,
+        minimum_gap: 0,
     };
     let grid = SourceTimebase::new(48000, 153600).unwrap();
     let envelope =
@@ -72,6 +128,7 @@ fn long_requested_fades_do_not_erase_known_absence() {
         attenuation: 0.1,
         fade_in: OWNERSHIP_FRAME_TICKS * 10,
         fade_out: OWNERSHIP_FRAME_TICKS * 35,
+        minimum_gap: 0,
     };
     let grid = SourceTimebase::new(48000, 153600).unwrap();
     let envelope =
@@ -113,12 +170,173 @@ fn project() -> (std::path::PathBuf, rust_app::Project) {
 }
 
 #[test]
+fn live_gap_setting_persists_and_human_absence_and_manual_gain_remain_authoritative() {
+    let (root, mut project) = project();
+    let seed = ownership();
+    let rows = (0..100)
+        .map(|frame| {
+            seed.evidence()
+                .evidence_at(frame * OWNERSHIP_FRAME_TICKS)
+                .unwrap()[0]
+                .clone()
+        })
+        .collect();
+    let grid = TemporalEvidenceGrid::new(
+        vec![project.sources[0].track_id],
+        seed.duration,
+        vec![rows],
+        vec![0.01; 100],
+    )
+    .unwrap();
+    let current = TemporalOwnershipCache::default()
+        .optimize_project_evidence(
+            &project,
+            &grid,
+            TemporalSettings {
+                preserved_gap_frames: 0,
+                ..Default::default()
+            },
+            None,
+        )
+        .unwrap();
+    let mut cache = rust_app::EffectiveEnvelopeCache::default();
+    let before = cache
+        .update(
+            &project,
+            &current,
+            rust_app::project_fade_settings(&project).unwrap(),
+            None,
+        )
+        .unwrap();
+    let middle = OWNERSHIP_FRAME_TICKS * 42;
+    assert_eq!(before.envelopes[0].gain_at_time(middle), 1.0);
+    project
+        .set_parameters(rust_app::AutomixParameters {
+            minimum_gap_ms: 10.0,
+            ..project.parameters()
+        })
+        .unwrap();
+    let after = cache
+        .update(
+            &project,
+            &current,
+            rust_app::project_fade_settings(&project).unwrap(),
+            None,
+        )
+        .unwrap();
+    assert!(after.envelopes[0].gain_at_time(middle) < 0.3);
+    assert_ne!(before.cache_key, after.cache_key);
+    assert!(
+        after.analysis_current,
+        "gain hold changes must not require training again"
+    );
+    assert_eq!(
+        rust_app::Project::open(project.path())
+            .unwrap()
+            .parameters()
+            .minimum_gap_ms,
+        10.0
+    );
+    for invalid in [0.0, 5001.0, f32::NAN] {
+        assert!(
+            project
+                .set_parameters(rust_app::AutomixParameters {
+                    minimum_gap_ms: invalid,
+                    ..project.parameters()
+                })
+                .is_err()
+        );
+    }
+    project
+        .set_parameters(rust_app::AutomixParameters {
+            minimum_gap_ms: 5000.0,
+            ..project.parameters()
+        })
+        .unwrap();
+    let range =
+        rust_app::TimeRange::new(OWNERSHIP_FRAME_TICKS * 40, OWNERSHIP_FRAME_TICKS * 48).unwrap();
+    project
+        .replace_reference_labels(vec![rust_app::ReferenceLabel {
+            id: 1,
+            range,
+            active_speakers: vec![],
+            reference_track: None,
+            sources: vec![rust_app::SourceBinding {
+                track: project.sources[0].track_id,
+                fingerprint: project.sources[0].fingerprint.clone(),
+            }],
+        }])
+        .unwrap();
+    let truth = TemporalOwnershipCache::default()
+        .optimize_project_evidence(
+            &project,
+            &grid,
+            TemporalSettings {
+                preserved_gap_frames: 0,
+                ..Default::default()
+            },
+            None,
+        )
+        .unwrap();
+    let labeled = cache
+        .update(
+            &project,
+            &truth,
+            rust_app::project_fade_settings(&project).unwrap(),
+            None,
+        )
+        .unwrap();
+    let unheld = cache
+        .update(
+            &project,
+            &truth,
+            GainFadeSettings {
+                minimum_gap: rust_app::TICKS_PER_SECOND / 100,
+                ..rust_app::project_fade_settings(&project).unwrap()
+            },
+            None,
+        )
+        .unwrap();
+    for frame in 0..100 {
+        let time = OWNERSHIP_FRAME_TICKS * frame;
+        assert_eq!(
+            labeled.envelopes[0].gain_at_time(time),
+            unheld.envelopes[0].gain_at_time(time),
+            "human room tone must have the same envelope with a 5 second hold as with 10 ms"
+        );
+    }
+    assert!(
+        labeled.envelopes[0].gain_at_time(OWNERSHIP_FRAME_TICKS * 47) < 0.2,
+        "the room-tone gap must still reach substantial attenuation inside its fitted fades"
+    );
+    let draft = project
+        .region_gain_edit(
+            project.sources[0].track_id,
+            range,
+            rust_app::GainRegionAction::Attenuate(0.4),
+        )
+        .unwrap();
+    project.commit_gain_edit(draft).unwrap();
+    let manual = cache
+        .update(
+            &project,
+            &truth,
+            rust_app::project_fade_settings(&project).unwrap(),
+            None,
+        )
+        .unwrap();
+    assert_eq!(manual.envelopes[0].gain_at_time(middle), 0.4);
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn source_grid_rounding_preserves_every_boundary_sample_including_arbitrary_rates() {
     let ownership = ownership_with_offset(1);
     let settings = GainFadeSettings {
         attenuation: 0.125,
         fade_in: OWNERSHIP_FRAME_TICKS * 4,
         fade_out: OWNERSHIP_FRAME_TICKS * 4,
+        minimum_gap: 0,
     };
     for rate in [44100, 48000, 96000, 47999] {
         let grid = SourceTimebase::new(rate, u64::from(rate) * 32 / 10).unwrap();
@@ -196,6 +414,7 @@ fn a_bound_session_protection_does_not_expand_when_a_track_is_added() {
         attenuation: 0.25,
         fade_in: OWNERSHIP_FRAME_TICKS,
         fade_out: OWNERSHIP_FRAME_TICKS,
+        minimum_gap: 0,
     };
     let result = rust_app::EffectiveEnvelopeCache::default()
         .update(&project, &ownership, settings, None)
@@ -324,6 +543,7 @@ fn touching_manual_constraints_have_explicit_right_endpoint_ownership_and_exact_
         attenuation: 0.125,
         fade_in: OWNERSHIP_FRAME_TICKS,
         fade_out: OWNERSHIP_FRAME_TICKS,
+        minimum_gap: 0,
     };
     let mut cache = rust_app::EffectiveEnvelopeCache::default();
     let effective = cache.update(&project, &current, settings, None).unwrap();
@@ -382,6 +602,7 @@ fn previews_and_cancelled_jobs_do_not_install_and_changed_sources_require_explic
         attenuation: 0.25,
         fade_in: OWNERSHIP_FRAME_TICKS * 4,
         fade_out: OWNERSHIP_FRAME_TICKS * 4,
+        minimum_gap: 0,
     };
     let mut cache = rust_app::EffectiveEnvelopeCache::default();
     let accepted = cache.update(&project, &current, settings, None).unwrap();
@@ -554,6 +775,7 @@ fn manual_points_win_and_shared_evaluation_survives_reload_and_new_automatic_res
         attenuation: 0.25,
         fade_in: OWNERSHIP_FRAME_TICKS * 4,
         fade_out: OWNERSHIP_FRAME_TICKS * 4,
+        minimum_gap: 0,
     };
     let mut cache = EffectiveEnvelopeCache::default();
     let before = cache.update(&project, &current, settings, None).unwrap();

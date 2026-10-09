@@ -1,5 +1,15 @@
 # Owner verification
 
+## Latest waveform and gap-control refinement
+
+Verified executable: `C:/Users/User/.codex/worktrees/offline-timebase/podcast-automix-rust-gui/target/owner-ui/debug/rust-app.exe`, SHA-256 `3F61A696AB00500625664F13B9639FACF4159D267D02EB2AFFE8BA2BA54F3C1A`. Full tests: 206 passed, zero failed, 19 documented opt-ins ignored. Strict all-target/all-feature Clippy passed. Retained offline/locked one-job build settings are unchanged. Actual recording regression remains 0.1585/0.2668/0.9812 mean sampled gain in the marked area; owner listening and physical responsiveness approval remain pending.
+
+The owner's acoustic feedback is "much better". The next candidate removes the review queue, counts and review navigation, along with automatic region fills, orange dots and red hatching. Waveforms, gain curves, reference marks and manual protection remain visible. **Ignore gaps shorter than** adjusts 10–5000 ms, default 768 ms, through the existing live gain path. It bridges bounded automatic attenuation gaps; explicit room tone and manual edits win. Larger values may preserve more bleed.
+
+Run Analyze once after opening an older saved result: fixed acoustic temporal bridging has moved into gain generation, so shorter slider values can take effect. After that, slider changes reuse the same ownership evidence. Compare at low/high settings, save/reopen, and check wanted words in Removed. Check zoom and horizontal pan after analysis. Removing roughly one ownership-overview query per visible bucket and all automatic hatch/dot geometry reduces redraw work; actual interactive latency still needs physical verification.
+
+The owner closed the preceding GUI before saving and authorized using the last saved project. No discarded edits were reconstructed. See [the ownership explanation](ownership-explained.md) for the code-derived Mermaid diagram and probability formula. Earlier verification records below describe their respective candidates.
+
 ## Current acoustic feedback candidate — 2026-10-09
 
 Launch `C:/Users/User/.codex/worktrees/offline-timebase/podcast-automix-rust-gui/target/owner-ui/debug/rust-app.exe` and open `C:/Users/User/Documents/Codex/2026-08-14/podcast-automix-rust-gui/test-audio/quick-test-10min/261005-quick-test.cleanslate`. The saved session now contains the owner's 15 references, including room tone; none are in the marked 125–157-second regression. Original source audio and saved labels were preserved. The records below describe earlier checkpoints.

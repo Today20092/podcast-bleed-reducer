@@ -272,6 +272,7 @@ pub(crate) fn validate_parameters(p: AutomixParameters) -> Result<(), RenderBloc
         p.speech_padding_ms * crate::timebase::DETECTOR_SAMPLE_RATE as f32 / 1000.0,
         p.open_ms * crate::timebase::DETECTOR_SAMPLE_RATE as f32 / 1000.0,
         p.close_ms * crate::timebase::DETECTOR_SAMPLE_RATE as f32 / 1000.0,
+        p.minimum_gap_ms,
     ]
     .iter()
     .all(|v| v.is_finite())
@@ -281,6 +282,7 @@ pub(crate) fn validate_parameters(p: AutomixParameters) -> Result<(), RenderBloc
         || p.speech_padding_ms < 0.0
         || p.open_ms < 0.0
         || p.close_ms < 0.0
+        || !(10.0..=5000.0).contains(&p.minimum_gap_ms)
     {
         return Err(RenderBlocker(
             "automix parameters must be finite, attenuation-only, and within valid ranges".into(),

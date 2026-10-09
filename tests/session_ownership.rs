@@ -117,6 +117,7 @@ fn unresolved_speaker_does_not_disable_an_independently_resolved_track() {
                 attenuation: 0.25,
                 fade_in: TICKS_PER_SECOND / 20,
                 fade_out: TICKS_PER_SECOND / 20,
+                minimum_gap: 0,
             },
             None,
         )

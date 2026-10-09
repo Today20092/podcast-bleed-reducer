@@ -227,6 +227,15 @@ impl Project {
         let mut project: Self = serde_json::from_slice(&fs::read(&path)?).map_err(invalid_json)?;
         project.path = path;
         project.validate_contract()?;
+        if project.analysis_recipe.as_ref().is_some_and(|recipe| {
+            !recipe
+                .feature_recipe
+                .starts_with(crate::EDITOR_ANALYSIS_RECIPE)
+        }) {
+            project.invalidate(
+                "Analysis recipe changed; Analyze once to enable the current gap control.",
+            );
+        }
         if project
             .analysis_recipe
             .as_ref()

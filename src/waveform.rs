@@ -1,5 +1,5 @@
 use crate::{
-    AnalysisPreview, Decision, RenderBlocker,
+    AnalysisPreview, RenderBlocker,
     audio_io::decode_chunks,
     timebase::{Rounding, SourceTimebase, TICKS_PER_SECOND, TimePosition},
     timeline::{TimelineEvent, TimelineViewport},
@@ -17,30 +17,11 @@ use std::{
 
 const BASE_BUCKET: usize = 256;
 const WAVEFORM_CACHE_VERSION: u32 = 3;
-const ATTENUATION_HATCH_SPACING: f32 = 20.0;
 
 fn processed_peak((min, max): (f32, f32), (low, high): (f32, f32)) -> (f32, f32) {
     // ponytail: cached peaks lack sample positions, so these are conservative
     // bounds. Use source samples if exact processed extrema become necessary.
     ((min * low).min(min * high), (max * low).max(max * high))
-}
-
-fn attenuation_hatches(left: f32, right: f32, height: f32) -> Vec<(Point, Point)> {
-    let first = ((left - height) / ATTENUATION_HATCH_SPACING).floor() * ATTENUATION_HATCH_SPACING;
-    let mut base = first;
-    let mut lines = Vec::new();
-    while base < right {
-        let start_x = base.max(left);
-        let end_x = (base + height).min(right);
-        if end_x > start_x {
-            lines.push((
-                Point::new(start_x, height - (start_x - base)),
-                Point::new(end_x, height - (end_x - base)),
-            ));
-        }
-        base += ATTENUATION_HATCH_SPACING;
-    }
-    lines
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -328,7 +309,6 @@ pub(crate) struct TimelineCanvas<'a, Message> {
     viewport: &'a TimelineViewport,
     ruler: bool,
     preview: Option<(&'a AnalysisPreview, usize)>,
-    overview: Option<&'a crate::OwnershipOverview>,
     selecting: bool,
     on_event: Box<dyn Fn(TimelineEvent) -> Message + 'a>,
     on_context: Option<Box<dyn Fn(Point) -> Message + 'a>>,
@@ -348,7 +328,6 @@ impl<'a, Message: 'a> TimelineCanvas<'a, Message> {
             viewport,
             ruler: false,
             preview,
-            overview: None,
             selecting,
             on_event: Box::new(on_event),
             on_context: None,
@@ -366,7 +345,6 @@ impl<'a, Message: 'a> TimelineCanvas<'a, Message> {
             viewport,
             ruler: true,
             preview: None,
-            overview: None,
             selecting,
             on_event: Box::new(on_event),
             on_context: None,
@@ -385,10 +363,6 @@ impl<'a, Message> TimelineCanvas<'a, Message> {
     }
     pub fn with_context(mut self, on_context: impl Fn(Point) -> Message + 'a) -> Self {
         self.on_context = Some(Box::new(on_context));
-        self
-    }
-    pub fn with_overview(mut self, overview: Option<&'a crate::OwnershipOverview>) -> Self {
-        self.overview = overview;
         self
     }
 }
@@ -585,79 +559,6 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
             let last = visible.end;
             let scale = center * 0.9;
             if let Some((preview, track)) = self.preview {
-                let summarized;
-                let visible_regions = if let Some(overview) = self.overview {
-                    summarized = overview
-                        .visible_bands(track, self.viewport, bounds.width)
-                        .into_iter()
-                        .map(|band| crate::Region {
-                            start: band.start,
-                            end: band.end,
-                            decision: match band.state {
-                                crate::OverviewState::Owned => Decision::Owned(vec![track]),
-                                crate::OverviewState::Absent => Decision::NoSpeech,
-                                crate::OverviewState::MixedOrUncertain => Decision::Uncertain,
-                            },
-                        })
-                        .collect::<Vec<_>>();
-                    summarized.as_slice()
-                } else {
-                    let first = preview.regions.partition_point(|region| {
-                        region.end <= self.viewport.start().max(0.0) as u64
-                    });
-                    let last = preview.regions.partition_point(|region| {
-                        region.start
-                            < (self.viewport.start() + self.viewport.visible_samples()).ceil()
-                                as u64
-                    });
-                    &preview.regions[first..last]
-                };
-                for region in visible_regions {
-                    let left = self
-                        .viewport
-                        .x_for_sample(region.start, bounds.width)
-                        .max(0.0);
-                    let right = self
-                        .viewport
-                        .x_for_sample(region.end, bounds.width)
-                        .min(bounds.width);
-                    if right <= left {
-                        continue;
-                    }
-                    let (color, pattern) = match &region.decision {
-                        Decision::Owned(owners) if owners.contains(&track) => {
-                            (Color::from_rgba8(70, 190, 120, 0.14), 0)
-                        }
-                        Decision::Uncertain => (Color::from_rgba8(235, 180, 55, 0.14), 2),
-                        _ => (Color::from_rgba8(220, 75, 85, 0.10), 1),
-                    };
-                    frame.fill(
-                        &canvas::Path::rectangle(
-                            Point::new(left, 0.0),
-                            Size::new(right - left, bounds.height),
-                        ),
-                        color,
-                    );
-                    if pattern == 1 {
-                        for (start, end) in attenuation_hatches(left, right, bounds.height) {
-                            frame.stroke(
-                                &canvas::Path::line(start, end),
-                                canvas::Stroke::default()
-                                    .with_width(0.5)
-                                    .with_color(Color::from_rgba8(230, 230, 235, 0.16)),
-                            );
-                        }
-                    } else if pattern == 2 {
-                        let mut x = left + 4.0;
-                        while x < right {
-                            frame.fill(
-                                &canvas::Path::circle(Point::new(x, 8.0), 1.5),
-                                Color::from_rgb8(245, 195, 70),
-                            );
-                            x += 10.0;
-                        }
-                    }
-                }
                 for protection in &preview.protections {
                     if protection.track.is_none_or(|protected| protected == track) {
                         let left = self
@@ -879,32 +780,6 @@ mod tests {
         assert_eq!(processed_peak((-0.8, -0.2), (0.25, 1.0)), (-0.8, -0.05));
         assert_eq!(processed_peak((-0.8, 0.6), (0.5, 0.5)), (-0.4, 0.3));
         assert_eq!(processed_peak((0.0, 0.0), (0.25, 1.0)), (0.0, 0.0));
-    }
-
-    #[test]
-    fn attenuation_hatches_keep_screen_phase_and_clip_to_region() {
-        let wide = attenuation_hatches(17.0, 93.0, 40.0);
-        let clipped = attenuation_hatches(31.0, 71.0, 40.0);
-
-        assert!(wide.iter().chain(&clipped).all(|(start, end)| {
-            start.x >= 17.0 && end.x <= 93.0 && start.y >= 0.0 && end.y <= 40.0
-        }));
-        assert_eq!(
-            clipped,
-            wide.into_iter()
-                .filter_map(|(start, end)| {
-                    let base = start.x + start.y - 40.0;
-                    let start_x = start.x.max(31.0);
-                    let end_x = end.x.min(71.0);
-                    (end_x > start_x).then(|| {
-                        (
-                            Point::new(start_x, 40.0 - (start_x - base)),
-                            Point::new(end_x, 40.0 - (end_x - base)),
-                        )
-                    })
-                })
-                .collect::<Vec<_>>()
-        );
     }
 
     fn wav(path: &Path, samples: &[f32]) {

@@ -1,8 +1,8 @@
 #[cfg(test)]
 use crate::CalibrationKind;
 use crate::{
-    AnalysisPreview, AutomixParameters, Comparison, Project, RenderState, ReviewState,
-    ReviewWorkspace, SpeakerId, TimeRange,
+    AnalysisPreview, AutomixParameters, Comparison, Project, RenderState, ReviewWorkspace,
+    SpeakerId, TimeRange,
     audition::{AuditionMode, AuditionPreparation, LiveAudition},
     prepared_analysis::source_stamps,
     timebase::{Rounding, TICKS_PER_SECOND, TimePosition, time_from_seconds},
@@ -979,6 +979,40 @@ mod tests {
     }
 
     #[test]
+    fn gap_control_persists_without_starting_inference_or_changing_manual_edits() {
+        let directory =
+            std::env::temp_dir().join(format!("cleanslate-gap-ui-{}", std::process::id()));
+        std::fs::create_dir_all(&directory).unwrap();
+        let source = directory.join("voice.wav");
+        write_wav(&source, &[0.0; 100]);
+        let project =
+            synchronized_project(directory.join("episode.cleanslate"), vec![source]).unwrap();
+        let mut app = super::CleanSlateApp {
+            project: Some(project),
+            ..Default::default()
+        };
+        app.timeline.set_selection(Some((10, 40)));
+        let _ = app.update(super::Message::GainAction(0, false));
+        let constraints = app.project.as_ref().unwrap().gain_constraints();
+        for value in [10.0, 5000.0, 768.0] {
+            let _ = app.update(super::Message::MinimumGap(value));
+            assert_eq!(
+                app.project.as_ref().unwrap().parameters().minimum_gap_ms,
+                value
+            );
+            assert_eq!(
+                app.project.as_ref().unwrap().gain_constraints(),
+                constraints
+            );
+            assert!(!app.reference_analyze_requested);
+            assert!(app.preview_processing.is_none());
+        }
+        let reopened = crate::Project::open(app.project.as_ref().unwrap().path()).unwrap();
+        assert_eq!(reopened.parameters().minimum_gap_ms, 768.0);
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
     fn inspector_stacks_only_in_compact_windows() {
         assert!(!super::compact_workspace(1280.0));
         assert!(super::compact_workspace(1000.0));
@@ -1146,7 +1180,6 @@ pub struct CleanSlateApp {
     gain_constraints: crate::GainConstraints,
     selected_gain_point: Option<(usize, u64, usize)>,
     replace_gain_constraints: bool,
-    selected_supervised_warning: Option<usize>,
     preview_processing: Option<PreviewProcessing>,
     preview_pending: Option<Instant>,
     preview_generation: u64,
@@ -1203,7 +1236,6 @@ impl Default for CleanSlateApp {
             },
             selected_gain_point: None,
             replace_gain_constraints: false,
-            selected_supervised_warning: None,
             preview_processing: None,
             preview_pending: None,
             preview_generation: 0,
@@ -1446,6 +1478,7 @@ enum Message {
     SpeechPadding(f32),
     OpenTime(f32),
     CloseTime(f32),
+    MinimumGap(f32),
     RefreshPreview,
     Original,
     Processed,
@@ -1487,10 +1520,9 @@ enum Message {
     DeleteGain,
     InsertGainPoint,
     RebindSource(usize),
+    #[cfg(test)]
     SelectSupervisedWarning(usize),
     SaveProject,
-    ToggleReviewed,
-    ProtectRegion,
     ProtectTrack(usize),
     ProtectSelection,
     Export,
@@ -2724,6 +2756,7 @@ impl CleanSlateApp {
                 | Message::Attenuation(_)
                 | Message::OpenTime(_)
                 | Message::CloseTime(_)
+                | Message::MinimumGap(_)
                 | Message::RefreshPreview
                 | Message::GainEvent(_, _)
                 | Message::GainAction(_, _)
@@ -2738,7 +2771,6 @@ impl CleanSlateApp {
                 | Message::SuppliedAlignment(_)
                 | Message::RebindSource(_)
                 | Message::ProtectTrack(_)
-                | Message::ProtectRegion
                 | Message::ProtectSelection
                 | Message::ImportStems
                 | Message::OpenProject
@@ -2895,6 +2927,7 @@ impl CleanSlateApp {
             }
             Message::OpenTime(value) => self.preview_parameters.open_ms = value,
             Message::CloseTime(value) => self.preview_parameters.close_ms = value,
+            Message::MinimumGap(value) => self.preview_parameters.minimum_gap_ms = value,
             Message::RefreshPreview => {
                 if let Some(project) = &mut self.project
                     && let Err(error) = project.set_parameters(self.preview_parameters)
@@ -3114,6 +3147,7 @@ impl CleanSlateApp {
                     }
                 }
             }
+            #[cfg(test)]
             Message::SelectSupervisedWarning(index) => {
                 if let Some(review) = &mut self.review {
                     self.selection_track = None;
@@ -3124,7 +3158,6 @@ impl CleanSlateApp {
                     if let Some(audition) = &self.audition {
                         audition.seek(review.playhead());
                     }
-                    self.selected_supervised_warning = Some(index);
                 }
             }
             Message::SaveProject => {
@@ -3150,44 +3183,6 @@ impl CleanSlateApp {
                         Err(error) => self.calibration_error = Some(error.to_string()),
                     }
                 }
-            }
-            Message::ToggleReviewed => {
-                if let (Some(project), Some(key)) = (
-                    self.project.as_mut(),
-                    self.review.as_ref().and_then(ReviewWorkspace::selected_key),
-                ) {
-                    let state = if project.review_states().get(&key) == Some(&ReviewState::Reviewed)
-                    {
-                        ReviewState::Unreviewed
-                    } else {
-                        ReviewState::Reviewed
-                    };
-                    if let Err(error) = project.set_review_state(key, state) {
-                        self.messages.push(error.to_string());
-                    }
-                }
-            }
-            Message::ProtectRegion => {
-                if let (Some(project), Some(review)) = (self.project.as_mut(), &self.review) {
-                    let result = if let Some(warning) = review.selected_warning() {
-                        project.protect_region(&warning.affected_tracks, warning.start, warning.end)
-                    } else if let Some(region) = review.selected_region() {
-                        project.protect_region(
-                            &region.affected_track.into_iter().collect::<Vec<_>>(),
-                            region.start,
-                            region.end,
-                        )
-                    } else {
-                        Ok(())
-                    };
-                    if let Err(error) = result {
-                        self.messages.push(error.to_string());
-                    }
-                }
-                if let Some(review) = &mut self.review {
-                    review.set_comparison(Comparison::Original);
-                }
-                self.start_preview();
             }
             Message::ProtectTrack(track) => {
                 if let Some(project) = &mut self.project
@@ -3358,15 +3353,7 @@ impl CleanSlateApp {
             {
                 return "ANALYSIS OUT OF DATE".into();
             }
-            let warnings = self
-                .review
-                .as_ref()
-                .map_or(0, |review| review.warnings.len());
-            return if warnings == 0 {
-                "ANALYSIS COMPLETE".into()
-            } else {
-                format!("ANALYSIS COMPLETE · {warnings} REVIEW REGIONS")
-            };
+            return "ANALYSIS COMPLETE".into();
         }
         "REFERENCES SAVED · ANALYZE TO VALIDATE".into()
     }
@@ -3490,44 +3477,6 @@ impl CleanSlateApp {
             })
             .size(12),
         );
-        if let Some(review) = &self.review {
-            let warnings = &review.warnings;
-            controls =
-                controls.push(text(format!("{} regions need review", warnings.len())).size(12));
-            if !warnings.is_empty() {
-                let selected = self
-                    .selected_supervised_warning
-                    .unwrap_or(0)
-                    .min(warnings.len() - 1);
-                let warning = &warnings[selected];
-                controls = controls.push(
-                    button(text(format!(
-                        "Review {:.2}–{:.2}s: {}",
-                        warning.start as f64 / TICKS_PER_SECOND as f64,
-                        warning.end as f64 / TICKS_PER_SECOND as f64,
-                        warning.label
-                    )))
-                    .on_press(Message::SelectSupervisedWarning(selected)),
-                );
-                controls = controls.push(
-                    column![
-                        button("Previous review").on_press_maybe(
-                            selected
-                                .checked_sub(1)
-                                .map(Message::SelectSupervisedWarning)
-                        ),
-                        button("Next review").on_press_maybe(
-                            (selected + 1 < warnings.len())
-                                .then_some(Message::SelectSupervisedWarning(selected + 1))
-                        ),
-                        button("Mark selected reviewed").on_press_maybe(
-                            review.selected_warning().map(|_| Message::ToggleReviewed)
-                        )
-                    ]
-                    .spacing(6),
-                );
-            }
-        }
         if self.calibration_timing {
             controls = controls.push(text({
             match self.calibration_range() {
@@ -3737,12 +3686,6 @@ impl CleanSlateApp {
                 button("Protect selection across all tracks").on_press(Message::ProtectSelection),
             );
         }
-        if self.review.as_ref().is_some_and(|review| {
-            review.selected_region().is_some() || review.selected_warning().is_some()
-        }) {
-            controls =
-                controls.push(button("Protect reviewed region").on_press(Message::ProtectRegion));
-        }
         for message in &self.messages {
             controls = controls.push(text(message));
         }
@@ -3883,13 +3826,6 @@ impl CleanSlateApp {
                 ]
                 .spacing(8)
                 .align_y(iced::Center);
-                if self
-                    .review
-                    .as_ref()
-                    .is_some_and(|review| review.highlighted_tracks().contains(&index))
-                {
-                    header = header.push(text("REVIEW").size(12));
-                }
                 if !source.available {
                     header = header.push(text("Missing source").size(12));
                 }
@@ -3927,13 +3863,10 @@ impl CleanSlateApp {
                                 self.selecting_range || self.calibrating,
                             )
                             .with_context(move |point| Message::OpenReferenceMenu(index, point))
-                            .with_selection(move |start, end, point| {
-                                Message::CompleteTrackSelection(index, start, end, point)
-                            })
-                            .with_overview(
-                                self.supervised_result
-                                    .as_ref()
-                                    .map(|result| &result.overview),
+                            .with_selection(
+                                move |start, end, point| {
+                                    Message::CompleteTrackSelection(index, start, end, point)
+                                },
                             ),
                         )
                         .width(Fill)
@@ -4069,7 +4002,18 @@ impl CleanSlateApp {
                 slider(1.0..=2000.0, parameters.close_ms, Message::CloseTime)
                     .step(1.0_f32)
                     .on_release(Message::RefreshPreview),
-                text("Solid: preserved · hatch: attenuated · dots: uncertain").size(11),
+                text(format!(
+                    "Ignore gaps shorter than: {:.0} ms",
+                    parameters.minimum_gap_ms
+                )),
+                slider(
+                    10.0..=5000.0,
+                    parameters.minimum_gap_ms,
+                    Message::MinimumGap
+                )
+                .step(1.0_f32)
+                .on_release(Message::RefreshPreview),
+                text("Waveform / gain curve / labels and protection").size(11),
             ]
             .spacing(12),
         )

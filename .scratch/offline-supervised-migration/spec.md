@@ -16,6 +16,8 @@ Acoustic-first supervised ownership is the default. Nemotron is an explicit per-
 
 ## Architectural boundaries
 
+2026-10-09 owner refinement: remove the uncertainty review queue, review navigation/counts, orange dotted bands and red attenuation hatching from the editor. The user reviews the waveform, auditions and applies labels, attenuation or protection directly. Internal missing-evidence protection and export validation remain enforced. Provide a persisted **Ignore gaps shorter than** gain control, 10–5000 ms with a 768 ms default. It bridges only brief, bounded automatic attenuation gaps between preserved spans; it cannot erase explicit room-tone truth or protected manual edits. Changing it updates audition and export envelopes immediately from cached ownership, without rerunning analysis. Old analysis with fixed temporal bridging must be reanalyzed once before the new control can expose shorter gaps.
+
 Keep the existing Rust library and Iced application. Add focused modules only where a real responsibility is missing; do not pre-create the ten-crate workspace sketched in the source chat. The analysis API does not depend on GUI widgets. The same library supports the editor and a small headless evaluation entry point.
 
 The pipeline is:

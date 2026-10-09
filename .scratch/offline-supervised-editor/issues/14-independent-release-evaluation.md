@@ -7,6 +7,8 @@ Spec: ../spec.md
 
 ## Scope
 
+Latest owner refinement: replace the fixed acoustic phrase bridge with a persisted 10–5000 ms automatic gain gap hold, default 768 ms. Reuse cached ownership when adjusting it. Short automatic attenuation gaps bounded by preserved speech may be ignored, while explicit human room tone and speech/overlap plus protected manual edits retain authority. Remove fixed acoustic temporal bridging so lowering the control actually exposes shorter gaps; invalidate prior fixed-bridge analysis for one explicit reanalysis. Acoustic probabilities and independent hysteresis remain separate from this gain setting. Release qualification remains pending.
+
 ### Recording regression checkpoint — 2026-10-09
 
 The owner's exact saved quick session has 15 references, including room tone, and no references in the marked 125–157-second area. A byte-identical backup preserves it; probes use a separate external project copy. The actual native baseline produced unity on all three tracks there. Acoustic independent models removed the unresolved-native identity veto. Short-gap fade fitting fixes a second problem: merging gaps whenever requested fades exceeded their length was keeping bleed at near unity.

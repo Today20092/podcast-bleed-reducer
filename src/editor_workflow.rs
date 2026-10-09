@@ -10,7 +10,7 @@ use std::{
 };
 
 pub const EDITOR_ANALYSIS_RECIPE: &str =
-    "offline-supervised-optional-native-acoustic-model09-temporal10-v2";
+    "offline-supervised-optional-native-acoustic-model09-temporal10-live-gap-v3";
 
 pub fn verify_installed_editor_runtime(
     runtime: &crate::model::RuntimeProvenance,
@@ -374,9 +374,9 @@ impl EditorAnalysisWorker {
         let settings = if evidence.is_some() {
             crate::TemporalSettings::default()
         } else {
-            // Development acoustic profile bridges phrase gaps up to 768 ms.
+            // Gap holding is adjustable in the shared gain layer without retraining.
             crate::TemporalSettings {
-                preserved_gap_frames: 24,
+                preserved_gap_frames: 0,
                 ..crate::TemporalSettings::default()
             }
         };
@@ -442,6 +442,7 @@ pub fn project_fade_settings(project: &Project) -> Result<crate::GainFadeSetting
         attenuation: 10_f32.powf(parameters.attenuation_db / 20.0),
         fade_in: duration(parameters.open_ms)?,
         fade_out: duration(parameters.close_ms)?,
+        minimum_gap: duration(parameters.minimum_gap_ms)?,
     })
 }
 

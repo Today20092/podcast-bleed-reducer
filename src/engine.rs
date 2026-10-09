@@ -21,6 +21,7 @@ pub struct AutomixParameters {
     pub speech_padding_ms: f32,
     pub open_ms: f32,
     pub close_ms: f32,
+    pub minimum_gap_ms: f32,
 }
 
 impl<'de> Deserialize<'de> for AutomixParameters {
@@ -38,6 +39,8 @@ impl<'de> Deserialize<'de> for AutomixParameters {
             open_ms: Option<f32>,
             close_ms: Option<f32>,
             transition_ms: Option<f32>,
+            #[serde(default = "default_minimum_gap")]
+            minimum_gap_ms: f32,
         }
         let stored = Stored::deserialize(deserializer)?;
         Ok(Self {
@@ -47,6 +50,7 @@ impl<'de> Deserialize<'de> for AutomixParameters {
             speech_padding_ms: stored.speech_padding_ms,
             open_ms: stored.open_ms.or(stored.transition_ms).unwrap_or(50.0),
             close_ms: stored.close_ms.or(stored.transition_ms).unwrap_or(500.0),
+            minimum_gap_ms: stored.minimum_gap_ms,
         })
     }
 }
@@ -62,6 +66,9 @@ fn default_attenuation() -> f32 {
 }
 fn default_speech_padding() -> f32 {
     512.0
+}
+fn default_minimum_gap() -> f32 {
+    768.0
 }
 
 #[cfg(test)]
@@ -457,6 +464,7 @@ mod preview_tests {
         ).unwrap();
         assert_eq!(parameters.open_ms, 75.0);
         assert_eq!(parameters.close_ms, 75.0);
+        assert_eq!(parameters.minimum_gap_ms, 768.0);
     }
 }
 
@@ -469,6 +477,7 @@ impl Default for AutomixParameters {
             speech_padding_ms: 512.0,
             open_ms: 50.0,
             close_ms: 500.0,
+            minimum_gap_ms: default_minimum_gap(),
         }
     }
 }

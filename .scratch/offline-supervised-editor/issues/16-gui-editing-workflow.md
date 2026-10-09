@@ -8,6 +8,8 @@ Spec: ../../offline-supervised-migration/gui-design-summary.md
 
 ## Scope
 
+Latest owner feedback: the acoustic candidate is "much better". Remove the review UI/counts and automatic orange dotted/red hatched waveform decoration. Keep direct manual labels, Preserve/Attenuate/protection and gain curves. Add the engine-backed 10–5000 ms gap control from ticket 14. Diagnose slow zoom/pan with a meaningful workload check and physical owner verification; do not claim latency improvement solely from deleting decoration. GUI closed by owner before saving; preserve the last saved project and do not guess lost edits. This remains one consolidated GUI ticket.
+
 Consolidate GUI decisions 07–11 into one owner-testable Rust/Iced workflow. Keep the finite DAW lane layout and existing transport/envelope architecture. Implement in sequence within this ticket: direct selection/labeling, playback readiness, concise inspector/readiness, and source-bound waveform reuse. Build a verified candidate and physically test the flow with the owner before completion. No analysis algorithm changes belong here.
 
 ## Reach and reuse
@@ -34,6 +36,10 @@ Inspect graph symbols/callers in src/app.rs, src/waveform.rs, src/audition.rs, s
 ## Planning record
 
 ## Candidate verification — 2026-10-09
+
+Gap/clean-waveform refinement: actual slider 10–5000 ms is visible in the inspector and wired through the live parameter path; persisted default 768 ms. Review queue/actions/counts, REVIEW badges, automatic region backgrounds, orange dots and hatches are removed. This removes roughly one overview query per visible waveform bucket plus hatch/dot geometry from every redraw. Gain curves, labels, manual protection and source validation remain. Physical responsiveness and listening feedback remain owner checks; no measured latency improvement is claimed.
+
+Final automated checks: 206 passed, zero failed, 19 documented opt-ins ignored across 33 suites; strict all-target/all-feature Clippy passed. The actual saved-recording probe retained mean gains 0.1585/0.2668/0.9812 at the default hold in the 125–157-second development regression. Read-only review found a missing slider invocation and stale legend; both were corrected and re-reviewed. The test suite caught a native rounding threshold bug and confirmed original timeline comparisons fix exact-duration behavior at 44.1/48/96 kHz. Eleven envelope tests include shorter/longer/exact gap boundaries, save/reopen, live cached updates, explicit room truth and manual-edit precedence. A missing Rust library cache artifact was recovered by recompiling the local library, without deleting dependencies, audio or projects. GUI SHA-256: 3F61A696AB00500625664F13B9639FACF4159D267D02EB2AFFE8BA2BA54F3C1A. Ticket remains claimed until owner workflow verification; release tickets remain separate.
 
 Owner physically confirmed drag/release labeling and Space play/stop. Follow-up requests: replace duplicate solo/room buttons with one speaker multiselect, show the entire popup without a scrollbar, and show truthful analysis stage/elapsed activity. Keep this ticket claimed while those refinements are implemented and checked. Optional Nemotron and whole-session acoustic attenuation are folded into existing ticket 14, with the reconciled owner override in the accepted specification; no new ticket is needed.
 

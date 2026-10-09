@@ -8,12 +8,17 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
 pub const EFFECTIVE_ENVELOPE_RECIPE: &str =
-    "finite-exp4-fit-absent-gaps-source-time-halfopen-linear-manual-v2";
+    "finite-exp4-live-bounded-gap-source-time-halfopen-linear-manual-v3";
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct GainFadeSettings {
     pub attenuation: f32,
     pub fade_in: u64,
     pub fade_out: u64,
+    #[serde(default = "default_minimum_gap")]
+    pub minimum_gap: u64,
+}
+fn default_minimum_gap() -> u64 {
+    crate::TICKS_PER_SECOND * 768 / 1000
 }
 impl Default for GainFadeSettings {
     fn default() -> Self {
@@ -21,6 +26,7 @@ impl Default for GainFadeSettings {
             attenuation: 0.1,
             fade_in: crate::TICKS_PER_SECOND / 20,
             fade_out: crate::TICKS_PER_SECOND / 2,
+            minimum_gap: default_minimum_gap(),
         }
     }
 }
@@ -89,6 +95,8 @@ impl AutomaticEnvelope {
             .ok_or_else(|| RenderBlocker("Unknown envelope track.".into()))?;
         let mut preserved: Vec<(u64, u64)> = vec![];
         let mut position = 0;
+        let mut human_absence = false;
+        let mut previous_preserved_end = 0;
         for (index, region) in ownership.regions().iter().enumerate() {
             if index % 1024 == 0 {
                 crate::prepared_analysis::check_cancelled(cancelled)?;
@@ -106,16 +114,24 @@ impl AutomaticEnvelope {
             if region.start >= duration {
                 continue;
             }
+            if region.human_truth && region.states[track] == TemporalTrackState::Absent {
+                human_absence = true;
+            }
             if region.states[track] != TemporalTrackState::Absent {
                 let (start, end) = rounded_range(grid, region.start, region.end.min(duration))?;
-                if let Some(previous) = preserved
-                    .last_mut()
-                    .filter(|previous| start <= previous.1 || start - previous.1 <= 1)
-                {
+                if let Some(previous) = preserved.last_mut().filter(|previous| {
+                    start <= previous.1
+                        || start - previous.1 <= 1
+                        || (!human_absence
+                            && region.start.saturating_sub(previous_preserved_end)
+                                < settings.minimum_gap)
+                }) {
                     previous.1 = previous.1.max(end);
                 } else {
                     preserved.push((start, end));
                 }
+                human_absence = false;
+                previous_preserved_end = region.end;
             }
         }
         if position != ownership.duration {
