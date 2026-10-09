@@ -4,6 +4,132 @@ use rust_app::{OwnershipTrainingSettings, SessionOwnershipCache, TICKS_PER_SECON
 mod fixture;
 use fixture::{session, session_gain};
 #[test]
+fn unresolved_speaker_does_not_disable_an_independently_resolved_track() {
+    let (root, project, audio, mut evidence) = session();
+    let mut writer = ProbabilityHistoryWriter::create(&root.join("partly-resolved.f32")).unwrap();
+    writer
+        .append(&ProbabilityFrames {
+            start: 0,
+            frames: 401,
+            speakers: 8,
+            seconds_per_frame: 0.01,
+            probabilities: (0..401)
+                .flat_map(|frame| {
+                    (0..8).map(move |channel| match channel {
+                        0 | 2 if (50..150).contains(&frame) || (300..375).contains(&frame) => 0.8,
+                        1 if (200..275).contains(&frame) || (325..375).contains(&frame) => 0.95,
+                        _ => 0.01,
+                    })
+                })
+                .collect(),
+        })
+        .unwrap();
+    evidence.history = writer.finish().unwrap();
+    let mut cache = SessionOwnershipCache::default();
+    let result = cache
+        .analyze(
+            &project,
+            &audio,
+            &evidence,
+            OwnershipTrainingSettings::default(),
+            None,
+        )
+        .unwrap();
+    let direct = result.estimates_at(TICKS_PER_SECOND * 7 / 2).unwrap();
+    assert!(direct[0].probability.is_none());
+    assert!(
+        direct[1].probability.is_some_and(|p| p > 0.7),
+        "Resolved speaker still owns held-out direct speech: {direct:?}"
+    );
+    let bleed = result.estimates_at(TICKS_PER_SECOND * 31 / 10).unwrap();
+    assert!(
+        bleed[1].probability.is_some_and(|p| p < 0.2),
+        "Human negative truth remains usable despite another unresolved identity: {bleed:?}"
+    );
+    let models = result.models.as_ref().unwrap();
+    assert_eq!(models.models.len(), 1);
+    assert_eq!(models.models[0].track, project.sources[1].track_id);
+    let saved = rust_app::SessionOwnershipModels::from_json(&models.to_json().unwrap()).unwrap();
+    let mut restored = SessionOwnershipCache::default();
+    restored.restore_models(saved).unwrap();
+    let rebuilt = restored
+        .analyze(
+            &project,
+            &audio,
+            &evidence,
+            OwnershipTrainingSettings::default(),
+            None,
+        )
+        .unwrap();
+    assert_eq!(restored.stats().model_fits, 0);
+    assert_eq!(
+        rebuilt.estimates_at(TICKS_PER_SECOND * 7 / 2).unwrap()[1].probability,
+        direct[1].probability
+    );
+    assert!(
+        result
+            .temporal_evidence(&project)
+            .unwrap()
+            .evidence_at(TICKS_PER_SECOND * 31 / 10)
+            .unwrap()[0]
+            .assigned_activity
+            .is_none()
+    );
+    let temporal = rust_app::TemporalOwnershipCache::default()
+        .optimize(
+            &project,
+            &result,
+            rust_app::TemporalSettings::default(),
+            None,
+        )
+        .unwrap();
+    let wanted_time = TICKS_PER_SECOND * 7 / 2;
+    let bleed_time = TICKS_PER_SECOND * 31 / 10;
+    assert_eq!(
+        temporal.states_at(wanted_time).unwrap()[0],
+        rust_app::TemporalTrackState::UncertainUnity
+    );
+    assert_eq!(
+        temporal.states_at(wanted_time).unwrap()[1],
+        rust_app::TemporalTrackState::UncertainUnity,
+        "Resolved direct estimate: {direct:?}"
+    );
+    assert!(
+        direct[1]
+            .preservation_reason
+            .as_deref()
+            .unwrap()
+            .contains("Poor")
+    );
+    assert_eq!(
+        temporal.states_at(TICKS_PER_SECOND * 5 / 2).unwrap()[1],
+        rust_app::TemporalTrackState::Owned
+    );
+    assert_eq!(
+        temporal.states_at(bleed_time).unwrap()[1],
+        rust_app::TemporalTrackState::Absent
+    );
+    let envelopes = rust_app::EffectiveEnvelopeCache::default()
+        .update(
+            &project,
+            &temporal,
+            rust_app::GainFadeSettings {
+                attenuation: 0.25,
+                fade_in: TICKS_PER_SECOND / 20,
+                fade_out: TICKS_PER_SECOND / 20,
+            },
+            None,
+        )
+        .unwrap();
+    assert_eq!(envelopes.envelopes[0].gain_at_time(bleed_time), 1.0);
+    assert_eq!(envelopes.envelopes[1].gain_at_time(wanted_time), 1.0);
+    assert_eq!(envelopes.envelopes[1].gain_at_time(bleed_time), 0.25);
+    let mut invalid: serde_json::Value = serde_json::from_str(&models.to_json().unwrap()).unwrap();
+    invalid["source_tracks"][0] = invalid["source_tracks"][1].clone();
+    assert!(rust_app::SessionOwnershipModels::from_json(&invalid.to_string()).is_err());
+    std::fs::remove_dir_all(root).unwrap();
+}
+#[test]
 fn held_out_episode_allows_two_direct_owners_and_rejects_speech_bleed() {
     let (root, project, audio, evidence) = session();
     let mut cache = SessionOwnershipCache::default();
