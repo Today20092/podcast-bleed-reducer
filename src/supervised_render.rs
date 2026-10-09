@@ -34,20 +34,23 @@ pub struct SupervisedRenderSnapshot {
     pub ownership_identity: String,
     pub effective_identity: String,
     pub recipe: AnalysisRecipe,
-    pub runtime: RuntimeProvenance,
+    #[serde(default)]
+    pub runtime: Option<RuntimeProvenance>,
 }
 impl SupervisedRenderSnapshot {
-    pub fn capture(
+    pub fn capture<'a>(
         project: &Project,
         analysis: &EditorAnalysisResult,
         effective: &EffectiveEnvelopes,
-        runtime: &RuntimeProvenance,
+        runtime: impl Into<Option<&'a RuntimeProvenance>>,
     ) -> Result<Self, RenderBlocker> {
+        let runtime = runtime.into();
         project.require_alignment()?;
         project.validate_interactive_sources()?;
         if !analysis.snapshot.matches(project)
             || !effective.analysis_current
-            || runtime != &analysis.runtime
+            || runtime != analysis.runtime.as_ref()
+            || project.nemotron_enabled() != runtime.is_some()
             || project.analysis_recipe() != Some(&analysis.recipe)
             || !matches!(project.result(), crate::ResultState::Current { identity } if identity == &analysis.temporal.cache_key)
         {
@@ -61,7 +64,7 @@ impl SupervisedRenderSnapshot {
             ownership_identity: analysis.ownership.cache_key.clone(),
             effective_identity: effective.cache_key.clone(),
             recipe: analysis.recipe.clone(),
-            runtime: runtime.clone(),
+            runtime: runtime.cloned(),
         })
     }
     pub fn matches(&self, project: &Project) -> bool {
@@ -124,7 +127,7 @@ pub fn prepare_supervised_render(
     cancelled: Option<&AtomicBool>,
 ) -> Result<PreparedSupervisedRender, RenderBlocker> {
     crate::prepared_analysis::check_cancelled(cancelled)?;
-    if SupervisedRenderSnapshot::capture(project, analysis, effective, &snapshot.runtime)?
+    if SupervisedRenderSnapshot::capture(project, analysis, effective, snapshot.runtime.as_ref())?
         != *snapshot
     {
         return Err(RenderBlocker("Final render snapshot changed.".into()));
@@ -219,14 +222,15 @@ pub fn prepare_supervised_render(
     })
 }
 impl PreparedSupervisedRender {
-    pub fn publish(
+    pub fn publish<'a>(
         self,
         project: &Project,
-        runtime: &RuntimeProvenance,
+        runtime: impl Into<Option<&'a RuntimeProvenance>>,
         generation: &RenderGeneration,
         expected_generation: u64,
         cancelled: Option<&AtomicBool>,
     ) -> Result<PublishedSupervisedRender, RenderBlocker> {
+        let runtime = runtime.into();
         project.validate_sources_cancellable(cancelled)?;
         for file in &self.record.files {
             let path = self.output.path(&file.name);
@@ -248,7 +252,8 @@ impl PreparedSupervisedRender {
         let _guard = generation.0.lock().unwrap_or_else(|e| e.into_inner());
         crate::prepared_analysis::check_cancelled(cancelled)?;
         if *_guard != expected_generation
-            || runtime != &self.record.snapshot.runtime
+            || runtime != self.record.snapshot.runtime.as_ref()
+            || project.nemotron_enabled() != runtime.is_some()
             || !self.record.snapshot.matches(project)
             || Project::saved_sound_identity(project.path())? != self.record.snapshot.sound_identity
         {

@@ -196,23 +196,26 @@ pub fn evaluate_project_command(
     } else {
         None
     };
-    let helper = std::env::current_exe()?.with_file_name(if cfg!(windows) {
-        "model-check.exe"
+    let runtime = if project.nemotron_enabled() {
+        let helper = std::env::current_exe()?.with_file_name(if cfg!(windows) {
+            "model-check.exe"
+        } else {
+            "model-check"
+        });
+        let mut verification = std::process::Command::new(helper);
+        verification
+            .arg("--verify-only")
+            .arg("--runtime")
+            .arg(crate::model::runtime_directory().map_err(RenderBlocker)?);
+        Some(crate::model::verify_native_runtime(verification, &cancel).map_err(RenderBlocker)?)
     } else {
-        "model-check"
-    });
-    let mut verification = std::process::Command::new(helper);
-    verification
-        .arg("--verify-only")
-        .arg("--runtime")
-        .arg(crate::model::runtime_directory().map_err(RenderBlocker)?);
-    let runtime =
-        crate::model::verify_native_runtime(verification, &cancel).map_err(RenderBlocker)?;
+        None
+    };
     let mut worker = crate::EditorAnalysisWorker::default();
     let analysis = worker.analyze(
         &project,
         std::path::Path::new(&args[4]),
-        Some(&runtime),
+        runtime.as_ref(),
         &std::sync::atomic::AtomicU8::new(0),
         &cancel,
     )?;
@@ -222,7 +225,9 @@ pub fn evaluate_project_command(
         .map(|b| score.compare_baseline(b))
         .transpose()?;
     manifest.validate(&project, Some(&cancel))?;
-    crate::verify_installed_editor_runtime(&runtime, &cancel)?;
+    if let Some(runtime) = &runtime {
+        crate::verify_installed_editor_runtime(runtime, &cancel)?;
+    }
     if std::fs::read(project.path())? != saved_project {
         return Err("Saved project changed during evaluation; no report published.".into());
     }
@@ -715,10 +720,13 @@ impl FrozenEvaluationManifest {
             if !recipe.as_object().is_some_and(|object| {
                 object.len() == fields.len()
                     && fields.iter().all(|field| object.contains_key(*field))
-            }) || !["model_sha256", "runtime_sha256"]
-                .into_iter()
-                .all(|key| recipe[key].as_str().is_some_and(sha256_string))
-            {
+            }) || !["model_sha256", "runtime_sha256"].into_iter().all(|key| {
+                if project.nemotron_enabled() {
+                    recipe[key].as_str().is_some_and(sha256_string)
+                } else {
+                    recipe[key].is_null()
+                }
+            }) {
                 return Err(RenderBlocker(
                     "Frozen analysis recipe is incomplete or contains unsupported fields.".into(),
                 ));

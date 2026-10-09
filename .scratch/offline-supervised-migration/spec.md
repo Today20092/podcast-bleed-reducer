@@ -10,9 +10,9 @@ CleanSlate is a standalone, local editor for synchronized mono podcast tracks. E
 
 Use ownership baseline `6a60cc2bfe187ea889fd2d8bcc3344311cfd706b` and retain Iced. Keep earlier responsive code and rejected experiments recoverable; do not promote existing detector quality by inheritance. Start a fresh versioned project format. No existing saved project migration is required.
 
-Required workflow: import and validate, assign speakers, mark solo references for each speaker and room tone, Analyze, review uncertainty, correct labels or gain, audition, save an editable project, and export individual processed WAVs. Overlap labels are optional. Labels can include any active speaker set. One calibration setup covers a recording, with multiple examples across the show to handle small microphone movements. Poorly explained acoustic relationships become review warnings.
+Required workflow: import and validate, assign speakers, mark solo references for each speaker and room tone, Analyze the whole recording, audition and adjust attenuation, correct labels or gain where needed, save an editable project, and export individual processed WAVs. Uncertainty review remains available without dominating the editing flow. Overlap labels are optional. Labels can include any active speaker set. One calibration setup covers a recording, with multiple examples across the show to handle small microphone movements. Poorly explained acoustic relationships become review warnings.
 
-Required first-release diarization is Nemotron. The native runtime ships with the app; the pinned model is downloaded once on first use, verified and stored locally. Inference is local and CPU-capable without Python or a GPU requirement. A failed required model cannot silently become an alternate detector.
+Acoustic-first supervised ownership is the default. Nemotron is an explicit per-project option, default off. When selected, its native runtime and pinned model are verified and run locally on CPU without Python or a GPU requirement; a failed selected model cannot silently switch to acoustic-only analysis. Acoustic-only analysis requires no Nemotron download or verification.
 
 ## Architectural boundaries
 
@@ -22,10 +22,10 @@ The pipeline is:
 
 1. Native-rate source decoding and validation.
 2. Cached waveforms and 16 kHz analysis copies.
-3. Required Nemotron speaker activity and per-track fixed speech/acoustic measurements.
+3. Per-track fixed speech/acoustic measurements, with optional Nemotron speaker activity.
 4. Human-reference speaker mapping, room calibration and directed bleed evidence.
 5. A small supervised session classifier producing independent local-speaker probability estimates per track.
-6. Whole-timeline temporal optimization with human truth constraints and conservative uncertainty.
+6. Whole-timeline temporal ownership with human truth constraints and mode-specific evidence handling.
 7. Automatic gain-envelope generation.
 8. Protected manual edit composition into one effective envelope.
 9. Display, Original/Processed/Removed audition and final WAV rendering.
@@ -50,7 +50,7 @@ A reference label is a source-bound time interval with an active speaker set. So
 
 One valid solo reference per assigned speaker and a room-tone reference are required to run supervised analysis. Multiple references are encouraged when acoustic evidence changes. Insufficient or inconsistent examples block training with a specific correction request. Fixed neural feature extractors are not fine-tuned from labels. Do not automatically turn predictions into training truth in this release.
 
-Use human solo references to map Nemotron's first-arrival speaker channels to assigned speakers. Require one-to-one evidence with ambiguity checks; unmatched or inconsistent channels remain unresolved and cause review/preservation, not a guessed assignment. Keep one native diarization stream across the recording. Copy probability frames after bounded input pushes using global frame positions before the runtime compacts old values. Persist the complete required probability history, including the final tail. Full-attention one-shot inference is not the two-hour processing route.
+When Nemotron is selected, use human solo references to map its first-arrival speaker channels to assigned speakers. Require one-to-one evidence with ambiguity checks; unmatched or inconsistent channels remain unresolved and cause review/preservation, not a guessed assignment. Keep one native diarization stream across the recording. Copy probability frames after bounded input pushes using global frame positions before the runtime compacts old values. Persist its complete probability history, including the final tail. Acoustic-only analysis learns directly from assigned tracks and human labels; it neither requires nor fabricates anonymous speaker channels. Full-attention one-shot native inference is not the two-hour processing route.
 
 Build a deterministic nonclipping analysis-only mono mix. Compare candidate downmix recipes on development fixtures and freeze the chosen recipe before independent acceptance evaluation. The documentation does not establish one optimal multitrack mix.
 
@@ -58,7 +58,7 @@ Reuse existing room-floor, directed scalar leakage and pairwise evidence as the 
 
 The first learned ownership model is independent binary logistic regression per assigned track. Use a maintained pure Rust implementation for nontrivial training rather than writing a new optimizer. Features combine mapped Nemotron activity, raw VAD, local noise-relative energy, relative dominance, bleed explanation/residual evidence and fit reliability. Freeze normalization, feature recipe and regularization through development validation. More complex classifier families and blind source separation are outside this release.
 
-Temporal optimization uses whole-track context to remove unstable decisions while treating human active-speaker labels as constraints. It may retain multiple owners. It must not discard brief independent speech or override a label to satisfy a minimum-duration heuristic. Missing, ambiguous, poorly supported or contradictory evidence yields an uncertain region kept at unity and queued for review.
+Temporal ownership uses whole-track context while treating human active-speaker labels as constraints. It may retain multiple owners. It must not override a label to satisfy a minimum-duration heuristic. Acoustic-only analysis uses independent fitted ownership evidence throughout every track; native mapping ambiguity and a poor bleed-fit feature cannot blanket-veto acoustic absence predictions. Missing or invalid evidence remains preserved/actionable. Selected Nemotron retains explicit uncertainty for unresolved identity and contradictory evidence. The more aggressive acoustic policy requires recording-specific listening and independent preservation qualification.
 
 ## Cache, jobs and invalidation
 
@@ -74,7 +74,7 @@ Labels teach detection. Manual gain edits control final sound and remain authori
 
 Provide draggable points and fades plus Preserve/Attenuate region actions. Group one drag or region action as one undoable command. The default is attenuation-only, with unity as the maximum; boosting and full DAW automation are not added. Empty overrides expose the regenerated automatic envelope. Finite/bounded values, ordered times, endpoint behavior and source binding are validated on load and edit.
 
-Confirmed transition decision: exponential-shaped automatic fades with explicit start/end times and exact target endpoints; keep curved behavior and defer a fade-shape selector. Preserve wanted/overlap/uncertain spans at exact unity absent manual overrides. Schedule fades in available surrounding time; short gaps may remain preserved instead of cutting speech to fit a fade. Manual edits may intentionally change labeled speech.
+Confirmed transition decision: exponential-shaped automatic fades with explicit start/end times and exact target endpoints; keep curved behavior and defer a fade-shape selector. Preserve owned speech, explicit human speech/overlap and invalid-evidence protection at exact unity absent manual overrides. Treat requested fade lengths as maximum durations; fit them proportionally inside shorter detected non-speaking gaps instead of merging those gaps into unity. Never shorten a preserved span to fit a fade. Manual edits may intentionally change labeled speech.
 
 Store project schema version, stable track/speaker identities, source fingerprints/metadata, reference labels, settings, manual edits/protections, review state, analysis recipe/model provenance, current or stale result identity and render identity. Derived cache files are versioned and rebuildable; a project must remain editable if a cache is missing. Save atomically and retain prior data on failure. A moved identical source can relink; a changed source requires revalidation and explicit review of bound labels/edits before they apply. Never silently transfer decisions to different audio.
 
@@ -88,11 +88,17 @@ Review items show affected time/tracks and reasons such as uncertain identity or
 
 ## Confirmed owner workflow refinement
 
+2026-10-09 feedback after the first GUI candidate supersedes the required-Nemotron default above for development and subsequent implementation: persist an explicit Use Nemotron option, default off. Off runs acoustic-first supervised ownership across every track for the whole session, trained only from human labels and fixed per-track speech/acoustic measurements; it requires no Nemotron verification or anonymous-channel mapping. On explicitly selects the verified Nemotron-assisted path. Analysis mode participates in source/result/cache identity, and changing it requires Analyze. No missing/corrupt selected model may silently switch modes.
+
+The label popup is one active-speaker multiselect: no selected speaker means room tone, one means solo, several means overlap. Show the complete bounded menu without its own scrollbar. Numeric keyboard shortcuts toggle selections; Enter saves, R clears, Escape/outside dismiss. Analysis shows the actual stage and advancing elapsed time instead of a fabricated total percentage. Existing measured stage markers may support the display but cannot claim an inference completion estimate.
+
+Ownership prediction and attenuation run across the entire source timeline, including unlabeled spans. Labels are training examples and explicit truth constraints, not processing limits. Acoustic-only decisions use the fitted per-track ownership evidence without an unresolved Nemotron mapping or poor-fit feature automatically vetoing every absence prediction. Invalid/missing evidence remains actionable; trusted human speech/overlap and explicit manual edits remain authoritative. This more aggressive development policy requires owner listening and independent preservation/bleed qualification before release.
+
 2026-10-09: The owner confirmed [the GUI and attenuation design](gui-design-summary.md). [Build ticket 16](../offline-supervised-editor/issues/16-gui-editing-workflow.md) consolidates the UI work: ordinary click seeks; dragging selects a track-bound range and immediately opens pointer-adjacent solo/overlap/room label actions, with captured input, dismissal and keyboard access. No selection mode should prevent seeking. Labels describe the session-wide active-speaker set. Use concise readiness/next-step guidance and compact installed-model status with expandable details.
 
 For compatible validated tracks whose start timing is unverified, Original audition is available before supplied-alignment confirmation, model setup or references. Actual timing conflicts remain blocked; Analyze/export still require the existing alignment contract. Start cancellable playback preparation when validated tracks open, reuse compatible prepared audio and show progress. Share per-source waveform caches across projects using validated source identity and recipe/version checks; retain user projects, sources and legacy cache files.
 
-The owner also confirmed acoustic-first supervised analysis with optional Nemotron as an evaluation direction within existing ticket 14, using a few clear representative references and adjustable attenuation. This experiments with evidence-supported attenuation rather than automatic uncertainty preservation and retains explicitly labeled speech protection. It does not yet replace the required-Nemotron shipping contract or independent wanted/overlap release checks. Adoption requires measured development evidence, a reconciled analysis specification and owner listening approval.
+The owner authorized acoustic-first supervised analysis with optional Nemotron, using a few clear representative references and adjustable attenuation. Implement this mode within existing ticket 14, preserving explicit labels and source/output safeguards. Independent wanted/overlap, bleed and listening release checks remain required; the new default does not claim those gates have passed.
 
 ## Release acceptance
 

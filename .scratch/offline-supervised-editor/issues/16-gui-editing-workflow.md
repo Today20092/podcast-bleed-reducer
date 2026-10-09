@@ -35,6 +35,8 @@ Inspect graph symbols/callers in src/app.rs, src/waveform.rs, src/audition.rs, s
 
 ## Candidate verification — 2026-10-09
 
+Owner physically confirmed drag/release labeling and Space play/stop. Follow-up requests: replace duplicate solo/room buttons with one speaker multiselect, show the entire popup without a scrollbar, and show truthful analysis stage/elapsed activity. Keep this ticket claimed while those refinements are implemented and checked. Optional Nemotron and whole-session acoustic attenuation are folded into existing ticket 14, with the reconciled owner override in the accepted specification; no new ticket is needed.
+
 Implemented shared audio-identity waveform caching, direct drag/release and right-click label actions, captured popup controls, concise inspector/model details, original audition before alignment confirmation, and automatic cancellable playback preparation. Source timing conflicts, analysis/export alignment checks and explicitly labeled speech protection remain enforced. No detector policy change was included.
 
 Red/green checks covered click/drag canvas behavior, controller labels/conflicts/undo/persistence/cross-track binding, automatic preparation without autoplay, missing timing versus conflicting BWF metadata, source cache reuse/recovery and preparation cancellation. Review found stale track binding after warning navigation and queued exact-time input behind the popup; both were fixed with controller regression coverage. Final all-target tests: 199 passed, 19 explicitly ignored, zero failed. Strict all-target/all-feature Clippy, formatting and diff checks passed. Offline app-relative model/runtime verification passed. Build settings and executable hashes are in docs/owner-verification.md.

@@ -4,7 +4,9 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::sync::{Arc, atomic::AtomicBool};
 
-pub const TEMPORAL_RECIPE: &str = "independent-bands-consistent-activity-gap-preservation-v1";
+pub const TEMPORAL_RECIPE: &str =
+    "independent-native-bands-acoustic-hysteresis-gap-preservation-v3";
+
 #[derive(Clone, Debug, Serialize)]
 pub struct TemporalEvidence {
     pub probability: Option<f32>,
@@ -19,6 +21,7 @@ pub struct TemporalEvidenceGrid {
     rows: Vec<Vec<TemporalEvidence>>,
     global_activity: Vec<f32>,
     identity: String,
+    acoustic_only: bool,
 }
 impl TemporalEvidenceGrid {
     pub fn new(
@@ -62,10 +65,18 @@ impl TemporalEvidenceGrid {
             rows,
             global_activity,
             identity,
+            acoustic_only: false,
         })
     }
     pub fn duration(&self) -> u64 {
         self.duration
+    }
+    pub(crate) fn set_acoustic_only(&mut self, acoustic_only: bool) {
+        self.acoustic_only = acoustic_only;
+        self.identity = format!(
+            "{:x}",
+            Sha256::digest(serde_json::to_vec(&(&self.identity, acoustic_only)).unwrap())
+        );
     }
     pub(crate) fn bind_upstream_identity(&mut self, identity: &str) {
         self.identity = format!(
@@ -449,17 +460,39 @@ impl TemporalOwnershipCache {
         let mut states = vec![vec![TemporalTrackState::Absent; frames]; grid.tracks.len()];
         let mut reasons = vec![vec![None; frames]; grid.tracks.len()];
         for (track, rows) in grid.rows.iter().enumerate() {
+            let mut acoustic_owned = false;
             for (frame, row) in rows.iter().enumerate() {
                 if frame % 1024 == 0 {
                     crate::prepared_analysis::check_cancelled(cancelled)?;
                 }
                 let quiet_global = grid.global_activity[frame] <= settings.quiet_threshold;
+                if row.preservation_reason.is_some()
+                    || row.probability.is_none()
+                    || row.raw_speech.is_none()
+                {
+                    acoustic_owned = false;
+                }
                 let (state, reason) = match (row.probability, row.raw_speech, row.assigned_activity)
                 {
                     _ if row.preservation_reason.is_some() => (
                         TemporalTrackState::UncertainUnity,
                         row.preservation_reason.clone(),
                     ),
+                    (Some(p), Some(_), None) if grid.acoustic_only => {
+                        if p >= settings.owner_high {
+                            acoustic_owned = true;
+                        } else if p <= settings.owner_low {
+                            acoustic_owned = false;
+                        }
+                        (
+                            if acoustic_owned {
+                                TemporalTrackState::Owned
+                            } else {
+                                TemporalTrackState::Absent
+                            },
+                            None,
+                        )
+                    }
                     (Some(p), Some(raw), Some(activity))
                         if p >= settings.owner_high
                             && activity >= settings.activity_threshold
@@ -508,6 +541,7 @@ impl TemporalOwnershipCache {
             if states
                 .iter()
                 .all(|rows| rows[frame] == TemporalTrackState::Absent)
+                && !grid.acoustic_only
                 && (grid.global_activity[frame] > settings.quiet_threshold
                     || grid.rows.iter().any(|rows| {
                         rows[frame]
@@ -571,5 +605,120 @@ impl TemporalOwnershipCache {
         crate::prepared_analysis::check_cancelled(cancelled)?;
         self.accepted = Some(result.clone());
         Ok(result)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn acoustic_phrase_guard_only_fills_bounded_speech_gaps() {
+        let rows = (0..64)
+            .map(|frame| TemporalEvidence {
+                probability: Some(if matches!(frame, 3..=7 | 24..=27 | 54..=57) {
+                    0.95
+                } else {
+                    0.05
+                }),
+                raw_speech: Some(0.9),
+                assigned_activity: None,
+                preservation_reason: None,
+            })
+            .collect();
+        let mut grid = TemporalEvidenceGrid::new(
+            vec![TrackId(1)],
+            OWNERSHIP_FRAME_TICKS * 64,
+            vec![rows],
+            vec![0.9; 64],
+        )
+        .unwrap();
+        grid.set_acoustic_only(true);
+        let result = TemporalOwnershipCache::default()
+            .optimize_evidence(
+                &grid,
+                TemporalSettings {
+                    preserved_gap_frames: 24,
+                    ..TemporalSettings::default()
+                },
+                None,
+            )
+            .unwrap();
+        assert_eq!(
+            result.states_at(OWNERSHIP_FRAME_TICKS * 2).unwrap()[0],
+            TemporalTrackState::Absent
+        );
+        assert_eq!(
+            result.states_at(OWNERSHIP_FRAME_TICKS * 15).unwrap()[0],
+            TemporalTrackState::UncertainUnity
+        );
+        assert_eq!(
+            result.states_at(OWNERSHIP_FRAME_TICKS * 40).unwrap()[0],
+            TemporalTrackState::Absent
+        );
+        assert_eq!(
+            result.states_at(OWNERSHIP_FRAME_TICKS * 58).unwrap()[0],
+            TemporalTrackState::Absent
+        );
+    }
+
+    #[test]
+    fn acoustic_hysteresis_holds_quiet_speech_without_promoting_moderate_bleed() {
+        let probabilities = [
+            [0.1, 0.9, 0.4, 0.3, 0.25, 0.1, 0.6, 0.9],
+            [0.4, 0.6, 0.7, 0.9, 0.3, 0.1, 0.6, 0.4],
+        ];
+        let rows = probabilities
+            .iter()
+            .map(|track| {
+                track
+                    .iter()
+                    .map(|&p| TemporalEvidence {
+                        probability: Some(p),
+                        raw_speech: Some(0.9),
+                        assigned_activity: None,
+                        preservation_reason: None,
+                    })
+                    .collect()
+            })
+            .collect();
+        let mut grid = TemporalEvidenceGrid::new(
+            vec![TrackId(1), TrackId(2)],
+            OWNERSHIP_FRAME_TICKS * 8,
+            rows,
+            vec![0.9; 8],
+        )
+        .unwrap();
+        grid.set_acoustic_only(true);
+        let result = TemporalOwnershipCache::default()
+            .optimize_evidence(
+                &grid,
+                TemporalSettings {
+                    preserved_gap_frames: 0,
+                    ..TemporalSettings::default()
+                },
+                None,
+            )
+            .unwrap();
+        for frame in 2..5 {
+            assert_eq!(
+                result.states_at(OWNERSHIP_FRAME_TICKS * frame).unwrap()[0],
+                TemporalTrackState::Owned
+            );
+        }
+        for frame in 0..3 {
+            assert_eq!(
+                result.states_at(OWNERSHIP_FRAME_TICKS * frame).unwrap()[1],
+                TemporalTrackState::Absent
+            );
+        }
+        assert_eq!(
+            result.states_at(OWNERSHIP_FRAME_TICKS * 3).unwrap(),
+            vec![TemporalTrackState::Owned; 2]
+        );
+        assert_eq!(
+            result.states_at(OWNERSHIP_FRAME_TICKS * 6).unwrap(),
+            vec![TemporalTrackState::Absent; 2]
+        );
     }
 }

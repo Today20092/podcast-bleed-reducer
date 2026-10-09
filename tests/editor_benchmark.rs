@@ -9,6 +9,7 @@ fn prepare_controlled_eight_track_capacity_project() {
     let started = std::time::Instant::now();
     let mut project =
         rust_app::Project::create(directory.join("capacity.cleanslate"), paths).unwrap();
+    project.set_nemotron_enabled(true).unwrap();
     project.set_supplied_alignment(true).unwrap();
     project
         .add_reference_label(

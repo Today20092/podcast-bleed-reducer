@@ -7,7 +7,8 @@ use sha2::{Digest, Sha256};
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
-pub const EFFECTIVE_ENVELOPE_RECIPE: &str = "finite-exp4-source-time-halfopen-linear-manual-v1";
+pub const EFFECTIVE_ENVELOPE_RECIPE: &str =
+    "finite-exp4-fit-absent-gaps-source-time-halfopen-linear-manual-v2";
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct GainFadeSettings {
     pub attenuation: f32,
@@ -107,10 +108,10 @@ impl AutomaticEnvelope {
             }
             if region.states[track] != TemporalTrackState::Absent {
                 let (start, end) = rounded_range(grid, region.start, region.end.min(duration))?;
-                if let Some(previous) = preserved.last_mut().filter(|previous| {
-                    start <= previous.1
-                        || start - previous.1 <= settings.fade_in + settings.fade_out
-                }) {
+                if let Some(previous) = preserved
+                    .last_mut()
+                    .filter(|previous| start <= previous.1 || start - previous.1 <= 1)
+                {
                     previous.1 = previous.1.max(end);
                 } else {
                     preserved.push((start, end));
@@ -121,16 +122,6 @@ impl AutomaticEnvelope {
             return Err(RenderBlocker(
                 "Ownership regions do not cover the recording tail.".into(),
             ));
-        }
-        if let Some(first) = preserved.first_mut()
-            && first.0 < settings.fade_in + settings.fade_out
-        {
-            first.0 = 0;
-        }
-        if let Some(last) = preserved.last_mut()
-            && duration - last.1 < settings.fade_out
-        {
-            last.1 = duration;
         }
         let mut segments = vec![];
         let mut append = |start, end, from, to| {
@@ -146,41 +137,44 @@ impl AutomaticEnvelope {
         let mut cursor = 0;
         for &(start, end) in &preserved {
             if cursor < start {
+                let gap = start - cursor;
+                if gap <= 1 {
+                    append(cursor, start, 1.0, 1.0);
+                    append(start, end, 1.0, 1.0);
+                    cursor = end;
+                    continue;
+                }
+                // Fit fades inside absence instead of preserving the entire short gap.
+                let close = if gap < settings.fade_in + settings.fade_out {
+                    ((u128::from(gap) * u128::from(settings.fade_out)
+                        / u128::from(settings.fade_in + settings.fade_out))
+                        as u64)
+                        .clamp(1, gap - 1)
+                } else {
+                    settings.fade_out
+                };
+                let open = settings.fade_in.min(gap - close);
+                append(cursor, cursor + close, 1.0, settings.attenuation);
                 append(
-                    cursor,
-                    cursor + settings.fade_out,
-                    1.0,
+                    cursor + close,
+                    start - open,
+                    settings.attenuation,
                     settings.attenuation,
                 );
-                append(
-                    cursor + settings.fade_out,
-                    start - settings.fade_in,
-                    settings.attenuation,
-                    settings.attenuation,
-                );
-                append(start - settings.fade_in, start, settings.attenuation, 1.0);
+                append(start - open, start, settings.attenuation, 1.0);
             }
             append(start, end, 1.0, 1.0);
             cursor = end;
         }
         if cursor < duration {
-            if duration - cursor >= settings.fade_out {
-                append(
-                    cursor,
-                    cursor + settings.fade_out,
-                    1.0,
-                    settings.attenuation,
-                );
-                append(
-                    cursor + settings.fade_out,
-                    duration,
-                    settings.attenuation,
-                    settings.attenuation,
-                );
-            } else {
-                append(cursor, duration, 1.0, 1.0);
-                preserved.push((cursor, duration));
-            }
+            let close = settings.fade_out.min(duration - cursor);
+            append(cursor, cursor + close, 1.0, settings.attenuation);
+            append(
+                cursor + close,
+                duration,
+                settings.attenuation,
+                settings.attenuation,
+            );
         }
         crate::prepared_analysis::check_cancelled(cancelled)?;
         Ok(Self {

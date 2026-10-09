@@ -33,7 +33,7 @@ fn ownership_with_offset(offset: usize) -> std::sync::Arc<rust_app::TemporalOwne
 }
 
 #[test]
-fn finite_fades_finish_before_speech_and_short_gaps_remain_preserved() {
+fn finite_fades_fit_short_absent_gaps_and_preserve_speech_endpoints() {
     let result = ownership();
     let settings = GainFadeSettings {
         attenuation: 0.25,
@@ -47,9 +47,12 @@ fn finite_fades_finish_before_speech_and_short_gaps_remain_preserved() {
     assert_eq!(envelope.gain_at_time(settings.fade_out), 0.25);
     assert_eq!(envelope.gain_at_time(OWNERSHIP_FRAME_TICKS * 16), 0.25);
     assert_eq!(envelope.gain_at_time(OWNERSHIP_FRAME_TICKS * 20), 1.0);
-    for frame in 20..50 {
+    for frame in (20..40).chain(44..50) {
         assert_eq!(envelope.gain_at_time(OWNERSHIP_FRAME_TICKS * frame), 1.0);
     }
+    assert_eq!(envelope.gain_at_time(OWNERSHIP_FRAME_TICKS * 40), 1.0);
+    assert_eq!(envelope.gain_at_time(OWNERSHIP_FRAME_TICKS * 42), 0.25);
+    assert_eq!(envelope.gain_at_time(OWNERSHIP_FRAME_TICKS * 44), 1.0);
     assert_eq!(envelope.gain_at_time(OWNERSHIP_FRAME_TICKS * 54), 0.25);
     let interior = envelope.gain_at_time(settings.fade_out / 2);
     assert!(
@@ -60,6 +63,29 @@ fn finite_fades_finish_before_speech_and_short_gaps_remain_preserved() {
         envelope.segment_count() < 12,
         "representation must scale with edges, not samples"
     );
+}
+
+#[test]
+fn long_requested_fades_do_not_erase_known_absence() {
+    let result = ownership();
+    let settings = GainFadeSettings {
+        attenuation: 0.1,
+        fade_in: OWNERSHIP_FRAME_TICKS * 10,
+        fade_out: OWNERSHIP_FRAME_TICKS * 35,
+    };
+    let grid = SourceTimebase::new(48000, 153600).unwrap();
+    let envelope =
+        AutomaticEnvelope::from_ownership(&result, TrackId(1), grid, settings, None).unwrap();
+    let start = OWNERSHIP_FRAME_TICKS * 40;
+    let end = OWNERSHIP_FRAME_TICKS * 44;
+    let meeting = start + (end - start) * 35 / 45;
+    assert_eq!(envelope.gain_at_time(start), 1.0);
+    assert_eq!(envelope.gain_at_time(meeting), 0.1);
+    assert_eq!(envelope.gain_at_time(end), 1.0);
+    assert!(envelope.gain_at_time((start + end) / 2) < 0.5);
+    for frame in (20..40).chain(44..50) {
+        assert_eq!(envelope.gain_at_time(OWNERSHIP_FRAME_TICKS * frame), 1.0);
+    }
 }
 
 fn project() -> (std::path::PathBuf, rust_app::Project) {
@@ -98,20 +124,24 @@ fn source_grid_rounding_preserves_every_boundary_sample_including_arbitrary_rate
         let grid = SourceTimebase::new(rate, u64::from(rate) * 32 / 10).unwrap();
         let auto = AutomaticEnvelope::from_ownership(&ownership, TrackId(1), grid, settings, None)
             .unwrap();
-        let range =
-            rust_app::TimeRange::new(OWNERSHIP_FRAME_TICKS * 21, OWNERSHIP_FRAME_TICKS * 51)
-                .unwrap()
-                .native_frames(grid)
-                .unwrap();
-        for sample in range {
-            assert_eq!(
-                auto.gain_at_time(
-                    grid.time_at_frame(sample as u64, rust_app::Rounding::Floor)
-                        .unwrap()
-                ),
-                1.0,
-                "rate {rate}, native sample {sample}"
-            );
+        for (start, end) in [(21, 41), (45, 51)] {
+            let range = rust_app::TimeRange::new(
+                OWNERSHIP_FRAME_TICKS * start,
+                OWNERSHIP_FRAME_TICKS * end,
+            )
+            .unwrap()
+            .native_frames(grid)
+            .unwrap();
+            for sample in range {
+                assert_eq!(
+                    auto.gain_at_time(
+                        grid.time_at_frame(sample as u64, rust_app::Rounding::Floor)
+                            .unwrap()
+                    ),
+                    1.0,
+                    "rate {rate}, native sample {sample}"
+                );
+            }
         }
         assert_eq!(auto.gain_at_time(grid.duration().unwrap()), 1.0);
     }

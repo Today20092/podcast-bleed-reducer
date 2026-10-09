@@ -37,7 +37,7 @@ Settle the architecture and produce ordered, implementation-ready tickets to mig
 
 Owner GUI feedback on 2026-10-09 is documented in [the interview record](gui-feedback.md). Decisions 07–12 are resolved and consolidated into one new GUI build ticket 16 plus existing evaluation ticket 14. The owner subsequently authorized implement-spec, a fast GUI candidate and synchronized 10-minute source clips. Ticket 16 is claimed; release/listening acceptance remains pending.
 
-The owner confirmed [the GUI and attenuation design](gui-design-summary.md). GUI refinements are recorded in the accepted specification; acoustic-first analysis with optional Nemotron is an evaluation direction, not accepted recording-quality evidence or a changed shipping model contract.
+The owner confirmed [the GUI and attenuation design](gui-design-summary.md) and authorized implementation. The accepted specification now uses acoustic-first analysis with optional Nemotron defaulting off. This contract change does not establish recording quality or release approval; those checks remain in ticket 14.
 
 None blocking implementation planning. Numerical tuning, acoustic estimator/downmix qualification, measured speed and final audio quality have explicit development/release checks in the build tickets; they have not been measured or accepted by this map.
 

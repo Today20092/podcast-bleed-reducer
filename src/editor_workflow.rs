@@ -9,7 +9,8 @@ use std::{
     },
 };
 
-pub const EDITOR_ANALYSIS_RECIPE: &str = "offline-supervised-native06-model09-temporal10-v1";
+pub const EDITOR_ANALYSIS_RECIPE: &str =
+    "offline-supervised-optional-native-acoustic-model09-temporal10-v2";
 
 pub fn verify_installed_editor_runtime(
     runtime: &crate::model::RuntimeProvenance,
@@ -172,9 +173,9 @@ pub struct EditorAnalysisResult {
     pub temporal: Arc<crate::TemporalOwnership>,
     pub overview: crate::OwnershipOverview,
     pub recipe: crate::AnalysisRecipe,
-    pub runtime: crate::model::RuntimeProvenance,
+    pub runtime: Option<crate::model::RuntimeProvenance>,
     pub timings: EditorAnalysisTimings,
-    pub fixed_evidence: crate::model::DiarizationEvidence,
+    pub fixed_evidence: Option<crate::model::DiarizationEvidence>,
 }
 
 /// Wall-clock observations only; these never participate in sound or cache identity.
@@ -238,7 +239,17 @@ impl EditorAnalysisWorker {
                 readiness.issues.join("; ")
             )));
         }
-        let runtime = runtime.ok_or_else(|| RenderBlocker("Verify the installed Nemotron model, or explicitly download it on first use, before Analyze.".into()))?;
+        if !project.nemotron_enabled() {
+            return self.analyze_evidence(
+                project,
+                &audio,
+                None,
+                (snapshot, timings),
+                progress,
+                cancel,
+            );
+        }
+        let runtime = runtime.ok_or_else(|| RenderBlocker("Nemotron is enabled: verify the installed model, or disable Nemotron for acoustic analysis.".into()))?;
         progress.store(20, Ordering::Relaxed);
         let stage = std::time::Instant::now();
         let helper = std::env::current_exe()?.with_file_name(if cfg!(windows) {
@@ -277,7 +288,7 @@ impl EditorAnalysisWorker {
         self.analyze_evidence(
             project,
             &audio,
-            &evidence,
+            Some(&evidence),
             (snapshot, timings),
             progress,
             cancel,
@@ -292,11 +303,38 @@ impl EditorAnalysisWorker {
         progress: &AtomicU8,
         cancel: &AtomicBool,
     ) -> Result<Arc<EditorAnalysisResult>, RenderBlocker> {
+        if !project.nemotron_enabled() {
+            return Err(RenderBlocker(
+                "Enable Nemotron before supplying native evidence.".into(),
+            ));
+        }
         let snapshot = EditorAnalysisIdentity::capture(project)?;
         self.analyze_evidence(
             project,
             audio,
-            evidence,
+            Some(evidence),
+            (snapshot, EditorAnalysisTimings::default()),
+            progress,
+            cancel,
+        )
+    }
+    pub fn analyze_acoustic_evidence(
+        &mut self,
+        project: &Project,
+        audio: &[crate::PreparedAnalysisAudio],
+        progress: &AtomicU8,
+        cancel: &AtomicBool,
+    ) -> Result<Arc<EditorAnalysisResult>, RenderBlocker> {
+        if project.nemotron_enabled() {
+            return Err(RenderBlocker(
+                "Disable Nemotron before acoustic-only analysis.".into(),
+            ));
+        }
+        let snapshot = EditorAnalysisIdentity::capture(project)?;
+        self.analyze_evidence(
+            project,
+            audio,
+            None,
             (snapshot, EditorAnalysisTimings::default()),
             progress,
             cancel,
@@ -306,7 +344,7 @@ impl EditorAnalysisWorker {
         &mut self,
         project: &Project,
         audio: &[crate::PreparedAnalysisAudio],
-        evidence: &crate::model::DiarizationEvidence,
+        evidence: Option<&crate::model::DiarizationEvidence>,
         observed: (EditorAnalysisIdentity, EditorAnalysisTimings),
         progress: &AtomicU8,
         cancel: &AtomicBool,
@@ -314,22 +352,37 @@ impl EditorAnalysisWorker {
         let (snapshot, mut timings) = observed;
         progress.store(55, Ordering::Relaxed);
         let stage = std::time::Instant::now();
-        let ownership = self.ownership.analyze(
-            project,
-            audio,
-            evidence,
-            crate::OwnershipTrainingSettings::default(),
-            Some(cancel),
-        )?;
+        let ownership = if let Some(evidence) = evidence {
+            self.ownership.analyze(
+                project,
+                audio,
+                evidence,
+                crate::OwnershipTrainingSettings::default(),
+                Some(cancel),
+            )?
+        } else {
+            self.ownership.analyze_acoustic(
+                project,
+                audio,
+                crate::OwnershipTrainingSettings::default(),
+                Some(cancel),
+            )?
+        };
         timings.ownership_ms = stage.elapsed().as_secs_f64() * 1000.0;
         progress.store(80, Ordering::Relaxed);
         let stage = std::time::Instant::now();
-        let temporal = self.temporal.optimize(
-            project,
-            &ownership,
-            crate::TemporalSettings::default(),
-            Some(cancel),
-        )?;
+        let settings = if evidence.is_some() {
+            crate::TemporalSettings::default()
+        } else {
+            // Development acoustic profile bridges phrase gaps up to 768 ms.
+            crate::TemporalSettings {
+                preserved_gap_frames: 24,
+                ..crate::TemporalSettings::default()
+            }
+        };
+        let temporal = self
+            .temporal
+            .optimize(project, &ownership, settings, Some(cancel))?;
         timings.temporal_ms = stage.elapsed().as_secs_f64() * 1000.0;
         let recipe = crate::AnalysisRecipe {
             decoder: crate::AUDIO_DECODER_RECIPE.into(),
@@ -338,9 +391,12 @@ impl EditorAnalysisWorker {
                 "{EDITOR_ANALYSIS_RECIPE}/{}",
                 crate::OWNERSHIP_FEATURE_RECIPE
             ),
-            model_sha256: Some(evidence.model_sha256.clone()),
-            runtime_sha256: Some(evidence.runtime.recipe_sha256.clone()),
-            mix_recipe: evidence.mix_recipe.clone(),
+            model_sha256: evidence.map(|e| e.model_sha256.clone()),
+            runtime_sha256: evidence.map(|e| e.runtime.recipe_sha256.clone()),
+            mix_recipe: evidence.map_or_else(
+                || "individual-native-tracks-acoustic-v1".into(),
+                |e| e.mix_recipe.clone(),
+            ),
         };
         crate::prepared_analysis::check_cancelled(Some(cancel))?;
         if !snapshot.matches(project) {
@@ -362,9 +418,9 @@ impl EditorAnalysisWorker {
             temporal,
             overview,
             recipe,
-            runtime: evidence.runtime.clone(),
+            runtime: evidence.map(|e| e.runtime.clone()),
             timings,
-            fixed_evidence: evidence.clone(),
+            fixed_evidence: evidence.cloned(),
         });
         self.accepted = Some(result.clone());
         progress.store(95, Ordering::Relaxed);
@@ -398,8 +454,10 @@ impl EditorAnalysisResult {
         runtime: Option<&crate::model::RuntimeProvenance>,
         cancel: Option<&AtomicBool>,
     ) -> Result<Arc<crate::EffectiveEnvelopes>, RenderBlocker> {
-        if runtime != Some(&self.runtime)
-            || self.recipe.model_sha256.as_deref() != Some(crate::model::NEMOTRON.sha256)
+        if runtime != self.runtime.as_ref()
+            || project.nemotron_enabled() != self.runtime.is_some()
+            || (self.runtime.is_some()
+                && self.recipe.model_sha256.as_deref() != Some(crate::model::NEMOTRON.sha256))
         {
             return Err(RenderBlocker(
                 "Required model or runtime changed; verify and Analyze again.".into(),
@@ -463,6 +521,7 @@ impl EditorAnalysisIdentity {
                         EDITOR_ANALYSIS_RECIPE,
                         SessionOwnership::reference_identity(project),
                         project.supplied_alignment(),
+                        project.nemotron_enabled(),
                     ))
                     .map_err(|e| RenderBlocker(e.to_string()))?
                 )

@@ -130,6 +130,8 @@ pub struct Project {
     pub sources: Vec<SourceIdentity>,
     #[serde(default)]
     supplied_alignment: bool,
+    #[serde(default)]
+    nemotron_enabled: bool,
     references: Vec<ReferenceLabel>,
     #[serde(default)]
     next_reference_id: u64,
@@ -190,6 +192,7 @@ impl Project {
             path: path.into(),
             sources,
             supplied_alignment: false,
+            nemotron_enabled: false,
             references: vec![],
             next_reference_id: 1,
             reference_undo: vec![],
@@ -224,6 +227,13 @@ impl Project {
         let mut project: Self = serde_json::from_slice(&fs::read(&path)?).map_err(invalid_json)?;
         project.path = path;
         project.validate_contract()?;
+        if project
+            .analysis_recipe
+            .as_ref()
+            .is_some_and(|recipe| recipe.model_sha256.is_some() != project.nemotron_enabled)
+        {
+            project.invalidate("Saved analysis uses different evidence; Analyze with the selected Nemotron setting.");
+        }
         for source in &mut project.sources {
             source.loaded_stamp = SourceStamp::read(&source.path).ok();
             source.available = source.matches_disk();
@@ -591,6 +601,7 @@ impl Project {
         let data = serde_json::to_vec(&(
             &self.sources,
             self.supplied_alignment,
+            self.nemotron_enabled,
             &self.references,
             self.gain_constraints(),
             self.parameters,
@@ -687,6 +698,20 @@ impl Project {
 
     pub fn supplied_alignment(&self) -> bool {
         self.supplied_alignment
+    }
+
+    pub fn nemotron_enabled(&self) -> bool {
+        self.nemotron_enabled
+    }
+
+    pub fn set_nemotron_enabled(&mut self, enabled: bool) -> io::Result<()> {
+        self.transaction(|next| {
+            if next.nemotron_enabled != enabled {
+                next.nemotron_enabled = enabled;
+                next.invalidate("Analysis evidence changed; Analyze again.");
+            }
+            Ok(())
+        })
     }
 
     pub fn set_supplied_alignment(&mut self, declared: bool) -> io::Result<()> {

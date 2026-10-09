@@ -24,7 +24,7 @@ Automatically prepare playable audio when tracks open and reuse compatible prepa
 
 ## Automatic attenuation direction
 
-Evaluate acoustic-first supervised analysis with Nemotron optional before committing to removal. The evaluation should establish whether human references and acoustic evidence can identify absent speakers and reduce bleed effectively on the owner's recording. The existing required-Nemotron design has not yet been revised. Optional use, model-feature availability and reference readiness need concrete implementation contracts after the evaluation direction is confirmed.
+The owner authorized acoustic-first supervised analysis, with a persisted manual Nemotron option defaulting off. Human references train independent track models across the entire recording. The accepted specification now defines mode-specific evidence, provenance and invalidation. Recording quality still needs practical listening and independent evaluation.
 
 The owner prioritizes useful main attenuation and does not want uncertain-region review to dominate the workflow. Uncertainty alone should not automatically veto attenuation when usable evidence supports reducing a track. If identity/model evidence is missing, attempt an acoustically supported decision rather than preserving the entire track by default. Missing evidence alone cannot establish absence. Explicit human speech/overlap labels remain protected.
 
@@ -72,7 +72,7 @@ For example, a Speaker 1 solo reference teaches what Speaker 1 sounds like on th
 
 The talking/absent branches are estimates outside your labeled examples, not guaranteed truth. Explicit human speech labels remain protected; manual gain edits can intentionally change them. An uncertainty flag should not automatically veto evidence-supported reduction under the proposed policy. Nemotron is an optional source of additional activity evidence in this experiment, not another action you must perform in the editing flow.
 
-This diagram describes the proposed evaluation direction. The shipping design still requires Nemotron until a revision is accepted and tested. The current accepted pipeline is documented in [the feedback explanation](gui-feedback.md).
+This diagram describes the accepted acoustic-first flow. Nemotron is optional and defaults off. Independent recording quality and release qualification remain pending.
 
 ## Ticket scope and confirmation
 

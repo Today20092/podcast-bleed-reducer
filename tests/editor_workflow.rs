@@ -3,6 +3,117 @@ use rust_app::{EditorAnalysisIdentity, Project, TICKS_PER_SECOND, TimeRange};
 mod fixture;
 
 #[test]
+fn acoustic_analysis_trains_every_track_and_applies_beyond_reference_ranges() {
+    let (root, mut project, audio, _) = fixture::session_gain(0.0);
+    project.set_nemotron_enabled(false).unwrap();
+    let mut parameters = project.parameters();
+    parameters.close_ms = 50.0;
+    project.set_parameters(parameters).unwrap();
+    let mut worker = rust_app::EditorAnalysisWorker::default();
+    let progress = std::sync::atomic::AtomicU8::new(0);
+    let cancel = std::sync::atomic::AtomicBool::new(false);
+    let result = worker
+        .analyze_acoustic_evidence(&project, &audio, &progress, &cancel)
+        .unwrap();
+    assert!(result.runtime.is_none());
+    assert!(result.fixed_evidence.is_none());
+    assert_eq!(
+        result.ownership.models.as_ref().unwrap().models.len(),
+        project.sources.len()
+    );
+    let probe = TICKS_PER_SECOND * 31 / 10;
+    assert!(
+        project
+            .reference_labels()
+            .iter()
+            .all(|label| !(label.range.start <= probe && probe < label.range.end))
+    );
+    assert_eq!(
+        result.temporal.states_at(probe).unwrap()[1],
+        rust_app::TemporalTrackState::Absent
+    );
+    assert_eq!(
+        result.temporal.states_at(probe).unwrap()[0],
+        rust_app::TemporalTrackState::Owned
+    );
+    let stats = worker.stats();
+    let repeated = worker
+        .analyze_acoustic_evidence(&project, &audio, &progress, &cancel)
+        .unwrap();
+    assert_eq!(worker.stats(), stats);
+    assert_eq!(repeated.ownership.cache_key, result.ownership.cache_key);
+    let mut envelopes = rust_app::EffectiveEnvelopeCache::default();
+    let effective = result
+        .install(&mut project, &mut envelopes, None, None)
+        .unwrap();
+    assert_eq!(effective.envelopes[0].gain_at_time(probe), 1.0);
+    assert!(effective.envelopes[1].gain_at_time(probe) < 0.5);
+    let identity = rust_app::EditorAnalysisIdentity::capture(&project).unwrap();
+    project.set_nemotron_enabled(true).unwrap();
+    assert!(!identity.matches(&project));
+    assert!(
+        result
+            .install(&mut project, &mut envelopes, None, None)
+            .is_err()
+    );
+    project.save().unwrap();
+    assert!(
+        rust_app::Project::open(project.path())
+            .unwrap()
+            .nemotron_enabled()
+    );
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn acoustic_analysis_preserves_explicit_quiet_overlap_and_rejects_canceled_install() {
+    let (root, mut project, audio, _) = fixture::session_gain(0.03);
+    project.set_nemotron_enabled(false).unwrap();
+    let range = TimeRange::new(TICKS_PER_SECOND * 33 / 10, TICKS_PER_SECOND * 36 / 10).unwrap();
+    project
+        .add_reference_label(
+            range,
+            project.sources.iter().map(|s| s.speaker_id).collect(),
+            &[],
+        )
+        .unwrap();
+    let mut worker = rust_app::EditorAnalysisWorker::default();
+    let progress = std::sync::atomic::AtomicU8::new(0);
+    let cancel = std::sync::atomic::AtomicBool::new(false);
+    let result = worker
+        .analyze_acoustic_evidence(&project, &audio, &progress, &cancel)
+        .unwrap();
+    let mut cache = rust_app::EffectiveEnvelopeCache::default();
+    let effective = result
+        .install(&mut project, &mut cache, None, None)
+        .unwrap();
+    for time in [range.start, TICKS_PER_SECOND * 7 / 2, range.end - 1] {
+        assert!(
+            effective
+                .envelopes
+                .iter()
+                .all(|envelope| envelope.gain_at_time(time) == 1.0)
+        );
+    }
+    cancel.store(true, std::sync::atomic::Ordering::Relaxed);
+    assert!(
+        worker
+            .analyze_acoustic_evidence(&project, &audio, &progress, &cancel)
+            .is_err()
+    );
+    assert!(std::sync::Arc::ptr_eq(
+        worker.last_completed().unwrap(),
+        &result
+    ));
+    assert!(
+        result
+            .install(&mut project, &mut cache, None, Some(&cancel))
+            .is_err()
+    );
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn completed_job_wakes_long_cancellation_timer_without_claiming_a_cancel() {
     let (root, project, audio, evidence) = fixture::session();
     let mut worker = rust_app::EditorAnalysisWorker::default();

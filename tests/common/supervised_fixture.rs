@@ -91,6 +91,7 @@ fn session_rates_gain(
     }
     let mut project = Project::create(root.join("project.cleanslate"), paths).unwrap();
     project.set_supplied_alignment(true).unwrap();
+    project.set_nemotron_enabled(true).unwrap();
     project
         .add_reference_label(
             TimeRange::new(0, TICKS_PER_SECOND / 4).unwrap(),

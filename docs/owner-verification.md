@@ -1,5 +1,17 @@
 # Owner verification
 
+## Current acoustic feedback candidate — 2026-10-09
+
+Launch `C:/Users/User/.codex/worktrees/offline-timebase/podcast-automix-rust-gui/target/owner-ui/debug/rust-app.exe` and open `C:/Users/User/Documents/Codex/2026-08-14/podcast-automix-rust-gui/test-audio/quick-test-10min/261005-quick-test.cleanslate`. The saved session now contains the owner's 15 references, including room tone; none are in the marked 125–157-second regression. Original source audio and saved labels were preserved. The records below describe earlier checkpoints.
+
+Leave **Use Nemotron (optional)** unchecked, then Analyze. It now estimates ownership across the whole recording. References are examples and truth constraints, not processing boundaries. Stage plus elapsed time replaces the fixed percentage. Drag a range, choose speakers in one checkbox list, and Save: nobody means room tone, one means solo, several means overlap. The popup has no internal scrollbar and clamps to the viewport.
+
+Compare Original, Processed and Removed around 125–157 seconds and elsewhere. Tracks 1/2 should drop during Speaker 3's speech; wanted words should stay audible on Track 3. Change attenuation and listen for unwanted speech in Removed. The actual development probe's one-second sampled mean gains were 0.1585, 0.2668 and 0.9812 at -16 dB. These are development measurements, not independent accuracy or listening approval. The acoustic profile uses 0.8/0.2 hysteresis and a fixed 768 ms bounded phrase guard; gain fade controls remain separate.
+
+Physical review of menu edges, repeated playback, fresh-project/reopen behavior and owner listening remains necessary before ticket 16 closes. Tickets 14/15 retain their independent release gates. Cold playback resampling still has a substantial measured preparation wait; this change does not establish an improved latency result.
+
+## Historical checkpoint before acoustic refinements
+
 The 2026-10-09 GUI feedback candidate is open at `C:/Users/User/.codex/worktrees/offline-timebase/podcast-automix-rust-gui/target/owner-ui/debug/rust-app.exe`, SHA-256 `0B9B3E26640875F3F110DA7F739915DBA743AAA7AD797C077F0BB48F574D553D`. Adjacent model-check SHA-256 is `98F243CD80CB3F5E45E3693F1D69CAD8C335D919425D688B3E232A74727DE534`; offline runtime/model verification passed. Builds used the retained owner-ui target, offline/locked dependencies, one Cargo job, package opt-level 0, debug 0, 256 codegen units and no incremental compilation; sha2/digest/bwavfile/ort opt-level 2. Tests: 199 passed, 19 ignored; strict all-target/all-feature Clippy and formatting passed. This supersedes the earlier owner-ui hashes below.
 
 Quick session: `C:/Users/User/Documents/Codex/2026-08-14/podcast-automix-rust-gui/test-audio/quick-test-10min/261005-quick-test.cleanslate`. Its three clips are the identical first 600 seconds of each original: 48 kHz mono, exactly 28,800,000 source samples each, independently verified sample hashes in adjacent provenance.md. Five existing human references were retained, no manual gain edits or old analysis were copied, and the original later room label was excluded. Add a heard room-tone range, then Analyze and compare Original/Processed/Removed. This candidate retains the current detector; acoustic-first/optional-Nemotron remains ticket 14 evaluation work.

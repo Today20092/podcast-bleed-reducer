@@ -151,6 +151,30 @@ mod tests {
         let _ = app.update(Message::CalibrationStart("999".into()));
         assert_eq!(app.calibration_start, captured_start);
         assert_eq!(app.reference_speakers, vec![speakers[0]]);
+        let _ = app.update(Message::KeyPressed(
+            iced::keyboard::Key::Character("2".into()),
+            iced::keyboard::Modifiers::empty(),
+        ));
+        assert_eq!(app.reference_speakers, vec![speakers[0], speakers[1]]);
+        assert!(
+            app.reference_menu.is_some()
+                && app.project.as_ref().unwrap().reference_labels().is_empty()
+        );
+        let _ = app.update(Message::KeyPressed(
+            iced::keyboard::Key::Character("2".into()),
+            iced::keyboard::Modifiers::empty(),
+        ));
+        assert_eq!(app.reference_speakers, vec![speakers[0]]);
+        let _ = app.update(Message::KeyPressed(
+            iced::keyboard::Key::Character("r".into()),
+            iced::keyboard::Modifiers::empty(),
+        ));
+        assert!(app.reference_speakers.is_empty() && app.reference_menu.is_some());
+        let _ = app.update(Message::KeyPressed(
+            iced::keyboard::Key::Character("1".into()),
+            iced::keyboard::Modifiers::empty(),
+        ));
+        assert_eq!(app.reference_speakers, vec![speakers[0]]);
         let _ = app.update(Message::Timeline(TimelineEvent::Seek(0)));
         let _ = app.update(Message::TrackTimeline(1, TimelineEvent::Select(0, end)));
         let _ = app.update(Message::KeyPressed(
@@ -232,7 +256,7 @@ mod tests {
     }
 
     #[test]
-    fn imported_tracks_report_required_model_and_reference_setup() {
+    fn imported_tracks_report_reference_setup_without_required_model() {
         let directory =
             std::env::temp_dir().join(format!("cleanslate-ui-status-{}", std::process::id()));
         std::fs::create_dir(&directory).unwrap();
@@ -240,11 +264,11 @@ mod tests {
         write_wav(&source, &vec![0.0; 48000]);
         let app = super::CleanSlateApp {
             project: Some(
-                synchronized_project(directory.join("session.cleanslate"), vec![source]).unwrap(),
+                crate::Project::create(directory.join("session.cleanslate"), vec![source]).unwrap(),
             ),
             ..Default::default()
         };
-        assert_eq!(app.workspace_status(), "VERIFY MODEL · ADD REFERENCES");
+        assert_eq!(app.workspace_status(), "ADD SPEAKER / ROOM REFERENCES");
         std::fs::remove_dir_all(directory).unwrap();
     }
 
@@ -333,6 +357,7 @@ mod tests {
     ) -> std::io::Result<crate::Project> {
         let mut project = crate::Project::create(path, sources)?;
         project.set_supplied_alignment(true)?;
+        project.set_nemotron_enabled(true)?;
         Ok(project)
     }
     #[test]
@@ -678,6 +703,7 @@ mod tests {
         let cancelled = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
         let (_sender, result) = super::mpsc::channel();
         app.preview_processing = Some(super::PreviewProcessing {
+            started_at: std::time::Instant::now(),
             snapshot: crate::EditorAnalysisIdentity {
                 key: String::new(),
                 project: Default::default(),
@@ -1373,6 +1399,7 @@ impl Drop for ExportProcessing {
 }
 
 struct PreviewProcessing {
+    started_at: Instant,
     progress: Arc<AtomicU8>,
     cancelled: Arc<AtomicBool>,
     generation: u64,
@@ -1399,6 +1426,7 @@ enum Message {
     DismissReferenceMenu,
     ContextReference(Vec<SpeakerId>, bool),
     ModelDetails(bool),
+    NemotronEnabled(bool),
     DownloadModel,
     VerifyModel,
     CancelModelDownload,
@@ -1504,6 +1532,12 @@ fn waveform_height(workspace_height: f32, stem_count: usize, compact: bool) -> f
 }
 
 impl CleanSlateApp {
+    fn analysis_runtime(&self) -> Option<&crate::model::RuntimeProvenance> {
+        self.project
+            .as_ref()
+            .filter(|project| project.nemotron_enabled())
+            .and_then(|_| self.model_acquisition.provenance())
+    }
     fn install_waveforms(&mut self, waveforms: Vec<WaveformCache>) {
         self.reference_menu = None;
         self.selection_track = None;
@@ -1760,17 +1794,15 @@ impl CleanSlateApp {
         if self.processing.is_some() {
             return;
         }
-        let (Some(project), Some(analysis), Some(effective), Some(runtime)) = (
+        let (Some(project), Some(analysis), Some(effective)) = (
             &self.project,
             &self.supervised_result,
             &self.effective_result,
-            self.model_acquisition.provenance(),
         ) else {
-            self.messages = vec![
-                "Final export requires current supervised analysis and a verified model.".into(),
-            ];
+            self.messages = vec!["Final export requires current supervised analysis.".into()];
             return;
         };
+        let runtime = self.analysis_runtime();
         if self.reference_stale
             || self.gain_drag.is_some()
             || self.preview_processing.is_some()
@@ -1793,7 +1825,7 @@ impl CleanSlateApp {
         let project = project.clone();
         let analysis = analysis.clone();
         let effective = effective.clone();
-        let runtime = runtime.clone();
+        let runtime = runtime.cloned();
         let generation = self.render_generation.current();
         let gate = self.render_generation.clone();
         let nonce = std::time::SystemTime::now()
@@ -1812,7 +1844,9 @@ impl CleanSlateApp {
         let worker_snapshot = snapshot.clone();
         std::thread::spawn(move || {
             let completed = (|| {
-                crate::verify_installed_editor_runtime(&runtime, &worker_cancel)?;
+                if let Some(runtime) = &runtime {
+                    crate::verify_installed_editor_runtime(runtime, &worker_cancel)?;
+                }
                 let private = crate::prepare_supervised_render(
                     &project,
                     &analysis,
@@ -1822,8 +1856,16 @@ impl CleanSlateApp {
                     &worker_progress,
                     Some(&worker_cancel),
                 )?;
-                crate::verify_installed_editor_runtime(&runtime, &worker_cancel)?;
-                private.publish(&project, &runtime, &gate, generation, Some(&worker_cancel))
+                if let Some(runtime) = &runtime {
+                    crate::verify_installed_editor_runtime(runtime, &worker_cancel)?;
+                }
+                private.publish(
+                    &project,
+                    runtime.as_ref(),
+                    &gate,
+                    generation,
+                    Some(&worker_cancel),
+                )
             })()
             .map_err(|error: crate::RenderBlocker| error.to_string());
             let _ = sender.send(completed);
@@ -1846,9 +1888,7 @@ impl CleanSlateApp {
             return;
         }
         let Some(project) = &self.project else { return };
-        let Some(runtime) = self.model_acquisition.provenance().cloned() else {
-            return;
-        };
+        let runtime = self.analysis_runtime().cloned();
         let project = project.clone();
         let gate = self.render_generation.clone();
         let generation = gate.current();
@@ -1857,9 +1897,13 @@ impl CleanSlateApp {
         let (sender, result) = mpsc::channel();
         std::thread::spawn(move || {
             let completed = (|| {
-                crate::verify_installed_editor_runtime(&runtime, &worker_cancel)?;
+                if let Some(runtime) = &runtime {
+                    crate::verify_installed_editor_runtime(runtime, &worker_cancel)?;
+                }
                 let private = crate::prepare_export(&project, &destination, Some(&worker_cancel))?;
-                crate::verify_installed_editor_runtime(&runtime, &worker_cancel)?;
+                if let Some(runtime) = &runtime {
+                    crate::verify_installed_editor_runtime(runtime, &worker_cancel)?;
+                }
                 private.publish(&project, &gate, generation, Some(&worker_cancel))?;
                 Ok(destination)
             })()
@@ -1894,7 +1938,7 @@ impl CleanSlateApp {
             && self.gain_drag.is_none()
             && self.preview_pending.is_none()
             && self.preview_processing.is_none()
-            && self.supervised_result.as_ref().is_some_and(|result| self.model_acquisition.provenance() == Some(&result.runtime))
+            && self.supervised_result.as_ref().is_some_and(|result| self.analysis_runtime() == result.runtime.as_ref())
             && self.supervised_result.as_ref().is_some_and(|result| self.project.as_ref().is_some_and(|project| result.snapshot.matches(project)))
             && self.effective_result.as_ref().is_some_and(|effective| effective.analysis_current)
             && self.processing.is_none()
@@ -1999,7 +2043,7 @@ impl CleanSlateApp {
         };
         let source_project = project.clone();
         let cache_directory = project.path().with_extension("analysis-cache");
-        let runtime = self.model_acquisition.provenance().cloned();
+        let runtime = self.analysis_runtime().cloned();
         let progress = Arc::new(AtomicU8::new(0));
         let worker_progress = progress.clone();
         let cancelled = Arc::new(AtomicBool::new(false));
@@ -2019,6 +2063,7 @@ impl CleanSlateApp {
             let _ = sender.send((completed, worker));
         });
         self.preview_processing = Some(PreviewProcessing {
+            started_at: Instant::now(),
             progress,
             cancelled,
             result,
@@ -2044,7 +2089,7 @@ impl CleanSlateApp {
         match result {
             Ok(effective) => {
                 self.reference_stale = !effective.analysis_current
-                    || self.model_acquisition.provenance() != Some(&analysis.runtime);
+                    || self.analysis_runtime() != analysis.runtime.as_ref();
                 if let Some(audition) = &self.audition {
                     audition.replace_envelopes(effective.envelopes.clone());
                 }
@@ -2228,14 +2273,20 @@ impl CleanSlateApp {
                     Message::ContextReference(self.reference_speakers.clone(), false),
                 ),
                 keyboard::Key::Character("r" | "R") => {
-                    Some(Message::ContextReference(vec![], false))
+                    self.reference_speakers.clear();
+                    None
                 }
                 keyboard::Key::Character(number) => number
                     .parse::<usize>()
                     .ok()
                     .and_then(|index| index.checked_sub(1))
                     .and_then(|index| self.project.as_ref()?.sources.get(index))
-                    .map(|source| Message::ContextReference(vec![source.speaker_id], false)),
+                    .map(|source| {
+                        Message::ReferenceSpeaker(
+                            source.speaker_id,
+                            !self.reference_speakers.contains(&source.speaker_id),
+                        )
+                    }),
                 _ => None,
             };
             if let Some(message) = message {
@@ -2324,7 +2375,11 @@ impl CleanSlateApp {
                             match analysis.install(
                                 project,
                                 &mut self.effective_cache,
-                                self.model_acquisition.provenance(),
+                                if project.nemotron_enabled() {
+                                    self.model_acquisition.provenance()
+                                } else {
+                                    None
+                                },
                                 None,
                             ) {
                                 Ok(effective) => {
@@ -2370,7 +2425,7 @@ impl CleanSlateApp {
         let processing = self.processing.take().unwrap();
         let current = !processing.cancelled.load(Ordering::Relaxed)
             && self.render_generation.current() == processing.generation
-            && self.model_acquisition.provenance() == Some(&processing.snapshot.runtime)
+            && self.analysis_runtime() == processing.snapshot.runtime.as_ref()
             && self
                 .project
                 .as_ref()
@@ -2664,6 +2719,7 @@ impl CleanSlateApp {
                 | Message::CancelAnalysis
                 | Message::DownloadModel
                 | Message::VerifyModel
+                | Message::NemotronEnabled(_)
                 | Message::CancelModelDownload
                 | Message::Attenuation(_)
                 | Message::OpenTime(_)
@@ -2734,6 +2790,21 @@ impl CleanSlateApp {
             }
             Message::DismissReferenceMenu => self.reference_menu = None,
             Message::ModelDetails(show) => self.model_details = show,
+            Message::NemotronEnabled(enabled) => {
+                if let Some(project) = &mut self.project {
+                    match project.set_nemotron_enabled(enabled) {
+                        Ok(()) => {
+                            self.mark_reference_edit();
+                            if let Some(processing) = &self.preview_processing {
+                                processing.cancelled.store(true, Ordering::Relaxed);
+                            }
+                        }
+                        Err(error) => {
+                            self.preview_error = Some(format!("Analysis option not saved: {error}"))
+                        }
+                    }
+                }
+            }
             Message::ContextReference(speakers, replace) => {
                 if let Some((track, _)) = self.reference_menu
                     && self.selection_track == Some(track)
@@ -3270,7 +3341,7 @@ impl CleanSlateApp {
             return "MODEL SETUP".into();
         }
         let (missing, room) = self.missing_references();
-        if self.model_acquisition.provenance().is_none() {
+        if project.nemotron_enabled() && self.model_acquisition.provenance().is_none() {
             return if missing.is_empty() && room {
                 "VERIFY MODEL"
             } else {
@@ -3283,7 +3354,7 @@ impl CleanSlateApp {
         }
         if let Some(result) = &self.supervised_result {
             if !result.snapshot.matches(project)
-                || self.model_acquisition.provenance() != Some(&result.runtime)
+                || self.analysis_runtime() != result.runtime.as_ref()
             {
                 return "ANALYSIS OUT OF DATE".into();
             }
@@ -3314,7 +3385,7 @@ impl CleanSlateApp {
         if project.require_alignment().is_err() {
             return "Confirm synchronized recording starts below before Analyze.";
         }
-        if self.model_acquisition.provenance().is_none() {
+        if project.nemotron_enabled() && self.model_acquisition.provenance().is_none() {
             return "Verify the model below, then Analyze your references.";
         }
         if self.reference_stale || self.supervised_result.is_none() {
@@ -3526,9 +3597,16 @@ impl CleanSlateApp {
     }
 
     fn model_controls(&self) -> Element<'_, Message> {
+        let enabled = self
+            .project
+            .as_ref()
+            .is_some_and(|project| project.nemotron_enabled());
         let ready =
             self.model_acquisition.provenance().is_some() && !self.model_acquisition.is_busy();
         let mut controls = column![
+            iced::widget::checkbox(enabled)
+                .label("Use Nemotron (optional)")
+                .on_toggle(Message::NemotronEnabled),
             text(if ready {
                 "Model ready · offline"
             } else {
@@ -3543,6 +3621,17 @@ impl CleanSlateApp {
             .on_press(Message::ModelDetails(!self.model_details)),
         ]
         .spacing(6);
+        if !enabled && !self.model_details && !self.model_acquisition.is_busy() {
+            return column![
+                iced::widget::checkbox(false)
+                    .label("Use Nemotron (optional)")
+                    .on_toggle(Message::NemotronEnabled),
+                text("Acoustic analysis from your references").size(12),
+                button("Model details").on_press(Message::ModelDetails(true)),
+            ]
+            .spacing(6)
+            .into();
+        }
         if ready && !self.model_details {
             return controls.into();
         }
@@ -3911,18 +4000,21 @@ impl CleanSlateApp {
         .height(Fill);
         let preview_state: Element<'_, Message> = if let Some(processing) = &self.preview_processing
         {
-            let progress = processing.progress.load(Ordering::Relaxed) as f32;
-            let stage = match progress as u8 {
+            let stage = match processing.progress.load(Ordering::Relaxed) {
                 0..=19 => "Preparing audio and validating references",
-                20..=54 => "Verifying Nemotron and analyzing speaker activity on CPU",
+                20..=54 => "Analyzing optional speaker-activity evidence on CPU",
                 55..=79 => "Fitting session ownership estimates",
                 80..=94 => "Resolving ownership and uncertainty",
                 _ => "Composing the current gain preview",
             };
             column![
                 text(stage),
-                progress_bar(0.0..=100.0, progress),
-                text("Stage progress; inference duration is measured, not predicted."),
+                text(format!(
+                    "Working · elapsed {:02}:{:02}",
+                    processing.started_at.elapsed().as_secs() / 60,
+                    processing.started_at.elapsed().as_secs() % 60
+                ))
+                .size(12),
                 text(if self.preview.is_some() {
                     "Previous completed preview remains available"
                 } else {
@@ -3934,9 +4026,10 @@ impl CleanSlateApp {
         } else if let Some(error) = &self.preview_error {
             text(format!("Preview failed: {error}")).into()
         } else if self.reference_stale
-            || self.supervised_result.as_ref().is_some_and(|analysis| {
-                self.model_acquisition.provenance() != Some(&analysis.runtime)
-            })
+            || self
+                .supervised_result
+                .as_ref()
+                .is_some_and(|analysis| self.analysis_runtime() != analysis.runtime.as_ref())
         {
             text("Analysis out of date · click Analyze").into()
         } else if let Some(preview) = &self.preview {
@@ -4076,24 +4169,11 @@ impl CleanSlateApp {
         let overlay = responsive(move |size| {
             let mut menu = column![
                 text("Who is talking?").size(16),
-                text("1–8: solo · R: room tone · Enter: selected speakers · Esc: close").size(11)
+                text("Select everyone speaking. None means room tone.").size(12),
+                text("1–8: toggle · R: clear · Enter: save · Esc: close").size(11)
             ]
             .spacing(6);
             if let Some(project) = &self.project {
-                for source in &project.sources {
-                    let speaker = source.speaker_id;
-                    menu = menu.push(
-                        button(text(format!("Speaker {} · solo speech", speaker.0)))
-                            .on_press(Message::ContextReference(vec![speaker], false))
-                            .width(Fill),
-                    );
-                }
-                menu = menu.push(
-                    button("Room tone · nobody speaking")
-                        .on_press(Message::ContextReference(vec![], false))
-                        .width(Fill),
-                );
-                menu = menu.push(text("Overlap: select everyone speaking").size(12));
                 for source in &project.sources {
                     let speaker = source.speaker_id;
                     menu = menu.push(
@@ -4102,42 +4182,46 @@ impl CleanSlateApp {
                             .on_toggle(move |active| Message::ReferenceSpeaker(speaker, active)),
                     );
                 }
-                menu = menu.push(button("Save selected speakers").on_press(
-                    Message::ContextReference(self.reference_speakers.clone(), false),
-                ));
+                menu = menu.push(
+                    row![
+                        button("Save label").on_press(Message::ContextReference(
+                            self.reference_speakers.clone(),
+                            false
+                        )),
+                        button("Cancel").on_press(Message::DismissReferenceMenu)
+                    ]
+                    .spacing(8),
+                );
             }
             if let Some(error) = &self.calibration_error {
-                menu = menu.push(text(error).size(12));
+                menu = menu.push(iced::widget::tooltip(
+                    text("Label not saved. Show details").size(12),
+                    text(error).size(12),
+                    iced::widget::tooltip::Position::Top,
+                ));
                 if !self.reference_conflicts().is_empty() {
                     menu = menu.push(button("Replace conflicting whole labels").on_press(
                         Message::ContextReference(self.reference_speakers.clone(), true),
                     ));
                 }
             }
-            menu = menu.push(button("Cancel").on_press(Message::DismissReferenceMenu));
-            let width = 280.0_f32.min(size.width);
-            let rows = self.project.as_ref().map_or(0, |p| p.sources.len());
-            let height = (150.0
-                + rows as f32 * 64.0
-                + if self.calibration_error.is_some() {
-                    120.0
-                } else {
-                    0.0
-                })
-            .min(520.0)
-            .min(size.height);
-            let x = point.x.min((size.width - width).max(0.0)).max(0.0);
-            let y = point.y.min((size.height - height).max(0.0)).max(0.0);
-            let panel = container(scrollable(menu))
+            let panel = container(menu)
                 .padding(10)
-                .width(width)
-                .height(height)
+                .width(320.0_f32.min(size.width))
                 .style(container::bordered_box);
-            let positioned = container(opaque(panel)).padding(iced::Padding {
-                top: y,
-                left: x,
-                ..iced::Padding::ZERO
-            });
+            let positioned =
+                iced::widget::float(opaque(panel)).translate(move |bounds, viewport| {
+                    iced::Vector::new(
+                        point.x.clamp(
+                            viewport.x,
+                            (viewport.x + viewport.width - bounds.width).max(viewport.x),
+                        ) - bounds.x,
+                        point.y.clamp(
+                            viewport.y,
+                            (viewport.y + viewport.height - bounds.height).max(viewport.y),
+                        ) - bounds.y,
+                    )
+                });
             opaque(
                 mouse_area(container(positioned).width(Fill).height(Fill))
                     .on_press(Message::DismissReferenceMenu)

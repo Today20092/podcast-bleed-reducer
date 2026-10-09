@@ -150,6 +150,11 @@ pub fn benchmark_editor_project_command(
     }
     let start = Instant::now();
     let project = Project::open(std::path::PathBuf::from(&args[2]))?;
+    if !project.nemotron_enabled() {
+        return Err(
+            "This native-runtime benchmark requires a project with Nemotron enabled.".into(),
+        );
+    }
     let project_load_ms = start.elapsed().as_secs_f64() * 1000.0;
     let saved_project = std::fs::read(project.path())?;
     let cache = std::path::Path::new(&args[4]);
@@ -180,7 +185,11 @@ pub fn benchmark_editor_project_command(
     if gain_stats != cold_stats {
         return Err("Gain benchmark unexpectedly reanalyzed.".into());
     }
-    let history = &cold.fixed_evidence.history;
+    let fixed = cold
+        .fixed_evidence
+        .as_ref()
+        .ok_or("Native benchmark did not produce native evidence")?;
+    let history = &fixed.history;
     let first = history
         .read_frames(0..history.frames.min(1))
         .map_err(RenderBlocker)?;
@@ -218,6 +227,8 @@ pub fn benchmark_editor_project_command(
         .last_completed()
         .is_some_and(|last| std::sync::Arc::ptr_eq(last, &warm));
     warm.fixed_evidence
+        .as_ref()
+        .ok_or("Warm native benchmark did not produce native evidence")?
         .history
         .verify()
         .map_err(RenderBlocker)?;
@@ -248,7 +259,7 @@ pub fn benchmark_editor_project_command(
     if std::fs::read(project.path())? != saved_project {
         return Err("Project changed during benchmark.".into());
     }
-    let report = serde_json::json!({"version":1,"measurement_kind":"actual-required-native-editor-pipeline","quality_claim":"performance only; no independent quality or listening approval","project_load_ms":project_load_ms,"initial_runtime_verification_ms":initial_runtime_verification_ms,"cold_analysis_ms":cold_analysis_ms,"cold_stages_ms":cold.timings,"warm_analysis_ms":warm_analysis_ms,"warm_stages_ms":warm.timings,"gain_edits":gain,"cold_stats":cold_stats,"warm_stats":warm_stats,"fitted_models":cold.ownership.models.as_ref().map_or(0,|m|m.models.len()),"native_history":{"frames":history.frames,"first_probabilities":first,"last_probabilities":tail,"sha256":history.sha256,"compactions":cold.fixed_evidence.compactions,"maximum_retained_frames":cold.fixed_evidence.maximum_retained_frames,"sample_count":cold.fixed_evidence.sample_count},"cache_before_bytes":cache_before_bytes,"cache_after_bytes":cache_bytes(cache)?,"pre_canceled_job_ms":cancellation_ms,"pre_canceled_job_retained_accepted":retained,"sources":project.sources.iter().map(|s|serde_json::json!({"track":s.track_id,"fingerprint":s.fingerprint,"grid":s.metadata.grid})).collect::<Vec<_>>(),"runtime":runtime,"recipe":cold.recipe,"saved_project_unchanged":true,"inflight_cancellation_measured":false,"peak_process_memory_measured":false});
+    let report = serde_json::json!({"version":1,"measurement_kind":"actual-required-native-editor-pipeline","quality_claim":"performance only; no independent quality or listening approval","project_load_ms":project_load_ms,"initial_runtime_verification_ms":initial_runtime_verification_ms,"cold_analysis_ms":cold_analysis_ms,"cold_stages_ms":cold.timings,"warm_analysis_ms":warm_analysis_ms,"warm_stages_ms":warm.timings,"gain_edits":gain,"cold_stats":cold_stats,"warm_stats":warm_stats,"fitted_models":cold.ownership.models.as_ref().map_or(0,|m|m.models.len()),"native_history":{"frames":history.frames,"first_probabilities":first,"last_probabilities":tail,"sha256":history.sha256,"compactions":fixed.compactions,"maximum_retained_frames":fixed.maximum_retained_frames,"sample_count":fixed.sample_count},"cache_before_bytes":cache_before_bytes,"cache_after_bytes":cache_bytes(cache)?,"pre_canceled_job_ms":cancellation_ms,"pre_canceled_job_retained_accepted":retained,"sources":project.sources.iter().map(|s|serde_json::json!({"track":s.track_id,"fingerprint":s.fingerprint,"grid":s.metadata.grid})).collect::<Vec<_>>(),"runtime":runtime,"recipe":cold.recipe,"saved_project_unchanged":true,"inflight_cancellation_measured":false,"peak_process_memory_measured":false});
     let mut report = report;
     report["cold_application_cache"] = serde_json::json!(cache_before_bytes == 0);
     report["first_run_cache_state"] = serde_json::json!(if cache_before_bytes == 0 {

@@ -119,6 +119,7 @@ fn current_project_names(dir: &Path, names: [&str; 2]) -> Project {
         })
         .collect();
     let mut project = Project::create(dir.join("episode.cleanslate"), paths).unwrap();
+    project.set_nemotron_enabled(true).unwrap();
     project.set_supplied_alignment(true).unwrap();
     for label in old_project.reference_labels() {
         project
