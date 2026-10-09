@@ -30,8 +30,14 @@ Settle the architecture and produce ordered, implementation-ready tickets to mig
 - [Define protected edits and reproducible project persistence](issues/04-define-edit-persistence-contract.md): edits persist above generated gain; exponential-shaped finite fades and explicit Analyze use a fresh project format.
 - [Define evidence required to accept supervised ownership](issues/05-define-release-evidence.md): independent preservation/bleed checks, Windows long-session evidence and owner listening/timing approval gate release.
 - [Turn the settled architecture into migration tickets](issues/06-plan-implementation-sequence.md): fifteen scoped build specifications with dependencies and acceptance checks are ready.
+- GUI decisions [07](issues/07-audio-waveform-cache.md), [08](issues/08-model-status-controls.md), [09](issues/09-timing-playback-readiness.md), [10](issues/10-direct-track-labeling.md) and [11](issues/11-editor-workflow-guidance.md) are resolved: shared waveform reuse, early playback, immediate track labeling and concise controls feed one [build ticket 16](../offline-supervised-editor/issues/16-gui-editing-workflow.md).
+- [Attenuation policy decision 12](issues/12-attenuation-policy.md) is resolved as an evaluation direction: acoustic-first supervised ownership with optional Nemotron, representative labels and adjustable attenuation extends existing ticket 14. See [confirmed design and diagrams](gui-design-summary.md); shipping model/quality requirements remain until qualified adoption.
 
 ## Not yet specified
+
+Owner GUI feedback on 2026-10-09 is documented in [the interview record](gui-feedback.md). Decisions 07–12 are resolved and consolidated into one new GUI build ticket 16 plus existing evaluation ticket 14. The owner subsequently authorized implement-spec, a fast GUI candidate and synchronized 10-minute source clips. Ticket 16 is claimed; release/listening acceptance remains pending.
+
+The owner confirmed [the GUI and attenuation design](gui-design-summary.md). GUI refinements are recorded in the accepted specification; acoustic-first analysis with optional Nemotron is an evaluation direction, not accepted recording-quality evidence or a changed shipping model contract.
 
 None blocking implementation planning. Numerical tuning, acoustic estimator/downmix qualification, measured speed and final audio quality have explicit development/release checks in the build tickets; they have not been measured or accepted by this map.
 
@@ -46,4 +52,4 @@ None blocking implementation planning. Numerical tuning, acoustic estimator/down
 
 ## Handoff
 
-The [accepted architecture](spec.md), [documentation findings](feasibility-notes.md) and [implementation sequence](implementation.md) accompany the decision resolutions. All six planning tickets are resolved. All fifteen build specifications are ready; dependency completion still governs execution. Start with [Establish the accepted development baseline](../offline-supervised-editor/issues/01-establish-baseline.md).
+The [accepted architecture](spec.md), [documentation findings](feasibility-notes.md) and [implementation sequence](implementation.md) accompany the decision resolutions. All twelve planning decisions are resolved. Build tickets 01–13 are done; 14 remains claimed, 15 remains blocked, and the single added GUI ticket 16 is ready and unclaimed. When implementation is authorized, complete ticket 16 and owner GUI checks, then continue ticket 14's acoustic-first/quality evaluation before release qualification. Dependency completion still governs execution.

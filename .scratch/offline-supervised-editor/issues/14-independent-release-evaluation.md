@@ -7,6 +7,12 @@ Spec: ../spec.md
 
 ## Scope
 
+### Confirmed acoustic-first evaluation direction
+
+2026-10-09: Owner confirmed [the GUI and attenuation design](../../offline-supervised-migration/gui-design-summary.md). Fold decision 12 into this ticket rather than adding another build ticket. After the owner can label/listen comfortably using ticket 16, evaluate acoustic-first supervised ownership using a few clear solo/room examples across the recording, with overlap examples where useful. Compare the current Nemotron-assisted path against acoustically supported predictions and effective gain; identify whether classifier evidence, unresolved mapping, temporal vetoes or envelope generation cause obvious absent-speaker spans to remain preserved. Use adjustable attenuation and finite fades. Do not make uncertainty review a prerequisite to useful attenuation; explicit human speech/overlap labels remain protected, and missing evidence alone is not proof of silence.
+
+Optional Nemotron is the experimental direction, not yet the shipping contract. Separate development experiments from frozen independent truth, report bleed reduction and wanted/overlap impact, and obtain owner listening approval. If acoustic-first succeeds, reconcile model requirements, feature/cache identity, uncertainty policy and release qualification in the accepted specification before adopting it. Existing source/output validation and independent release gates still apply. No algorithm changes or new quality evidence are claimed by this planning update.
+
 Extend the existing detector-quality/release-gate machinery and headless binaries using the same library pipeline; do not add a duplicate CLI when current entry points suffice. Freeze development references/tuning separately from independent test sessions/regions. Keep historical used holdouts out of unseen claims. Include the recorded screenshot failure, quiet speech, interruptions, laughter, overlap, room tone, movement and changing delays. Store source fingerprints/splits/recipes so comparison is reproducible; keep audio local and do not publish it.
 
 Compare the frozen historical detector and new engine on identical acceptance material. Any automatic attenuation of labeled wanted/overlap samples is a release failure; intentional manual edits are evaluated separately. Require measurable bleed improvement without preservation regression. Report ownership, uncertainty and applied-gain metrics separately. Do not tune on final acceptance results and then report them as unseen.

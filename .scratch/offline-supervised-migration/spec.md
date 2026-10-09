@@ -86,6 +86,14 @@ Retain one synchronized Iced workspace, waveform cache and transport. Add speake
 
 Review items show affected time/tracks and reasons such as uncertain identity or poor bleed fit. Clicking seeks/selects without losing transport context. Show numerical estimates as analysis evidence rather than a claim of guaranteed confidence. Retain Original, Processed and Removed comparison. Distinguish automatic envelopes, protected manual edits and active labels visually. Provide keyboard operations for core selection/label/edit actions.
 
+## Confirmed owner workflow refinement
+
+2026-10-09: The owner confirmed [the GUI and attenuation design](gui-design-summary.md). [Build ticket 16](../offline-supervised-editor/issues/16-gui-editing-workflow.md) consolidates the UI work: ordinary click seeks; dragging selects a track-bound range and immediately opens pointer-adjacent solo/overlap/room label actions, with captured input, dismissal and keyboard access. No selection mode should prevent seeking. Labels describe the session-wide active-speaker set. Use concise readiness/next-step guidance and compact installed-model status with expandable details.
+
+For compatible validated tracks whose start timing is unverified, Original audition is available before supplied-alignment confirmation, model setup or references. Actual timing conflicts remain blocked; Analyze/export still require the existing alignment contract. Start cancellable playback preparation when validated tracks open, reuse compatible prepared audio and show progress. Share per-source waveform caches across projects using validated source identity and recipe/version checks; retain user projects, sources and legacy cache files.
+
+The owner also confirmed acoustic-first supervised analysis with optional Nemotron as an evaluation direction within existing ticket 14, using a few clear representative references and adjustable attenuation. This experiments with evidence-supported attenuation rather than automatic uncertainty preservation and retains explicitly labeled speech protection. It does not yet replace the required-Nemotron shipping contract or independent wanted/overlap release checks. Adoption requires measured development evidence, a reconciled analysis specification and owner listening approval.
+
 ## Release acceptance
 
 Acceptance data is local and source-authorized; do not publish recordings. Freeze development/training/tuning data separately from independent test sessions/regions, including the historical screenshot failure, quiet speech, interjections, laughter, overlap, room tone, movement and changing bleed delay. Adjacent frames from the same labeled episode cannot create an artificial train/test split.
