@@ -3,6 +3,129 @@ use rust_app::{EditorAnalysisIdentity, Project, TICKS_PER_SECOND, TimeRange};
 mod fixture;
 
 #[test]
+fn completed_job_wakes_long_cancellation_timer_without_claiming_a_cancel() {
+    let (root, project, audio, evidence) = fixture::session();
+    let mut worker = rust_app::EditorAnalysisWorker::default();
+    let progress = std::sync::atomic::AtomicU8::new(95);
+    let (result, timing) = rust_app::measure_editor_cancellation(
+        &progress,
+        55,
+        std::time::Duration::from_secs(600),
+        |cancel| worker.analyze_verified_evidence(&project, &audio, &evidence, &progress, cancel),
+    )
+    .unwrap();
+    assert!(result.is_ok());
+    assert!(!timing.cancelled);
+    assert!(!timing.job_active_at_request);
+    assert!(timing.requested_progress.is_none());
+    assert!(timing.return_after_request_ms.is_none());
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn timed_public_job_cancellation_retains_previous_completed_analysis() {
+    let (root, mut project, audio, evidence) = fixture::session_at_rates([96000, 96000]);
+    let mut worker = rust_app::EditorAnalysisWorker::default();
+    let progress = std::sync::atomic::AtomicU8::new(0);
+    let previous = worker
+        .analyze_verified_evidence(
+            &project,
+            &audio,
+            &evidence,
+            &progress,
+            &std::sync::atomic::AtomicBool::new(false),
+        )
+        .unwrap();
+    project
+        .add_reference_label(
+            TimeRange::new(TICKS_PER_SECOND * 33 / 10, TICKS_PER_SECOND * 36 / 10).unwrap(),
+            project.sources.iter().map(|s| s.speaker_id).collect(),
+            &[],
+        )
+        .unwrap();
+    progress.store(0, std::sync::atomic::Ordering::Relaxed);
+    let (result, timing) = rust_app::measure_editor_cancellation(
+        &progress,
+        55,
+        std::time::Duration::from_millis(1),
+        |cancel| worker.analyze_verified_evidence(&project, &audio, &evidence, &progress, cancel),
+    )
+    .unwrap();
+    assert!(result.is_err());
+    assert!(timing.cancelled);
+    assert!(timing.requested_progress.is_some_and(|p| p >= 55));
+    assert!(
+        timing
+            .return_after_request_ms
+            .is_some_and(|ms| ms.is_finite() && ms >= 0.0)
+    );
+    assert!(std::sync::Arc::ptr_eq(
+        worker.last_completed().unwrap(),
+        &previous
+    ));
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn gain_benchmark_does_not_install_project_edits_or_reanalyze() {
+    let (root, project, audio, evidence) = fixture::session();
+    let mut worker = rust_app::EditorAnalysisWorker::default();
+    let cancel = std::sync::atomic::AtomicBool::new(false);
+    let result = worker
+        .analyze_verified_evidence(
+            &project,
+            &audio,
+            &evidence,
+            &std::sync::atomic::AtomicU8::new(0),
+            &cancel,
+        )
+        .unwrap();
+    let before = std::fs::read(project.path()).unwrap();
+    let stats = worker.stats();
+    let report = rust_app::benchmark_editor_gain_edits(&project, &result, 4, &cancel).unwrap();
+    assert_eq!(report.runs_ms.len(), 4);
+    assert_eq!(report.automatic_builds, 1);
+    assert!(report.runs_ms.iter().all(|ms| ms.is_finite() && *ms >= 0.0));
+    assert_eq!(worker.stats().model_fits, stats.model_fits);
+    assert_eq!(
+        worker.stats().fixed_vad_preparations,
+        stats.fixed_vad_preparations
+    );
+    assert_eq!(worker.stats().probability_passes, stats.probability_passes);
+    assert_eq!(std::fs::read(project.path()).unwrap(), before);
+    cancel.store(true, std::sync::atomic::Ordering::Relaxed);
+    assert!(rust_app::benchmark_editor_gain_edits(&project, &result, 4, &cancel).is_err());
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn analysis_stage_measurements_describe_the_shared_completed_worker() {
+    let (root, project, audio, evidence) = fixture::session();
+    let mut worker = rust_app::EditorAnalysisWorker::default();
+    let result = worker
+        .analyze_verified_evidence(
+            &project,
+            &audio,
+            &evidence,
+            &std::sync::atomic::AtomicU8::new(0),
+            &std::sync::atomic::AtomicBool::new(false),
+        )
+        .unwrap();
+    let stages = serde_json::to_value(&result.timings).unwrap();
+    for value in stages.as_object().unwrap().values() {
+        assert!(value.as_f64().is_some_and(|ms| ms.is_finite() && ms >= 0.0));
+    }
+    assert!(result.timings.ownership_ms > 0.0);
+    assert!(result.timings.temporal_ms > 0.0);
+    assert!(result.timings.overview_ms > 0.0);
+    assert_eq!(
+        result.timings.native_history_ms, 0.0,
+        "trusted prepared fixture does not perform native inference"
+    );
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn supervised_review_correction_batch_analysis_and_gain_undo_save_share_one_pipeline() {
     let (root, mut project, audio, evidence) = fixture::session();
     let progress = std::sync::atomic::AtomicU8::new(0);

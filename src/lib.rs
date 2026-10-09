@@ -6,6 +6,7 @@ mod audio_io;
 mod audition;
 mod calibration;
 pub mod detector_quality;
+mod editor_benchmark;
 mod editor_drawing;
 mod editor_workflow;
 mod effective_envelope;
@@ -38,6 +39,7 @@ pub use analysis_audio::{
 pub use audio_io::SourceMetadata;
 pub use audition::{AuditionMode, AuditionPlayback, PreparedAudio};
 pub use calibration::{CalibrationExample, CalibrationKind, OwnershipSettings};
+pub use editor_benchmark::*;
 pub use editor_drawing::{
     GainDrawingBucket, OverviewBand, OverviewState, OwnershipOverview, visible_automatic_buckets,
     visible_gain_buckets, visible_gain_curve,

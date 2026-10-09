@@ -169,6 +169,21 @@ pub struct EditorAnalysisResult {
     pub overview: crate::OwnershipOverview,
     pub recipe: crate::AnalysisRecipe,
     pub runtime: crate::model::RuntimeProvenance,
+    pub timings: EditorAnalysisTimings,
+    pub fixed_evidence: crate::model::DiarizationEvidence,
+}
+
+/// Wall-clock observations only; these never participate in sound or cache identity.
+#[derive(Clone, Debug, Default, serde::Serialize)]
+pub struct EditorAnalysisTimings {
+    pub source_validation_ms: f64,
+    pub audio_preparation_ms: f64,
+    pub reference_readiness_ms: f64,
+    pub runtime_verification_ms: f64,
+    pub native_history_ms: f64,
+    pub ownership_ms: f64,
+    pub temporal_ms: f64,
+    pub overview_ms: f64,
 }
 
 #[derive(Default)]
@@ -193,17 +208,24 @@ impl EditorAnalysisWorker {
         cancel: &AtomicBool,
     ) -> Result<Arc<EditorAnalysisResult>, RenderBlocker> {
         crate::prepared_analysis::check_cancelled(Some(cancel))?;
+        let mut timings = EditorAnalysisTimings::default();
+        let stage = std::time::Instant::now();
         let snapshot = EditorAnalysisIdentity::capture(project)?;
         project
             .validate_sources_cancellable(Some(cancel))
             .map_err(|e| RenderBlocker(e.to_string()))?;
+        timings.source_validation_ms = stage.elapsed().as_secs_f64() * 1000.0;
         progress.store(5, Ordering::Relaxed);
+        let stage = std::time::Instant::now();
         let audio = project
             .source_paths()
             .iter()
             .map(|path| crate::prepare_analysis_audio_in(path, &cache.join("audio"), Some(cancel)))
             .collect::<Result<Vec<_>, _>>()?;
+        timings.audio_preparation_ms = stage.elapsed().as_secs_f64() * 1000.0;
+        let stage = std::time::Instant::now();
         let readiness = crate::reference_readiness(project, &audio, Some(cancel))?;
+        timings.reference_readiness_ms = stage.elapsed().as_secs_f64() * 1000.0;
         if !readiness.ready() {
             return Err(RenderBlocker(format!(
                 "Required references need correction: missing solo speakers {:?}; room tone usable: {}; {}",
@@ -214,6 +236,7 @@ impl EditorAnalysisWorker {
         }
         let runtime = runtime.ok_or_else(|| RenderBlocker("Verify the installed Nemotron model, or explicitly download it on first use, before Analyze.".into()))?;
         progress.store(20, Ordering::Relaxed);
+        let stage = std::time::Instant::now();
         let helper = std::env::current_exe()?.with_file_name(if cfg!(windows) {
             "model-check.exe"
         } else {
@@ -232,6 +255,8 @@ impl EditorAnalysisWorker {
                 "Installed native model/runtime changed; verify it again before Analyze.".into(),
             ));
         }
+        timings.runtime_verification_ms = stage.elapsed().as_secs_f64() * 1000.0;
+        let stage = std::time::Instant::now();
         let evidence = crate::model::prepare_diarization(
             &audio
                 .iter()
@@ -244,7 +269,15 @@ impl EditorAnalysisWorker {
             cancel,
         )
         .map_err(RenderBlocker)?;
-        self.analyze_evidence(project, &audio, &evidence, snapshot, progress, cancel)
+        timings.native_history_ms = stage.elapsed().as_secs_f64() * 1000.0;
+        self.analyze_evidence(
+            project,
+            &audio,
+            &evidence,
+            (snapshot, timings),
+            progress,
+            cancel,
+        )
     }
     /// Verified fixed evidence is also the headless evaluation boundary; never guessed labels.
     pub fn analyze_verified_evidence(
@@ -256,18 +289,27 @@ impl EditorAnalysisWorker {
         cancel: &AtomicBool,
     ) -> Result<Arc<EditorAnalysisResult>, RenderBlocker> {
         let snapshot = EditorAnalysisIdentity::capture(project)?;
-        self.analyze_evidence(project, audio, evidence, snapshot, progress, cancel)
+        self.analyze_evidence(
+            project,
+            audio,
+            evidence,
+            (snapshot, EditorAnalysisTimings::default()),
+            progress,
+            cancel,
+        )
     }
     fn analyze_evidence(
         &mut self,
         project: &Project,
         audio: &[crate::PreparedAnalysisAudio],
         evidence: &crate::model::DiarizationEvidence,
-        snapshot: EditorAnalysisIdentity,
+        observed: (EditorAnalysisIdentity, EditorAnalysisTimings),
         progress: &AtomicU8,
         cancel: &AtomicBool,
     ) -> Result<Arc<EditorAnalysisResult>, RenderBlocker> {
+        let (snapshot, mut timings) = observed;
         progress.store(55, Ordering::Relaxed);
+        let stage = std::time::Instant::now();
         let ownership = self.ownership.analyze(
             project,
             audio,
@@ -275,13 +317,16 @@ impl EditorAnalysisWorker {
             crate::OwnershipTrainingSettings::default(),
             Some(cancel),
         )?;
+        timings.ownership_ms = stage.elapsed().as_secs_f64() * 1000.0;
         progress.store(80, Ordering::Relaxed);
+        let stage = std::time::Instant::now();
         let temporal = self.temporal.optimize(
             project,
             &ownership,
             crate::TemporalSettings::default(),
             Some(cancel),
         )?;
+        timings.temporal_ms = stage.elapsed().as_secs_f64() * 1000.0;
         let recipe = crate::AnalysisRecipe {
             decoder: crate::AUDIO_DECODER_RECIPE.into(),
             resampler: crate::ANALYSIS_RESAMPLER_RECIPE.into(),
@@ -299,7 +344,9 @@ impl EditorAnalysisWorker {
                 "Sources or references changed before analysis completed.".into(),
             ));
         }
+        let stage = std::time::Instant::now();
         let overview = crate::OwnershipOverview::new_cancellable(&temporal, Some(cancel))?;
+        timings.overview_ms = stage.elapsed().as_secs_f64() * 1000.0;
         if !snapshot.matches(project) {
             return Err(RenderBlocker(
                 "Sources or references changed before analysis completed.".into(),
@@ -312,6 +359,8 @@ impl EditorAnalysisWorker {
             overview,
             recipe,
             runtime: evidence.runtime.clone(),
+            timings,
+            fixed_evidence: evidence.clone(),
         });
         self.accepted = Some(result.clone());
         progress.store(95, Ordering::Relaxed);

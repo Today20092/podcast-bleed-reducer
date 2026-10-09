@@ -21,4 +21,14 @@ The comparison verifies the exact `6a60cc2` checkout, unchanged lock/model asset
 
 Current frozen comparison requires identical mono 48 kHz native grids and unambiguous CSV-safe basenames. Mixed-rate native gain scoring already works; verified common-grid derivatives for historical comparison remain pending. Both scorers derive the same frozen manifest digest from the validated source, truth, reference and recipe declarations. Comparison rejects a differing digest as well as differing input-energy/sample denominators. A missing baseline is explicitly reported as pending.
 
+The existing performance binary also accepts the saved-project workflow:
+
+```text
+preview_benchmark --project 10 session.cleanslate new-benchmark.json cache-directory
+```
+
+It loads the saved project and verifies the installed required runtime, then measures the same editor worker's preparation, references, native history, classifier, temporal and overview stages. A second analysis measures reuse. Transient gain edits use the effective-envelope cache without saving edits or invoking inference. The report records native history endpoints and compaction metadata, classifier counts and cache counters. A cold application-cache claim requires an initially empty cache; OS caches are not flushed.
+
+A separate cancellation namespace reuses immutable prepared audio through hard links and starts with fresh native history. The public job flag is requested 20 seconds after progress reaches 20, which means preparation and reference readiness have completed, before runtime/history work. Actual child-process observation is needed to identify a more precise phase. The report distinguishes active cancellation, completion before a request, completion despite a request and failure. Completion before the timer preserves the first and warm measurements rather than granting cancellation evidence. A pre-canceled job must retain the latest accepted analysis. Logical cache bytes count hard-linked files per path; physical disk usage and sampled process-tree memory require an external measurement receipt.
+
 Ticket 14 remains claimed. Listening-region delivery, typed prior-use provenance, mixed-rate frozen comparison derivatives and the complete long-session benchmark are still being implemented. Controlled test fixtures establish mechanics only.

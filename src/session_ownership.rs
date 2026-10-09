@@ -18,7 +18,7 @@ pub const OWNERSHIP_FEATURE_RECIPE: &str =
 pub const OWNERSHIP_FRAME_TICKS: u64 = TICKS_PER_SECOND * 32 / 1000;
 const NEURAL_STEP: u64 = TICKS_PER_SECOND / 100;
 const BLOCK: usize = 1024;
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize)]
 pub struct OwnershipCacheStats {
     pub fixed_vad_preparations: u64,
     pub model_fits: u64,
