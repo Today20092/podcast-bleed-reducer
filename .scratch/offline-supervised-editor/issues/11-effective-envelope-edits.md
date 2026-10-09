@@ -1,6 +1,7 @@
 # Compose editable exponential envelopes with protected overrides
 
-Status: ready-for-agent
+Status: claimed
+Assignee: effective_envelopes
 Blocked by: 02, 10
 Spec: ../spec.md
 
