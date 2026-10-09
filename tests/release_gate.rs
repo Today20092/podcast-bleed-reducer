@@ -19,12 +19,14 @@ fn baseline_comparison_requires_matching_truth_and_automatic_bleed_improvement()
         bleed_output_rms: 0.1,
     };
     let mut score = EditorGainEvidence {
+        manifest_sha256: "controlled-manifest".into(),
         analysis_identity: "controlled".into(),
         effective: automatic.clone(),
         automatic,
         ownership: vec![],
     };
     let mut baseline = FrozenBaselineComparison {
+        manifest_sha256: "controlled-manifest".into(),
         variant: "legacy_default".into(),
         receipt_sha256: "controlled".into(),
         raw_report_sha256: "controlled".into(),
@@ -54,6 +56,11 @@ fn baseline_comparison_requires_matching_truth_and_automatic_bleed_improvement()
     );
     baseline.bleed_samples = 49;
     assert!(score.compare_baseline(&baseline).is_err());
+    baseline.bleed_samples = 48;
+    baseline.bleed_input_rms = 0.2;
+    baseline.manifest_sha256 = "different-session-same-counts-and-energy".into();
+    assert!(score.compare_baseline(&baseline).is_err());
+    baseline.manifest_sha256 = score.manifest_sha256.clone();
     baseline.bleed_samples = 48;
     baseline.bleed_input_rms = 0.3;
     assert!(score.compare_baseline(&baseline).is_err());
@@ -106,6 +113,7 @@ fn actual_frozen_comparison_scores_only_preselected_native_truth() {
     )
     .unwrap();
     assert_eq!(result.variant, "legacy_default");
+    assert_eq!(result.manifest_sha256, frozen.digest());
     assert_eq!(result.preservation_samples, 48000);
     assert_eq!(result.bleed_samples, 48000);
     assert!(result.bleed_output_rms.is_finite());
@@ -237,6 +245,7 @@ fn accepted_evaluation_reuses_editor_analysis_without_installing_or_training_on_
     let report =
         rust_app::release_gate::measure_editor_result(&project, &manifest, &analysis, &cancel)
             .unwrap();
+    assert_eq!(report.manifest_sha256, manifest.digest());
     assert_eq!(report.effective.preservation_samples, 16000);
     assert_eq!(
         report.ownership.iter().map(|s| s.samples).sum::<u64>(),
@@ -377,6 +386,7 @@ fn applied_gain_counts_attenuated_zero_samples_and_unique_truth() {
     )
     .unwrap();
     let report = rust_app::release_gate::EditorGainEvidence {
+        manifest_sha256: "controlled-manifest".into(),
         analysis_identity: "controlled".into(),
         automatic: measured,
         effective: preserved,

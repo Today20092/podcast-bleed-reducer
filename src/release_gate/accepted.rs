@@ -8,6 +8,7 @@ use std::{collections::BTreeSet, sync::atomic::AtomicBool};
 /// Held-out truth is consumed only after analysis has completed.
 #[derive(Debug, Serialize)]
 pub struct EditorGainEvidence {
+    pub manifest_sha256: String,
     pub analysis_identity: String,
     pub automatic: AppliedGainEvidence,
     pub effective: AppliedGainEvidence,
@@ -19,7 +20,8 @@ impl EditorGainEvidence {
         baseline: &FrozenBaselineComparison,
     ) -> Result<BleedComparisonEvidence, RenderBlocker> {
         let automatic = &self.automatic;
-        if baseline.preservation_samples != automatic.preservation_samples
+        if baseline.manifest_sha256 != self.manifest_sha256
+            || baseline.preservation_samples != automatic.preservation_samples
             || baseline.bleed_samples != automatic.bleed_samples
             || !baseline.bleed_input_rms.is_finite()
             || !baseline.bleed_output_rms.is_finite()
@@ -286,6 +288,7 @@ pub fn measure_editor_result(
     })?;
     let applied = measure_applied_gain(project, manifest, &effective.envelopes, Some(cancel))?;
     Ok(EditorGainEvidence {
+        manifest_sha256: manifest.digest().into(),
         analysis_identity: analysis.snapshot.key.clone(),
         automatic,
         effective: applied,
@@ -427,6 +430,7 @@ pub fn frozen_baseline_csv(
 
 #[derive(Debug, Serialize)]
 pub struct FrozenBaselineComparison {
+    pub manifest_sha256: String,
     pub variant: String,
     pub receipt_sha256: String,
     pub raw_report_sha256: String,
@@ -556,6 +560,7 @@ pub fn run_frozen_comparison(
         ));
     }
     let mut result = FrozenBaselineComparison {
+        manifest_sha256: manifest.digest().into(),
         variant: selection.variant.clone(),
         receipt_sha256: selection.receipt_sha256.clone(),
         raw_report_sha256: format!("{:x}", Sha256::digest(&raw)),
