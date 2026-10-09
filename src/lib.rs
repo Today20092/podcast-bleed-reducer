@@ -6,9 +6,12 @@ mod audio_io;
 mod audition;
 mod calibration;
 pub mod detector_quality;
+mod editor_drawing;
+mod editor_workflow;
 mod effective_envelope;
 mod engine;
 mod export;
+mod gain_editor;
 mod joint_detector;
 mod media;
 pub mod model;
@@ -34,9 +37,15 @@ pub use analysis_audio::{
 pub use audio_io::SourceMetadata;
 pub use audition::{AuditionMode, AuditionPlayback, PreparedAudio};
 pub use calibration::{CalibrationExample, CalibrationKind, OwnershipSettings};
+pub use editor_drawing::{
+    GainDrawingBucket, OverviewBand, OverviewState, OwnershipOverview, visible_automatic_buckets,
+    visible_gain_buckets, visible_gain_curve,
+};
+pub use editor_workflow::*;
 pub use effective_envelope::*;
 pub use engine::*;
 pub use export::*;
+pub use gain_editor::{GainEditorEvent, GainPointer, hit_gain_point};
 pub use ownership_model::*;
 pub use prepared_analysis::{JointDiagnostics, PreviewCache, PreviewCacheStats, preview_stage};
 pub use project::*;

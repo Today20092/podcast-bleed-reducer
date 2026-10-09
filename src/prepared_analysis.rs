@@ -66,20 +66,6 @@ impl PreviewCache {
     pub fn set_supplied_alignment(&mut self, declared: bool) {
         self.supplied_alignment = declared;
     }
-    pub(crate) fn requires_source_validation(
-        &self,
-        paths: &[PathBuf],
-        settings: &OwnershipSettings,
-    ) -> Result<bool, RenderBlocker> {
-        Ok(self
-            .prepared
-            .as_ref()
-            .is_none_or(|p| source_stamps(paths).as_ref().ok() != Some(&p.sources))
-            || self
-                .ownership
-                .as_ref()
-                .is_none_or(|(_, previous, _)| previous != settings))
-    }
     pub fn stats(&self) -> PreviewCacheStats {
         self.stats
     }

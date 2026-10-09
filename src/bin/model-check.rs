@@ -12,20 +12,22 @@ fn main() {
 fn check() -> Result<(), String> {
     let arguments: Vec<_> = std::env::args().skip(1).collect();
     let mut download = false;
+    let mut verify_only = false;
     let mut diarize = None;
     let mut runtime = model::runtime_directory()?;
     let mut index = 0;
     while index < arguments.len() {
         match arguments[index].as_str() {
             "--download" => download = true,
+            "--verify-only" => verify_only = true,
             "--diarize" => { index += 1; diarize = Some(arguments.get(index).ok_or("--diarize needs a private request file")?.clone()); },
             "--runtime" => { index += 1; runtime = arguments.get(index).ok_or("--runtime needs a package bin directory")?.into(); },
-            _ => return Err("Usage: model-check [--download | --diarize REQUEST.json] [--runtime DIRECTORY]; default is offline verification/inference".into()),
+            _ => return Err("Usage: model-check [--download | --verify-only | --diarize REQUEST.json] [--runtime DIRECTORY]; default is offline verification/inference".into()),
         }
         index += 1;
     }
     if let Some(path) = diarize {
-        if download {
+        if download || verify_only {
             return Err("Diarization cannot implicitly download a model".into());
         }
         let file = std::fs::File::open(path)
@@ -52,6 +54,18 @@ fn check() -> Result<(), String> {
         NEMOTRON.sha256
     );
     let cache = ModelCache::default_location()?;
+    if verify_only {
+        if download {
+            return Err("Offline verification cannot download a model.".into());
+        }
+        let runtime = NativeRuntime::open(&runtime)?;
+        cache.verified_path(&NEMOTRON)?;
+        println!(
+            "Runtime provenance: {}",
+            serde_json::to_string(runtime.provenance()).map_err(|e| e.to_string())?
+        );
+        return Ok(());
+    }
     if download {
         let mut reported = 0;
         cache.download_required(&AtomicBool::new(false), |bytes| {

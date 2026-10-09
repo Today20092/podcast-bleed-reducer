@@ -1,11 +1,9 @@
 use crate::{
-    AnalysisPreview, AutomixParameters, CalibrationKind, Comparison, OwnershipSettings,
-    PreviewCache, Project, RenderState, ReviewState, ReviewWorkspace, RunRequest, SpeakerId,
-    TimeRange, WorkflowStep,
+    AnalysisPreview, AutomixParameters, CalibrationKind, Comparison, OwnershipSettings, Project,
+    RenderState, ReviewState, ReviewWorkspace, SpeakerId, TimeRange, WorkflowStep,
     audition::{AuditionMode, AuditionPreparation, LiveAudition},
     export,
     prepared_analysis::source_stamps,
-    preview_stage, run_with_ownership,
     timebase::{Rounding, TICKS_PER_SECOND, TimePosition, time_from_seconds},
     timeline::{TimelineEvent, TimelineViewport},
     validate, validate_export,
@@ -26,10 +24,11 @@ use std::{
         atomic::{AtomicBool, AtomicU8, Ordering},
         mpsc::{self, Receiver},
     },
-    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant},
 };
 
 // Match the detector's rounding of 1536-sample frames at 48 kHz.
+#[cfg(test)]
 fn effective_padding_ms(value: f32) -> f32 {
     (value / 32.0).round() * 32.0
 }
@@ -61,6 +60,85 @@ fn available_project_path(directory: &std::path::Path) -> PathBuf {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn fresh_original_playback_and_transient_gain_feedback_do_not_require_analysis() {
+        let root =
+            std::env::temp_dir().join(format!("cleanslate-fresh-editor-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let source = root.join("source.wav");
+        write_wav(&source, &vec![0.0; 48000]);
+        let project = synchronized_project(root.join("session.cleanslate"), vec![source]).unwrap();
+        let mut app = super::CleanSlateApp {
+            project: Some(project),
+            ..Default::default()
+        };
+        app.timeline.set_total_samples(crate::TICKS_PER_SECOND);
+        let _ = app.update(super::Message::Audition);
+        assert!(app.audition_range.is_some());
+        assert!(app.audition_preparation.is_busy());
+        assert!(app.preview_processing.is_none());
+        assert!(app.preview.is_none());
+        let _ = app.update(super::Message::Stop);
+        let _ = app.update(super::Message::Timeline(
+            crate::timeline::TimelineEvent::Select(
+                crate::TICKS_PER_SECOND / 4,
+                crate::TICKS_PER_SECOND * 3 / 4,
+            ),
+        ));
+        let _ = app.update(super::Message::GainAction(0, false));
+        let before = app.project.as_ref().unwrap().gain_constraints();
+        let id = before.manual_edits[0].id;
+        let _ = app.update(super::Message::GainTool(true));
+        let _ = app.update(super::Message::GainEvent(
+            0,
+            crate::GainEditorEvent::Begin(id, 0),
+        ));
+        let _ = app.update(super::Message::GainEvent(
+            0,
+            crate::GainEditorEvent::Move(crate::TICKS_PER_SECOND / 8, 0.7),
+        ));
+        assert_eq!(
+            app.gain_drag
+                .as_ref()
+                .unwrap()
+                .draft()
+                .constraints
+                .manual_edits[0]
+                .points[0]
+                .gain,
+            0.7
+        );
+        assert_eq!(app.project.as_ref().unwrap().gain_constraints(), before);
+        let _ = app.update(super::Message::GainEvent(0, crate::GainEditorEvent::Cancel));
+        assert!(app.gain_drag.is_none());
+        assert_eq!(app.gain_constraints, before);
+        let arrow = iced::keyboard::Key::Named(iced::keyboard::key::Named::ArrowUp);
+        assert!(
+            super::keyboard_message(
+                arrow.clone(),
+                iced::keyboard::Modifiers::empty(),
+                iced::event::Status::Captured
+            )
+            .is_none(),
+            "Text input owns captured editing keys"
+        );
+        let key = super::keyboard_message(
+            arrow,
+            iced::keyboard::Modifiers::empty(),
+            iced::event::Status::Ignored,
+        )
+        .unwrap();
+        let _ = app.update(key);
+        assert!(
+            app.project.as_ref().unwrap().manual_gain_edits()[0].points[0].gain
+                > before.manual_edits[0].points[0].gain
+        );
+        let _ = app.update(super::Message::UndoGain);
+        assert_eq!(app.project.as_ref().unwrap().gain_constraints(), before);
+        assert_eq!(app.supervised_worker.stats().probability_passes, 0);
+        app.audition_preparation.cancel();
+        std::fs::remove_dir_all(root).unwrap();
+    }
     fn synchronized_project(
         path: impl Into<std::path::PathBuf>,
         sources: Vec<std::path::PathBuf>,
@@ -129,7 +207,7 @@ mod tests {
         assert!(
             app.messages
                 .iter()
-                .any(|message| message.contains("not current"))
+                .any(|message| message.contains("current supervised"))
         );
         // The worker owns these temporary inputs until it exits.
     }
@@ -394,264 +472,6 @@ mod tests {
     }
 
     #[test]
-    fn failed_derivation_keeps_completed_preview_source_identity() {
-        let directory =
-            std::env::temp_dir().join(format!("preview-identity-{}", std::process::id()));
-        std::fs::create_dir_all(&directory).unwrap();
-        let path = directory.join("voice.wav");
-        write_wav(&path, &[0.0; 3073]);
-        let mut project =
-            synchronized_project(directory.join("episode.cleanslate"), vec![path.clone()]).unwrap();
-        project
-            .protect_range(
-                crate::timebase::detector_time(1600),
-                crate::timebase::detector_time(3000),
-            )
-            .unwrap();
-        let mut app = super::CleanSlateApp {
-            project: Some(project),
-            ..Default::default()
-        };
-        let drain = |app: &mut super::CleanSlateApp| {
-            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
-            while app.preview_processing.is_some() || app.preview_pending.is_some() {
-                app.poll_processing();
-                assert!(std::time::Instant::now() < deadline);
-                std::thread::sleep(std::time::Duration::from_millis(1));
-            }
-        };
-        app.start_preview();
-        drain(&mut app);
-        let original = vec![super::waveform::SourceStamp::read(&path).unwrap()];
-        assert_eq!(app.preview_sources, original);
-        write_wav(&path, &[0.0; 1537]);
-        app.start_preview();
-        drain(&mut app);
-        assert!(
-            app.preview_error
-                .as_deref()
-                .unwrap()
-                .contains("relink and review")
-        );
-        assert_eq!(app.preview_cache.stats().preparations, 1);
-        assert_eq!(
-            app.preview.as_ref().unwrap().envelopes[0].sample_count(),
-            3073
-        );
-        assert_eq!(app.preview_sources, original);
-        assert_ne!(
-            app.preview_sources,
-            vec![super::waveform::SourceStamp::read(&path).unwrap()]
-        );
-        app.timeline
-            .set_total_samples(crate::timebase::detector_time(3073));
-        app.audition(false);
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
-        while app.audition_preparation.is_busy() {
-            app.poll_audition();
-            assert!(std::time::Instant::now() < deadline);
-            std::thread::sleep(std::time::Duration::from_millis(1));
-        }
-        assert!(app.audition.is_none());
-        assert!(
-            app.messages
-                .iter()
-                .any(|message| message.contains("Sources changed"))
-        );
-        std::fs::remove_dir_all(directory).unwrap();
-    }
-
-    #[test]
-    fn dragging_coalesces_and_finishes_with_latest_parameters() {
-        let directory =
-            std::env::temp_dir().join(format!("cleanslate-drag-{}", std::process::id()));
-        std::fs::create_dir_all(&directory).unwrap();
-        let path = directory.join("voice.wav");
-        write_wav(&path, &[0.0; 1537]);
-        let mut app = super::CleanSlateApp {
-            project: Some(
-                synchronized_project(directory.join("episode.cleanslate"), vec![path]).unwrap(),
-            ),
-            ..Default::default()
-        };
-        app.start_preview();
-        let active = app.preview_processing.as_ref().unwrap().cancelled.clone();
-        for value in [-6.0, -12.0, -17.0] {
-            let _ = app.update(super::Message::Attenuation(value));
-        }
-        assert!(std::sync::Arc::ptr_eq(
-            &active,
-            &app.preview_processing.as_ref().unwrap().cancelled
-        ));
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
-        loop {
-            app.poll_processing();
-            if app
-                .preview
-                .as_ref()
-                .is_some_and(|p| p.parameters.attenuation_db == -17.0)
-            {
-                break;
-            }
-            assert!(
-                std::time::Instant::now() < deadline,
-                "latest drag value never installed"
-            );
-            std::thread::sleep(std::time::Duration::from_millis(1));
-        }
-        assert_eq!(app.preview_cache.stats().preparations, 1);
-        // Control worker delivery and the clock boundary: two drag inputs occur
-        // before completion (e.g. 0/16 ms input, 30 ms result, 40 ms boundary).
-        // Repeating this proves intermediate snapshots survive sustained input.
-        for snapshot in [-11.0, -10.0, -9.0] {
-            app.preview_parameters.attenuation_db = snapshot;
-            app.start_preview();
-            let processing = app.preview_processing.as_mut().unwrap();
-            let completed = processing
-                .result
-                .recv_timeout(std::time::Duration::from_secs(20))
-                .unwrap();
-            let (sender, receiver) = super::mpsc::channel();
-            processing.result = receiver;
-            for value in [snapshot - 1.0, -17.0] {
-                let _ = app.update(super::Message::Attenuation(value));
-                // Freeze the coalescing deadline ahead of the simulated inputs.
-                app.preview_pending =
-                    Some(std::time::Instant::now() + std::time::Duration::from_secs(1));
-                app.poll_processing();
-                assert!(
-                    !app.preview_processing
-                        .as_ref()
-                        .unwrap()
-                        .cancelled
-                        .load(super::Ordering::Relaxed)
-                );
-            }
-            sender.send(completed).unwrap();
-            app.poll_processing();
-            assert_eq!(
-                app.preview.as_ref().unwrap().parameters.attenuation_db,
-                snapshot
-            );
-        }
-        let _ = app.update(super::Message::RefreshPreview);
-        assert_eq!(
-            app.project.as_ref().unwrap().parameters().attenuation_db,
-            -17.0
-        );
-        let _ = app.update(super::Message::ProtectTrack(0));
-        while app.preview_processing.is_some() || app.preview_pending.is_some() {
-            app.poll_processing();
-            assert!(std::time::Instant::now() < deadline);
-            std::thread::sleep(std::time::Duration::from_millis(1));
-        }
-        assert_eq!(
-            app.preview.as_ref().unwrap().protections,
-            app.project.as_ref().unwrap().protections()
-        );
-        assert_eq!(app.preview_cache.stats().preparations, 1);
-        std::fs::remove_dir_all(directory).unwrap();
-    }
-
-    #[test]
-    fn completed_obsolete_work_cannot_replace_preview_after_source_change() {
-        let directory =
-            std::env::temp_dir().join(format!("cleanslate-obsolete-{}", std::process::id()));
-        std::fs::create_dir_all(&directory).unwrap();
-        let path = directory.join("voice.wav");
-        write_wav(&path, &[0.0; 1537]);
-        let mut app = super::CleanSlateApp {
-            project: Some(
-                synchronized_project(directory.join("episode.cleanslate"), vec![path.clone()])
-                    .unwrap(),
-            ),
-            ..Default::default()
-        };
-        app.start_preview();
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
-        while app
-            .preview_processing
-            .as_ref()
-            .unwrap()
-            .progress
-            .load(super::Ordering::Relaxed)
-            != 100
-        {
-            assert!(std::time::Instant::now() < deadline);
-            std::thread::sleep(std::time::Duration::from_millis(1));
-        }
-        write_wav(&path, &[0.0; 3073]);
-        app.poll_processing();
-        assert!(
-            app.preview.is_none(),
-            "changed source accepted a completed obsolete preview"
-        );
-        app.install_waveforms(vec![]);
-        app.start_preview();
-        while app.preview_processing.is_some() || app.preview_pending.is_some() {
-            app.poll_processing();
-            assert!(std::time::Instant::now() < deadline);
-            std::thread::sleep(std::time::Duration::from_millis(1));
-        }
-        assert!(
-            app.preview_error
-                .as_deref()
-                .unwrap()
-                .contains("relink and review")
-        );
-        let project = app.project.as_mut().unwrap();
-        let track = project.sources[0].track_id;
-        project.relink(0, path.clone()).unwrap();
-        project.review_and_rebind_source(track).unwrap();
-        project.set_supplied_alignment(true).unwrap();
-        app.start_preview();
-        while app.preview_processing.is_some() || app.preview_pending.is_some() {
-            app.poll_processing();
-            assert!(std::time::Instant::now() < deadline);
-            std::thread::sleep(std::time::Duration::from_millis(1));
-        }
-        assert_eq!(
-            app.preview.as_ref().unwrap().envelopes[0].sample_count(),
-            3073
-        );
-        app.start_preview();
-        let obsolete = app.preview_processing.as_ref().unwrap().cancelled.clone();
-        app.install_waveforms(vec![]);
-        app.start_preview();
-        assert!(obsolete.load(super::Ordering::Relaxed));
-        assert!(std::sync::Arc::ptr_eq(
-            &obsolete,
-            &app.preview_processing.as_ref().unwrap().cancelled
-        ));
-        while app.preview_processing.is_some() || app.preview_pending.is_some() {
-            app.poll_processing();
-            assert!(std::time::Instant::now() < deadline);
-            std::thread::sleep(std::time::Duration::from_millis(1));
-        }
-        assert!(app.preview_error.is_none());
-        std::fs::write(&path, b"invalid WAV").unwrap();
-        app.start_preview();
-        while app.preview_processing.is_some() {
-            app.poll_processing();
-            assert!(std::time::Instant::now() < deadline);
-            std::thread::sleep(std::time::Duration::from_millis(1));
-        }
-        assert!(app.preview_error.is_some());
-        assert_eq!(
-            app.preview.as_ref().unwrap().envelopes[0].sample_count(),
-            3073
-        );
-        std::fs::remove_file(&path).unwrap();
-        app.start_preview();
-        assert!(app.preview_error.is_some());
-        assert_eq!(
-            app.preview.as_ref().unwrap().envelopes[0].sample_count(),
-            3073
-        );
-        std::fs::remove_dir_all(directory).unwrap();
-    }
-
-    #[test]
     fn audition_stop_relink_and_error_do_not_start_output() {
         let directory =
             std::env::temp_dir().join(format!("audition-editor-{}", std::process::id()));
@@ -749,97 +569,6 @@ mod tests {
         assert!((reopened.speech_sensitivity - 0.2).abs() < 1e-6);
     }
 
-    #[test]
-    fn editor_retains_preparation_for_parameter_edits_and_rechecks_same_path() {
-        let directory =
-            std::env::temp_dir().join(format!("cleanslate-prepared-editor-{}", std::process::id()));
-        std::fs::create_dir_all(&directory).unwrap();
-        let path = directory.join("voice.wav");
-        write_wav(&path, &vec![0.0; 48_000]);
-        let mut app = super::CleanSlateApp {
-            project: Some(
-                synchronized_project(directory.join("episode.cleanslate"), vec![path.clone()])
-                    .unwrap(),
-            ),
-            ..Default::default()
-        };
-        app.timeline
-            .set_total_samples(crate::timebase::detector_time(48_000));
-        let wait = |app: &mut super::CleanSlateApp| {
-            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
-            while app.preview_processing.is_some() {
-                app.poll_processing();
-                assert!(std::time::Instant::now() < deadline);
-                std::thread::sleep(std::time::Duration::from_millis(1));
-            }
-            assert!(app.preview_error.is_none(), "{:?}", app.preview_error);
-        };
-        app.start_preview();
-        wait(&mut app);
-        app.preview_parameters.attenuation_db = -9.0;
-        app.start_preview();
-        wait(&mut app);
-        assert_eq!(app.preview_cache.stats().preparations, 1);
-        assert_eq!(
-            app.preview.as_ref().unwrap().parameters.attenuation_db,
-            -9.0
-        );
-        for enabled in [false, true] {
-            let before = app.preview_cache.stats().ownership_derivations;
-            let _ = app.update(super::Message::OwnershipMode(enabled));
-            assert!(app.reference_stale);
-            assert_eq!(app.preview_cache.stats().ownership_derivations, before);
-            let _ = app.update(super::Message::AnalyzeReferences);
-            wait(&mut app);
-            assert_eq!(app.preview_cache.stats().ownership_derivations, before + 1);
-        }
-        app.calibration_start = "0".into();
-        app.calibration_end = "0.5".into();
-        let before = app.preview_cache.stats().ownership_derivations;
-        let _ = app.update(super::Message::SaveCalibration(
-            crate::CalibrationKind::RoomTone,
-            0,
-        ));
-        assert_eq!(app.preview_cache.stats().ownership_derivations, before);
-        let _ = app.update(super::Message::AnalyzeReferences);
-        wait(&mut app);
-        assert_eq!(app.preview_cache.stats().ownership_derivations, before + 1);
-        let _ = app.update(super::Message::RemoveCalibration(0));
-        assert_eq!(app.preview_cache.stats().ownership_derivations, before + 1);
-        let _ = app.update(super::Message::AnalyzeReferences);
-        wait(&mut app);
-        assert_eq!(app.preview_cache.stats().ownership_derivations, before + 2);
-        assert_eq!(app.preview_cache.stats().preparations, 1);
-        write_wav(&path, &[0.0; 3073]);
-        app.start_preview();
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
-        while app.preview_processing.is_some() || app.preview_pending.is_some() {
-            app.poll_processing();
-            assert!(std::time::Instant::now() < deadline);
-            std::thread::sleep(std::time::Duration::from_millis(1));
-        }
-        assert!(
-            app.preview_error
-                .as_deref()
-                .unwrap()
-                .contains("relink and review")
-        );
-        assert_eq!(app.preview_cache.stats().preparations, 1);
-        let project = app.project.as_mut().unwrap();
-        let track = project.sources[0].track_id;
-        project.relink(0, path.clone()).unwrap();
-        project.review_and_rebind_source(track).unwrap();
-        project.set_supplied_alignment(true).unwrap();
-        app.start_preview();
-        wait(&mut app);
-        assert_eq!(app.preview_cache.stats().preparations, 2);
-        assert_eq!(
-            app.preview.as_ref().unwrap().envelopes[0].sample_count(),
-            3073
-        );
-        std::fs::remove_dir_all(directory).unwrap();
-    }
-
     fn write_wav(path: &std::path::Path, samples: &[f32]) {
         let writer =
             bwavfile::WaveWriter::create(path, bwavfile::WaveFmt::new_pcm_mono(48_000, 16))
@@ -860,7 +589,10 @@ mod tests {
         let cancelled = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
         let (_sender, result) = super::mpsc::channel();
         app.preview_processing = Some(super::PreviewProcessing {
-            ownership: Default::default(),
+            snapshot: crate::EditorAnalysisIdentity {
+                key: String::new(),
+                project: Default::default(),
+            },
             progress: Default::default(),
             cancelled: cancelled.clone(),
             generation: 0,
@@ -1228,12 +960,12 @@ mod tests {
             ..Default::default()
         };
         app.refresh_export_readiness();
-        assert!(app.export_ready());
+        assert!(!app.export_ready());
         let delivery = directory.join("delivery");
         app.export_to(delivery.clone());
-        assert!(delivery.join("voice-clean.wav").is_file());
+        assert!(!delivery.exists());
         assert!(!delivery.join("report.json").exists());
-        assert!(app.messages[0].starts_with("Export committed"));
+        assert!(app.messages[0].starts_with("Export blocked"));
         let _ = app.update(super::Message::Attenuation(-12.0));
         assert!(!app.export_ready());
         let blocked = directory.join("during-drag");
@@ -1241,13 +973,12 @@ mod tests {
         assert!(!blocked.exists());
         assert!(matches!(
             app.project.as_ref().unwrap().render(),
-            crate::RenderState::Current { .. }
+            crate::RenderState::Stale
         ));
         app.preview_parameters = app.project.as_ref().unwrap().parameters();
         std::fs::remove_file(rendered).unwrap();
         app.refresh_export_readiness();
         assert!(!app.export_ready());
-        assert!(app.export_error.is_some());
         std::fs::remove_file(source).unwrap();
         app.preview_parameters.attenuation_db = -12.0;
         let _ = app.update(super::Message::RefreshPreview);
@@ -1280,13 +1011,21 @@ pub struct CleanSlateApp {
     reference_speakers: Vec<SpeakerId>,
     reference_stale: bool,
     reference_analyze_requested: bool,
-    preview_ownership: Option<OwnershipSettings>,
     waveforms: Vec<WaveformCache>,
     timeline: TimelineViewport,
     preview_parameters: AutomixParameters,
     preview: Option<AnalysisPreview>,
     preview_sources: Vec<waveform::SourceStamp>,
-    preview_cache: PreviewCache,
+    supervised_worker: crate::EditorAnalysisWorker,
+    supervised_result: Option<Arc<crate::EditorAnalysisResult>>,
+    effective_cache: crate::EffectiveEnvelopeCache,
+    effective_result: Option<Arc<crate::EffectiveEnvelopes>>,
+    gain_tool: bool,
+    gain_drag: Option<crate::GainPointDrag>,
+    gain_constraints: crate::GainConstraints,
+    selected_gain_point: Option<(usize, u64, usize)>,
+    replace_gain_constraints: bool,
+    selected_supervised_warning: Option<usize>,
     preview_processing: Option<PreviewProcessing>,
     preview_pending: Option<Instant>,
     preview_generation: u64,
@@ -1320,13 +1059,24 @@ impl Default for CleanSlateApp {
             reference_speakers: vec![],
             reference_stale: false,
             reference_analyze_requested: false,
-            preview_ownership: None,
             waveforms: vec![],
             timeline: TimelineViewport::default(),
             preview_parameters: AutomixParameters::default(),
             preview: None,
             preview_sources: vec![],
-            preview_cache: PreviewCache::default(),
+            supervised_worker: crate::EditorAnalysisWorker::default(),
+            supervised_result: None,
+            effective_cache: crate::EffectiveEnvelopeCache::default(),
+            effective_result: None,
+            gain_tool: false,
+            gain_drag: None,
+            gain_constraints: crate::GainConstraints {
+                manual_edits: vec![],
+                protections: vec![],
+            },
+            selected_gain_point: None,
+            replace_gain_constraints: false,
+            selected_supervised_warning: None,
             preview_processing: None,
             preview_pending: None,
             preview_generation: 0,
@@ -1533,8 +1283,11 @@ struct PreviewProcessing {
     generation: u64,
     source_generation: u64,
     sources: Vec<waveform::SourceStamp>,
-    ownership: OwnershipSettings,
-    result: Receiver<(Result<AnalysisPreview, String>, PreviewCache)>,
+    snapshot: crate::EditorAnalysisIdentity,
+    result: Receiver<(
+        Result<Arc<crate::EditorAnalysisResult>, String>,
+        crate::EditorAnalysisWorker,
+    )>,
 }
 
 impl Drop for PreviewProcessing {
@@ -1557,9 +1310,10 @@ enum Message {
     Process,
     Cancel,
     Tick,
+    #[cfg(test)]
     SpeechSensitivity(f32),
-    BleedDiscrimination(f32),
     Attenuation(f32),
+    #[cfg(test)]
     SpeechPadding(f32),
     OpenTime(f32),
     CloseTime(f32),
@@ -1573,7 +1327,7 @@ enum Message {
     Stop,
     Previous,
     MonitorGain(f32),
-    KeyPressed(keyboard::Key),
+    KeyPressed(keyboard::Key, keyboard::Modifiers),
     RangeModifier(bool),
     #[cfg(test)]
     OwnershipMode(bool),
@@ -1593,6 +1347,18 @@ enum Message {
     UndoReferences,
     RedoReferences,
     AnalyzeReferences,
+    CancelAnalysis,
+    GainTool(bool),
+    GainEvent(usize, crate::GainEditorEvent),
+    GainAction(usize, bool),
+    ReplaceGainConstraints(bool),
+    UndoGain,
+    RedoGain,
+    DeleteGain,
+    InsertGainPoint,
+    RebindSource(usize),
+    SelectSupervisedWarning(usize),
+    SaveProject,
     ToggleReviewed,
     ProtectRegion,
     ProtectTrack(usize),
@@ -1618,6 +1384,14 @@ pub fn run() -> iced::Result {
     .run()
 }
 
+fn keyboard_message(
+    key: keyboard::Key,
+    modifiers: keyboard::Modifiers,
+    status: iced::event::Status,
+) -> Option<Message> {
+    (status == iced::event::Status::Ignored).then_some(Message::KeyPressed(key, modifiers))
+}
+
 fn compact_workspace(width: f32) -> bool {
     width < 1100.0
 }
@@ -1639,7 +1413,6 @@ impl CleanSlateApp {
                 || matches!(project.result(), crate::ResultState::Stale { .. })
         });
         self.reference_analyze_requested = false;
-        self.preview_ownership = None;
         self.audition_preparation.invalidate();
         self.audition_range = None;
         if let Some(audition) = self.audition.take() {
@@ -1647,7 +1420,17 @@ impl CleanSlateApp {
         }
         self.preview = None;
         self.preview_sources.clear();
-        self.preview_cache = PreviewCache::default();
+        self.supervised_result = None;
+        self.effective_result = None;
+        self.effective_cache = crate::EffectiveEnvelopeCache::default();
+        self.gain_drag = None;
+        self.gain_constraints = self.project.as_ref().map_or(
+            crate::GainConstraints {
+                manual_edits: vec![],
+                protections: vec![],
+            },
+            Project::gain_constraints,
+        );
         self.source_generation += 1;
         self.preview_generation += 1;
         self.preview_pending = None;
@@ -1670,8 +1453,13 @@ impl CleanSlateApp {
         let mut additions: Vec<_> = paths
             .into_iter()
             .filter(|path| {
-                path.extension()
-                    .is_some_and(|ext| ext.eq_ignore_ascii_case("wav"))
+                path.extension().is_some_and(|ext| {
+                    [
+                        "wav", "bwf", "aif", "aiff", "flac", "mp3", "m4a", "mp4", "ogg",
+                    ]
+                    .iter()
+                    .any(|format| ext.eq_ignore_ascii_case(format))
+                })
             })
             .filter(|path| {
                 !existing.iter().any(|old| {
@@ -1686,7 +1474,7 @@ impl CleanSlateApp {
                 .eq_ignore_ascii_case(&b.to_string_lossy())
         });
         if additions.is_empty() {
-            self.messages = vec!["No new WAV stems were selected".into()];
+            self.messages = vec!["No new supported mono tracks were selected".into()];
             return;
         }
 
@@ -1874,9 +1662,16 @@ impl CleanSlateApp {
 
     fn export_ready(&self) -> bool {
         !self.sources_busy()
+            && !self.reference_stale
+            && self.gain_drag.is_none()
+            && self.preview_pending.is_none()
+            && self.preview_processing.is_none()
+            && self.supervised_result.as_ref().is_some_and(|result| self.model_acquisition.provenance() == Some(&result.runtime))
+            && self.supervised_result.as_ref().is_some_and(|result| self.project.as_ref().is_some_and(|project| result.snapshot.matches(project)))
+            && self.effective_result.as_ref().is_some_and(|effective| effective.analysis_current)
             && self.processing.is_none()
             && self.export_error.is_none()
-            && self.project.as_ref().is_some_and(|project| {
+              && self.project.as_ref().is_some_and(|project| {
                 project.sources.iter().all(|source| source.available)
                     && project.parameters() == self.preview_parameters
                     && matches!(project.render(), RenderState::Current { identity } if identity.is_file())
@@ -1912,81 +1707,6 @@ impl CleanSlateApp {
         }
     }
 
-    fn start_processing(&mut self) {
-        if self.processing.is_some() {
-            return;
-        }
-        let Some(project) = &self.project else { return };
-        if let Err(error) = project.require_alignment() {
-            self.messages = vec![format!("Final render blocked: {error}")];
-            return;
-        }
-        let snapshot = match RenderSnapshot::read(project) {
-            Ok(snapshot) => snapshot,
-            Err(error) => {
-                self.messages = vec![format!("Final render blocked: {error}")];
-                return;
-            }
-        };
-        let stems = project.source_paths();
-        let protections = project.protections().to_vec();
-        let parameters = project.parameters();
-        let ownership = snapshot.ownership.clone();
-        let parent = project
-            .path()
-            .parent()
-            .unwrap_or_else(|| std::path::Path::new("."));
-        let id = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_millis()
-            .to_string();
-        let output_dir = parent.join(format!("render-{id}"));
-        let report = output_dir.join("report.json");
-        let cancelled = Arc::new(AtomicBool::new(false));
-        let progress = Arc::new(AtomicU8::new(0));
-        let request_cancelled = Arc::clone(&cancelled);
-        let request_progress = Arc::clone(&progress);
-        let (sender, result) = mpsc::channel();
-        let source_project = project.clone();
-        std::thread::spawn(move || {
-            let outcome = source_project
-                .validate_sources_cancellable(Some(&request_cancelled))
-                .map_err(|e| e.to_string())
-                .and_then(|_| {
-                    run_with_ownership(
-                        RunRequest {
-                            supplied_alignment: source_project.supplied_alignment(),
-                            stems,
-                            output_dir,
-                            regions: vec![],
-                            protections,
-                            cancelled: Some(request_cancelled),
-                        },
-                        Some(request_progress),
-                        parameters,
-                        &ownership,
-                    )
-                    .map(|_| report.display().to_string())
-                    .map_err(|error| error.to_string())
-                })
-                .and_then(|report| {
-                    source_project
-                        .validate_sources()
-                        .map(|_| report)
-                        .map_err(|e| e.to_string())
-                });
-            let _ = sender.send(outcome);
-        });
-        self.messages = vec!["Final render started".into()];
-        self.processing = Some(Processing {
-            cancelled,
-            progress,
-            result,
-            snapshot,
-        });
-    }
-
     fn start_preview(&mut self) {
         self.queue_preview(Duration::ZERO);
         self.launch_preview();
@@ -2001,7 +1721,7 @@ impl CleanSlateApp {
         }
         // Drag events belong to the next coalesced snapshot. Keep the current
         // snapshot installable until that boundary, even under continuous input.
-        if delay.is_zero() {
+        if delay.is_zero() && self.reference_analyze_requested {
             self.preview_generation += 1;
         }
         let due = Instant::now() + delay;
@@ -2012,7 +1732,7 @@ impl CleanSlateApp {
             // Parameter edits must not cancel initial source inference. At 70,
             // analyze has retained its facts and cancellation can preserve them.
             if sources.as_ref().ok() != Some(&processing.sources)
-                || (delay.is_zero() && processing.progress.load(Ordering::Relaxed) >= 70)
+                || (delay.is_zero() && self.reference_analyze_requested)
             {
                 processing.cancelled.store(true, Ordering::Relaxed);
             }
@@ -2026,75 +1746,90 @@ impl CleanSlateApp {
             return;
         }
         self.preview_pending = None;
-        self.preview_generation += 1;
-        let Some(project) = &self.project else { return };
-        if let Err(error) = project.require_alignment() {
-            self.preview_error = Some(error.to_string());
+        if !self.reference_analyze_requested {
+            self.rebuild_effective();
             return;
         }
-        let stems = project.source_paths();
-        let sources = match source_stamps(&stems) {
+        self.reference_analyze_requested = false;
+        let Some(project) = &self.project else { return };
+        let snapshot = match crate::EditorAnalysisIdentity::capture(project) {
+            Ok(snapshot) => snapshot,
+            Err(error) => {
+                self.preview_error = Some(error.to_string());
+                return;
+            }
+        };
+        self.preview_generation += 1;
+        let sources = match source_stamps(&project.source_paths()) {
             Ok(sources) => sources,
             Err(error) => {
                 self.preview_error = Some(error.to_string());
                 return;
             }
         };
-        let protections = project.protections().to_vec();
-        let parameters = self.preview_parameters;
-        let ownership = if self.reference_stale && !self.reference_analyze_requested {
-            self.preview_ownership.clone().unwrap_or_default()
-        } else {
-            project.ownership_settings().clone()
-        };
-        let snapshot_ownership = ownership.clone();
-        let progress = Arc::new(AtomicU8::new(0));
-        let worker_progress = Arc::clone(&progress);
-        let cancelled = Arc::new(AtomicBool::new(false));
-        let worker_cancelled = Arc::clone(&cancelled);
-        let mut cache = self.preview_cache.clone();
-        cache.set_supplied_alignment(project.supplied_alignment());
         let source_project = project.clone();
+        let cache_directory = project.path().with_extension("analysis-cache");
+        let runtime = self.model_acquisition.provenance().cloned();
+        let progress = Arc::new(AtomicU8::new(0));
+        let worker_progress = progress.clone();
+        let cancelled = Arc::new(AtomicBool::new(false));
+        let worker_cancelled = cancelled.clone();
+        let mut worker = std::mem::take(&mut self.supervised_worker);
         let (sender, result) = mpsc::channel();
         std::thread::spawn(move || {
-            let result = cache
-                .requires_source_validation(&stems, &ownership)
-                .map_err(|error| error.to_string())
-                .and_then(|required| {
-                    if required {
-                        source_project
-                            .validate_sources_cancellable(Some(&worker_cancelled))
-                            .map_err(|error| error.to_string())
-                    } else {
-                        Ok(())
-                    }
-                })
-                .and_then(|_| {
-                    cache
-                        .analyze_with_ownership(
-                            &stems,
-                            &protections,
-                            parameters,
-                            &ownership,
-                            &worker_progress,
-                            Some(&worker_cancelled),
-                        )
-                        .map_err(|error| error.to_string())
-                });
-            let _ = sender.send((result, cache));
+            let completed = worker
+                .analyze(
+                    &source_project,
+                    &cache_directory,
+                    runtime.as_ref(),
+                    &worker_progress,
+                    &worker_cancelled,
+                )
+                .map_err(|e| e.to_string());
+            let _ = sender.send((completed, worker));
         });
         self.preview_processing = Some(PreviewProcessing {
-            ownership: snapshot_ownership,
             progress,
             cancelled,
             result,
             sources,
+            snapshot,
             generation: self.preview_generation,
             source_generation: self.source_generation,
         });
         self.preview_error = None;
     }
 
+    fn rebuild_effective(&mut self) {
+        if let Some(project) = &self.project {
+            self.gain_constraints = project.gain_constraints();
+        }
+        let (Some(project), Some(analysis)) = (&self.project, &self.supervised_result) else {
+            return;
+        };
+        let result = crate::project_fade_settings(project).and_then(|settings| {
+            self.effective_cache
+                .update(project, &analysis.temporal, settings, None)
+        });
+        match result {
+            Ok(effective) => {
+                self.reference_stale = !effective.analysis_current
+                    || self.model_acquisition.provenance() != Some(&analysis.runtime);
+                if let Some(audition) = &self.audition {
+                    audition.replace_envelopes(effective.envelopes.clone());
+                }
+                if let Some(preview) = &mut self.preview {
+                    preview.envelopes = effective.envelopes.clone();
+                    preview.parameters = project.parameters();
+                    preview.protections = project.protections().to_vec();
+                } else {
+                    self.preview = Some(analysis.preview(project, &effective));
+                }
+                self.effective_result = Some(effective);
+            }
+            Err(error) => self.preview_error = Some(error.to_string()),
+        }
+    }
     fn load_review(&mut self) {
         self.review = self.project.as_ref().and_then(|project| {
             let identity = project.review_identity()?;
@@ -2107,8 +1842,17 @@ impl CleanSlateApp {
     }
 
     fn audition(&mut self, selection_only: bool) {
-        let (Some(project), Some(preview)) = (&self.project, &self.preview) else {
-            return;
+        let Some(project) = &self.project else { return };
+        let envelopes = match crate::editor_audition_envelopes(
+            project,
+            self.preview.as_ref(),
+            self.audition_mode,
+        ) {
+            Ok(envelopes) => envelopes,
+            Err(error) => {
+                self.messages = vec![error.to_string()];
+                return;
+            }
         };
         let selection = if selection_only {
             self.timeline.selection()
@@ -2118,8 +1862,7 @@ impl CleanSlateApp {
         let start = selection.map_or(self.timeline.playhead(), |range| range.0.min(range.1));
         let end = selection.map_or_else(
             || {
-                preview
-                    .envelopes
+                envelopes
                     .iter()
                     .map(|envelope| envelope.duration())
                     .max()
@@ -2132,69 +1875,240 @@ impl CleanSlateApp {
         self.audition_preparation.request(project.source_paths());
     }
 
+    fn gain_event(&mut self, track: usize, event: crate::GainEditorEvent) {
+        match event {
+            crate::GainEditorEvent::Begin(id, point) => {
+                if let Some(project) = &self.project
+                    && let Some(source) = project.sources.get(track)
+                {
+                    match crate::GainPointDrag::begin(project, source.track_id, id, point) {
+                        Ok(drag) => {
+                            self.gain_drag = Some(drag);
+                            self.selected_gain_point = Some((track, id, point));
+                        }
+                        Err(error) => self.preview_error = Some(error.to_string()),
+                    }
+                }
+            }
+            crate::GainEditorEvent::Move(time, gain) => {
+                let Some(drag) = &mut self.gain_drag else {
+                    return;
+                };
+                if let Err(error) = drag.move_to(time, gain) {
+                    self.preview_error = Some(error.to_string());
+                    return;
+                }
+                if let (Some(project), Some(analysis)) = (&self.project, &self.supervised_result) {
+                    let result = crate::project_fade_settings(project).and_then(|settings| {
+                        self.effective_cache.preview_edit(
+                            project,
+                            &analysis.temporal,
+                            settings,
+                            drag.draft(),
+                            None,
+                        )
+                    });
+                    match result {
+                        Ok(effective) => {
+                            if let Some(audition) = &self.audition {
+                                audition.replace_envelopes(effective.envelopes.clone());
+                            }
+                            if let Some(preview) = &mut self.preview {
+                                preview.envelopes = effective.envelopes.clone();
+                            } else {
+                                self.preview = Some(analysis.preview(project, &effective));
+                            }
+                            self.effective_result = Some(effective);
+                        }
+                        Err(error) => self.preview_error = Some(error.to_string()),
+                    }
+                }
+            }
+            crate::GainEditorEvent::End => {
+                if let (Some(drag), Some(project)) = (self.gain_drag.take(), self.project.as_mut())
+                    && let Err(error) = project.commit_gain_edit(drag.finish())
+                {
+                    self.preview_error = Some(error.to_string());
+                }
+                self.rebuild_effective();
+            }
+            crate::GainEditorEvent::Cancel => {
+                self.gain_drag = None;
+                self.rebuild_effective();
+            }
+        }
+    }
+
+    fn gain_action(&mut self, track: usize, preserve: bool) {
+        let (Some(project), Some((start, end))) = (&mut self.project, self.timeline.selection())
+        else {
+            return;
+        };
+        let Some(source) = project.sources.get(track) else {
+            return;
+        };
+        let track_id = source.track_id;
+        let Ok(range) = TimeRange::new(start.min(end), start.max(end)) else {
+            return;
+        };
+        let action = if preserve {
+            crate::GainRegionAction::Preserve
+        } else {
+            crate::GainRegionAction::Attenuate(
+                10_f32.powf(self.preview_parameters.attenuation_db / 20.0),
+            )
+        };
+        let result = project
+            .region_gain_edit(track_id, range, action)
+            .and_then(|mut draft| {
+                if self.replace_gain_constraints {
+                    let new_edit = draft.constraints.manual_edits.last().map(|edit| edit.id);
+                    draft.constraints.manual_edits.retain(|edit| {
+                        (!preserve && Some(edit.id) == new_edit)
+                            || edit.source.track != track_id
+                            || edit.points.last().is_none_or(|p| p.time <= range.start)
+                            || edit.points.first().is_none_or(|p| p.time >= range.end)
+                    });
+                    let last = draft.constraints.protections.len().saturating_sub(1);
+                    draft.constraints.protections = draft
+                        .constraints
+                        .protections
+                        .into_iter()
+                        .enumerate()
+                        .filter_map(|(index, protection)| {
+                            (preserve && index == last
+                                || !protection.sources.iter().any(|s| s.track == track_id)
+                                || protection.range.end <= range.start
+                                || protection.range.start >= range.end)
+                                .then_some(protection)
+                        })
+                        .collect();
+                }
+                project.commit_gain_edit(draft)
+            });
+        if let Err(error) = result {
+            self.preview_error = Some(format!(
+                "Edit not saved: {error}. Select explicit replacement to replace overlapping edits."
+            ));
+        } else {
+            self.preview_error = None;
+        }
+        self.rebuild_effective();
+    }
+
+    fn handle_edit_key(&mut self, key: &keyboard::Key, modifiers: keyboard::Modifiers) -> bool {
+        if modifiers.command() {
+            let message = match key.as_ref() {
+                keyboard::Key::Character("z") if self.gain_tool && modifiers.shift() => {
+                    Some(Message::RedoGain)
+                }
+                keyboard::Key::Character("z") if self.gain_tool => Some(Message::UndoGain),
+                keyboard::Key::Character("y") if self.gain_tool => Some(Message::RedoGain),
+                keyboard::Key::Character("z") if self.calibrating && modifiers.shift() => {
+                    Some(Message::RedoReferences)
+                }
+                keyboard::Key::Character("z") if self.calibrating => Some(Message::UndoReferences),
+                _ => None,
+            };
+            if let Some(message) = message {
+                let _ = self.update(message);
+                return true;
+            }
+        }
+        if !self.gain_tool {
+            return false;
+        }
+        if key.as_ref() == keyboard::Key::Named(keyboard::key::Named::Escape) {
+            self.gain_drag = None;
+            self.rebuild_effective();
+            return true;
+        }
+        if key.as_ref() == keyboard::Key::Named(keyboard::key::Named::Delete) {
+            let _ = self.update(Message::DeleteGain);
+            return true;
+        }
+        let direction = match key.as_ref() {
+            keyboard::Key::Named(keyboard::key::Named::ArrowLeft) => Some((-1_i64, 0.0)),
+            keyboard::Key::Named(keyboard::key::Named::ArrowRight) => Some((1, 0.0)),
+            keyboard::Key::Named(keyboard::key::Named::ArrowUp) => Some((0, 0.01)),
+            keyboard::Key::Named(keyboard::key::Named::ArrowDown) => Some((0, -0.01)),
+            _ => None,
+        };
+        if let (Some((time_delta, gain_delta)), Some((track, id, point)), Some(project)) =
+            (direction, self.selected_gain_point, &self.project)
+            && let Some(old) = project
+                .manual_gain_edits()
+                .iter()
+                .find(|edit| edit.id == id)
+                .and_then(|edit| edit.points.get(point))
+                .copied()
+        {
+            let time = old
+                .time
+                .saturating_add_signed(time_delta * (TICKS_PER_SECOND / 100) as i64);
+            self.gain_event(track, crate::GainEditorEvent::Begin(id, point));
+            self.gain_event(
+                track,
+                crate::GainEditorEvent::Move(time, (old.gain + gain_delta).clamp(0.0, 1.0)),
+            );
+            self.gain_event(track, crate::GainEditorEvent::End);
+            return true;
+        }
+        false
+    }
+
     fn poll_processing(&mut self) {
-        if let Some(processing) = &self.preview_processing
-            && self
-                .preview_pending
-                .is_some_and(|due| Instant::now() >= due)
-            && processing.generation == self.preview_generation
-        {
-            self.preview_generation += 1;
-        }
-        if let Some(processing) = &self.preview_processing
-            && processing.generation != self.preview_generation
-            && processing.progress.load(Ordering::Relaxed) >= 70
-        {
-            processing.cancelled.store(true, Ordering::Relaxed);
-        }
         if let Some(processing) = &self.preview_processing
             && let result = processing.result.try_recv()
             && !matches!(result, Err(mpsc::TryRecvError::Empty))
         {
             let processing = self.preview_processing.take().unwrap();
-            let (result, cache) = result.unwrap_or_else(|_| {
-                (
-                    Err("preview worker stopped unexpectedly".into()),
-                    self.preview_cache.clone(),
-                )
-            });
-            let sources_match = self.project.as_ref().is_some_and(|project| {
-                source_stamps(&project.source_paths()).as_ref().ok() == Some(&processing.sources)
-            });
-            if processing.source_generation == self.source_generation && sources_match {
-                self.preview_cache = cache;
-            }
-            if processing.generation == self.preview_generation {
-                let result = result.and_then(|preview| {
-                    if sources_match {
-                        Ok(preview)
-                    } else {
-                        Err("source changed before preview installation; retry".into())
-                    }
-                });
-                match result {
-                    Ok(preview) => {
-                        if self.reference_analyze_requested {
-                            // Retained-detector preview does not satisfy the new
-                            // supervised recipe. Ticket 12 owns that commit gate.
-                            self.reference_analyze_requested = false;
-                        }
-                        self.preview_ownership = Some(processing.ownership.clone());
-                        if self.preview_sources != processing.sources {
-                            self.audition_preparation.invalidate();
-                            self.audition_range = None;
-                            if let Some(audition) = self.audition.take() {
-                                audition.stop();
+            let cancelled = processing.cancelled.load(Ordering::Relaxed);
+            let sources_match = self
+                .project
+                .as_ref()
+                .is_some_and(|project| processing.snapshot.matches(project));
+            if let Ok((completed, worker)) = result {
+                if processing.source_generation == self.source_generation {
+                    self.supervised_worker = worker;
+                }
+                if !cancelled && processing.generation == self.preview_generation && sources_match {
+                    match completed {
+                        Ok(analysis) => {
+                            let project = self.project.as_mut().unwrap();
+                            match analysis.install(
+                                project,
+                                &mut self.effective_cache,
+                                self.model_acquisition.provenance(),
+                                None,
+                            ) {
+                                Ok(effective) => {
+                                    let preview = analysis.preview(project, &effective);
+                                    if let Some(audition) = &self.audition {
+                                        audition.replace_envelopes(preview.envelopes.clone());
+                                    }
+                                    self.preview_sources = processing.sources.clone();
+                                    self.preview = Some(preview);
+                                    self.effective_result = Some(effective);
+                                    self.review =
+                                        Some(ReviewWorkspace::from_ownership(&analysis.temporal));
+                                    self.supervised_result = Some(analysis);
+                                    self.reference_stale = false;
+                                    self.gain_constraints = project.gain_constraints();
+                                    self.preview_error = None;
+                                }
+                                Err(error) => self.preview_error = Some(error.to_string()),
                             }
                         }
-                        if let Some(audition) = &self.audition {
-                            audition.replace_envelopes(preview.envelopes.clone());
+                        Err(error) => {
+                            self.preview_error = Some(error);
+                            self.reference_stale = true;
                         }
-                        self.preview_sources = processing.sources.clone();
-                        self.preview = Some(preview);
                     }
-                    Err(error) => self.preview_error = Some(error),
                 }
+            } else if !cancelled && processing.generation == self.preview_generation {
+                self.preview_error =
+                    Some("Analysis worker stopped unexpectedly; previous preview retained.".into());
             }
         }
         self.launch_preview();
@@ -2256,26 +2170,39 @@ impl CleanSlateApp {
         {
             match result {
                 Ok(prepared) => {
-                    if let (Some(project), Some(preview)) = (&self.project, &self.preview) {
-                        if prepared.is_current(&project.source_paths())
-                            && prepared.matches_sources(&self.preview_sources)
-                        {
-                            match LiveAudition::start(
-                                prepared,
-                                preview.envelopes.clone(),
-                                self.audition_mode,
-                                10.0_f32.powf(self.monitor_db / 20.0),
-                                start,
-                                end,
-                            ) {
-                                Ok(audition) => self.audition = Some(audition),
-                                Err(error) => self.messages = vec![error.to_string()],
+                    if let Some(project) = &self.project {
+                        let envelopes = crate::editor_audition_envelopes(
+                            project,
+                            self.preview.as_ref(),
+                            self.audition_mode,
+                        );
+                        match envelopes {
+                            Ok(envelopes)
+                                if prepared.is_current(&project.source_paths())
+                                    && source_stamps(&project.source_paths()).is_ok_and(
+                                        |sources| prepared.matches_sources(&sources),
+                                    ) =>
+                            {
+                                match LiveAudition::start(
+                                    prepared,
+                                    envelopes,
+                                    self.audition_mode,
+                                    10.0_f32.powf(self.monitor_db / 20.0),
+                                    start,
+                                    end,
+                                ) {
+                                    Ok(audition) => self.audition = Some(audition),
+                                    Err(error) => self.messages = vec![error.to_string()],
+                                }
                             }
-                        } else {
-                            self.audition_preparation.invalidate();
-                            self.messages = vec![
-                                "Sources changed; prepare the session again before audition".into(),
-                            ];
+                            Ok(_) => {
+                                self.audition_preparation.invalidate();
+                                self.messages = vec![
+                                    "Sources changed; prepare the session again before audition."
+                                        .into(),
+                                ];
+                            }
+                            Err(error) => self.messages = vec![error.to_string()],
                         }
                     }
                 }
@@ -2293,8 +2220,10 @@ impl CleanSlateApp {
             self.audition = None;
         }
     }
-
     fn set_audition_mode(&mut self, mode: AuditionMode) {
+        if mode != AuditionMode::Original && self.preview.is_none() {
+            return;
+        }
         self.audition_mode = mode;
         if let Some(audition) = &self.audition {
             audition.set_mode(mode);
@@ -2356,8 +2285,7 @@ impl CleanSlateApp {
         self.preview_generation = self.preview_generation.wrapping_add(1);
         self.preview_pending = None;
         self.calibration_error = None;
-        // Fixed evidence may finish and be retained; only obsolete derivation
-        // is cancelled by the existing generation check once progress reaches 70.
+        // Completed fixed evidence can be reused; this generation cannot install.
     }
     fn reference_conflicts(&self) -> Vec<u64> {
         let Ok((start, end)) = self.calibration_range() else {
@@ -2531,16 +2459,7 @@ impl CleanSlateApp {
                 }
             }
             Message::Process => {
-                if self.reference_stale
-                    || self
-                        .project
-                        .as_ref()
-                        .is_some_and(|project| !project.reference_labels().is_empty())
-                {
-                    self.messages = vec!["Supervised analysis is not current. Final export requires current supervised analysis.".into()];
-                } else {
-                    self.start_processing();
-                }
+                self.messages = vec!["Final export requires a current supervised preview and matching delivery settings.".into()];
             }
             Message::Cancel => {
                 if let Some(processing) = &self.processing {
@@ -2555,13 +2474,12 @@ impl CleanSlateApp {
                 }
                 self.poll_audition();
             }
+            #[cfg(test)]
             Message::SpeechSensitivity(value) => {
                 self.preview_parameters.speech_sensitivity = 1.0 - value
             }
-            Message::BleedDiscrimination(value) => {
-                self.preview_parameters.bleed_discrimination_db = value
-            }
             Message::Attenuation(value) => self.preview_parameters.attenuation_db = value,
+            #[cfg(test)]
             Message::SpeechPadding(value) => {
                 self.preview_parameters.speech_padding_ms = effective_padding_ms(value)
             }
@@ -2612,20 +2530,29 @@ impl CleanSlateApp {
                     audition.set_monitor(10.0_f32.powf(value / 20.0));
                 }
             }
-            Message::KeyPressed(key) => match key.as_ref() {
-                keyboard::Key::Named(keyboard::key::Named::Space) => {
-                    if self.audition.is_some() || self.audition_range.is_some() {
-                        self.stop_audition();
-                    } else {
-                        self.audition(false);
-                    }
+            Message::KeyPressed(key, modifiers) => {
+                if self.handle_edit_key(&key, modifiers) {
+                    return Task::none();
                 }
-                keyboard::Key::Named(keyboard::key::Named::Home) => self.seek_to_selection_start(),
-                keyboard::Key::Character("1") => self.set_audition_mode(AuditionMode::Original),
-                keyboard::Key::Character("2") => self.set_audition_mode(AuditionMode::Processed),
-                keyboard::Key::Character("3") => self.set_audition_mode(AuditionMode::Removed),
-                _ => {}
-            },
+                match key.as_ref() {
+                    keyboard::Key::Named(keyboard::key::Named::Space) => {
+                        if self.audition.is_some() || self.audition_range.is_some() {
+                            self.stop_audition();
+                        } else {
+                            self.audition(false);
+                        }
+                    }
+                    keyboard::Key::Named(keyboard::key::Named::Home) => {
+                        self.seek_to_selection_start()
+                    }
+                    keyboard::Key::Character("1") => self.set_audition_mode(AuditionMode::Original),
+                    keyboard::Key::Character("2") => {
+                        self.set_audition_mode(AuditionMode::Processed)
+                    }
+                    keyboard::Key::Character("3") => self.set_audition_mode(AuditionMode::Removed),
+                    _ => {}
+                }
+            }
             Message::RangeModifier(selecting) => self.selecting_range = selecting,
             #[cfg(test)]
             Message::OwnershipMode(enabled) => {
@@ -2699,6 +2626,108 @@ impl CleanSlateApp {
             Message::AnalyzeReferences => {
                 self.reference_analyze_requested = true;
                 self.start_preview();
+            }
+            Message::CancelAnalysis => {
+                self.preview_generation = self.preview_generation.wrapping_add(1);
+                self.reference_analyze_requested = false;
+                self.preview_pending = None;
+                if let Some(job) = &self.preview_processing {
+                    job.cancelled.store(true, Ordering::Relaxed);
+                }
+                self.messages = vec!["Analysis cancelled; previous preview retained.".into()];
+            }
+            Message::GainTool(enabled) => {
+                self.gain_tool = enabled;
+                self.gain_drag = None;
+                self.rebuild_effective();
+            }
+            Message::GainEvent(track, event) => self.gain_event(track, event),
+            Message::GainAction(track, preserve) => self.gain_action(track, preserve),
+            Message::ReplaceGainConstraints(replace) => self.replace_gain_constraints = replace,
+            Message::UndoGain | Message::RedoGain => {
+                self.gain_drag = None;
+                if let Some(project) = &mut self.project {
+                    let result = if matches!(message, Message::UndoGain) {
+                        project.undo_gain_edit()
+                    } else {
+                        project.redo_gain_edit()
+                    };
+                    if let Err(error) = result {
+                        self.preview_error = Some(error.to_string());
+                    }
+                }
+                self.rebuild_effective();
+            }
+            Message::DeleteGain => {
+                if let (Some((_, id, _)), Some(project)) =
+                    (self.selected_gain_point.take(), self.project.as_mut())
+                {
+                    let mut constraints = project.gain_constraints();
+                    constraints.manual_edits.retain(|edit| edit.id != id);
+                    if let Err(error) = project.replace_gain_constraints(constraints) {
+                        self.preview_error = Some(error.to_string());
+                    }
+                    self.rebuild_effective();
+                }
+            }
+            Message::InsertGainPoint => {
+                if let (Some((_, id, _)), Some(project)) =
+                    (self.selected_gain_point, self.project.as_mut())
+                {
+                    let time = self.timeline.playhead();
+                    let mut constraints = project.gain_constraints();
+                    if let Some(edit) = constraints
+                        .manual_edits
+                        .iter_mut()
+                        .find(|edit| edit.id == id)
+                        && time > edit.points[0].time
+                        && time < edit.points.last().unwrap().time
+                        && !edit.points.iter().any(|point| point.time == time)
+                    {
+                        let after = edit.points.partition_point(|point| point.time < time);
+                        let left = edit.points[after - 1];
+                        let right = edit.points[after];
+                        let gain = left.gain
+                            + (right.gain - left.gain) * (time - left.time) as f32
+                                / (right.time - left.time) as f32;
+                        edit.points
+                            .insert(after, crate::EnvelopePoint { time, gain });
+                        if let Err(error) = project.replace_gain_constraints(constraints) {
+                            self.preview_error = Some(error.to_string());
+                        }
+                        self.rebuild_effective();
+                    }
+                }
+            }
+            Message::RebindSource(index) => {
+                if let Some(project) = &mut self.project
+                    && let Some(source) = project.sources.get(index)
+                {
+                    let track = source.track_id;
+                    match project.review_and_rebind_source(track) {
+                        Ok(()) => self.mark_reference_edit(),
+                        Err(error) => self.preview_error = Some(error.to_string()),
+                    }
+                }
+            }
+            Message::SelectSupervisedWarning(index) => {
+                if let Some(review) = &mut self.review {
+                    review.select_warning(index);
+                    self.timeline.seek(review.playhead());
+                    self.timeline.set_selection(review.selection());
+                    if let Some(audition) = &self.audition {
+                        audition.seek(review.playhead());
+                    }
+                    self.selected_supervised_warning = Some(index);
+                }
+            }
+            Message::SaveProject => {
+                if let Some(project) = &self.project {
+                    self.messages = vec![match project.save() {
+                        Ok(()) => "Editable project saved.".into(),
+                        Err(error) => format!("Project was not saved: {error}"),
+                    }];
+                }
             }
             #[cfg(test)]
             Message::RemoveCalibration(index) => {
@@ -2811,6 +2840,11 @@ impl CleanSlateApp {
             },
         }
         if previous_parameters != self.preview_parameters {
+            if let Some(project) = &mut self.project
+                && let Err(error) = project.set_parameters(self.preview_parameters)
+            {
+                self.preview_error = Some(error.to_string());
+            }
             self.queue_preview(Duration::from_millis(40));
         }
         Task::none()
@@ -2821,10 +2855,8 @@ impl CleanSlateApp {
             iced::Event::Window(iced::window::Event::FileDropped(path)) => {
                 Some(Message::FileDropped(path))
             }
-            iced::Event::Keyboard(keyboard::Event::KeyPressed { key, .. })
-                if status == iced::event::Status::Ignored =>
-            {
-                Some(Message::KeyPressed(key))
+            iced::Event::Keyboard(keyboard::Event::KeyPressed { key, modifiers, .. }) => {
+                keyboard_message(key, modifiers, status)
             }
             iced::Event::Keyboard(keyboard::Event::ModifiersChanged(modifiers)) => {
                 Some(Message::RangeModifier(modifiers.shift()))
@@ -2900,7 +2932,110 @@ impl CleanSlateApp {
             ]
             .spacing(8),
         );
-        controls = controls.push(button("Analyze preview").on_press(Message::AnalyzeReferences));
+        controls = controls.push(
+            row![
+                button("Analyze").on_press(Message::AnalyzeReferences),
+                button("Cancel analysis").on_press_maybe(
+                    self.preview_processing
+                        .as_ref()
+                        .map(|_| Message::CancelAnalysis)
+                ),
+                button("Save project").on_press(Message::SaveProject),
+            ]
+            .spacing(6),
+        );
+        controls = controls.push(
+            iced::widget::checkbox(self.gain_tool)
+                .label("Envelope edit tool")
+                .on_toggle(Message::GainTool),
+        );
+        if self.gain_tool {
+            controls = controls.push(text("Drag pink points to change gain or fade duration. Arrow keys move a selected point; Delete removes its override. Ctrl+Z / Ctrl+Y undo and redo.").size(12));
+            controls = controls.push(
+                row![
+                    button("Undo gain").on_press(Message::UndoGain),
+                    button("Redo gain").on_press(Message::RedoGain)
+                ]
+                .spacing(6),
+            );
+            controls = controls.push(
+                row![
+                    button("Add point at cursor").on_press(Message::InsertGainPoint),
+                    button("Remove selected override").on_press(Message::DeleteGain)
+                ]
+                .spacing(6),
+            );
+            controls = controls.push(
+                iced::widget::checkbox(self.replace_gain_constraints)
+                    .label("Replace entire overlapping overrides and protections")
+                    .on_toggle(Message::ReplaceGainConstraints),
+            );
+        }
+        let missing: Vec<_> = project
+            .sources
+            .iter()
+            .filter(|source| {
+                !project.reference_labels().iter().any(|label| {
+                    label.active_speakers == vec![source.speaker_id]
+                        && project.reference_label_is_current(label)
+                })
+            })
+            .map(|source| format!("Speaker {} solo", source.speaker_id.0))
+            .collect();
+        let room = project.reference_labels().iter().any(|label| {
+            label.active_speakers.is_empty() && project.reference_label_is_current(label)
+        });
+        controls = controls.push(
+            text(if missing.is_empty() && room {
+                "References supplied; Analyze checks usable speech and room tone.".into()
+            } else {
+                format!(
+                    "References needed: {}{}",
+                    missing.join(", "),
+                    if room { "" } else { "; room tone" }
+                )
+            })
+            .size(12),
+        );
+        controls = controls.push(text("Blue: human labels · gray: automatic gain · teal: effective gain · pink: manual points · gold: unity protection").size(12));
+        if let Some(review) = &self.review {
+            let warnings = &review.warnings;
+            controls =
+                controls.push(text(format!("{} regions need review", warnings.len())).size(12));
+            if !warnings.is_empty() {
+                let selected = self
+                    .selected_supervised_warning
+                    .unwrap_or(0)
+                    .min(warnings.len() - 1);
+                let warning = &warnings[selected];
+                controls = controls.push(
+                    button(text(format!(
+                        "Review {:.2}–{:.2}s: {}",
+                        warning.start as f64 / TICKS_PER_SECOND as f64,
+                        warning.end as f64 / TICKS_PER_SECOND as f64,
+                        warning.label
+                    )))
+                    .on_press(Message::SelectSupervisedWarning(selected)),
+                );
+                controls = controls.push(
+                    row![
+                        button("Previous review").on_press_maybe(
+                            selected
+                                .checked_sub(1)
+                                .map(Message::SelectSupervisedWarning)
+                        ),
+                        button("Next review").on_press_maybe(
+                            (selected + 1 < warnings.len())
+                                .then_some(Message::SelectSupervisedWarning(selected + 1))
+                        ),
+                        button("Mark selected reviewed").on_press_maybe(
+                            review.selected_warning().map(|_| Message::ToggleReviewed)
+                        )
+                    ]
+                    .spacing(6),
+                );
+            }
+        }
         controls = controls.push(text("Final export requires current supervised analysis. Preview playback remains available.").size(12));
         controls = controls.push(text({
             match self.calibration_range() {
@@ -3049,8 +3184,10 @@ impl CleanSlateApp {
                 container(
                     column![
                         text("NO STEMS IMPORTED").size(22),
-                        text("Import synchronized mono WAV stems or drop them anywhere in this window."),
-                        button("Import WAV stems").on_press(Message::ImportStems),
+                        text(
+                            "Import synchronized mono tracks or drop them anywhere in this window."
+                        ),
+                        button("Import mono tracks").on_press(Message::ImportStems),
                     ]
                     .spacing(12)
                     .align_x(iced::Center),
@@ -3089,6 +3226,34 @@ impl CleanSlateApp {
                 if !source.available {
                     header = header.push(button("Relink source").on_press(Message::Relink(index)));
                 }
+                header = header.push(text(format!("Speaker {}", source.speaker_id.0)).size(12));
+                if project.pending_source_reviews().contains(&source.track_id) {
+                    header = header.push(
+                        button("Accept changed source bindings")
+                            .on_press(Message::RebindSource(index)),
+                    );
+                }
+                if let Some(analysis) = &self.supervised_result
+                    && let Ok(estimates) = analysis.ownership.estimates_at(self.timeline.playhead())
+                    && let Some(estimate) = estimates
+                        .iter()
+                        .find(|estimate| estimate.track == source.track_id)
+                {
+                    header = header.push(
+                        text(estimate.probability.map_or_else(
+                            || "Ownership unresolved · preserved".into(),
+                            |p| format!("Ownership estimate {p:.2}"),
+                        ))
+                        .size(12),
+                    );
+                }
+                if self
+                    .review
+                    .as_ref()
+                    .is_some_and(|review| review.highlighted_tracks().contains(&index))
+                {
+                    header = header.push(text("REVIEW TARGET"));
+                }
                 if matches!(current, WorkflowStep::Review | WorkflowStep::Export) {
                     header = header.push(
                         button("Protect entire track").on_press(Message::ProtectTrack(index)),
@@ -3102,13 +3267,20 @@ impl CleanSlateApp {
                             .into()
                     },
                     |cache| {
-                        canvas(TimelineCanvas::waveform(
-                            cache,
-                            &self.timeline,
-                            Message::Timeline,
-                            self.preview.as_ref().map(|preview| (preview, index)),
-                            self.selecting_range || self.calibrating,
-                        ))
+                        canvas(
+                            TimelineCanvas::waveform(
+                                cache,
+                                &self.timeline,
+                                Message::Timeline,
+                                self.preview.as_ref().map(|preview| (preview, index)),
+                                self.selecting_range || self.calibrating,
+                            )
+                            .with_overview(
+                                self.supervised_result
+                                    .as_ref()
+                                    .map(|result| &result.overview),
+                            ),
+                        )
                         .width(Fill)
                         .height(waveform_height)
                         .into()
@@ -3119,6 +3291,43 @@ impl CleanSlateApp {
                         column![
                             header,
                             waveform,
+                            canvas(crate::gain_editor::GainCanvas {
+                                project,
+                                constraints: self
+                                    .gain_drag
+                                    .as_ref()
+                                    .map_or(&self.gain_constraints, |drag| &drag
+                                        .draft()
+                                        .constraints),
+                                track: source.track_id,
+                                viewport: &self.timeline,
+                                automatic: self
+                                    .effective_result
+                                    .as_ref()
+                                    .and_then(|result| result.automatic.get(index))
+                                    .map(AsRef::as_ref),
+                                effective: self
+                                    .preview
+                                    .as_ref()
+                                    .and_then(|preview| preview.envelopes.get(index)),
+                                editing: self.gain_tool,
+                                on_event: Box::new(move |event| Message::GainEvent(index, event)),
+                            })
+                            .width(Fill)
+                            .height(64),
+                            row![
+                                button("Preserve selection").on_press_maybe(
+                                    self.timeline
+                                        .selection()
+                                        .map(|_| Message::GainAction(index, true))
+                                ),
+                                button("Attenuate selection").on_press_maybe(
+                                    self.timeline
+                                        .selection()
+                                        .map(|_| Message::GainAction(index, false))
+                                )
+                            ]
+                            .spacing(8),
                             row![
                                 button("Save room tone").on_press_maybe(
                                     (project.ownership_settings().enabled
@@ -3276,25 +3485,33 @@ impl CleanSlateApp {
         let preview_state: Element<'_, Message> = if let Some(processing) = &self.preview_processing
         {
             let progress = processing.progress.load(Ordering::Relaxed) as f32;
-            if self.preview_cache.stats().preparations > 0 && !(20.0..70.0).contains(&progress) {
-                text("Updating preview · showing previous completed preview").into()
-            } else {
-                column![
-                    text(format!("{}: {progress:.0}%", preview_stage(progress as u8))),
-                    progress_bar(0.0..=100.0, progress),
-                    text(if self.preview.is_some() {
-                        "Showing previous completed preview"
-                    } else {
-                        "No completed preview yet"
-                    }),
-                ]
-                .spacing(6)
-                .into()
-            }
+            let stage = match progress as u8 {
+                0..=19 => "Preparing audio and validating references",
+                20..=54 => "Verifying Nemotron and analyzing speaker activity on CPU",
+                55..=79 => "Fitting session ownership estimates",
+                80..=94 => "Resolving ownership and uncertainty",
+                _ => "Composing the current gain preview",
+            };
+            column![
+                text(stage),
+                progress_bar(0.0..=100.0, progress),
+                text("Stage progress; inference duration is measured, not predicted."),
+                text(if self.preview.is_some() {
+                    "Previous completed preview remains available"
+                } else {
+                    "No completed preview yet"
+                })
+            ]
+            .spacing(6)
+            .into()
         } else if let Some(error) = &self.preview_error {
             text(format!("Preview failed: {error}")).into()
-        } else if self.reference_stale {
-            text("Analysis stale after label edits · click Analyze; previous preview remains available").into()
+        } else if self.reference_stale
+            || self.supervised_result.as_ref().is_some_and(|analysis| {
+                self.model_acquisition.provenance() != Some(&analysis.runtime)
+            })
+        {
+            text("Supervised analysis is not current · verify the model and click Analyze; previous preview remains available").into()
         } else if let Some(preview) = &self.preview {
             text(format!(
                 "Preview ready · {} ownership regions",
@@ -3309,33 +3526,9 @@ impl CleanSlateApp {
             column![
                 text("ANALYSIS PREVIEW").size(12),
                 text("Session parameters").size(20),
-                text("Preview and audition use these settings. Render again to update exported audio."),
+                text("Gain settings update preview and audition immediately. Analyze uses your reference labels."),
                 preview_state,
                 self.calibration_controls(),
-                text(format!(
-                    "Speech sensitivity: {:.2}",
-                    1.0 - parameters.speech_sensitivity
-                )),
-                slider(
-                    0.1..=0.9,
-                    1.0 - parameters.speech_sensitivity,
-                    Message::SpeechSensitivity
-                )
-                .step(0.01_f32)
-                .on_release(Message::RefreshPreview),
-                text("Higher sensitivity admits weaker speech evidence.").size(12),
-                text(format!(
-                    "Bleed discrimination: {:.1} dB",
-                    parameters.bleed_discrimination_db
-                )),
-                slider(
-                    0.0..=18.0,
-                    parameters.bleed_discrimination_db,
-                    Message::BleedDiscrimination
-                )
-                .step(0.5_f32)
-                .on_release(Message::RefreshPreview),
-                text("Required margin above each track's own noise floor.").size(12),
                 text(format!("Attenuation: {:.1} dB", parameters.attenuation_db)),
                 slider(
                     -30.0..=-3.0,
@@ -3345,26 +3538,14 @@ impl CleanSlateApp {
                 .step(1.0_f32)
                 .on_release(Message::RefreshPreview),
                 text(format!(
-                    "Speech padding: {:.0} ms effective",
-                    effective_padding_ms(parameters.speech_padding_ms)
-                )),
-                slider(
-                    0.0..=992.0,
-                    effective_padding_ms(parameters.speech_padding_ms),
-                    Message::SpeechPadding
-                )
-                .step(32.0_f32)
-                .on_release(Message::RefreshPreview),
-                text("32 ms steps. Legacy stored values stay unchanged until padding is edited.").size(12),
-                text(format!(
-                    "Open time: {:.0} ms",
+                    "Open fade duration: {:.0} ms",
                     parameters.open_ms
                 )),
                 slider(1.0..=1000.0, parameters.open_ms, Message::OpenTime)
                     .step(1.0_f32)
                     .on_release(Message::RefreshPreview),
                 text(format!(
-                    "Close time: {:.0} ms",
+                    "Close fade duration: {:.0} ms",
                     parameters.close_ms
                 )),
                 slider(1.0..=2000.0, parameters.close_ms, Message::CloseTime)
@@ -3382,8 +3563,8 @@ impl CleanSlateApp {
         .style(container::bordered_box);
         let inspector: Element<'_, Message> = if self.sources_busy() {
             container(column![text("Loading tracks").size(20),
-                text("Waveforms appear as each track is read. Validation and source checks run in the background, followed by speech analysis."),
-                text("You can scroll the tracks and drop more WAV files. Editing becomes available when the import is validated."),
+                text("Waveforms appear as each track is read. Validation and source checks run in the background, then choose references and click Analyze."),
+                text("You can scroll the tracks and drop more supported mono files. Editing becomes available when the import is validated."),
             ].spacing(12)).padding(18).width(if compact { Fill } else { Length::Fixed(280.0) }).into()
         } else {
             scrollable(inspector)
@@ -3406,7 +3587,15 @@ impl CleanSlateApp {
             } else {
                 "Play"
             })
-            .on_press_maybe(self.preview.is_some().then_some(Message::Audition)),
+            .on_press_maybe(
+                (self.preview.is_some()
+                    || self.audition_mode == AuditionMode::Original
+                        && self
+                            .project
+                            .as_ref()
+                            .is_some_and(|project| crate::original_envelopes(project).is_ok()))
+                .then_some(Message::Audition)
+            ),
             button("Stop").on_press_maybe(
                 (self.audition.is_some() || self.audition_range.is_some()).then_some(Message::Stop)
             ),
@@ -3423,13 +3612,13 @@ impl CleanSlateApp {
             } else {
                 "Processed"
             })
-            .on_press(Message::Processed),
+            .on_press_maybe(self.preview.as_ref().map(|_| Message::Processed)),
             button(if self.audition_mode == AuditionMode::Removed {
                 "Removed ✓"
             } else {
                 "Removed"
             })
-            .on_press(Message::Removed),
+            .on_press_maybe(self.preview.as_ref().map(|_| Message::Removed)),
             text(format!("Monitor {:+.1} dB", self.monitor_db)),
             slider(-24.0..=6.0, self.monitor_db, Message::MonitorGain)
                 .step(1.0_f32)

@@ -66,7 +66,7 @@ pub struct ReferenceLabel {
     #[serde(default)]
     pub reference_track: Option<TrackId>,
 }
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct EnvelopePoint {
     pub time: TimePosition,
     pub gain: f32,

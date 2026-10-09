@@ -147,6 +147,25 @@ impl WaveformCache {
             .find(|level| level.samples_per_bucket <= samples_per_pixel.max(BASE_BUCKET))
             .unwrap_or(&self.levels[0])
     }
+
+    fn visible_level(
+        &self,
+        viewport: &TimelineViewport,
+        width: f32,
+    ) -> (&WaveformLevel, std::ops::Range<usize>) {
+        let start = self.frame_at_time(viewport.start().max(0.0) as u64, Rounding::Floor);
+        let end = self.frame_at_time(
+            (viewport.start() + viewport.visible_samples()).ceil() as u64,
+            Rounding::Ceil,
+        );
+        let target = ((end - start) as f64 / width.max(1.0) as f64).ceil() as usize;
+        let level = self.level(target);
+        let first = (start / level.samples_per_bucket).min(level.peaks.len());
+        let last = end
+            .div_ceil(level.samples_per_bucket)
+            .min(level.peaks.len());
+        (level, first..last)
+    }
 }
 
 #[cfg(test)]
@@ -254,6 +273,7 @@ pub(crate) struct TimelineCanvas<'a, Message> {
     viewport: &'a TimelineViewport,
     ruler: bool,
     preview: Option<(&'a AnalysisPreview, usize)>,
+    overview: Option<&'a crate::OwnershipOverview>,
     selecting: bool,
     on_event: fn(TimelineEvent) -> Message,
 }
@@ -271,6 +291,7 @@ impl<'a, Message> TimelineCanvas<'a, Message> {
             viewport,
             ruler: false,
             preview,
+            overview: None,
             selecting,
             on_event,
         }
@@ -286,9 +307,17 @@ impl<'a, Message> TimelineCanvas<'a, Message> {
             viewport,
             ruler: true,
             preview: None,
+            overview: None,
             selecting,
             on_event,
         }
+    }
+}
+
+impl<'a, Message> TimelineCanvas<'a, Message> {
+    pub fn with_overview(mut self, overview: Option<&'a crate::OwnershipOverview>) -> Self {
+        self.overview = overview;
+        self
     }
 }
 
@@ -460,21 +489,39 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
                 });
             }
         } else if let Some(cache) = self.cache {
-            let visible_start = cache.frame_at_time(self.viewport.start() as u64, Rounding::Floor);
-            let visible_end = cache.frame_at_time(
-                (self.viewport.start() + self.viewport.visible_samples()).ceil() as u64,
-                Rounding::Ceil,
-            );
-            let target = ((visible_end - visible_start) as f64 / bounds.width.max(1.0) as f64)
-                .ceil() as usize;
-            let level = cache.level(target);
-            let first = (visible_start / level.samples_per_bucket).min(level.peaks.len());
-            let last = visible_end
-                .div_ceil(level.samples_per_bucket)
-                .min(level.peaks.len());
+            let (level, visible) = cache.visible_level(self.viewport, bounds.width);
+            let first = visible.start;
+            let last = visible.end;
             let scale = center * 0.9;
             if let Some((preview, track)) = self.preview {
-                for region in &preview.regions {
+                let summarized;
+                let visible_regions = if let Some(overview) = self.overview {
+                    summarized = overview
+                        .visible_bands(track, self.viewport, bounds.width)
+                        .into_iter()
+                        .map(|band| crate::Region {
+                            start: band.start,
+                            end: band.end,
+                            decision: match band.state {
+                                crate::OverviewState::Owned => Decision::Owned(vec![track]),
+                                crate::OverviewState::Absent => Decision::NoSpeech,
+                                crate::OverviewState::MixedOrUncertain => Decision::Uncertain,
+                            },
+                        })
+                        .collect::<Vec<_>>();
+                    summarized.as_slice()
+                } else {
+                    let first = preview.regions.partition_point(|region| {
+                        region.end <= self.viewport.start().max(0.0) as u64
+                    });
+                    let last = preview.regions.partition_point(|region| {
+                        region.start
+                            < (self.viewport.start() + self.viewport.visible_samples()).ceil()
+                                as u64
+                    });
+                    &preview.regions[first..last]
+                };
+                for region in visible_regions {
                     let left = self
                         .viewport
                         .x_for_sample(region.start, bounds.width)
@@ -698,6 +745,37 @@ mod tests {
         assert_eq!(cache.level(BASE_BUCKET).peaks[0], (-0.75, 0.9));
         let full = cache.level(samples.len());
         assert_eq!(full.peaks, vec![(-0.75, 0.9)]);
+    }
+
+    #[test]
+    fn two_hour_visible_peak_drawing_work_is_bounded_at_mixed_native_rates() {
+        let mut elapsed = std::time::Duration::ZERO;
+        for rate in [44_100, 48_000, 96_000] {
+            let samples = rate as usize * 7200;
+            let cache = WaveformCache::from_peaks(
+                vec![(-0.2, 0.4); samples.div_ceil(BASE_BUCKET)],
+                samples,
+                rate,
+            );
+            let mut viewport = TimelineViewport::new(cache.duration());
+            let start = std::time::Instant::now();
+            for _ in 0..100 {
+                let (level, range) = cache.visible_level(&viewport, 1000.0);
+                assert!(range.len() <= 2002);
+                let peak = level.peaks[range]
+                    .iter()
+                    .fold((0.0_f32, 0.0_f32), |(lo, hi), &(min, max)| {
+                        (lo.min(min), hi.max(max))
+                    });
+                assert_eq!(peak, (-0.2, 0.4));
+                viewport.zoom_at(500.0, 1000.0, 1.0);
+                viewport.pan_by_pixels(-30.0, 1000.0);
+            }
+            elapsed += start.elapsed();
+        }
+        eprintln!(
+            "300 two-hour mixed-rate production visible peak queries/navigation: {elapsed:?}"
+        );
     }
 
     #[test]

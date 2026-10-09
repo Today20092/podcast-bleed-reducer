@@ -198,6 +198,27 @@ impl AutomaticEnvelope {
     pub fn segment_count(&self) -> usize {
         self.segments.len()
     }
+    pub fn gain_bounds_time(&self, start: u64, end: u64) -> Option<(f32, f32)> {
+        let end = end.min(self.duration);
+        if start >= end {
+            return None;
+        }
+        let mut bounds = (1.0_f32, 0.0_f32);
+        let first = self
+            .segments
+            .partition_point(|segment| segment.end <= start);
+        for segment in self.segments[first..]
+            .iter()
+            .take_while(|segment| segment.start < end)
+        {
+            for time in [start.max(segment.start), (end - 1).min(segment.end)] {
+                let gain = segment.gain(time);
+                bounds.0 = bounds.0.min(gain);
+                bounds.1 = bounds.1.max(gain);
+            }
+        }
+        Some(bounds)
+    }
     pub fn duration(&self) -> u64 {
         self.duration
     }
@@ -366,7 +387,7 @@ pub struct EffectiveEnvelopes {
     pub envelopes: Vec<crate::GainEnvelope>,
     pub automatic: Vec<Arc<AutomaticEnvelope>>,
 }
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct EffectiveEnvelopeCache {
     accepted: Option<Arc<EffectiveEnvelopes>>,
     builds: u64,
