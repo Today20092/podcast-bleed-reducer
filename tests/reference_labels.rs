@@ -9,15 +9,17 @@ fn session() -> (PathBuf, Project) {
 }
 
 fn session_frames(length: usize) -> (PathBuf, Project) {
+    static NEXT_SESSION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let root = std::env::temp_dir().join(format!(
-        "cleanslate-references-{}-{}",
+        "cleanslate-references-{}-{}-{}",
         std::process::id(),
         SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
-            .as_nanos()
+            .as_nanos(),
+        NEXT_SESSION.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     ));
-    std::fs::create_dir_all(&root).unwrap();
+    std::fs::create_dir(&root).unwrap();
     let mut paths = vec![];
     for track in 0..2 {
         let path = root.join(format!("speaker-{track}.wav"));

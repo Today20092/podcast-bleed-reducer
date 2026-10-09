@@ -31,4 +31,22 @@ It loads the saved project and verifies the installed required runtime, then mea
 
 A separate cancellation namespace reuses immutable prepared audio through hard links and starts with fresh native history. The public job flag is requested 20 seconds after progress reaches 20, which means preparation and reference readiness have completed, before runtime/history work. Actual child-process observation is needed to identify a more precise phase. The report distinguishes active cancellation, completion before a request, completion despite a request and failure. Completion before the timer preserves the first and warm measurements rather than granting cancellation evidence. A pre-canceled job must retain the latest accepted analysis. Logical cache bytes count hard-linked files per path; physical disk usage and sampled process-tree memory require an external measurement receipt.
 
-Ticket 14 remains claimed. Listening-region delivery, typed prior-use provenance, mixed-rate frozen comparison derivatives and the complete long-session benchmark are still being implemented. Controlled test fixtures establish mechanics only.
+## Controlled capacity measurements
+
+The actual required-native editor worker completed eight mono 16 kHz tracks over two hours on the Ryzen 9 3950X / 31.92 GiB computer. Application cache was initially empty; OS caches were unflushed. The development profile optimized the app, SHA, WAV decoder and ORT wrapper, while other dependencies retained their default debug profile. These timings do not generalize to resampling, other codecs or a release build.
+
+| Measurement | Actual required-native pipeline | Scripted-history trained components |
+| --- | ---: | ---: |
+| First analysis | 330.83 s | 323.17 s |
+| Warm analysis | 18.16 s | 10.02 s |
+| Gain draft median / p95 | 1.87 / 1.92 ms | 1.10 / 1.19 ms |
+| Fitted models | 0 | 8 |
+| Sampled tree private peak | 1.894 GB | 0.561 GB |
+
+The capacity sources repeat two scripted voices across eight track roles. Actual anonymous mapping remained unresolved, so the first column did not run fixed VAD, fitting or ownership probability passes. Its native history contains 720,001 eight-channel frames, ten compactions and the complete 115,200,000-sample tail. The second column supplies explicitly scripted role probabilities through the trusted public editor seam and runs real fixed VAD, eight fits and one probability pass; warm and gain operations leave those counters unchanged. It performs no native inference. Neither column establishes eight-speaker accuracy, and their timings are not a measured single fully mapped native job.
+
+Public cancellation during an observed native child returned 26.39 ms after the flag and retained accepted analysis/history. A pre-canceled job also retained the latest accepted result. Logical cache size was 7.396 GB because immutable hard links count per path. The 3.714 GB system-volume free-space delta is not isolated cache allocation: unrelated writes may contribute. Memory peaks are sampled process-tree values and can miss short-lived children or between-sample peaks.
+
+External `ticket14-capacity-7200-8` holds separate native/component reports, samplers, pinned executable/profile/runtime receipts and evidence indexes. An earlier unoptimized diagnostic was OS-stopped during preparation after 593.75 s; it is not completed performance or public cancellation evidence. [Owner verification](owner-verification.md) identifies the current candidate and the remaining human work.
+
+Ticket 14 remains claimed. Real independent quality, listening delivery/approval and representative timing approval remain pending. Typed prior-use provenance and verified mixed-rate historical comparison derivatives also remain documented tooling limits. Controlled fixtures establish mechanics and capacity only.
