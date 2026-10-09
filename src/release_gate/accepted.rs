@@ -14,6 +14,40 @@ pub struct EditorGainEvidence {
     pub ownership: Vec<HeldOutOwnershipEvidence>,
 }
 impl EditorGainEvidence {
+    pub fn compare_baseline(
+        &self,
+        baseline: &FrozenBaselineComparison,
+    ) -> Result<BleedComparisonEvidence, RenderBlocker> {
+        let automatic = &self.automatic;
+        if baseline.preservation_samples != automatic.preservation_samples
+            || baseline.bleed_samples != automatic.bleed_samples
+            || !baseline.bleed_input_rms.is_finite()
+            || !baseline.bleed_output_rms.is_finite()
+            || !automatic.bleed_input_rms.is_finite()
+            || !automatic.bleed_output_rms.is_finite()
+            || baseline.bleed_input_rms < 0.0
+            || baseline.bleed_output_rms < 0.0
+            || (baseline.bleed_input_rms - automatic.bleed_input_rms).abs()
+                > automatic.bleed_input_rms.max(1e-12) * 1e-6
+        {
+            return Err(RenderBlocker("Baseline and editor evidence do not describe identical physical truth and input energy.".into()));
+        }
+        let measurable_bleed = automatic.bleed_samples > 0 && automatic.bleed_input_rms > 0.0;
+        let improved = measurable_bleed && automatic.bleed_output_rms < baseline.bleed_output_rms;
+        Ok(BleedComparisonEvidence {
+            measurable_bleed,
+            automatic_bleed_improved: improved,
+            baseline_output_rms: baseline.bleed_output_rms,
+            automatic_output_rms: automatic.bleed_output_rms,
+            release_status: if self.release_status() == "failed" || (measurable_bleed && !improved)
+            {
+                "failed"
+            } else {
+                "incomplete"
+            },
+        })
+    }
+
     pub fn release_status(&self) -> &'static str {
         if self.automatic.attenuated_preservation_samples > 0
             || self.automatic.attenuated_overlap_ticks > 0
@@ -23,6 +57,16 @@ impl EditorGainEvidence {
             "incomplete"
         }
     }
+}
+
+#[derive(Debug, Serialize)]
+pub struct BleedComparisonEvidence {
+    pub measurable_bleed: bool,
+    pub automatic_bleed_improved: bool,
+    pub baseline_output_rms: f64,
+    pub automatic_output_rms: f64,
+    /// Listening, independent truth and timing approval remain separate gates.
+    pub release_status: &'static str,
 }
 
 #[derive(Debug, Serialize)]
@@ -139,6 +183,17 @@ pub fn evaluate_project_command(
         &std::fs::read_to_string(&args[2])?,
         Some(&cancel),
     )?;
+    // Capture and run the already selected historical recipe before observing new results.
+    let baseline = if manifest.input.baseline.is_some() {
+        Some(run_frozen_comparison(
+            &project,
+            &manifest,
+            std::path::Path::new(&args[4]),
+            Some(&cancel),
+        )?)
+    } else {
+        None
+    };
     let helper = std::env::current_exe()?.with_file_name(if cfg!(windows) {
         "model-check.exe"
     } else {
@@ -160,6 +215,10 @@ pub fn evaluate_project_command(
         &cancel,
     )?;
     let score = measure_editor_result(&project, &manifest, &analysis, &cancel)?;
+    let comparison = baseline
+        .as_ref()
+        .map(|b| score.compare_baseline(b))
+        .transpose()?;
     manifest.validate(&project, Some(&cancel))?;
     crate::verify_installed_editor_runtime(&runtime, &cancel)?;
     if std::fs::read(project.path())? != saved_project {
@@ -169,8 +228,10 @@ pub fn evaluate_project_command(
         "version":1,"manifest_sha256":manifest.digest(),"claim":manifest.claim(),
         "analysis_recipe":analysis.recipe,"runtime":analysis.runtime,"gain":score,
         "parameters":project.parameters(),"manual_constraints":project.gain_constraints(),
-        "release_status":score.release_status(),"human_listening_performed":false,
-        "pending":["frozen baseline comparison","independent real truth","owner listening and timing approval"]
+        "release_status":comparison.as_ref().map_or(score.release_status(), |c|c.release_status),"human_listening_performed":false,
+        "baseline":baseline,"bleed_comparison":comparison,
+        "pending":["independent real truth","owner listening and timing approval"],
+        "baseline_comparison_pending":baseline.is_none()
     });
     use std::io::Write;
     std::fs::OpenOptions::new()
@@ -191,6 +252,18 @@ pub fn measure_editor_result(
     if !analysis.snapshot.matches(project) {
         return Err(RenderBlocker(
             "Analysis no longer matches frozen evaluation sources and references.".into(),
+        ));
+    }
+    if manifest
+        .input
+        .analysis_recipe
+        .as_ref()
+        .is_some_and(|expected| {
+            serde_json::to_value(&analysis.recipe).as_ref().ok() != Some(expected)
+        })
+    {
+        return Err(RenderBlocker(
+            "Completed analysis does not match the frozen evaluation recipe.".into(),
         ));
     }
     let effective = crate::EffectiveEnvelopeCache::default().update(
@@ -276,6 +349,299 @@ struct InputManifest {
     reference_identity: String,
     sources: Vec<EvaluationSource>,
     labels: Vec<InputLabel>,
+    #[serde(default)]
+    sound_sha256: Option<String>,
+    #[serde(default)]
+    analysis_recipe: Option<serde_json::Value>,
+    #[serde(default)]
+    baseline: Option<FrozenBaselineSelection>,
+    #[serde(default)]
+    engine_sha256: Option<String>,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct FrozenBaselineSelection {
+    receipt: std::path::PathBuf,
+    receipt_sha256: String,
+    variant: String,
+    development_settings: std::path::PathBuf,
+    development_settings_sha256: String,
+}
+fn sha256_string(value: &str) -> bool {
+    value.len() == 64
+        && value
+            .bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+}
+
+/// Adapt validated physical intervals to the frozen executable's strict 48 kHz CSV.
+pub fn frozen_baseline_csv(
+    project: &Project,
+    manifest: &FrozenEvaluationManifest,
+    cancel: Option<&AtomicBool>,
+) -> Result<String, RenderBlocker> {
+    manifest.validate(project, cancel)?;
+    let first = project
+        .sources
+        .first()
+        .ok_or_else(|| RenderBlocker("Baseline sources are missing.".into()))?
+        .metadata
+        .grid;
+    if first.sample_rate != 48000 || project.sources.iter().any(|s| s.metadata.grid != first) {
+        return Err(RenderBlocker("Frozen comparison requires identical 48 kHz native grids; mixed-rate comparison needs an explicit verified derivative.".into()));
+    }
+    let mut names = BTreeSet::new();
+    let mut csv = String::from("track,start_seconds,end_seconds,label,notes\n");
+    for source in &project.sources {
+        crate::prepared_analysis::check_cancelled(cancel)?;
+        let name = source
+            .path
+            .file_name()
+            .and_then(|s| s.to_str())
+            .ok_or_else(|| RenderBlocker("Frozen CSV requires UTF-8 source names.".into()))?;
+        if name.contains([',', '\n', '\r']) || !names.insert(name.to_lowercase()) {
+            return Err(RenderBlocker(
+                "Frozen CSV source names are ambiguous or unsupported.".into(),
+            ));
+        }
+        for (range, kind) in
+            native_intervals(&manifest.labels, source.track_id, source.metadata.grid)?
+        {
+            let label = match kind {
+                EvaluationKind::Preserve => "direct-speech",
+                EvaluationKind::Bleed => "bleed",
+            };
+            use std::fmt::Write;
+            writeln!(
+                csv,
+                "{name},{:.17},{:.17},{label},frozen physical truth only",
+                range.start as f64 / 48000.0,
+                range.end as f64 / 48000.0
+            )
+            .map_err(|e| RenderBlocker(e.to_string()))?;
+        }
+    }
+    Ok(csv)
+}
+
+#[derive(Debug, Serialize)]
+pub struct FrozenBaselineComparison {
+    pub variant: String,
+    pub receipt_sha256: String,
+    pub raw_report_sha256: String,
+    pub raw_report_path: std::path::PathBuf,
+    pub grid: SourceTimebase,
+    pub preservation_samples: u64,
+    pub attenuated_preservation_samples: u64,
+    pub bleed_samples: u64,
+    pub bleed_input_rms: f64,
+    pub bleed_output_rms: f64,
+}
+
+struct OwnedFrozenProcess(std::process::Child);
+impl Drop for OwnedFrozenProcess {
+    fn drop(&mut self) {
+        if self.0.try_wait().ok().flatten().is_none() {
+            let _ = self.0.kill();
+        }
+        let _ = self.0.wait();
+    }
+}
+
+/// Execute the immutable historical binary with development guidance and held-out scoring kept separate.
+pub fn run_frozen_comparison(
+    project: &Project,
+    manifest: &FrozenEvaluationManifest,
+    cache: &std::path::Path,
+    cancel: Option<&AtomicBool>,
+) -> Result<FrozenBaselineComparison, RenderBlocker> {
+    let selection = manifest.input.baseline.as_ref().ok_or_else(|| {
+        RenderBlocker(
+            "Baseline receipt, variant and development settings must be frozen before comparison."
+                .into(),
+        )
+    })?;
+    let csv = frozen_baseline_csv(project, manifest, cancel)?;
+    let receipt_bytes = std::fs::read(&selection.receipt)?;
+    let receipt =
+        super::verify_frozen_artifacts(&receipt_bytes, &selection.receipt_sha256, cancel)?;
+    receipt.verify_checkout(cancel)?;
+    let settings = std::fs::read(&selection.development_settings)?;
+    if format!("{:x}", Sha256::digest(&settings)) != selection.development_settings_sha256 {
+        return Err(RenderBlocker("Frozen development settings changed.".into()));
+    }
+    super::validate_frozen_development_settings(
+        project,
+        std::str::from_utf8(&settings).map_err(|e| RenderBlocker(e.to_string()))?,
+        cancel,
+    )?;
+    let executable = receipt.executable(&selection.variant)?;
+    std::fs::create_dir_all(cache)?;
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| RenderBlocker(e.to_string()))?
+        .as_nanos();
+    let attempt = cache.join(format!("frozen-{}-{nonce}", std::process::id()));
+    std::fs::create_dir(&attempt)?;
+    let write_new = |name: &str, bytes: &[u8]| -> Result<std::path::PathBuf, RenderBlocker> {
+        use std::io::Write;
+        let path = attempt.join(name);
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)?;
+        file.write_all(bytes)?;
+        file.sync_all()?;
+        Ok(path)
+    };
+    let labels = write_new("truth.csv", csv.as_bytes())?;
+    let guidance = write_new("development.json", &settings)?;
+    let raw_path = attempt.join("result.json");
+    let stderr = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(attempt.join("stderr.log"))?;
+    let mut command = std::process::Command::new(executable);
+    command
+        .arg(labels)
+        .arg(guidance)
+        .arg("all")
+        .arg(&raw_path)
+        .args(project.source_paths())
+        .stdout(std::process::Stdio::null())
+        .stderr(stderr);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x08000000);
+    }
+    let mut process = OwnedFrozenProcess(command.spawn()?);
+    loop {
+        crate::prepared_analysis::check_cancelled(cancel)?;
+        if let Some(status) = process.0.try_wait()? {
+            if !status.success() {
+                return Err(RenderBlocker(format!(
+                    "Frozen comparison failed ({status}); diagnostics retained in {}.",
+                    attempt.display()
+                )));
+            }
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    let raw = std::fs::read(&raw_path)?;
+    let report: serde_json::Value =
+        serde_json::from_slice(&raw).map_err(|e| RenderBlocker(e.to_string()))?;
+    let grid = project.sources[0].metadata.grid;
+    if report["sample_rate"].as_u64() != Some(48000)
+        || report["sample_count"].as_u64() != Some(grid.frame_count)
+    {
+        return Err(RenderBlocker(
+            "Frozen report native grid differs from the compared sources.".into(),
+        ));
+    }
+    let rows = report["labels"]
+        .as_array()
+        .ok_or_else(|| RenderBlocker("Frozen report label rows are missing.".into()))?;
+    let mut expected = Vec::new();
+    for (track, source) in project.sources.iter().enumerate() {
+        for (range, kind) in native_intervals(&manifest.labels, source.track_id, grid)? {
+            expected.push((track, range, kind));
+        }
+    }
+    if rows.len() != expected.len() {
+        return Err(RenderBlocker(
+            "Frozen report omitted or added physical truth rows.".into(),
+        ));
+    }
+    let mut result = FrozenBaselineComparison {
+        variant: selection.variant.clone(),
+        receipt_sha256: selection.receipt_sha256.clone(),
+        raw_report_sha256: format!("{:x}", Sha256::digest(&raw)),
+        raw_report_path: raw_path,
+        grid,
+        preservation_samples: 0,
+        attenuated_preservation_samples: 0,
+        bleed_samples: 0,
+        bleed_input_rms: 0.0,
+        bleed_output_rms: 0.0,
+    };
+    let (mut input_energy, mut output_energy) = (0.0_f64, 0.0_f64);
+    for (row, (track, range, kind)) in rows.iter().zip(expected) {
+        crate::prepared_analysis::check_cancelled(cancel)?;
+        let metrics = &row["metrics"][&selection.variant];
+        let count = (range.end - range.start) as u64;
+        let expected_kind = match kind {
+            EvaluationKind::Preserve => "Preserve",
+            EvaluationKind::Bleed => "Bleed",
+        };
+        let start = row["start_seconds"]
+            .as_f64()
+            .filter(|v| v.is_finite())
+            .map(|v| (v * 48000.0).round() as u64);
+        let end = row["end_seconds"]
+            .as_f64()
+            .filter(|v| v.is_finite())
+            .map(|v| (v * 48000.0).round() as u64);
+        if row["track"].as_u64() != Some(track as u64)
+            || row["kind"].as_str() != Some(expected_kind)
+            || row["path"].as_str().map(std::path::Path::new)
+                != Some(project.sources[track].path.as_path())
+            || start != Some(range.start as u64)
+            || end != Some(range.end as u64)
+            || metrics["sample_count"].as_u64() != Some(count)
+        {
+            return Err(RenderBlocker(
+                "Frozen report did not score the identical physical source intervals.".into(),
+            ));
+        }
+        let changed = metrics["below_unity_samples"]
+            .as_u64()
+            .filter(|n| *n <= count)
+            .ok_or_else(|| RenderBlocker("Frozen applied-gain count is invalid.".into()))?;
+        match kind {
+            EvaluationKind::Preserve => {
+                result.preservation_samples += count;
+                result.attenuated_preservation_samples += changed;
+            }
+            EvaluationKind::Bleed => {
+                let energy = |key: &str| {
+                    metrics[key]
+                        .as_f64()
+                        .filter(|v| v.is_finite() && *v >= 0.0)
+                        .ok_or_else(|| RenderBlocker("Frozen bleed energy is invalid.".into()))
+                };
+                let input = energy("input_energy")?;
+                let output = energy("output_energy")?;
+                if output > input * (1.0 + 1e-12) {
+                    return Err(RenderBlocker("Frozen report contains gain growth.".into()));
+                }
+                input_energy += input;
+                output_energy += output;
+                result.bleed_samples += count;
+            }
+        }
+    }
+    if result.bleed_samples > 0 {
+        result.bleed_input_rms = (input_energy / result.bleed_samples as f64).sqrt();
+        result.bleed_output_rms = (output_energy / result.bleed_samples as f64).sqrt();
+    }
+    manifest.validate(project, cancel)?;
+    super::verify_frozen_artifacts(
+        &std::fs::read(&selection.receipt)?,
+        &selection.receipt_sha256,
+        cancel,
+    )?
+    .verify_checkout(cancel)?;
+    if crate::project::fingerprint_cancellable(&selection.development_settings, cancel)?
+        != selection.development_settings_sha256
+    {
+        return Err(RenderBlocker(
+            "Development settings changed during comparison.".into(),
+        ));
+    }
+    Ok(result)
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -292,6 +658,11 @@ pub struct FrozenEvaluationManifest {
     digest: String,
 }
 impl FrozenEvaluationManifest {
+    pub fn sound_identity(project: &Project) -> Result<String, RenderBlocker> {
+        let bytes = serde_json::to_vec(&(project.parameters(), project.gain_constraints()))
+            .map_err(|e| RenderBlocker(e.to_string()))?;
+        Ok(format!("{:x}", Sha256::digest(bytes)))
+    }
     pub fn reference_identity(project: &Project) -> String {
         crate::SessionOwnership::reference_identity(project)
     }
@@ -303,6 +674,63 @@ impl FrozenEvaluationManifest {
         crate::prepared_analysis::check_cancelled(cancelled)?;
         let input: InputManifest =
             serde_json::from_str(json).map_err(|e| RenderBlocker(e.to_string()))?;
+        if input.claim == EvaluationClaim::Independent
+            && (input.sound_sha256.is_none()
+                || input.analysis_recipe.is_none()
+                || input.baseline.is_none()
+                || input.engine_sha256.is_none())
+        {
+            return Err(RenderBlocker("Independent evaluation requires frozen sound, analysis recipe and baseline selection before scoring.".into()));
+        }
+        if let Some(engine) = &input.engine_sha256
+            && (!sha256_string(engine)
+                || crate::project::fingerprint_cancellable(&std::env::current_exe()?, cancelled)?
+                    != *engine)
+        {
+            return Err(RenderBlocker(
+                "Evaluation executable does not match the frozen engine build.".into(),
+            ));
+        }
+        if let Some(sound) = &input.sound_sha256
+            && (!sha256_string(sound) || *sound != Self::sound_identity(project)?)
+        {
+            return Err(RenderBlocker(
+                "Frozen automatic/manual sound settings changed.".into(),
+            ));
+        }
+        if let Some(recipe) = &input.analysis_recipe {
+            let fields = [
+                "decoder",
+                "resampler",
+                "feature_recipe",
+                "model_sha256",
+                "runtime_sha256",
+                "mix_recipe",
+            ];
+            if !recipe.as_object().is_some_and(|object| {
+                object.len() == fields.len()
+                    && fields.iter().all(|field| object.contains_key(*field))
+            }) || !["model_sha256", "runtime_sha256"]
+                .into_iter()
+                .all(|key| recipe[key].as_str().is_some_and(sha256_string))
+            {
+                return Err(RenderBlocker(
+                    "Frozen analysis recipe is incomplete or contains unsupported fields.".into(),
+                ));
+            }
+        }
+        if let Some(baseline) = &input.baseline
+            && (!sha256_string(&baseline.receipt_sha256)
+                || !sha256_string(&baseline.development_settings_sha256)
+                || !matches!(
+                    baseline.variant.as_str(),
+                    "legacy_default" | "automatic_joint" | "guided_joint"
+                ))
+        {
+            return Err(RenderBlocker(
+                "Frozen baseline variant or recipe identity is invalid.".into(),
+            ));
+        }
         if input.version != 1
             || input.provenance.trim().is_empty()
             || input.labels.is_empty()
@@ -347,12 +775,18 @@ impl FrozenEvaluationManifest {
                 .find(|s| s.track_id == label.track)
                 .ok_or_else(|| RenderBlocker("Evaluation label has an unknown track.".into()))?;
             let range = TimeRange::new(label.start, label.end)?;
-            range.native_frames(source.metadata.grid)?;
-            if project
-                .reference_labels()
-                .iter()
-                .any(|r| r.range.start < range.end && range.start < r.range.end)
-            {
+            let heldout_frames = range.native_frames(source.metadata.grid)?;
+            // References influence every microphone's acoustic features. Their physical
+            // coverage must stay disjoint even when touching tick boundaries round outward.
+            let mut overlaps_development = false;
+            for reference in project.reference_labels() {
+                let frames = reference.range.native_frames(source.metadata.grid)?;
+                if frames.start < heldout_frames.end && heldout_frames.start < frames.end {
+                    overlaps_development = true;
+                    break;
+                }
+            }
+            if overlaps_development {
                 return Err(RenderBlocker(
                     "Held-out truth overlaps development references or forced optimizer truth."
                         .into(),
