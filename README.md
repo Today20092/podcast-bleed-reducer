@@ -1,40 +1,65 @@
 # CleanSlate
 
-CleanSlate is a Rust/Iced podcast editor being migrated to offline, human-supervised multitrack ownership analysis and protected editable gain envelopes.
+CleanSlate is an offline microphone bleed-reduction tool for multitrack podcasts. It uses a supervised algorithm to learn from a few examples of who is speaking, then attenuate each microphone when its assigned person is silent. Listen to the result and adjust the gain where needed.
 
-The [decision map](.scratch/offline-supervised-migration/map.md) is the sole active roadmap. All six planning decisions are resolved; the [accepted architecture](.scratch/offline-supervised-migration/spec.md) and [15 implementation tickets](.scratch/offline-supervised-migration/implementation.md) define the work ahead.
+[Usage guide](docs/editor-workflow.md) · [How ownership and bleed work](docs/ownership-explained.md) · [Build from source](docs/development.md) · [Development status](.scratch/offline-supervised-migration/implementation.md)
 
-## Current implementation and target
+## Try it
 
-The retained implementation imports synchronized 48 kHz mono WAVs, provides waveform review and Original/Processed/Removed audition, supports unity protections, and renders validated individual WAVs. Its detector has not passed the new independent quality gate.
+CleanSlate is in development, with Windows as the first release target. Start with the [build guide](docs/development.md) to build and open the editor from this checkout.
 
-The accepted target adds common mono formats and mixed native rates, 16 kHz analysis copies, required local Nemotron diarization, human reference labels, session ownership learning, and protected editable envelopes. Windows is the first release, tested for eight speakers and two-hour recordings. These are planned capabilities until their implementation tickets pass.
+1. Import synchronized mono tracks, one dedicated microphone per speaker.
+2. Listen in Original mode. Drag across a waveform and select everyone speaking; select nobody for room tone. Supply a solo example for each speaker and a room-tone example.
+3. Run Analyze. The learned models evaluate the whole recording, including sections you have not labeled.
+4. Compare Original, Processed and Removed. Adjust attenuation, gap duration and fades. Add labels or manual gain edits where needed.
+5. Save your editable project and create individual processed WAVs when the result sounds right.
 
-## Build and test
+See the [usage guide](docs/editor-workflow.md) for editing, reanalysis and export details.
 
-Use `codex/offline-supervised`. `main` contains the same cleaned starting point. Read [AGENTS.md](AGENTS.md) before choosing a ticket.
+## What it does
 
-```powershell
-cargo test --all-targets --locked
-cargo fmt --all -- --check
-cargo clippy --all-targets --all-features --locked -- -D warnings
-cargo build --release --locked
-```
+CleanSlate was created to make podcast microphone bleed reduction practical offline, using the separate microphone tracks and human examples to guide the algorithm. The goal is to reduce unwanted leakage while preserving each speaker's direct speech and natural overlap.
 
-Run `target/release/rust-app.exe`. The required Nemotron model is acquired explicitly through the editor's Download / verify action; installed-model verification remains offline. Identity, size and distinct weights/runtime licenses are displayed before acquisition. This adds native model acquisition/loading; integration into ownership analysis follows ticket 06.
+- Learns each recording's speech, room-noise and directed microphone-bleed relationships from human examples.
+- Estimates ownership independently for each track, allowing multiple people to speak at once.
+- Provides synchronized waveform navigation, gain controls and protected manual edits that survive reanalysis.
+- Keeps source files unchanged and uses the same effective gain envelope for display, audition and export.
 
-For native Windows development, install Visual Studio 2022 C++ Build Tools with Windows SDK, CMake >=3.26 and Ninja, then run `pwsh -File scripts/build-native-runtime.ps1 -Jobs 2`. The recipe freezes NeMo-Speech.cpp, ggml and vcpkg revisions, applies the recorded PATH deduplication fix and builds the CPU diarization SDK with AVX2/FMA/F16C (no AVX-512, OpenMP or GPU). Outputs stay in ignored `native-runtime/`; native-source caches stay in ignored `.native-build/`. End users need none of these build tools, Python, keys or a GPU.
+## Defaults and limits
 
-`cargo run --bin model-check -- --download` explicitly acquires/verifies the model and exercises native CPU inference. Subsequent `cargo run --bin model-check` invocations use only local bytes. `scripts/package.ps1` requires the built native package and includes its DLL dependency closure, binary manifest, licenses and headless checker beside the app. `scripts/check-package.ps1` verifies package identity and offline native inference. See [runtime/model notices](docs/runtime-notices.md).
+Acoustic-first analysis is the default and the current development focus. It runs locally and needs no Nemotron download.
 
-## Audio behavior
+Supply aligned tracks; CleanSlate does not automatically synchronize them. Ownership scores are model estimates, not guaranteed accuracy. Review the result by listening, especially to Removed audio. Independent quality, listening and eight-speaker/two-hour Windows release qualification remain pending.
 
-Source audio stays unchanged. Analysis preview and live audition are separate from final WAV rendering. The migration retains conservative preservation, source identity checks and safe output transactions. See the accepted specification for new label, edit and stale-result behavior.
+## Work in progress
 
-## Development records
+Nemotron-assisted analysis is experimental and disabled by default. An implementation exists, but its benefit over acoustic-only analysis has not been established. Comparative evaluation must check wanted-speech preservation, bleed reduction, listening quality and processing cost before deciding whether to promote it as a supported feature. See the [evaluation tracker](.scratch/offline-supervised-editor/issues/14-independent-release-evaluation.md).
 
-- [Domain glossary](CONTEXT.md)
-- [Accepted architecture decision](docs/adr/0006-offline-supervised-editable-envelopes.md)
-- [Implementation sequence](.scratch/offline-supervised-migration/implementation.md)
+Developer setup remains documented in the [experimental runtime guide](docs/development.md#experimental-nemotron-runtime), with [model and runtime notices](docs/runtime-notices.md).
 
-Generated builds are ignored by Git. Listening and measured model/quality acceptance remain required before release.
+## Documentation and development
+
+### How this project is built
+
+All coding for this project is done with AI agents using GPT Astra and GPT 6.1 Sol. Development follows Matt Pocock's workflow, with specifications, scoped tickets, implementation and review. Human feedback guides the GUI and checks whether the attenuation sounds right.
+
+### Technology
+
+| Component | Technology |
+| --- | --- |
+| Application and desktop GUI | Rust and Iced |
+| Session ownership learning | Linfa logistic regression |
+| Fixed speech detection | Silero VAD through ONNX Runtime |
+| Audio decoding and analysis resampling | Symphonia and Rubato |
+| Playback | Rodio |
+| Experimental speaker activity | Nemotron through the native NeMo-Speech.cpp runtime |
+
+### Guides
+
+- [Ownership architecture](docs/ownership-explained.md): labels, acoustic inputs, bleed calibration, weights, logistic regression and gain decisions, with a Mermaid diagram.
+- [Developer guide](docs/development.md): builds, checks, optional native runtime and packaging.
+- [GUI development](docs/gui-development.md): repeatable build-and-launch workflow using a separate project copy.
+- [Technical model recipe](docs/supervised-ownership-models.md) and [acoustic evidence](docs/acoustic-evidence.md).
+- [Domain glossary](CONTEXT.md), [architecture decision](docs/adr/0006-offline-supervised-editable-envelopes.md) and [active roadmap](.scratch/offline-supervised-migration/map.md).
+
+For development tasks and known acceptance gaps, consult the [implementation tracker](.scratch/offline-supervised-migration/implementation.md). Read [AGENTS.md](AGENTS.md) before changing the project.
