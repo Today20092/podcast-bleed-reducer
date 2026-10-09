@@ -1,5 +1,13 @@
 # Owner verification
 
+## Uniform red attenuation backgrounds
+
+The open GUI development candidate now shows uniform muted red backgrounds wherever effective gain is below unity, including fades and manual attenuation. Full-volume spans stay neutral. Red means reduced gain; it does not classify the waveform as speech-free. Waveforms, purple gain curves, reference bars, protection and blue selection rendering remain above the fill. A timeline legend explains the color. The shading stays visible in Original, Processed and Removed.
+
+Native visual verification at 2560×1392 completed acoustic analysis with the saved development session's 30 references and confirmed the shading in all three modes. The original saved session/source audio were not replaced. Automated drag produced seeking rather than a selected range, so selection overlay visibility still needs a real mouse check. No listening, narrow-window or continuous-interaction timing approval is claimed.
+
+Checks: 84 passed across library, editor-workflow and effective-envelope suites, six documented opt-ins ignored. Strict all-target/all-feature Clippy, formatting and diff checks passed. GUI executable SHA-256: `D360E6DADFB932F19C67334D46C4DFA830DC1A4B74CDD30F9AAF7118F96B8BE5`. Use the [GUI development loop](gui-development.md) for subsequent iterations. Ticket 16 remains claimed for its broader owner acceptance; release qualification remains separate.
+
 ## Latest waveform and gap-control refinement
 
 Physical smoke check: the new candidate opens and loads the latest saved quick session with 18 references and the owner's saved -11 dB, 550 ms open / 1656 ms close settings plus manual points/protection. These are newer than the separate 15-reference tuning backup. Nemotron is unchecked, the new 768 ms slider is visible, and the old result explicitly requests one reanalysis. Actual acoustic Analyze completed; stage/elapsed activity was visible, review controls/counts and waveform bands were absent, and a wheel zoom updated the ruler/waveforms together. The GUI is left open with the completed preview. No continuous-interaction latency measurement or listening approval is asserted.

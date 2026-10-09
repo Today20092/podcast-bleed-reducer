@@ -9,6 +9,81 @@ use std::sync::atomic::AtomicBool;
 
 pub const EFFECTIVE_ENVELOPE_RECIPE: &str =
     "finite-exp4-live-bounded-gap-source-time-halfopen-linear-manual-v3";
+
+#[cfg(test)]
+mod zoom_tests {
+    use super::*;
+
+    #[test]
+    #[ignore = "timed production zoom-data workload; run with --ignored --nocapture"]
+    fn three_track_zoom_drawing_budget() {
+        let duration = crate::TICKS_PER_SECOND * 600;
+        let automatic = Arc::new(AutomaticEnvelope {
+            duration,
+            segments: (0..1200)
+                .map(|i| FadeSegment {
+                    start: i * crate::TICKS_PER_SECOND / 2,
+                    end: (i + 1) * crate::TICKS_PER_SECOND / 2,
+                    from: if i % 2 == 0 { 1.0 } else { 0.1 },
+                    to: if i % 2 == 0 { 0.1 } else { 1.0 },
+                })
+                .collect(),
+            preserved: vec![],
+        });
+        let constraints = crate::GainConstraints {
+            manual_edits: vec![],
+            protections: vec![],
+        };
+        let envelopes: Vec<_> = [44100, 48000, 96000]
+            .into_iter()
+            .map(|rate| {
+                let grid = SourceTimebase::new(rate, u64::from(rate) * 600).unwrap();
+                crate::GainEnvelope::from_effective(
+                    grid,
+                    Arc::new(
+                        EffectiveTrackEnvelope::new(
+                            automatic.clone(),
+                            TrackId(1),
+                            grid,
+                            &constraints,
+                        )
+                        .unwrap(),
+                    ),
+                )
+                .unwrap()
+            })
+            .collect();
+        let mut viewport = crate::timeline::TimelineViewport::new(duration);
+        let mut times = vec![];
+        let width = 1900.0;
+        for i in 0..24 {
+            viewport.zoom_at(950.0, width, if i < 12 { 1.0 } else { -1.0 });
+            let start = std::time::Instant::now();
+            for envelope in &envelopes {
+                for _ in 0..3 {
+                    std::hint::black_box(crate::visible_gain_buckets(&viewport, width, envelope));
+                }
+                std::hint::black_box(crate::visible_gain_curve(&viewport, width, envelope));
+                std::hint::black_box(crate::editor_drawing::sample_visible_curve(
+                    &viewport,
+                    width,
+                    |time| automatic.gain_at_time(time),
+                ));
+            }
+            times.push(start.elapsed().as_secs_f64() * 1000.0);
+        }
+        times.sort_by(f64::total_cmp);
+        let median = times[times.len() / 2];
+        eprintln!(
+            "Three-track 10-minute, 1900-column production zoom-data preparation: median {median:.2} ms, max {:.2} ms",
+            times[times.len() - 1]
+        );
+        assert!(
+            median < 16.7,
+            "zoom data alone exceeds a 60 Hz frame budget: {median:.2} ms"
+        );
+    }
+}
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct GainFadeSettings {
     pub attenuation: f32,

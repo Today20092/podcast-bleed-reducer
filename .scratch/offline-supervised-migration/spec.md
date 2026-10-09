@@ -6,6 +6,8 @@ This is the target architecture, not a description of completed code. Decision d
 
 ## Product and release scope
 
+2026-10-09 confirmed attenuation display refinement: uniform muted red background marks effective gain below unity, including fades and manual attenuation, in all audition modes. Full-volume spans remain clear; the waveform, purple gain curve, labels, protection and blue selection stay visible above it. This supersedes the earlier removal of attenuation backgrounds, while uncertainty decoration/hatching remains removed. Red means applied reduction, not absence of speech.
+
 CleanSlate is a standalone, local editor for synchronized mono podcast tracks. Each speaker has one dedicated track. The first release targets Windows, up to eight speakers, and recordings up to two hours for acceptance testing. Preserve portable Rust boundaries for later macOS/Linux releases.
 
 Use ownership baseline `6a60cc2bfe187ea889fd2d8bcc3344311cfd706b` and retain Iced. Keep earlier responsive code and rejected experiments recoverable; do not promote existing detector quality by inheritance. Start a fresh versioned project format. No existing saved project migration is required.

@@ -10,6 +10,7 @@ use iced::{
 };
 use serde::{Deserialize, Serialize};
 use std::{
+    cell::Cell,
     fs,
     path::{Path, PathBuf},
     time::UNIX_EPOCH,
@@ -305,6 +306,7 @@ fn waveform_matches_source(waveform: &WaveformCache, source: crate::SourceMetada
 type SelectionCallback<'a, Message> = dyn Fn(TimePosition, TimePosition, Point) -> Message + 'a;
 
 pub(crate) struct TimelineCanvas<'a, Message> {
+    revision: u64,
     cache: Option<&'a WaveformCache>,
     viewport: &'a TimelineViewport,
     ruler: bool,
@@ -324,6 +326,7 @@ impl<'a, Message: 'a> TimelineCanvas<'a, Message> {
         selecting: bool,
     ) -> Self {
         Self {
+            revision: 0,
             cache: Some(cache),
             viewport,
             ruler: false,
@@ -341,6 +344,7 @@ impl<'a, Message: 'a> TimelineCanvas<'a, Message> {
         on_event: fn(TimelineEvent) -> Message,
     ) -> Self {
         Self {
+            revision: 0,
             cache: None,
             viewport,
             ruler: true,
@@ -354,6 +358,10 @@ impl<'a, Message: 'a> TimelineCanvas<'a, Message> {
 }
 
 impl<'a, Message> TimelineCanvas<'a, Message> {
+    pub fn with_revision(mut self, revision: u64) -> Self {
+        self.revision = revision;
+        self
+    }
     pub fn with_selection(
         mut self,
         on_selection: impl Fn(TimePosition, TimePosition, Point) -> Message + 'a,
@@ -369,6 +377,8 @@ impl<'a, Message> TimelineCanvas<'a, Message> {
 
 #[derive(Default)]
 pub(crate) struct TimelineCanvasState {
+    geometry: canvas::Cache,
+    revision: Cell<Option<u64>>,
     dragging: bool,
     selection_anchor: Option<TimePosition>,
     anchor_x: f32,
@@ -517,105 +527,96 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
 
     fn draw(
         &self,
-        _state: &Self::State,
+        state: &Self::State,
         renderer: &Renderer,
         _theme: &Theme,
         bounds: Rectangle,
         _cursor: mouse::Cursor,
     ) -> Vec<canvas::Geometry> {
-        let mut frame = canvas::Frame::new(renderer, bounds.size());
-        let center = bounds.height / 2.0;
-        if let Some((start, end)) = self.viewport.selection() {
-            let left = self.viewport.x_for_sample(start, bounds.width).max(0.0);
-            let right = self
-                .viewport
-                .x_for_sample(end, bounds.width)
-                .min(bounds.width);
-            if right > left {
-                frame.fill(
-                    &canvas::Path::rectangle(
-                        Point::new(left, 0.0),
-                        Size::new(right - left, bounds.height),
-                    ),
-                    Color::from_rgba8(70, 120, 220, 0.18),
-                );
-            }
+        if state.revision.replace(Some(self.revision)) != Some(self.revision) {
+            state.geometry.clear();
         }
-        if self.ruler {
-            for tick in 0..=5 {
-                let x = bounds.width * tick as f32 / 5.0;
-                let sample = self.viewport.sample_at(x, bounds.width);
-                frame.fill_text(canvas::Text {
-                    content: format!("{:.1}s", sample as f64 / TICKS_PER_SECOND as f64),
-                    position: Point::new(x + 3.0, center + 4.0),
-                    color: Color::from_rgb8(180, 185, 195),
-                    size: 11.0.into(),
-                    ..canvas::Text::default()
-                });
+        let geometry = state.geometry.draw(renderer, bounds.size(), |frame| {
+            let center = bounds.height / 2.0;
+            if !self.ruler
+                && let Some((preview, track)) = self.preview
+                && let Some(envelope) = preview.envelopes.get(track)
+            {
+                let buckets = crate::visible_gain_buckets(self.viewport, bounds.width, envelope);
+                for (start, end) in crate::editor_drawing::attenuation_spans(&buckets) {
+                    let left = self.viewport.x_for_sample(start, bounds.width).max(0.0);
+                    let right = self
+                        .viewport
+                        .x_for_sample(end, bounds.width)
+                        .min(bounds.width);
+                    frame.fill_rectangle(
+                        Point::new(left, 0.0),
+                        Size::new((right - left).max(0.0), bounds.height),
+                        Color::from_rgba8(220, 65, 65, 0.24),
+                    );
+                }
             }
-        } else if let Some(cache) = self.cache {
-            let (level, visible) = cache.visible_level(self.viewport, bounds.width);
-            let first = visible.start;
-            let last = visible.end;
-            let scale = center * 0.9;
-            if let Some((preview, track)) = self.preview {
-                for protection in &preview.protections {
-                    if protection.track.is_none_or(|protected| protected == track) {
-                        let left = self
-                            .viewport
-                            .x_for_sample(protection.start, bounds.width)
-                            .max(0.0);
-                        let right = self
-                            .viewport
-                            .x_for_sample(protection.end.min(cache.duration()), bounds.width)
-                            .min(bounds.width);
-                        if right > left {
-                            frame.stroke(
-                                &canvas::Path::rectangle(
-                                    Point::new(left, 1.0),
-                                    Size::new(right - left, bounds.height - 2.0),
-                                ),
-                                canvas::Stroke::default()
-                                    .with_width(2.0)
-                                    .with_color(Color::from_rgb8(90, 150, 245)),
-                            );
+            if let Some((start, end)) = self.viewport.selection() {
+                let left = self.viewport.x_for_sample(start, bounds.width).max(0.0);
+                let right = self
+                    .viewport
+                    .x_for_sample(end, bounds.width)
+                    .min(bounds.width);
+                if right > left {
+                    frame.fill(
+                        &canvas::Path::rectangle(
+                            Point::new(left, 0.0),
+                            Size::new(right - left, bounds.height),
+                        ),
+                        Color::from_rgba8(70, 120, 220, 0.18),
+                    );
+                }
+            }
+            if self.ruler {
+                for tick in 0..=5 {
+                    let x = bounds.width * tick as f32 / 5.0;
+                    let sample = self.viewport.sample_at(x, bounds.width);
+                    frame.fill_text(canvas::Text {
+                        content: format!("{:.1}s", sample as f64 / TICKS_PER_SECOND as f64),
+                        position: Point::new(x + 3.0, center + 4.0),
+                        color: Color::from_rgb8(180, 185, 195),
+                        size: 11.0.into(),
+                        ..canvas::Text::default()
+                    });
+                }
+            } else if let Some(cache) = self.cache {
+                let (level, visible) = cache.visible_level(self.viewport, bounds.width);
+                let first = visible.start;
+                let last = visible.end;
+                let scale = center * 0.9;
+                if let Some((preview, track)) = self.preview {
+                    for protection in &preview.protections {
+                        if protection.track.is_none_or(|protected| protected == track) {
+                            let left = self
+                                .viewport
+                                .x_for_sample(protection.start, bounds.width)
+                                .max(0.0);
+                            let right = self
+                                .viewport
+                                .x_for_sample(protection.end.min(cache.duration()), bounds.width)
+                                .min(bounds.width);
+                            if right > left {
+                                frame.stroke(
+                                    &canvas::Path::rectangle(
+                                        Point::new(left, 1.0),
+                                        Size::new(right - left, bounds.height - 2.0),
+                                    ),
+                                    canvas::Stroke::default()
+                                        .with_width(2.0)
+                                        .with_color(Color::from_rgb8(90, 150, 245)),
+                                );
+                            }
                         }
                     }
                 }
-            }
-            let original = canvas::Path::new(|builder| {
-                for (index, (min, max)) in level.peaks[first..last].iter().enumerate() {
-                    let sample = (first + index) * level.samples_per_bucket;
-                    let x = self
-                        .viewport
-                        .x_for_sample(cache.time_at_frame(sample), bounds.width);
-                    builder.move_to(Point::new(x, center - max * scale));
-                    builder.line_to(Point::new(x, center - min * scale));
-                }
-            });
-            frame.stroke(
-                &original,
-                canvas::Stroke::default()
-                    .with_width(1.0)
-                    .with_color(Color::from_rgba8(93, 211, 198, 0.35)),
-            );
-            if let Some((preview, track)) = self.preview
-                && let Some(envelope) = preview.envelopes.get(track)
-            {
-                let processed = canvas::Path::new(|builder| {
+                let original = canvas::Path::new(|builder| {
                     for (index, (min, max)) in level.peaks[first..last].iter().enumerate() {
                         let sample = (first + index) * level.samples_per_bucket;
-                        let Some(gains) = envelope.gain_bounds_time(
-                            cache.time_at_frame(sample),
-                            cache.time_at_frame(
-                                sample
-                                    .saturating_add(level.samples_per_bucket)
-                                    .min(cache.sample_count),
-                            ),
-                        ) else {
-                            continue;
-                        };
-                        let (min, max) = processed_peak((*min, *max), gains);
                         let x = self
                             .viewport
                             .x_for_sample(cache.time_at_frame(sample), bounds.width);
@@ -624,30 +625,62 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
                     }
                 });
                 frame.stroke(
-                    &processed,
+                    &original,
                     canvas::Stroke::default()
-                        .with_width(1.4)
-                        .with_color(Color::from_rgb8(93, 211, 198)),
+                        .with_width(1.0)
+                        .with_color(Color::from_rgba8(93, 211, 198, 0.35)),
                 );
-                let gain_path = canvas::Path::new(|builder| {
-                    for x in 0..bounds.width as usize {
-                        let sample = self.viewport.sample_at(x as f32, bounds.width);
-                        let y = 4.0 + (1.0 - envelope.gain_at_time(sample)) * 18.0;
-                        if x == 0 {
-                            builder.move_to(Point::new(0.0, y));
-                        } else {
-                            builder.line_to(Point::new(x as f32, y));
+                if let Some((preview, track)) = self.preview
+                    && let Some(envelope) = preview.envelopes.get(track)
+                {
+                    let processed = canvas::Path::new(|builder| {
+                        for (index, (min, max)) in level.peaks[first..last].iter().enumerate() {
+                            let sample = (first + index) * level.samples_per_bucket;
+                            let Some(gains) = envelope.gain_bounds_time(
+                                cache.time_at_frame(sample),
+                                cache.time_at_frame(
+                                    sample
+                                        .saturating_add(level.samples_per_bucket)
+                                        .min(cache.sample_count),
+                                ),
+                            ) else {
+                                continue;
+                            };
+                            let (min, max) = processed_peak((*min, *max), gains);
+                            let x = self
+                                .viewport
+                                .x_for_sample(cache.time_at_frame(sample), bounds.width);
+                            builder.move_to(Point::new(x, center - max * scale));
+                            builder.line_to(Point::new(x, center - min * scale));
                         }
-                    }
-                });
-                frame.stroke(
-                    &gain_path,
-                    canvas::Stroke::default()
-                        .with_width(1.5)
-                        .with_color(Color::from_rgb8(210, 130, 245)),
-                );
+                    });
+                    frame.stroke(
+                        &processed,
+                        canvas::Stroke::default()
+                            .with_width(1.4)
+                            .with_color(Color::from_rgb8(93, 211, 198)),
+                    );
+                    let gain_path = canvas::Path::new(|builder| {
+                        for x in 0..bounds.width as usize {
+                            let sample = self.viewport.sample_at(x as f32, bounds.width);
+                            let y = 4.0 + (1.0 - envelope.gain_at_time(sample)) * 18.0;
+                            if x == 0 {
+                                builder.move_to(Point::new(0.0, y));
+                            } else {
+                                builder.line_to(Point::new(x as f32, y));
+                            }
+                        }
+                    });
+                    frame.stroke(
+                        &gain_path,
+                        canvas::Stroke::default()
+                            .with_width(1.5)
+                            .with_color(Color::from_rgb8(210, 130, 245)),
+                    );
+                }
             }
-        }
+        });
+        let mut frame = canvas::Frame::new(renderer, bounds.size());
         let playhead_x = self
             .viewport
             .x_for_sample(self.viewport.playhead(), bounds.width);
@@ -662,7 +695,7 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
                     .with_color(Color::WHITE),
             );
         }
-        vec![frame.into_geometry()]
+        vec![geometry, frame.into_geometry()]
     }
 
     fn mouse_interaction(

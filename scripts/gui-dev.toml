@@ -1,0 +1,25 @@
+# Match the retained dependency cache; lightly optimize local drawing code.
+[profile.dev]
+incremental = true
+
+[profile.dev.package.rust-app]
+opt-level = 1
+debug = 0
+codegen-units = 256
+
+[profile.test.package.rust-app]
+opt-level = 1
+debug = 0
+codegen-units = 256
+
+[profile.dev.package.sha2]
+opt-level = 2
+
+[profile.dev.package.digest]
+opt-level = 2
+
+[profile.dev.package.bwavfile]
+opt-level = 2
+
+[profile.dev.package.ort]
+opt-level = 2

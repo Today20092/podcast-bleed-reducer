@@ -193,6 +193,23 @@ pub fn visible_gain_buckets(
         envelope.gain_bounds_time(start, end)
     })
 }
+
+pub(crate) fn attenuation_spans(buckets: &[GainDrawingBucket]) -> Vec<(u64, u64)> {
+    let mut spans: Vec<(u64, u64)> = vec![];
+    for bucket in buckets {
+        if bucket.lower < 1.0 && bucket.start < bucket.end {
+            if let Some(last) = spans.last_mut()
+                && last.1 == bucket.start
+            {
+                last.1 = bucket.end;
+            } else {
+                spans.push((bucket.start, bucket.end));
+            }
+        }
+    }
+    spans
+}
+
 pub fn visible_automatic_buckets(
     viewport: &TimelineViewport,
     width: f32,
@@ -255,4 +272,30 @@ pub(crate) fn visible_boundary(viewport: &TimelineViewport, x: f32, width: f32) 
     (viewport.start() + viewport.visible_samples() * f64::from(x / width))
         .floor()
         .clamp(0.0, viewport.total_samples() as f64) as u64
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn attenuation_shading_includes_fades_and_short_dips_but_leaves_unity_clear() {
+        let buckets = [
+            (0, 10, 1.0, 1.0),
+            (10, 20, 0.9, 1.0),
+            (20, 30, 0.25, 0.25),
+            (30, 40, 1.0, 1.0),
+            (40, 50, 0.5, 1.0),
+            (50, 60, 1.0, 1.0),
+            (60, 60, 0.25, 0.25),
+        ]
+        .map(|(start, end, lower, upper)| GainDrawingBucket {
+            start,
+            end,
+            lower,
+            upper,
+        });
+        assert_eq!(attenuation_spans(&buckets), vec![(10, 30), (40, 50)]);
+        assert!(attenuation_spans(&[]).is_empty());
+    }
 }

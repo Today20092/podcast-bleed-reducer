@@ -59,8 +59,120 @@ fn available_project_path(directory: &std::path::Path) -> PathBuf {
     unreachable!()
 }
 
+fn ownership_summary(speakers: &[SpeakerId], states: &[crate::TemporalTrackState]) -> String {
+    use crate::TemporalTrackState::{Owned, UncertainUnity};
+    let owners = speakers
+        .iter()
+        .zip(states)
+        .filter(|(_, state)| **state == Owned)
+        .map(|(speaker, _)| format!("Speaker {}", speaker.0))
+        .collect::<Vec<_>>();
+    let uncertain = states.contains(&UncertainUnity);
+    let mut summary = if owners.is_empty() {
+        if uncertain {
+            "Uncertain ownership"
+        } else {
+            "No active speaker"
+        }
+        .to_string()
+    } else {
+        format!(
+            "{}{}",
+            if owners.len() > 1 {
+                "Overlap: "
+            } else {
+                "Active: "
+            },
+            owners.join(" + ")
+        )
+    };
+    if uncertain && !owners.is_empty() {
+        summary.push_str(" · other ownership uncertain");
+    }
+    summary
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn playback_frames_reuse_drawing_without_polling_background_jobs() {
+        let mut app = super::CleanSlateApp::default();
+        app.timeline.seek(0);
+        // A queued import would start on a job tick, but must not start on display frames.
+        app.pending_imports
+            .push(std::env::temp_dir().join("missing-frame-source.wav"));
+        app.import_due = Some(std::time::Instant::now());
+        for _ in 0..144 {
+            let _ = app.update(super::Message::PlaybackFrame);
+        }
+        assert!(app.source_loading.is_none());
+        assert_eq!(app.pending_imports.len(), 1);
+        assert_eq!(app.drawing_revision, 0);
+        assert_eq!(app.timeline.playhead(), 0);
+        assert!(app.audition.is_none());
+
+        app.pending_imports.clear();
+        app.import_due = None;
+        let _ = app.update(super::Message::Timeline(
+            crate::timeline::TimelineEvent::Select(0, 1),
+        ));
+        assert_eq!(app.drawing_revision, 1);
+        let _ = app.update(super::Message::Attenuation(-12.0));
+        assert_eq!(app.drawing_revision, 2);
+        let _ = app.update(super::Message::Tick);
+        assert_eq!(app.drawing_revision, 3);
+        let _ = app.update(super::Message::PlaybackFrame);
+        assert_eq!(app.drawing_revision, 3);
+    }
+
+    #[test]
+    fn ownership_meter_reports_solo_overlap_silence_and_uncertainty() {
+        use crate::TemporalTrackState::{Absent, Owned, UncertainUnity};
+        let speakers = [crate::SpeakerId(3), crate::SpeakerId(7)];
+        assert_eq!(
+            super::ownership_summary(&speakers, &[Owned, Absent]),
+            "Active: Speaker 3"
+        );
+        assert_eq!(
+            super::ownership_summary(&speakers, &[Owned, Owned]),
+            "Overlap: Speaker 3 + Speaker 7"
+        );
+        assert_eq!(
+            super::ownership_summary(&speakers, &[Absent, Absent]),
+            "No active speaker"
+        );
+        assert_eq!(
+            super::ownership_summary(&speakers, &[Absent, UncertainUnity]),
+            "Uncertain ownership"
+        );
+        assert_eq!(
+            super::ownership_summary(&speakers, &[Owned, UncertainUnity]),
+            "Active: Speaker 3 · other ownership uncertain"
+        );
+    }
+
+    #[test]
+    fn development_startup_uses_the_normal_project_loader() {
+        assert!(super::startup(None).source_loading.is_none());
+        let missing = std::env::temp_dir().join(format!(
+            "cleanslate-missing-dev-project-{}.cleanslate",
+            std::process::id()
+        ));
+        assert!(!missing.exists());
+        let mut app = super::startup(Some(missing.clone()));
+        assert!(app.source_loading.is_some());
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while app.source_loading.is_some() && std::time::Instant::now() < deadline {
+            app.poll_sources();
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+        assert!(app.source_loading.is_none());
+        assert!(app.project.is_none());
+        assert!(!app.messages.is_empty());
+        assert!(app.processing.is_none());
+        assert!(!missing.exists());
+    }
+
     #[test]
     fn installing_validated_tracks_prepares_original_without_starting_playback() {
         let root =
@@ -1168,6 +1280,7 @@ pub struct CleanSlateApp {
     reference_analyze_requested: bool,
     waveforms: Vec<WaveformCache>,
     timeline: TimelineViewport,
+    drawing_revision: u64,
     preview_parameters: AutomixParameters,
     preview: Option<AnalysisPreview>,
     preview_sources: Vec<waveform::SourceStamp>,
@@ -1221,6 +1334,7 @@ impl Default for CleanSlateApp {
             reference_analyze_requested: false,
             waveforms: vec![],
             timeline: TimelineViewport::default(),
+            drawing_revision: 0,
             preview_parameters: AutomixParameters::default(),
             preview: None,
             preview_sources: vec![],
@@ -1471,6 +1585,7 @@ enum Message {
     Process,
     Cancel,
     Tick,
+    PlaybackFrame,
     #[cfg(test)]
     SpeechSensitivity(f32),
     Attenuation(f32),
@@ -1531,11 +1646,23 @@ enum Message {
 
 pub fn run() -> iced::Result {
     iced::application(
-        CleanSlateApp::default,
+        || {
+            #[cfg(debug_assertions)]
+            let project = std::env::var_os("CLEANSLATE_DEV_PROJECT").map(PathBuf::from);
+            #[cfg(not(debug_assertions))]
+            let project = None;
+            startup(project)
+        },
         CleanSlateApp::update,
         CleanSlateApp::view,
     )
-    .title("CleanSlate")
+    .title(
+        if cfg!(debug_assertions) && std::env::var_os("CLEANSLATE_DEV_PROJECT").is_some() {
+            "CleanSlate - GUI development"
+        } else {
+            "CleanSlate"
+        },
+    )
     .theme(CleanSlateApp::theme)
     .subscription(CleanSlateApp::subscription)
     .window(window::Settings {
@@ -1544,6 +1671,14 @@ pub fn run() -> iced::Result {
         ..window::Settings::default()
     })
     .run()
+}
+
+fn startup(project: Option<PathBuf>) -> CleanSlateApp {
+    let mut app = CleanSlateApp::default();
+    if let Some(path) = project {
+        app.begin_source_loading(SourceRequest::Open(path));
+    }
+    app
 }
 
 fn keyboard_message(
@@ -2532,6 +2667,10 @@ impl CleanSlateApp {
                 }
             }
         }
+        self.update_playback_position();
+    }
+
+    fn update_playback_position(&mut self) {
         let Some(audition) = &self.audition else {
             return;
         };
@@ -2695,6 +2834,12 @@ impl CleanSlateApp {
 
 impl CleanSlateApp {
     fn update(&mut self, message: Message) -> Task<Message> {
+        if matches!(message, Message::PlaybackFrame) {
+            self.update_playback_position();
+            return Task::none();
+        }
+        // Playback changes only the cursor; controller/job updates can change cached geometry.
+        self.drawing_revision = self.drawing_revision.wrapping_add(1);
         if self.reference_menu.is_some()
             && matches!(
                 message,
@@ -2916,6 +3061,7 @@ impl CleanSlateApp {
                 self.poll_audition();
                 self.poll_exporting();
             }
+            Message::PlaybackFrame => unreachable!(),
             #[cfg(test)]
             Message::SpeechSensitivity(value) => {
                 self.preview_parameters.speech_sensitivity = 1.0 - value
@@ -3272,7 +3418,6 @@ impl CleanSlateApp {
             || self.sources_busy()
             || self.preview_processing.is_some()
             || self.preview_pending.is_some()
-            || self.audition.is_some()
             || self.audition_preparation.is_busy()
         {
             let interval = if self.preview_processing.is_some()
@@ -3287,7 +3432,12 @@ impl CleanSlateApp {
         } else {
             Subscription::none()
         };
-        Subscription::batch([drops, processing])
+        let playback = if self.audition.is_some() {
+            window::frames().map(|_| Message::PlaybackFrame)
+        } else {
+            Subscription::none()
+        };
+        Subscription::batch([drops, processing, playback])
     }
 
     fn view(&self) -> Element<'_, Message> {
@@ -3693,6 +3843,38 @@ impl CleanSlateApp {
     }
 
     fn workspace(&self, compact: bool, height: f32) -> Element<'_, Message> {
+        let ownership_stale = self.reference_stale
+            || self
+                .supervised_result
+                .as_ref()
+                .is_some_and(|analysis| self.analysis_runtime() != analysis.runtime.as_ref());
+        let ownership_states = self
+            .supervised_result
+            .as_ref()
+            .and_then(|analysis| analysis.temporal.states_at(self.timeline.playhead()).ok());
+        let ownership_estimates = self.supervised_result.as_ref().and_then(|analysis| {
+            analysis
+                .ownership
+                .estimates_at(self.timeline.playhead())
+                .ok()
+        });
+        let ownership_status = match (&self.project, &self.supervised_result, &ownership_states) {
+            (Some(project), Some(_), Some(states)) => {
+                let speakers = project
+                    .sources
+                    .iter()
+                    .map(|source| source.speaker_id)
+                    .collect::<Vec<_>>();
+                let summary = ownership_summary(&speakers, states);
+                if ownership_stale {
+                    format!("Stale analysis · {summary}")
+                } else {
+                    summary
+                }
+            }
+            (_, Some(_), None) => "Ownership · outside analyzed audio".into(),
+            _ => "Ownership · Analyze to see active speakers".into(),
+        };
         let header = row![
             column![
                 text("CLEANSLATE").size(24),
@@ -3740,13 +3922,16 @@ impl CleanSlateApp {
                                 .into()
                         },
                         |(loading, cache)| {
-                            canvas(TimelineCanvas::waveform(
-                                cache,
-                                &loading.timeline,
-                                Message::Timeline,
-                                None,
-                                false,
-                            ))
+                            canvas(
+                                TimelineCanvas::waveform(
+                                    cache,
+                                    &loading.timeline,
+                                    Message::Timeline,
+                                    None,
+                                    false,
+                                )
+                                .with_revision(self.drawing_revision),
+                            )
                             .width(Fill)
                             .height(track_height)
                             .into()
@@ -3785,11 +3970,14 @@ impl CleanSlateApp {
         } else if let Some(project) = &self.project {
             timeline_content = timeline_content.push(
                 container(
-                    canvas(TimelineCanvas::ruler(
-                        &self.timeline,
-                        self.selecting_range || self.calibrating,
-                        Message::Timeline,
-                    ))
+                    canvas(
+                        TimelineCanvas::ruler(
+                            &self.timeline,
+                            self.selecting_range || self.calibrating,
+                            Message::Timeline,
+                        )
+                        .with_revision(self.drawing_revision),
+                    )
                     .width(Fill)
                     .height(28),
                 )
@@ -3832,18 +4020,48 @@ impl CleanSlateApp {
                 if project.pending_source_reviews().contains(&source.track_id) {
                     header = header.push(text("Review source").size(12));
                 }
-                if let Some(analysis) = &self.supervised_result
-                    && let Ok(estimates) = analysis.ownership.estimates_at(self.timeline.playhead())
+                if let Some(estimates) = &ownership_estimates
                     && let Some(estimate) = estimates
                         .iter()
                         .find(|estimate| estimate.track == source.track_id)
                 {
+                    let state = self.supervised_result.as_ref().and_then(|analysis| {
+                        let index = analysis
+                            .temporal
+                            .tracks
+                            .iter()
+                            .position(|track| *track == source.track_id)?;
+                        ownership_states.as_ref()?.get(index).copied()
+                    });
+                    let (label, color) = match state {
+                        Some(crate::TemporalTrackState::Owned) => {
+                            ("Active", iced::Color::from_rgb(0.2, 0.75, 0.4))
+                        }
+                        Some(crate::TemporalTrackState::Absent) => {
+                            ("Inactive", iced::Color::from_rgb(0.5, 0.55, 0.6))
+                        }
+                        _ => ("Uncertain", iced::Color::from_rgb(0.9, 0.65, 0.2)),
+                    };
                     header = header.push(
-                        text(estimate.probability.map_or_else(
-                            || "Unresolved · unity".into(),
-                            |p| format!("Ownership {p:.2}"),
-                        ))
-                        .size(12),
+                        column![
+                            text(format!(
+                                "{}{label} · {}",
+                                if ownership_stale { "Stale · " } else { "" },
+                                estimate.probability.map_or_else(
+                                    || "unresolved".into(),
+                                    |p| format!("{:.0}%", p * 100.0)
+                                )
+                            ))
+                            .size(12),
+                            progress_bar(0.0..=1.0, estimate.probability.unwrap_or(0.0))
+                                .girth(8)
+                                .style(move |theme| iced::widget::progress_bar::Style {
+                                    bar: color.into(),
+                                    ..iced::widget::progress_bar::primary(theme)
+                                }),
+                        ]
+                        .spacing(3)
+                        .width(170),
                     );
                 }
                 let waveform: Element<'_, Message> = self.waveforms.get(index).map_or_else(
@@ -3862,6 +4080,7 @@ impl CleanSlateApp {
                                 self.preview.as_ref().map(|preview| (preview, index)),
                                 self.selecting_range || self.calibrating,
                             )
+                            .with_revision(self.drawing_revision)
                             .with_context(move |point| Message::OpenReferenceMenu(index, point))
                             .with_selection(
                                 move |start, end, point| {
@@ -3880,6 +4099,7 @@ impl CleanSlateApp {
                             header,
                             waveform,
                             canvas(crate::gain_editor::GainCanvas {
+                                revision: self.drawing_revision,
                                 project,
                                 constraints: self
                                     .gain_drag
@@ -3923,7 +4143,7 @@ impl CleanSlateApp {
         let timeline = column![
             text("SESSION TIMELINE").size(12),
             text(
-                "Click to seek · drag to label · wheel to zoom · Ctrl-wheel or middle-drag to pan"
+                "Red background = reduced gain · Click to seek · drag to label · wheel to zoom · Ctrl-wheel or middle-drag to pan"
             )
             .size(11),
             tracks,
@@ -4102,11 +4322,18 @@ impl CleanSlateApp {
             row![timeline, inspector].spacing(12).height(Fill).into()
         };
 
-        let base: Element<'_, Message> = container(column![header, editor, transport].spacing(12))
-            .padding(12)
-            .width(Fill)
-            .height(Fill)
-            .into();
+        let ownership_monitor = row![
+            text(ownership_status).size(16).width(Fill),
+            text("Ownership estimate · bars are not audio level or gain").size(11),
+        ]
+        .spacing(8)
+        .align_y(iced::Center);
+        let base: Element<'_, Message> =
+            container(column![header, editor, ownership_monitor, transport].spacing(12))
+                .padding(12)
+                .width(Fill)
+                .height(Fill)
+                .into();
         let Some((_, point)) = self.reference_menu else {
             return base;
         };

@@ -54,6 +54,7 @@ fn gain_y(gain: f32, height: f32) -> f32 {
 }
 
 pub(crate) struct GainCanvas<'a, Message> {
+    pub revision: u64,
     pub project: &'a Project,
     pub constraints: &'a GainConstraints,
     pub track: TrackId,
@@ -65,6 +66,8 @@ pub(crate) struct GainCanvas<'a, Message> {
 }
 #[derive(Default)]
 pub(crate) struct GainCanvasState {
+    geometry: canvas::Cache,
+    revision: std::cell::Cell<Option<u64>>,
     dragging: bool,
 }
 impl<Message: 'static> canvas::Program<Message> for GainCanvas<'_, Message> {
@@ -125,144 +128,151 @@ impl<Message: 'static> canvas::Program<Message> for GainCanvas<'_, Message> {
     }
     fn draw(
         &self,
-        _state: &Self::State,
+        state: &Self::State,
         renderer: &Renderer,
         _theme: &Theme,
         bounds: Rectangle,
         _cursor: mouse::Cursor,
     ) -> Vec<canvas::Geometry> {
-        let mut frame = canvas::Frame::new(renderer, bounds.size());
-        let start = self.viewport.start().max(0.0) as u64;
-        let end = (self.viewport.start() + self.viewport.visible_samples()).ceil() as u64;
-        for (automatic, color, width) in [
-            (true, Color::from_rgb8(125, 145, 165), 1.0),
-            (false, Color::from_rgb8(80, 220, 200), 2.0),
-        ] {
-            let samples =
-                crate::editor_drawing::sample_visible_curve(self.viewport, bounds.width, |time| {
-                    if automatic {
-                        self.automatic.map_or(1.0, |e| e.gain_at_time(time))
-                    } else {
-                        self.effective.map_or(1.0, |e| e.gain_at_time(time))
+        if state.revision.replace(Some(self.revision)) != Some(self.revision) {
+            state.geometry.clear();
+        }
+        let geometry = state.geometry.draw(renderer, bounds.size(), |frame| {
+            let start = self.viewport.start().max(0.0) as u64;
+            let end = (self.viewport.start() + self.viewport.visible_samples()).ceil() as u64;
+            for (automatic, color, width) in [
+                (true, Color::from_rgb8(125, 145, 165), 1.0),
+                (false, Color::from_rgb8(80, 220, 200), 2.0),
+            ] {
+                let samples = crate::editor_drawing::sample_visible_curve(
+                    self.viewport,
+                    bounds.width,
+                    |time| {
+                        if automatic {
+                            self.automatic.map_or(1.0, |e| e.gain_at_time(time))
+                        } else {
+                            self.effective.map_or(1.0, |e| e.gain_at_time(time))
+                        }
+                    },
+                );
+                let path = canvas::Path::new(|builder| {
+                    for (column, sample) in samples.iter().enumerate() {
+                        let point = Point::new(
+                            self.viewport.x_for_sample(sample.time, bounds.width),
+                            gain_y(sample.gain, bounds.height),
+                        );
+                        if column == 0 {
+                            builder.move_to(point);
+                        } else {
+                            builder.line_to(point);
+                        }
                     }
                 });
-            let path = canvas::Path::new(|builder| {
-                for (column, sample) in samples.iter().enumerate() {
-                    let point = Point::new(
-                        self.viewport.x_for_sample(sample.time, bounds.width),
-                        gain_y(sample.gain, bounds.height),
-                    );
-                    if column == 0 {
-                        builder.move_to(point);
-                    } else {
-                        builder.line_to(point);
+                frame.stroke(
+                    &path,
+                    canvas::Stroke::default()
+                        .with_color(color)
+                        .with_width(width),
+                );
+                let buckets = if automatic {
+                    self.automatic.map(|envelope| {
+                        crate::visible_automatic_buckets(self.viewport, bounds.width, envelope)
+                    })
+                } else {
+                    self.effective.map(|envelope| {
+                        crate::visible_gain_buckets(self.viewport, bounds.width, envelope)
+                    })
+                };
+                if let Some(buckets) = buckets {
+                    for bucket in buckets {
+                        let x = self.viewport.x_for_sample(bucket.start, bounds.width);
+                        frame.stroke(
+                            &canvas::Path::line(
+                                Point::new(x, gain_y(bucket.lower, bounds.height)),
+                                Point::new(x, gain_y(bucket.upper, bounds.height)),
+                            ),
+                            canvas::Stroke::default()
+                                .with_color(color)
+                                .with_width(width),
+                        );
                     }
                 }
-            });
-            frame.stroke(
-                &path,
-                canvas::Stroke::default()
-                    .with_color(color)
-                    .with_width(width),
-            );
-            let buckets = if automatic {
-                self.automatic.map(|envelope| {
-                    crate::visible_automatic_buckets(self.viewport, bounds.width, envelope)
-                })
-            } else {
-                self.effective.map(|envelope| {
-                    crate::visible_gain_buckets(self.viewport, bounds.width, envelope)
-                })
-            };
-            if let Some(buckets) = buckets {
-                for bucket in buckets {
-                    let x = self.viewport.x_for_sample(bucket.start, bounds.width);
-                    frame.stroke(
-                        &canvas::Path::line(
-                            Point::new(x, gain_y(bucket.lower, bounds.height)),
-                            Point::new(x, gain_y(bucket.upper, bounds.height)),
-                        ),
-                        canvas::Stroke::default()
-                            .with_color(color)
-                            .with_width(width),
+            }
+            for label in self
+                .project
+                .reference_labels()
+                .iter()
+                .filter(|label| label.range.start < end && label.range.end > start)
+            {
+                let left = self
+                    .viewport
+                    .x_for_sample(label.range.start.max(start), bounds.width);
+                let right = self
+                    .viewport
+                    .x_for_sample(label.range.end.min(end), bounds.width);
+                let active = self
+                    .project
+                    .sources
+                    .iter()
+                    .find(|s| s.track_id == self.track)
+                    .is_some_and(|s| label.active_speakers.contains(&s.speaker_id));
+                frame.fill_rectangle(
+                    Point::new(left, bounds.height - 5.0),
+                    iced::Size::new((right - left).max(1.0), 5.0),
+                    if active {
+                        Color::from_rgb8(90, 135, 255)
+                    } else {
+                        Color::from_rgb8(100, 105, 125)
+                    },
+                );
+            }
+            for protection in self.constraints.protections.iter().filter(|p| {
+                p.sources.iter().any(|s| s.track == self.track)
+                    && p.range.start < end
+                    && p.range.end > start
+            }) {
+                let left = self
+                    .viewport
+                    .x_for_sample(protection.range.start.max(start), bounds.width);
+                let right = self
+                    .viewport
+                    .x_for_sample(protection.range.end.min(end), bounds.width);
+                frame.fill_rectangle(
+                    Point::new(left, 3.0),
+                    iced::Size::new((right - left).max(1.0), 5.0),
+                    Color::from_rgb8(220, 175, 65),
+                );
+            }
+            for edit in self
+                .constraints
+                .manual_edits
+                .iter()
+                .filter(|edit| edit.source.track == self.track)
+            {
+                let first = edit
+                    .points
+                    .partition_point(|p| p.time < start)
+                    .saturating_sub(1);
+                let last = edit
+                    .points
+                    .partition_point(|p| p.time <= end)
+                    .saturating_add(1)
+                    .min(edit.points.len());
+                for point in &edit.points[first..last] {
+                    if point.time < start || point.time > end {
+                        continue;
+                    }
+                    let position = Point::new(
+                        self.viewport.x_for_sample(point.time, bounds.width),
+                        gain_y(point.gain, bounds.height),
+                    );
+                    frame.fill(
+                        &canvas::Path::circle(position, 4.0),
+                        Color::from_rgb8(235, 150, 245),
                     );
                 }
             }
-        }
-        for label in self
-            .project
-            .reference_labels()
-            .iter()
-            .filter(|label| label.range.start < end && label.range.end > start)
-        {
-            let left = self
-                .viewport
-                .x_for_sample(label.range.start.max(start), bounds.width);
-            let right = self
-                .viewport
-                .x_for_sample(label.range.end.min(end), bounds.width);
-            let active = self
-                .project
-                .sources
-                .iter()
-                .find(|s| s.track_id == self.track)
-                .is_some_and(|s| label.active_speakers.contains(&s.speaker_id));
-            frame.fill_rectangle(
-                Point::new(left, bounds.height - 5.0),
-                iced::Size::new((right - left).max(1.0), 5.0),
-                if active {
-                    Color::from_rgb8(90, 135, 255)
-                } else {
-                    Color::from_rgb8(100, 105, 125)
-                },
-            );
-        }
-        for protection in self.constraints.protections.iter().filter(|p| {
-            p.sources.iter().any(|s| s.track == self.track)
-                && p.range.start < end
-                && p.range.end > start
-        }) {
-            let left = self
-                .viewport
-                .x_for_sample(protection.range.start.max(start), bounds.width);
-            let right = self
-                .viewport
-                .x_for_sample(protection.range.end.min(end), bounds.width);
-            frame.fill_rectangle(
-                Point::new(left, 3.0),
-                iced::Size::new((right - left).max(1.0), 5.0),
-                Color::from_rgb8(220, 175, 65),
-            );
-        }
-        for edit in self
-            .constraints
-            .manual_edits
-            .iter()
-            .filter(|edit| edit.source.track == self.track)
-        {
-            let first = edit
-                .points
-                .partition_point(|p| p.time < start)
-                .saturating_sub(1);
-            let last = edit
-                .points
-                .partition_point(|p| p.time <= end)
-                .saturating_add(1)
-                .min(edit.points.len());
-            for point in &edit.points[first..last] {
-                if point.time < start || point.time > end {
-                    continue;
-                }
-                let position = Point::new(
-                    self.viewport.x_for_sample(point.time, bounds.width),
-                    gain_y(point.gain, bounds.height),
-                );
-                frame.fill(
-                    &canvas::Path::circle(position, 4.0),
-                    Color::from_rgb8(235, 150, 245),
-                );
-            }
-        }
-        vec![frame.into_geometry()]
+        });
+        vec![geometry]
     }
 }

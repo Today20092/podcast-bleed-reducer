@@ -6,11 +6,17 @@ Before planning or implementation, read [.scratch/offline-supervised-migration/m
 
 Choose an unblocked implementation ticket, claim it before editing, and complete its scoped acceptance checks before marking it done. `ready-for-agent` describes specification readiness; every `Blocked by` dependency must be done first. Record results in the ticket. See [tracker conventions](docs/agents/issue-tracker.md) and [triage labels](docs/agents/triage-labels.md) when updating issues.
 
+For ticket inventories, use context-mode to extract only status, dependencies, and scope before returning results.
+
+For GUI changes, read [the GUI development guide](docs/gui-development.md) and use [scripts/gui-dev.ps1](scripts/gui-dev.ps1).
+
 ## Architecture and discovery
 
-Read [CONTEXT.md](CONTEXT.md) and [ADR-0006](docs/adr/0006-offline-supervised-editable-envelopes.md) before changing domain behavior. The accepted architecture is the target; the retained Rust/Iced implementation has not yet acquired the new analysis and editing capabilities. Preserve source validation, cancellation, safe exports and shared envelope evaluation while migrating.
+Read [CONTEXT.md](CONTEXT.md) and [ADR-0006](docs/adr/0006-offline-supervised-editable-envelopes.md) before changing domain behavior. Consult the [active implementation tracker](.scratch/offline-supervised-migration/implementation.md) for current implementation status. Preserve source validation, cancellation, safe exports and shared envelope evaluation while migrating.
 
-Discover code through the graph: search symbols, trace their callers/callees, then fetch their snippets. Index this checkout if coverage is absent or reflects an old branch/worktree. Use text search for literals, non-code records or graph gaps. Fetch current library/API documentation through Context7 before selecting or changing dependencies.
+Discover code through the graph: search symbols using supported filters, trace their callers/callees, then fetch snippets by qualified symbol. Index this checkout if coverage is absent or reflects an old branch/worktree. Use text search for literals, non-code records or graph gaps.
+
+When discovering tools, retrieve only the metadata needed for the task. Before selecting or changing dependencies, fetch current library/API documentation through Context7.
 
 ## Repository
 
