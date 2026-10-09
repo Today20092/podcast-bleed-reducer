@@ -11,11 +11,13 @@ mod export;
 mod joint_detector;
 mod media;
 pub mod model;
+mod ownership_model;
 mod prepared_analysis;
 mod project;
 mod references;
 pub mod release_gate;
 mod review;
+mod session_ownership;
 mod timebase;
 pub mod timeline;
 mod vad;
@@ -32,6 +34,7 @@ pub use audition::{AuditionMode, AuditionPlayback, PreparedAudio};
 pub use calibration::{CalibrationExample, CalibrationKind, OwnershipSettings};
 pub use engine::*;
 pub use export::*;
+pub use ownership_model::*;
 pub use prepared_analysis::{JointDiagnostics, PreviewCache, PreviewCacheStats, preview_stage};
 pub use project::*;
 pub use references::{
@@ -39,6 +42,7 @@ pub use references::{
     reference_readiness, resolve_speaker_mapping,
 };
 pub use review::*;
+pub use session_ownership::*;
 pub use timebase::{
     Rounding, SourceTimebase, TICKS_PER_SECOND, TimePosition, TimeRange, time_from_seconds,
 };
