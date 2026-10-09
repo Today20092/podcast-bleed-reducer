@@ -1,6 +1,7 @@
 # Optimize ownership regions with conservative uncertainty
 
-Status: ready-for-agent
+Status: claimed
+Assignee: temporal_ownership
 Blocked by: 09
 Spec: ../spec.md
 
