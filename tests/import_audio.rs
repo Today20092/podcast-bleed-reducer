@@ -347,6 +347,10 @@ fn bwf_origins_are_compared_in_time_and_conflicts_cannot_be_declared_away() {
         rust_app::Project::create(directory.join("conflict.cleanslate"), paths).unwrap();
     project.set_supplied_alignment(true).unwrap();
     assert!(project.require_alignment().is_err());
+    let error =
+        rust_app::editor_audition_envelopes(&project, None, rust_app::AuditionMode::Original)
+            .unwrap_err();
+    assert!(error.to_string().contains("conflicting BEXT"));
     std::fs::remove_dir_all(directory).unwrap();
 }
 

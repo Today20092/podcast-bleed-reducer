@@ -208,6 +208,14 @@ impl AuditionPreparation {
         self.job.is_some() || self.pending.is_some()
     }
 
+    pub(crate) fn is_requested(&self) -> bool {
+        self.pending.is_some()
+            || self
+                .job
+                .as_ref()
+                .is_some_and(|job| job.generation == self.generation)
+    }
+
     fn launch(&mut self) {
         if self.job.is_some() {
             return;
@@ -844,13 +852,18 @@ mod tests {
             delivered
         };
         preparation.request(vec![PathBuf::from("missing-audition-source.wav")]);
+        assert!(preparation.is_requested());
         preparation.cancel();
+        assert!(preparation.is_busy());
+        assert!(!preparation.is_requested());
         assert!(wait(&mut preparation).is_empty());
         preparation.request(vec![]);
         preparation.request(vec![PathBuf::from("missing-relinked-source.wav")]);
+        assert!(preparation.is_requested());
         let results = wait(&mut preparation);
         assert_eq!(results.len(), 1);
         assert!(results[0].is_err());
+        assert!(!preparation.is_requested());
         preparation.request(vec![]);
         preparation.invalidate();
         assert!(wait(&mut preparation).is_empty());

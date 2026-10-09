@@ -33,9 +33,13 @@ pub fn verify_installed_editor_runtime(
 }
 
 pub fn original_envelopes(project: &Project) -> Result<Vec<crate::GainEnvelope>, RenderBlocker> {
-    project
-        .require_alignment()
-        .map_err(|e| RenderBlocker(e.to_string()))?;
+    crate::engine::validate_source_metadata(
+        &project
+            .sources
+            .iter()
+            .map(|source| source.metadata)
+            .collect::<Vec<_>>(),
+    )?;
     project
         .validate_interactive_sources()
         .map_err(|e| RenderBlocker(e.to_string()))?;

@@ -46,10 +46,9 @@ None blocking implementation planning. Numerical tuning, acoustic estimator/down
 - Live processing and DAW plugins in the first release.
 - Automatic alignment in this migration.
 - Mixed-master and DAW-automation exports in the first release.
-- Production code changes during this planning effort.
 - Fade-shape selector, other classifier families, blind source separation and neural fine-tuning in the first release.
 - Shared microphones, speaker track switching, more than eight speakers and macOS/Linux release qualification in the first release.
 
 ## Handoff
 
-The [accepted architecture](spec.md), [documentation findings](feasibility-notes.md) and [implementation sequence](implementation.md) accompany the decision resolutions. All twelve planning decisions are resolved. Build tickets 01–13 are done; 14 remains claimed, 15 remains blocked, and the single added GUI ticket 16 is ready and unclaimed. When implementation is authorized, complete ticket 16 and owner GUI checks, then continue ticket 14's acoustic-first/quality evaluation before release qualification. Dependency completion still governs execution.
+The [accepted architecture](spec.md), [documentation findings](feasibility-notes.md) and [implementation sequence](implementation.md) accompany the decision resolutions. All twelve planning decisions are resolved. Build tickets 01–13 are done; 14 remains claimed, 15 remains blocked, and the single added GUI ticket 16 is claimed following owner authorization. Complete ticket 16 and owner GUI checks, then continue ticket 14's acoustic-first/quality evaluation before release qualification. Dependency completion still governs execution.

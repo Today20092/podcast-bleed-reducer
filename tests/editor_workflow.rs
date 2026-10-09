@@ -553,6 +553,15 @@ fn analysis_commit_identity_ignores_gain_but_rejects_new_truth_and_alignment() {
     bytes.resize(bytes.len() + data_bytes as usize, 0);
     std::fs::write(&source, bytes).unwrap();
     let mut project = Project::create(directory.join("session.cleanslate"), vec![source]).unwrap();
+    assert!(project.require_alignment().is_err());
+    let early_original =
+        rust_app::editor_audition_envelopes(&project, None, rust_app::AuditionMode::Original)
+            .expect("Original playback needs neither timing confirmation nor references/model");
+    assert_eq!(early_original[0].gain_at(47999), 1.0);
+    assert!(
+        project.require_alignment().is_err(),
+        "Audition must not declare synchronization"
+    );
     project.set_supplied_alignment(true).unwrap();
     let original = rust_app::original_envelopes(&project).unwrap();
     assert_eq!(original[0].sample_rate(), 48000);

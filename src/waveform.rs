@@ -16,7 +16,7 @@ use std::{
 };
 
 const BASE_BUCKET: usize = 256;
-const WAVEFORM_CACHE_VERSION: u32 = 2;
+const WAVEFORM_CACHE_VERSION: u32 = 3;
 const ATTENUATION_HATCH_SPACING: f32 = 20.0;
 
 fn processed_peak((min, max): (f32, f32), (low, high): (f32, f32)) -> (f32, f32) {
@@ -57,10 +57,12 @@ struct WaveformLevel {
 }
 
 #[derive(Deserialize, Serialize)]
-struct PersistedWaveforms {
+struct PersistedWaveform {
     version: u32,
-    sources: Vec<SourceStamp>,
-    waveforms: Vec<WaveformCache>,
+    fingerprint: String,
+    decoder_recipe: String,
+    source: crate::SourceMetadata,
+    waveform: WaveformCache,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -191,34 +193,47 @@ pub(crate) fn load_or_build(
 }
 
 pub(crate) fn load_or_build_progress(
-    project_path: &Path,
+    _project_path: &Path,
+    sources: &[PathBuf],
+    ready: impl FnMut(usize, &WaveformCache),
+) -> Result<Vec<WaveformCache>, RenderBlocker> {
+    let cache_root = std::env::var_os("LOCALAPPDATA")
+        .map(PathBuf::from)
+        .unwrap_or_else(std::env::temp_dir)
+        .join("CleanSlate/waveforms-v3");
+    load_or_build_progress_in(&cache_root, sources, ready)
+}
+
+fn load_or_build_progress_in(
+    cache_root: &Path,
     sources: &[PathBuf],
     mut ready: impl FnMut(usize, &WaveformCache),
 ) -> Result<Vec<WaveformCache>, RenderBlocker> {
-    let cache_path = project_path.with_extension("waveforms.json");
     let stamps = sources
         .iter()
         .map(|path| SourceStamp::read(path))
         .collect::<Result<Vec<_>, _>>()?;
-    if let Ok(bytes) = fs::read(&cache_path)
-        && let Ok(cache) = serde_json::from_slice::<PersistedWaveforms>(&bytes)
-        && cache.version == WAVEFORM_CACHE_VERSION
-        && cache.sources == stamps
-        && cache.waveforms.iter().all(|waveform| {
-            SourceTimebase::new(waveform.sample_rate, waveform.sample_count as u64)
-                .and_then(|grid| grid.duration())
-                .is_ok()
-        })
-    {
-        for (index, waveform) in cache.waveforms.iter().enumerate() {
-            ready(index, waveform);
-        }
-        return Ok(cache.waveforms);
-    }
     let waveforms = sources
         .iter()
         .enumerate()
         .map(|(index, path)| {
+            let fingerprint = crate::project::fingerprint_cancellable(path, None)?;
+            let source = crate::SourceMetadata::read(path)?;
+            if source.channels != 1 {
+                return Err(RenderBlocker("Waveforms require a mono source.".into()));
+            }
+            let cache_path = cache_root.join(format!("{fingerprint}.json"));
+            if let Ok(bytes) = fs::read(&cache_path)
+                && let Ok(cache) = serde_json::from_slice::<PersistedWaveform>(&bytes)
+                && cache.version == WAVEFORM_CACHE_VERSION
+                && cache.fingerprint == fingerprint
+                && cache.decoder_recipe == crate::analysis_audio::AUDIO_DECODER_RECIPE
+                && cache.source == source
+                && waveform_matches_source(&cache.waveform, source)
+            {
+                ready(index, &cache.waveform);
+                return Ok(cache.waveform);
+            }
             let mut peaks = Vec::new();
             let mut current = (f32::INFINITY, f32::NEG_INFINITY);
             let mut used = 0;
@@ -243,6 +258,22 @@ pub(crate) fn load_or_build_progress(
                 decoded.metadata.grid.frame_count as usize,
                 decoded.metadata.grid.sample_rate,
             );
+            if decoded.metadata != source || SourceStamp::read(path)? != stamps[index] {
+                return Err(RenderBlocker(
+                    "Source changed while loading waveforms; import again.".into(),
+                ));
+            }
+            // Waveforms remain usable when the rebuildable cache cannot be saved.
+            if let Ok(bytes) = serde_json::to_vec(&PersistedWaveform {
+                version: WAVEFORM_CACHE_VERSION,
+                fingerprint,
+                decoder_recipe: crate::analysis_audio::AUDIO_DECODER_RECIPE.into(),
+                source,
+                waveform: waveform.clone(),
+            }) && fs::create_dir_all(cache_root).is_ok()
+            {
+                let _ = crate::project::atomic_save(&cache_path, &bytes);
+            }
             ready(index, &waveform);
             Ok(waveform)
         })
@@ -256,17 +287,41 @@ pub(crate) fn load_or_build_progress(
             "Source changed while loading waveforms; import again.".into(),
         ));
     }
-    fs::write(
-        cache_path,
-        serde_json::to_vec(&PersistedWaveforms {
-            version: WAVEFORM_CACHE_VERSION,
-            sources: stamps,
-            waveforms: waveforms.clone(),
-        })
-        .map_err(|error| RenderBlocker(error.to_string()))?,
-    )?;
     Ok(waveforms)
 }
+
+fn waveform_matches_source(waveform: &WaveformCache, source: crate::SourceMetadata) -> bool {
+    if waveform.sample_rate != source.grid.sample_rate
+        || waveform.sample_count as u64 != source.grid.frame_count
+        || waveform.levels.is_empty()
+    {
+        return false;
+    }
+    let mut bucket = BASE_BUCKET;
+    let mut count = waveform.sample_count.div_ceil(bucket);
+    for (index, level) in waveform.levels.iter().enumerate() {
+        if level.samples_per_bucket != bucket
+            || level.peaks.len() != count
+            || level
+                .peaks
+                .iter()
+                .any(|(min, max)| !min.is_finite() || !max.is_finite() || min > max)
+        {
+            return false;
+        }
+        if count <= 1 {
+            return index + 1 == waveform.levels.len();
+        }
+        let Some(next) = bucket.checked_mul(2) else {
+            return false;
+        };
+        bucket = next;
+        count = count.div_ceil(2);
+    }
+    false
+}
+
+type SelectionCallback<'a, Message> = dyn Fn(TimePosition, TimePosition, Point) -> Message + 'a;
 
 pub(crate) struct TimelineCanvas<'a, Message> {
     cache: Option<&'a WaveformCache>,
@@ -275,14 +330,16 @@ pub(crate) struct TimelineCanvas<'a, Message> {
     preview: Option<(&'a AnalysisPreview, usize)>,
     overview: Option<&'a crate::OwnershipOverview>,
     selecting: bool,
-    on_event: fn(TimelineEvent) -> Message,
+    on_event: Box<dyn Fn(TimelineEvent) -> Message + 'a>,
+    on_context: Option<Box<dyn Fn(Point) -> Message + 'a>>,
+    on_selection: Option<Box<SelectionCallback<'a, Message>>>,
 }
 
-impl<'a, Message> TimelineCanvas<'a, Message> {
+impl<'a, Message: 'a> TimelineCanvas<'a, Message> {
     pub fn waveform(
         cache: &'a WaveformCache,
         viewport: &'a TimelineViewport,
-        on_event: fn(TimelineEvent) -> Message,
+        on_event: impl Fn(TimelineEvent) -> Message + 'a,
         preview: Option<(&'a AnalysisPreview, usize)>,
         selecting: bool,
     ) -> Self {
@@ -293,7 +350,9 @@ impl<'a, Message> TimelineCanvas<'a, Message> {
             preview,
             overview: None,
             selecting,
-            on_event,
+            on_event: Box::new(on_event),
+            on_context: None,
+            on_selection: None,
         }
     }
 
@@ -309,12 +368,25 @@ impl<'a, Message> TimelineCanvas<'a, Message> {
             preview: None,
             overview: None,
             selecting,
-            on_event,
+            on_event: Box::new(on_event),
+            on_context: None,
+            on_selection: None,
         }
     }
 }
 
 impl<'a, Message> TimelineCanvas<'a, Message> {
+    pub fn with_selection(
+        mut self,
+        on_selection: impl Fn(TimePosition, TimePosition, Point) -> Message + 'a,
+    ) -> Self {
+        self.on_selection = Some(Box::new(on_selection));
+        self
+    }
+    pub fn with_context(mut self, on_context: impl Fn(Point) -> Message + 'a) -> Self {
+        self.on_context = Some(Box::new(on_context));
+        self
+    }
     pub fn with_overview(mut self, overview: Option<&'a crate::OwnershipOverview>) -> Self {
         self.overview = overview;
         self
@@ -325,6 +397,7 @@ impl<'a, Message> TimelineCanvas<'a, Message> {
 pub(crate) struct TimelineCanvasState {
     dragging: bool,
     selection_anchor: Option<TimePosition>,
+    anchor_x: f32,
     pan_x: Option<f32>,
     modifiers: keyboard::Modifiers,
 }
@@ -341,6 +414,10 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
     ) -> Option<Action<Message>> {
         let position = cursor.position_in(bounds);
         match event {
+            canvas::Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Right)) => {
+                position?;
+                Some(Action::publish((self.on_context.as_ref()?)(cursor.position()?)).and_capture())
+            }
             canvas::Event::Keyboard(keyboard::Event::ModifiersChanged(modifiers)) => {
                 state.modifiers = *modifiers;
                 None
@@ -352,13 +429,10 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
             canvas::Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) => {
                 let position = position?;
                 state.dragging = true;
+                state.anchor_x = position.x;
                 let sample = self.viewport.sample_at(position.x, bounds.width);
-                if self.selecting {
+                if self.selecting || !self.ruler {
                     state.selection_anchor = Some(sample);
-                    return Some(
-                        Action::publish((self.on_event)(TimelineEvent::Select(sample, sample)))
-                            .and_capture(),
-                    );
                 }
                 Some(Action::publish((self.on_event)(TimelineEvent::Seek(sample))).and_capture())
             }
@@ -376,6 +450,9 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
             canvas::Event::Mouse(mouse::Event::CursorMoved { .. }) if state.dragging => {
                 let position = cursor.position_from(bounds.position())?;
                 if let Some(anchor) = state.selection_anchor {
+                    if (position.x - state.anchor_x).abs() < 3.0 {
+                        return Some(Action::capture());
+                    }
                     return Some(
                         Action::publish((self.on_event)(TimelineEvent::Select(
                             anchor,
@@ -397,12 +474,26 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
                 state.dragging = false;
                 let position = cursor.position_from(bounds.position())?;
                 if let Some(anchor) = state.selection_anchor.take() {
+                    let end = self.viewport.sample_at(position.x, bounds.width);
+                    if (position.x - state.anchor_x).abs() < 3.0 || anchor == end {
+                        return Some(
+                            Action::publish((self.on_event)(TimelineEvent::Seek(end)))
+                                .and_capture(),
+                        );
+                    }
+                    if let Some(on_selection) = &self.on_selection {
+                        return Some(
+                            Action::publish(on_selection(
+                                anchor.min(end),
+                                anchor.max(end),
+                                cursor.position()?,
+                            ))
+                            .and_capture(),
+                        );
+                    }
                     return Some(
-                        Action::publish((self.on_event)(TimelineEvent::Select(
-                            anchor,
-                            self.viewport.sample_at(position.x, bounds.width),
-                        )))
-                        .and_capture(),
+                        Action::publish((self.on_event)(TimelineEvent::Select(anchor, end)))
+                            .and_capture(),
                     );
                 }
                 Some(
@@ -693,6 +784,93 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
 mod tests {
     use super::*;
     use bwavfile::{WaveFmt, WaveWriter};
+    #[test]
+    fn plain_waveform_click_seeks_and_drag_release_opens_label_actions() {
+        use canvas::Program;
+        #[derive(Debug)]
+        enum Input {
+            Timeline(TimelineEvent),
+            Context(Point),
+            Selection(TimePosition, TimePosition, Point),
+        }
+        let cache = WaveformCache::from_samples(&[0.0; 48000], 48000);
+        let viewport = TimelineViewport::new(TICKS_PER_SECOND);
+        let waveform = TimelineCanvas::waveform(&cache, &viewport, Input::Timeline, None, false)
+            .with_context(Input::Context)
+            .with_selection(Input::Selection);
+        let bounds = Rectangle::new(Point::new(10.0, 20.0), iced::Size::new(100.0, 80.0));
+        let mut state = TimelineCanvasState::default();
+        let click = waveform
+            .update(
+                &mut state,
+                &canvas::Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)),
+                bounds,
+                mouse::Cursor::Available(Point::new(35.0, 40.0)),
+            )
+            .unwrap()
+            .into_inner();
+        assert!(
+            matches!(click.0, Some(Input::Timeline(TimelineEvent::Seek(a))) if a == TICKS_PER_SECOND/4)
+        );
+        let drag = waveform
+            .update(
+                &mut state,
+                &canvas::Event::Mouse(mouse::Event::CursorMoved {
+                    position: Point::new(85.0, 40.0),
+                }),
+                bounds,
+                mouse::Cursor::Available(Point::new(85.0, 40.0)),
+            )
+            .unwrap()
+            .into_inner();
+        assert!(
+            matches!(drag.0, Some(Input::Timeline(TimelineEvent::Select(a,b))) if a == TICKS_PER_SECOND/4 && b == TICKS_PER_SECOND*3/4)
+        );
+        let context = waveform
+            .update(
+                &mut state,
+                &canvas::Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)),
+                bounds,
+                mouse::Cursor::Available(Point::new(85.0, 40.0)),
+            )
+            .unwrap()
+            .into_inner();
+        assert!(
+            matches!(context.0, Some(Input::Selection(start, end, point)) if start == TICKS_PER_SECOND/4 && end == TICKS_PER_SECOND*3/4 && point == Point::new(85.0,40.0))
+        );
+        assert_eq!(context.2, iced::event::Status::Captured);
+        let context = waveform
+            .update(
+                &mut state,
+                &canvas::Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Right)),
+                bounds,
+                mouse::Cursor::Available(Point::new(85.0, 40.0)),
+            )
+            .unwrap()
+            .into_inner();
+        assert!(matches!(context.0, Some(Input::Context(point)) if point == Point::new(85.0,40.0)));
+        assert_eq!(context.2, iced::event::Status::Captured);
+        let _ = waveform.update(
+            &mut state,
+            &canvas::Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)),
+            bounds,
+            mouse::Cursor::Available(Point::new(35.0, 40.0)),
+        );
+        let short_drag = waveform
+            .update(
+                &mut state,
+                &canvas::Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)),
+                bounds,
+                mouse::Cursor::Available(Point::new(36.0, 40.0)),
+            )
+            .unwrap()
+            .into_inner();
+        assert!(matches!(
+            short_drag.0,
+            Some(Input::Timeline(TimelineEvent::Seek(_)))
+        ));
+        assert_eq!(short_drag.2, iced::event::Status::Captured);
+    }
 
     #[test]
     fn processed_bucket_bounds_cover_changing_gain_for_both_sample_signs() {
@@ -779,34 +957,111 @@ mod tests {
     }
 
     #[test]
+    fn waveform_cache_is_shared_across_project_names_and_track_order() {
+        let root =
+            std::env::temp_dir().join(format!("cleanslate-shared-waveform-{}", std::process::id()));
+        fs::create_dir(&root).unwrap();
+        let first = root.join("first.wav");
+        let second = root.join("second.wav");
+        wav(&first, &[0.0, 0.8, -0.6, 0.0]);
+        wav(&second, &[0.0, 0.2]);
+        let project = root.join("first-project.cleanslate");
+        let waveforms = load_or_build(&project, &[first.clone(), second.clone()]).unwrap();
+        assert!(
+            !project.with_extension("waveforms.json").exists(),
+            "Project names must not create duplicate waveform sidecars"
+        );
+        let reordered =
+            load_or_build(&root.join("second-project.cleanslate"), &[second, first]).unwrap();
+        assert_eq!(waveforms[0].sample_count, reordered[1].sample_count);
+        assert_eq!(waveforms[1].sample_count, reordered[0].sample_count);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn persisted_cache_reloads_and_invalidates_with_its_source() {
         let root = std::env::temp_dir().join(format!("cleanslate-waveform-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(&root).unwrap();
         let source = root.join("voice.wav");
-        let project = root.join("session.cleanslate");
+        let cache_root = root.join("cache");
         wav(&source, &[0.0, 0.8, -0.6, 0.0]);
-        let first = load_or_build(&project, std::slice::from_ref(&source)).unwrap();
-        assert!(project.with_extension("waveforms.json").is_file());
+        let first =
+            load_or_build_progress_in(&cache_root, std::slice::from_ref(&source), |_, _| {})
+                .unwrap();
+        let cache_path = fs::read_dir(&cache_root)
+            .unwrap()
+            .next()
+            .unwrap()
+            .unwrap()
+            .path();
+        let saved = fs::metadata(&cache_path).unwrap().modified().unwrap();
         assert_eq!(
-            load_or_build(&project, std::slice::from_ref(&source)).unwrap()[0].sample_count,
+            load_or_build_progress_in(&cache_root, std::slice::from_ref(&source), |_, _| {})
+                .unwrap()[0]
+                .sample_count,
             4
         );
-        let cache_path = project.with_extension("waveforms.json");
+        assert_eq!(
+            fs::metadata(&cache_path).unwrap().modified().unwrap(),
+            saved,
+            "Warm reuse must not rebuild/rewrite the waveform"
+        );
+        let moved = root.join("moved.wav");
+        fs::copy(&source, &moved).unwrap();
+        let moved_cache = load_or_build_progress_in(&cache_root, &[moved], |_, _| {}).unwrap();
+        assert_eq!(
+            moved_cache[0].level(BASE_BUCKET).peaks,
+            first[0].level(BASE_BUCKET).peaks
+        );
+        assert_eq!(
+            fs::read_dir(&cache_root).unwrap().count(),
+            1,
+            "Identical moved audio shares one cache entry"
+        );
         let mut obsolete: serde_json::Value =
             serde_json::from_slice(&fs::read(&cache_path).unwrap()).unwrap();
         obsolete["version"] = 99.into();
-        obsolete["waveforms"][0]["sample_rate"] = 96_000.into();
+        obsolete["waveform"]["sample_rate"] = 96_000.into();
         fs::write(&cache_path, serde_json::to_vec(&obsolete).unwrap()).unwrap();
         assert_eq!(
-            load_or_build(&project, std::slice::from_ref(&source)).unwrap()[0].sample_rate,
+            load_or_build_progress_in(&cache_root, std::slice::from_ref(&source), |_, _| {})
+                .unwrap()[0]
+                .sample_rate,
             48_000
+        );
+        fs::write(&cache_path, b"broken json").unwrap();
+        assert_eq!(
+            load_or_build_progress_in(&cache_root, std::slice::from_ref(&source), |_, _| {})
+                .unwrap()[0]
+                .sample_count,
+            4
+        );
+        let mut malformed: serde_json::Value =
+            serde_json::from_slice(&fs::read(&cache_path).unwrap()).unwrap();
+        malformed["waveform"]["levels"] = serde_json::json!([]);
+        fs::write(&cache_path, serde_json::to_vec(&malformed).unwrap()).unwrap();
+        assert_eq!(
+            load_or_build_progress_in(&cache_root, std::slice::from_ref(&source), |_, _| {})
+                .unwrap()[0]
+                .sample_count,
+            4
         );
         fs::remove_file(&source).unwrap();
         wav(&source, &[0.0, 0.2]);
-        let changed = load_or_build(&project, &[source]).unwrap();
+        let changed =
+            load_or_build_progress_in(&cache_root, std::slice::from_ref(&source), |_, _| {})
+                .unwrap();
         assert_eq!(first[0].sample_count, 4);
         assert_eq!(changed[0].sample_count, 2);
+        assert_eq!(fs::read_dir(&cache_root).unwrap().count(), 2);
+        let unavailable_cache = root.join("cache-is-a-file");
+        fs::write(&unavailable_cache, b"unwritable cache directory").unwrap();
+        assert_eq!(
+            load_or_build_progress_in(&unavailable_cache, &[source], |_, _| {}).unwrap()[0]
+                .sample_count,
+            2
+        );
         fs::remove_dir_all(root).unwrap();
     }
 

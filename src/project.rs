@@ -1400,7 +1400,7 @@ pub(crate) fn fingerprint_cancellable(
     }
     Ok(format!("{:x}", hash.finalize()))
 }
-fn atomic_save(path: &Path, bytes: &[u8]) -> io::Result<()> {
+pub(crate) fn atomic_save(path: &Path, bytes: &[u8]) -> io::Result<()> {
     static SEQUENCE: AtomicU64 = AtomicU64::new(0);
     let parent = path.parent().unwrap_or(Path::new("."));
     let name = path

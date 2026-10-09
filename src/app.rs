@@ -13,8 +13,8 @@ use crate::{
 use iced::{
     Element, Fill, Length, Subscription, Task, Theme, keyboard,
     widget::{
-        Space, button, canvas, column, container, progress_bar, responsive, row, scrollable,
-        slider, text, text_input,
+        Space, button, canvas, column, container, mouse_area, opaque, progress_bar, responsive,
+        row, scrollable, slider, stack, text, text_input,
     },
     window,
 };
@@ -61,6 +61,176 @@ fn available_project_path(directory: &std::path::Path) -> PathBuf {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn installing_validated_tracks_prepares_original_without_starting_playback() {
+        let root =
+            std::env::temp_dir().join(format!("cleanslate-auto-playback-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let source = root.join("voice.wav");
+        write_wav(&source, &vec![0.0; 48000]);
+        let waveforms = crate::waveform::load_or_build(
+            &root.join("session.cleanslate"),
+            std::slice::from_ref(&source),
+        )
+        .unwrap();
+        let mut app = super::CleanSlateApp {
+            project: Some(
+                crate::Project::create(root.join("session.cleanslate"), vec![source]).unwrap(),
+            ),
+            ..Default::default()
+        };
+        app.install_waveforms(waveforms);
+        assert!(app.audition_preparation.is_busy());
+        assert!(app.audition_range.is_none() && app.audition.is_none());
+        let _ = app.update(super::Message::Stop);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while app.audition_preparation.is_busy() && std::time::Instant::now() < deadline {
+            app.poll_audition();
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+        assert!(!app.audition_preparation.is_busy());
+        drop(app);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn track_context_labels_validate_replace_undo_and_persist_without_cross_track_selection() {
+        use super::Message;
+        use crate::timeline::TimelineEvent;
+        let root =
+            std::env::temp_dir().join(format!("cleanslate-context-menu-{}", std::process::id()));
+        std::fs::create_dir(&root).unwrap();
+        let sources: Vec<_> = (0..3)
+            .map(|index| {
+                let path = root.join(format!("speaker-{index}.wav"));
+                write_wav(&path, &vec![0.0; 48_000]);
+                path
+            })
+            .collect();
+        let path = root.join("session.cleanslate");
+        let mut app = super::CleanSlateApp {
+            project: Some(synchronized_project(&path, sources).unwrap()),
+            ..Default::default()
+        };
+        let speakers: Vec<_> = app
+            .project
+            .as_ref()
+            .unwrap()
+            .sources
+            .iter()
+            .map(|s| s.speaker_id)
+            .collect();
+        let start = crate::TICKS_PER_SECOND / 4;
+        let end = crate::TICKS_PER_SECOND * 3 / 4;
+        let point = iced::Point::new(400.0, 300.0);
+        app.timeline.set_total_samples(crate::TICKS_PER_SECOND);
+        let _ = app.update(Message::TrackTimeline(
+            0,
+            TimelineEvent::Select(start, start),
+        ));
+        assert_eq!(app.timeline.playhead(), start);
+        let _ = app.update(Message::OpenReferenceMenu(0, point));
+        assert!(
+            app.reference_menu.is_none(),
+            "A click is not a usable range"
+        );
+        let _ = app.update(Message::TrackTimeline(0, TimelineEvent::Select(end, start)));
+        let _ = app.update(Message::OpenReferenceMenu(1, point));
+        assert!(
+            app.reference_menu.is_none(),
+            "Another track's selection cannot label this track"
+        );
+        app.calibration_timing = true;
+        let _ = app.update(Message::CompleteTrackSelection(0, start, end, point));
+        assert_eq!(app.reference_menu, Some((0, point)));
+        assert!(
+            !app.calibration_timing,
+            "Popup removes the exact-times input focus"
+        );
+        let captured_start = app.calibration_start.clone();
+        let _ = app.update(Message::CalibrationStart("999".into()));
+        assert_eq!(app.calibration_start, captured_start);
+        assert_eq!(app.reference_speakers, vec![speakers[0]]);
+        let _ = app.update(Message::Timeline(TimelineEvent::Seek(0)));
+        let _ = app.update(Message::TrackTimeline(1, TimelineEvent::Select(0, end)));
+        let _ = app.update(Message::KeyPressed(
+            iced::keyboard::Key::Named(iced::keyboard::key::Named::Home),
+            iced::keyboard::Modifiers::empty(),
+        ));
+        assert_eq!(app.timeline.playhead(), start);
+        assert_eq!(app.timeline.selection(), Some((start, end)));
+        assert_eq!(app.selection_track, Some(0));
+        let _ = app.update(Message::ContextReference(vec![speakers[1]], false));
+        assert!(app.reference_menu.is_none());
+        assert!(app.reference_stale && app.preview_pending.is_none());
+        assert_eq!(
+            app.project.as_ref().unwrap().reference_labels()[0].active_speakers,
+            vec![speakers[1]]
+        );
+        let _ = app.update(Message::OpenReferenceMenu(0, point));
+        let _ = app.update(Message::ContextReference(vec![], false));
+        assert!(app.calibration_error.is_some() && app.reference_menu.is_some());
+        assert_eq!(app.project.as_ref().unwrap().reference_labels().len(), 1);
+        let _ = app.update(Message::ContextReference(vec![], true));
+        assert!(
+            app.project.as_ref().unwrap().reference_labels()[0]
+                .active_speakers
+                .is_empty()
+        );
+        let _ = app.update(Message::UndoReferences);
+        assert_eq!(
+            app.project.as_ref().unwrap().reference_labels()[0].active_speakers,
+            vec![speakers[1]]
+        );
+        let _ = app.update(Message::RedoReferences);
+        let _ = app.update(Message::OpenReferenceMenu(0, point));
+        let _ = app.update(Message::ContextReference(
+            vec![speakers[0], speakers[2]],
+            true,
+        ));
+        assert_eq!(
+            crate::Project::open(&path).unwrap().reference_labels()[0].active_speakers,
+            vec![speakers[0], speakers[2]]
+        );
+        let _ = app.update(Message::OpenReferenceMenu(0, point));
+        let _ = app.update(Message::KeyPressed(
+            iced::keyboard::Key::Named(iced::keyboard::key::Named::Escape),
+            iced::keyboard::Modifiers::empty(),
+        ));
+        assert!(app.reference_menu.is_none());
+        let _ = app.update(Message::OpenReferenceMenu(0, point));
+        let _ = app.update(Message::DismissReferenceMenu);
+        assert!(app.reference_menu.is_none());
+        let _ = app.update(Message::Timeline(TimelineEvent::Select(start, end)));
+        let _ = app.update(Message::OpenReferenceMenu(0, point));
+        assert!(
+            app.reference_menu.is_none(),
+            "Inspector selection has no track binding"
+        );
+        let _ = app.update(Message::TrackTimeline(0, TimelineEvent::Select(start, end)));
+        let mut review = crate::ReviewWorkspace::default();
+        review.warnings.push(
+            serde_json::from_value(serde_json::json!({
+                "start": 0,
+                "end": start,
+                "label": "Quiet speech",
+                "affected_tracks": [1],
+                "region": 0,
+                "analysis_identity": null
+            }))
+            .unwrap(),
+        );
+        app.review = Some(review);
+        let _ = app.update(Message::SelectSupervisedWarning(0));
+        assert_eq!(app.timeline.selection(), Some((0, start)));
+        let _ = app.update(Message::OpenReferenceMenu(0, point));
+        assert!(
+            app.reference_menu.is_none(),
+            "Review navigation cannot reuse an old track binding"
+        );
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
     #[test]
     fn imported_tracks_report_required_model_and_reference_setup() {
         let directory =
@@ -920,6 +1090,7 @@ pub struct CleanSlateApp {
     review: Option<ReviewWorkspace>,
     audition: Option<LiveAudition>,
     audition_preparation: AuditionPreparation,
+    audition_ready: bool,
     audition_range: Option<(TimePosition, TimePosition)>,
     audition_mode: AuditionMode,
     monitor_db: f32,
@@ -930,6 +1101,9 @@ pub struct CleanSlateApp {
     calibration_end: String,
     calibration_error: Option<String>,
     reference_speakers: Vec<SpeakerId>,
+    selection_track: Option<usize>,
+    reference_menu: Option<(usize, iced::Point)>,
+    model_details: bool,
     reference_stale: bool,
     reference_analyze_requested: bool,
     waveforms: Vec<WaveformCache>,
@@ -970,6 +1144,7 @@ impl Default for CleanSlateApp {
             review: None,
             audition: None,
             audition_preparation: AuditionPreparation::default(),
+            audition_ready: false,
             audition_range: None,
             audition_mode: AuditionMode::Original,
             monitor_db: -6.0,
@@ -980,6 +1155,9 @@ impl Default for CleanSlateApp {
             calibration_end: String::new(),
             calibration_error: None,
             reference_speakers: vec![],
+            selection_track: None,
+            reference_menu: None,
+            model_details: false,
             reference_stale: false,
             reference_analyze_requested: false,
             waveforms: vec![],
@@ -1215,6 +1393,12 @@ impl Drop for PreviewProcessing {
 
 #[derive(Debug, Clone)]
 enum Message {
+    TrackTimeline(usize, TimelineEvent),
+    CompleteTrackSelection(usize, TimePosition, TimePosition, iced::Point),
+    OpenReferenceMenu(usize, iced::Point),
+    DismissReferenceMenu,
+    ContextReference(Vec<SpeakerId>, bool),
+    ModelDetails(bool),
     DownloadModel,
     VerifyModel,
     CancelModelDownload,
@@ -1247,6 +1431,7 @@ enum Message {
     RangeModifier(bool),
     #[cfg(test)]
     OwnershipMode(bool),
+    #[cfg(test)]
     CalibrationMode(bool),
     CalibrationTiming(bool),
     CalibrationStart(String),
@@ -1320,6 +1505,8 @@ fn waveform_height(workspace_height: f32, stem_count: usize, compact: bool) -> f
 
 impl CleanSlateApp {
     fn install_waveforms(&mut self, waveforms: Vec<WaveformCache>) {
+        self.reference_menu = None;
+        self.selection_track = None;
         self.calibrating = false;
         self.calibration_start.clear();
         self.calibration_end.clear();
@@ -1330,7 +1517,8 @@ impl CleanSlateApp {
                 || matches!(project.result(), crate::ResultState::Stale { .. })
         });
         self.reference_analyze_requested = false;
-        self.audition_preparation.invalidate();
+        self.audition_preparation.cancel();
+        self.audition_ready = false;
         self.audition_range = None;
         if let Some(audition) = self.audition.take() {
             audition.stop();
@@ -1358,6 +1546,12 @@ impl CleanSlateApp {
             self.timeline.set_total_samples(cache.duration());
         }
         self.waveforms = waveforms;
+        if let Some(project) = &self.project {
+            match crate::original_envelopes(project) {
+                Ok(_) => self.audition_preparation.request(project.source_paths()),
+                Err(error) => self.messages.push(format!("Playback unavailable: {error}")),
+            }
+        }
     }
 
     fn add_stems(&mut self, paths: impl IntoIterator<Item = PathBuf>) {
@@ -1489,10 +1683,10 @@ impl CleanSlateApp {
                         Ok(loaded) => {
                             self.preview_parameters = loaded.project.parameters();
                             self.project = Some(loaded.project);
+                            self.messages = loaded.warnings;
                             self.install_waveforms(loading.waveforms);
                             self.review = loaded.review;
                             self.export_error = loaded.export_error;
-                            self.messages = loaded.warnings;
                         }
                         Err(error) => self.messages = vec![error],
                     }
@@ -1897,7 +2091,9 @@ impl CleanSlateApp {
         );
         self.audition.take().inspect(|playing| playing.stop());
         self.audition_range = Some((start, end));
-        self.audition_preparation.request(project.source_paths());
+        if !self.audition_preparation.is_requested() {
+            self.audition_preparation.request(project.source_paths());
+        }
     }
 
     fn gain_event(&mut self, track: usize, event: crate::GainEditorEvent) {
@@ -2023,6 +2219,30 @@ impl CleanSlateApp {
     }
 
     fn handle_edit_key(&mut self, key: &keyboard::Key, modifiers: keyboard::Modifiers) -> bool {
+        if self.reference_menu.is_some() {
+            let message = match key.as_ref() {
+                keyboard::Key::Named(keyboard::key::Named::Escape) => {
+                    Some(Message::DismissReferenceMenu)
+                }
+                keyboard::Key::Named(keyboard::key::Named::Enter) => Some(
+                    Message::ContextReference(self.reference_speakers.clone(), false),
+                ),
+                keyboard::Key::Character("r" | "R") => {
+                    Some(Message::ContextReference(vec![], false))
+                }
+                keyboard::Key::Character(number) => number
+                    .parse::<usize>()
+                    .ok()
+                    .and_then(|index| index.checked_sub(1))
+                    .and_then(|index| self.project.as_ref()?.sources.get(index))
+                    .map(|source| Message::ContextReference(vec![source.speaker_id], false)),
+                _ => None,
+            };
+            if let Some(message) = message {
+                let _ = self.update(message);
+            }
+            return true;
+        }
         if modifiers.command() {
             let message = match key.as_ref() {
                 keyboard::Key::Character("z") if self.gain_tool && modifiers.shift() => {
@@ -2030,10 +2250,9 @@ impl CleanSlateApp {
                 }
                 keyboard::Key::Character("z") if self.gain_tool => Some(Message::UndoGain),
                 keyboard::Key::Character("y") if self.gain_tool => Some(Message::RedoGain),
-                keyboard::Key::Character("z") if self.calibrating && modifiers.shift() => {
-                    Some(Message::RedoReferences)
-                }
-                keyboard::Key::Character("z") if self.calibrating => Some(Message::UndoReferences),
+                keyboard::Key::Character("z") if modifiers.shift() => Some(Message::RedoReferences),
+                keyboard::Key::Character("z") => Some(Message::UndoReferences),
+                keyboard::Key::Character("y") => Some(Message::RedoReferences),
                 _ => None,
             };
             if let Some(message) = message {
@@ -2177,48 +2396,53 @@ impl CleanSlateApp {
         }
     }
     fn poll_audition(&mut self) {
-        if let Some(result) = self.audition_preparation.poll()
-            && let Some((start, end)) = self.audition_range.take()
-        {
-            match result {
-                Ok(prepared) => {
-                    if let Some(project) = &self.project {
-                        let envelopes = crate::editor_audition_envelopes(
-                            project,
-                            self.preview.as_ref(),
-                            self.audition_mode,
-                        );
-                        match envelopes {
-                            Ok(envelopes)
-                                if prepared.is_current(&project.source_paths())
-                                    && source_stamps(&project.source_paths()).is_ok_and(
-                                        |sources| prepared.matches_sources(&sources),
-                                    ) =>
-                            {
-                                match LiveAudition::start(
-                                    prepared,
-                                    envelopes,
-                                    self.audition_mode,
-                                    10.0_f32.powf(self.monitor_db / 20.0),
-                                    start,
-                                    end,
-                                ) {
-                                    Ok(audition) => self.audition = Some(audition),
-                                    Err(error) => self.messages = vec![error.to_string()],
+        if let Some(result) = self.audition_preparation.poll() {
+            self.audition_ready = result.is_ok();
+            if let Err(error) = &result {
+                self.messages = vec![format!("Playback unavailable: {error}")];
+            }
+            if let Some((start, end)) = self.audition_range.take() {
+                match result {
+                    Ok(prepared) => {
+                        if let Some(project) = &self.project {
+                            let envelopes = crate::editor_audition_envelopes(
+                                project,
+                                self.preview.as_ref(),
+                                self.audition_mode,
+                            );
+                            match envelopes {
+                                Ok(envelopes)
+                                    if prepared.is_current(&project.source_paths())
+                                        && source_stamps(&project.source_paths()).is_ok_and(
+                                            |sources| prepared.matches_sources(&sources),
+                                        ) =>
+                                {
+                                    match LiveAudition::start(
+                                        prepared,
+                                        envelopes,
+                                        self.audition_mode,
+                                        10.0_f32.powf(self.monitor_db / 20.0),
+                                        start,
+                                        end,
+                                    ) {
+                                        Ok(audition) => self.audition = Some(audition),
+                                        Err(error) => self.messages = vec![error.to_string()],
+                                    }
                                 }
-                            }
-                            Ok(_) => {
-                                self.audition_preparation.invalidate();
-                                self.messages = vec![
+                                Ok(_) => {
+                                    self.audition_preparation.invalidate();
+                                    self.audition_ready = false;
+                                    self.messages = vec![
                                     "Sources changed; prepare the session again before audition."
                                         .into(),
                                 ];
+                                }
+                                Err(error) => self.messages = vec![error.to_string()],
                             }
-                            Err(error) => self.messages = vec![error.to_string()],
                         }
                     }
+                    Err(error) => self.messages = vec![error.to_string()],
                 }
-                Err(error) => self.messages = vec![error.to_string()],
             }
         }
         let Some(audition) = &self.audition else {
@@ -2384,6 +2608,19 @@ impl CleanSlateApp {
 
 impl CleanSlateApp {
     fn update(&mut self, message: Message) -> Task<Message> {
+        if self.reference_menu.is_some()
+            && matches!(
+                message,
+                Message::TrackTimeline(_, _)
+                    | Message::CompleteTrackSelection(_, _, _, _)
+                    | Message::Timeline(_)
+                    | Message::GainEvent(_, _)
+                    | Message::CalibrationStart(_)
+                    | Message::CalibrationEnd(_)
+            )
+        {
+            return Task::none();
+        }
         if self.sources_busy()
             && let Message::Timeline(event) = &message
         {
@@ -2456,6 +2693,59 @@ impl CleanSlateApp {
         }
         let previous_parameters = self.preview_parameters;
         match message {
+            Message::CompleteTrackSelection(track, start, end, point) => {
+                let _ = self.update(Message::TrackTimeline(
+                    track,
+                    TimelineEvent::Select(start, end),
+                ));
+                return self.update(Message::OpenReferenceMenu(track, point));
+            }
+            Message::TrackTimeline(track, event) => {
+                self.reference_menu = None;
+                if let TimelineEvent::Select(start, end) = event
+                    && start == end
+                {
+                    let _ = self.update(Message::Timeline(TimelineEvent::Seek(start)));
+                }
+                let selecting = matches!(event, TimelineEvent::Select(_, _));
+                let task = self.update(Message::Timeline(event));
+                if selecting {
+                    self.selection_track = Some(track);
+                }
+                return task;
+            }
+            Message::OpenReferenceMenu(track, point) => {
+                self.reference_menu = None;
+                if self.selection_track == Some(track)
+                    && self
+                        .project
+                        .as_ref()
+                        .is_some_and(|p| track < p.sources.len())
+                    && let Some((start, end)) = self.timeline.selection()
+                    && start < end
+                {
+                    self.capture_calibration_range(start, end);
+                    self.reference_speakers =
+                        vec![self.project.as_ref().unwrap().sources[track].speaker_id];
+                    self.calibration_error = None;
+                    self.calibration_timing = false;
+                    self.reference_menu = Some((track, point));
+                }
+            }
+            Message::DismissReferenceMenu => self.reference_menu = None,
+            Message::ModelDetails(show) => self.model_details = show,
+            Message::ContextReference(speakers, replace) => {
+                if let Some((track, _)) = self.reference_menu
+                    && self.selection_track == Some(track)
+                {
+                    self.reference_speakers = speakers;
+                    let _ = self.update(Message::SaveReference(replace));
+                    if self.calibration_error.is_none() {
+                        self.reference_menu = None;
+                        self.calibrating = false;
+                    }
+                }
+            }
             Message::DownloadModel => self.model_acquisition.begin(true),
             Message::VerifyModel => self.model_acquisition.begin(false),
             Message::CancelModelDownload => self.model_acquisition.cancel(),
@@ -2607,6 +2897,7 @@ impl CleanSlateApp {
                     }
                 }
             }
+            #[cfg(test)]
             Message::CalibrationMode(enabled) => self.calibrating = enabled,
             Message::CalibrationTiming(enabled) => self.calibration_timing = enabled,
             Message::CalibrationStart(value) => {
@@ -2754,6 +3045,8 @@ impl CleanSlateApp {
             }
             Message::SelectSupervisedWarning(index) => {
                 if let Some(review) = &mut self.review {
+                    self.selection_track = None;
+                    self.reference_menu = None;
                     review.select_warning(index);
                     self.timeline.seek(review.playhead());
                     self.timeline.set_selection(review.selection());
@@ -2870,6 +3163,8 @@ impl CleanSlateApp {
                     self.timeline.pan_by_pixels(delta_x, width)
                 }
                 TimelineEvent::Select(start, end) => {
+                    self.selection_track = None;
+                    self.reference_menu = None;
                     if self.calibrating {
                         self.capture_calibration_range(start, end);
                     }
@@ -3005,47 +3300,67 @@ impl CleanSlateApp {
         "REFERENCES SAVED · ANALYZE TO VALIDATE".into()
     }
 
+    fn next_action(&self) -> &'static str {
+        let Some(project) = &self.project else {
+            return "Open a project or import mono speaker tracks.";
+        };
+        if self.preview_processing.is_some() {
+            return "Analyzing. Original playback remains available.";
+        }
+        let (missing, room) = self.missing_references();
+        if !missing.is_empty() || !room {
+            return "Listen in Original. Drag a few solo examples and room tone, then label them.";
+        }
+        if project.require_alignment().is_err() {
+            return "Confirm synchronized recording starts below before Analyze.";
+        }
+        if self.model_acquisition.provenance().is_none() {
+            return "Verify the model below, then Analyze your references.";
+        }
+        if self.reference_stale || self.supervised_result.is_none() {
+            return "Click Analyze to learn from your saved references.";
+        }
+        "Listen in Processed and Removed. Adjust attenuation and fades, then export."
+    }
+
     fn calibration_controls(&self) -> Element<'_, Message> {
         let Some(project) = &self.project else {
             return column![].into();
         };
         let mut controls = column![
             text("Speaker references").size(18),
-            text(
-                "Required: solo speech for each speaker and room tone. Overlap labels are optional."
-            )
+            text("Drag a clear example on any track, then choose who is talking.").size(12),
+            text(format!(
+                "{} saved references",
+                project.reference_labels().len()
+            ))
             .size(12),
-            button(if self.calibrating {
-                "Finish selecting"
-            } else {
-                "Select a reference"
-            })
-            .on_press(Message::CalibrationMode(!self.calibrating)),
-            text("Drag across a waveform. Select everyone speaking; select nobody for room tone.")
-                .size(12),
-            text("Labels teach analysis. Manual gain edits remain authoritative.").size(12),
         ]
         .spacing(8);
-        for source in &project.sources {
-            let speaker = source.speaker_id;
+        if self.calibration_timing {
+            for source in &project.sources {
+                let speaker = source.speaker_id;
+                controls = controls.push(
+                    iced::widget::checkbox(self.reference_speakers.contains(&speaker))
+                        .label(format!("Speaker {}", speaker.0))
+                        .on_toggle(move |active| Message::ReferenceSpeaker(speaker, active)),
+                );
+            }
+            controls =
+                controls.push(button("Save reference").on_press(Message::SaveReference(false)));
             controls = controls.push(
-                iced::widget::checkbox(self.reference_speakers.contains(&speaker))
-                    .label(format!("Speaker {}", speaker.0))
-                    .on_toggle(move |active| Message::ReferenceSpeaker(speaker, active)),
+                button("Listen to selected range").on_press_maybe(
+                    self.timeline
+                        .selection()
+                        .map(|_| Message::AuditionSelection),
+                ),
             );
-        }
-        controls = controls.push(button("Save reference").on_press(Message::SaveReference(false)));
-        controls = controls.push(
-            button("Listen to selected range").on_press_maybe(
-                self.timeline
-                    .selection()
-                    .map(|_| Message::AuditionSelection),
-            ),
-        );
-        if !self.reference_conflicts().is_empty() {
-            controls = controls.push(
-                button("Replace conflicting whole labels").on_press(Message::SaveReference(true)),
-            );
+            if !self.reference_conflicts().is_empty() {
+                controls = controls.push(
+                    button("Replace conflicting whole labels")
+                        .on_press(Message::SaveReference(true)),
+                );
+            }
         }
         controls = controls.push(
             row![
@@ -3057,15 +3372,13 @@ impl CleanSlateApp {
         controls = controls.push(
             column![
                 button("Analyze").on_press(Message::AnalyzeReferences),
-                button("Cancel analysis").on_press_maybe(
-                    self.preview_processing
-                        .as_ref()
-                        .map(|_| Message::CancelAnalysis)
-                ),
                 button("Save project").on_press(Message::SaveProject),
             ]
             .spacing(6),
         );
+        if self.preview_processing.is_some() {
+            controls = controls.push(button("Cancel analysis").on_press(Message::CancelAnalysis));
+        }
         controls = controls.push(
             iced::widget::checkbox(self.gain_tool)
                 .label("Envelope edit tool")
@@ -3106,7 +3419,6 @@ impl CleanSlateApp {
             })
             .size(12),
         );
-        controls = controls.push(text("Blue: human labels · gray: automatic gain · teal: effective gain · pink: manual points · gold: unity protection").size(12));
         if let Some(review) = &self.review {
             let warnings = &review.warnings;
             controls =
@@ -3145,8 +3457,8 @@ impl CleanSlateApp {
                 );
             }
         }
-        controls = controls.push(text("Final export requires current supervised analysis. Preview playback remains available.").size(12));
-        controls = controls.push(text({
+        if self.calibration_timing {
+            controls = controls.push(text({
             match self.calibration_range() {
                 Ok((start, end)) => format!(
                     "Selected {:.3}–{:.3} s ({:.3} s). Choose the speakers above and Save reference.",
@@ -3157,11 +3469,12 @@ impl CleanSlateApp {
                 Err(error) => error,
             }
         }));
+        }
         controls = controls.push(
             button(if self.calibration_timing {
                 "Hide exact times"
             } else {
-                "Exact times / existing selection"
+                "Exact times / saved labels"
             })
             .on_press(Message::CalibrationTiming(!self.calibration_timing)),
         );
@@ -3188,34 +3501,51 @@ impl CleanSlateApp {
         if let Some(error) = &self.calibration_error {
             controls = controls.push(text(format!("Example not saved: {error}")));
         }
-        if project.reference_labels().is_empty() {
-            controls = controls.push(text(
-                "No saved references. Add room tone and each speaker's solo speech.",
-            ));
-        }
-        for label in project.reference_labels() {
-            let speakers = if label.active_speakers.is_empty() {
-                "Room tone".to_owned()
-            } else {
-                label
-                    .active_speakers
-                    .iter()
-                    .map(|speaker| format!("Speaker {}", speaker.0))
-                    .collect::<Vec<_>>()
-                    .join(" + ")
-            };
-            controls = controls
-                .push(text(format!(
-                    "{speakers}: {:.5} to {:.5} s",
-                    label.range.start as f64 / TICKS_PER_SECOND as f64,
-                    label.range.end as f64 / TICKS_PER_SECOND as f64
-                )))
-                .push(button("Remove reference").on_press(Message::RemoveReference(label.id)));
+        if self.calibration_timing {
+            for label in project.reference_labels() {
+                let speakers = if label.active_speakers.is_empty() {
+                    "Room tone".to_owned()
+                } else {
+                    label
+                        .active_speakers
+                        .iter()
+                        .map(|speaker| format!("Speaker {}", speaker.0))
+                        .collect::<Vec<_>>()
+                        .join(" + ")
+                };
+                controls = controls
+                    .push(text(format!(
+                        "{speakers}: {:.5} to {:.5} s",
+                        label.range.start as f64 / TICKS_PER_SECOND as f64,
+                        label.range.end as f64 / TICKS_PER_SECOND as f64
+                    )))
+                    .push(button("Remove reference").on_press(Message::RemoveReference(label.id)));
+            }
         }
         controls.into()
     }
 
     fn model_controls(&self) -> Element<'_, Message> {
+        let ready =
+            self.model_acquisition.provenance().is_some() && !self.model_acquisition.is_busy();
+        let mut controls = column![
+            text(if ready {
+                "Model ready · offline"
+            } else {
+                self.model_acquisition.status()
+            })
+            .size(12),
+            button(if self.model_details {
+                "Hide model details"
+            } else {
+                "Model details"
+            })
+            .on_press(Message::ModelDetails(!self.model_details)),
+        ]
+        .spacing(6);
+        if ready && !self.model_details {
+            return controls.into();
+        }
         let actions = if self.model_acquisition.is_busy() {
             column![
                 progress_bar(0.0..=1.0, self.model_acquisition.progress()),
@@ -3228,8 +3558,11 @@ impl CleanSlateApp {
             ]
         }
         .spacing(6);
-        column![
-            text(self.model_acquisition.status()).size(12),
+        if !ready {
+            controls = controls.push(actions);
+        }
+        if self.model_details {
+            controls = controls.push(column![
             iced::widget::tooltip(
                 text("Nemotron q8_0 · 107 MB · CPU / offline").size(12),
                 text(format!("Pinned {} · SHA-256 {}",crate::model::MODEL_REVISION,crate::model::NEMOTRON.sha256)).size(12),
@@ -3237,23 +3570,30 @@ impl CleanSlateApp {
             ),
             text("Weights: OpenMDW 1.1 · runtime: Apache-2.0").size(11),
             text("Download: NVIDIA / Hugging Face. Agreement: https://openmdw.ai/license/1-1/. Notices accompany the installed files.").size(11),
-            actions,
-        ].spacing(6).into()
+            button("Verify installed model offline").on_press(Message::VerifyModel),
+        ].spacing(6));
+        }
+        controls.into()
     }
 
     fn session_controls(&self) -> Element<'_, Message> {
         let Some(project) = &self.project else {
             return column![].into();
         };
-        let mut controls = column![
-            iced::widget::checkbox(project.supplied_alignment())
-                .label("I supplied synchronized tracks")
-                .on_toggle(Message::SuppliedAlignment),
-            button("Recheck source files").on_press(Message::Validate),
-        ]
-        .spacing(8);
+        let mut controls =
+            column![button("Recheck source files").on_press(Message::Validate),].spacing(8);
         if let Err(error) = project.require_alignment() {
-            controls = controls.push(text(error.to_string()));
+            controls = controls
+                .push(
+                    text("Before Analyze: confirm the tracks share the same recording start.")
+                        .size(12),
+                )
+                .push(
+                    iced::widget::checkbox(project.supplied_alignment())
+                        .label("Tracks are synchronized")
+                        .on_toggle(Message::SuppliedAlignment),
+                )
+                .push(text(error.to_string()).size(12));
         }
         for (index, source) in project.sources.iter().enumerate() {
             let mut source_controls =
@@ -3493,10 +3833,14 @@ impl CleanSlateApp {
                             TimelineCanvas::waveform(
                                 cache,
                                 &self.timeline,
-                                Message::Timeline,
+                                move |event| Message::TrackTimeline(index, event),
                                 self.preview.as_ref().map(|preview| (preview, index)),
                                 self.selecting_range || self.calibrating,
                             )
+                            .with_context(move |point| Message::OpenReferenceMenu(index, point))
+                            .with_selection(move |start, end, point| {
+                                Message::CompleteTrackSelection(index, start, end, point)
+                            })
                             .with_overview(
                                 self.supervised_result
                                     .as_ref()
@@ -3556,7 +3900,10 @@ impl CleanSlateApp {
         };
         let timeline = column![
             text("SESSION TIMELINE").size(12),
-            text(if self.calibrating { "Reference selection: drag across a waveform, choose the speakers, then Save reference." } else { "Click to seek. Select a reference to highlight a range; wheel to zoom, Ctrl-wheel or middle-drag to pan." }).size(11),
+            text(
+                "Click to seek · drag to label · wheel to zoom · Ctrl-wheel or middle-drag to pan"
+            )
+            .size(11),
             tracks,
         ]
         .spacing(10)
@@ -3591,7 +3938,7 @@ impl CleanSlateApp {
                 self.model_acquisition.provenance() != Some(&analysis.runtime)
             })
         {
-            text("Supervised analysis is not current · verify the model and click Analyze; previous preview remains available").into()
+            text("Analysis out of date · click Analyze").into()
         } else if let Some(preview) = &self.preview {
             text(format!(
                 "Preview ready · {} ownership regions",
@@ -3605,9 +3952,8 @@ impl CleanSlateApp {
         let inspector = container(
             column![
                 self.model_controls(),
-                text("ANALYSIS PREVIEW").size(12),
-                text("Session parameters").size(20),
-                text("Gain settings update preview and audition immediately. Analyze uses your reference labels."),
+                text("Next step").size(18),
+                text(self.next_action()).size(13),
                 preview_state,
                 self.calibration_controls(),
                 self.session_controls(),
@@ -3619,10 +3965,7 @@ impl CleanSlateApp {
                 )
                 .step(1.0_f32)
                 .on_release(Message::RefreshPreview),
-                text(format!(
-                    "Open fade duration: {:.0} ms",
-                    parameters.open_ms
-                )),
+                text(format!("Open fade duration: {:.0} ms", parameters.open_ms)),
                 slider(1.0..=1000.0, parameters.open_ms, Message::OpenTime)
                     .step(1.0_f32)
                     .on_release(Message::RefreshPreview),
@@ -3633,10 +3976,7 @@ impl CleanSlateApp {
                 slider(1.0..=2000.0, parameters.close_ms, Message::CloseTime)
                     .step(1.0_f32)
                     .on_release(Message::RefreshPreview),
-                text(
-                    "Overlay: preserved solid · attenuated diagonal hatch · uncertain dotted · protected outline"
-                ),
-                text("Bright waveform: conservative processed bounds; faint waveform: Original.").size(12),
+                text("Solid: preserved · hatch: attenuated · dots: uncertain").size(11),
             ]
             .spacing(12),
         )
@@ -3679,8 +4019,19 @@ impl CleanSlateApp {
                 .then_some(Message::Audition)
             ),
             button("Stop").on_press_maybe(
-                (self.audition.is_some() || self.audition_range.is_some()).then_some(Message::Stop)
+                (self.audition.is_some()
+                    || self.audition_range.is_some()
+                    || self.audition_preparation.is_busy())
+                .then_some(Message::Stop)
             ),
+            text(if self.audition_preparation.is_busy() {
+                "Preparing playback…"
+            } else if self.audition_ready {
+                "Playback ready"
+            } else {
+                ""
+            })
+            .size(11),
             Space::new().width(Fill),
             text("AUDITION"),
             button(if self.audition_mode == AuditionMode::Original {
@@ -3714,10 +4065,86 @@ impl CleanSlateApp {
             row![timeline, inspector].spacing(12).height(Fill).into()
         };
 
-        container(column![header, editor, transport].spacing(12))
+        let base: Element<'_, Message> = container(column![header, editor, transport].spacing(12))
             .padding(12)
             .width(Fill)
             .height(Fill)
-            .into()
+            .into();
+        let Some((_, point)) = self.reference_menu else {
+            return base;
+        };
+        let overlay = responsive(move |size| {
+            let mut menu = column![
+                text("Who is talking?").size(16),
+                text("1–8: solo · R: room tone · Enter: selected speakers · Esc: close").size(11)
+            ]
+            .spacing(6);
+            if let Some(project) = &self.project {
+                for source in &project.sources {
+                    let speaker = source.speaker_id;
+                    menu = menu.push(
+                        button(text(format!("Speaker {} · solo speech", speaker.0)))
+                            .on_press(Message::ContextReference(vec![speaker], false))
+                            .width(Fill),
+                    );
+                }
+                menu = menu.push(
+                    button("Room tone · nobody speaking")
+                        .on_press(Message::ContextReference(vec![], false))
+                        .width(Fill),
+                );
+                menu = menu.push(text("Overlap: select everyone speaking").size(12));
+                for source in &project.sources {
+                    let speaker = source.speaker_id;
+                    menu = menu.push(
+                        iced::widget::checkbox(self.reference_speakers.contains(&speaker))
+                            .label(format!("Speaker {}", speaker.0))
+                            .on_toggle(move |active| Message::ReferenceSpeaker(speaker, active)),
+                    );
+                }
+                menu = menu.push(button("Save selected speakers").on_press(
+                    Message::ContextReference(self.reference_speakers.clone(), false),
+                ));
+            }
+            if let Some(error) = &self.calibration_error {
+                menu = menu.push(text(error).size(12));
+                if !self.reference_conflicts().is_empty() {
+                    menu = menu.push(button("Replace conflicting whole labels").on_press(
+                        Message::ContextReference(self.reference_speakers.clone(), true),
+                    ));
+                }
+            }
+            menu = menu.push(button("Cancel").on_press(Message::DismissReferenceMenu));
+            let width = 280.0_f32.min(size.width);
+            let rows = self.project.as_ref().map_or(0, |p| p.sources.len());
+            let height = (150.0
+                + rows as f32 * 64.0
+                + if self.calibration_error.is_some() {
+                    120.0
+                } else {
+                    0.0
+                })
+            .min(520.0)
+            .min(size.height);
+            let x = point.x.min((size.width - width).max(0.0)).max(0.0);
+            let y = point.y.min((size.height - height).max(0.0)).max(0.0);
+            let panel = container(scrollable(menu))
+                .padding(10)
+                .width(width)
+                .height(height)
+                .style(container::bordered_box);
+            let positioned = container(opaque(panel)).padding(iced::Padding {
+                top: y,
+                left: x,
+                ..iced::Padding::ZERO
+            });
+            opaque(
+                mouse_area(container(positioned).width(Fill).height(Fill))
+                    .on_press(Message::DismissReferenceMenu)
+                    .on_right_press(Message::DismissReferenceMenu)
+                    .on_scroll(|_| Message::DismissReferenceMenu),
+            )
+        });
+        stack![base, overlay].into()
     }
 }
