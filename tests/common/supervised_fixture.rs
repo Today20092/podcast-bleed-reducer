@@ -19,6 +19,29 @@ pub fn session_gain(
     Vec<PreparedAnalysisAudio>,
     DiarizationEvidence,
 ) {
+    session_rates_gain([16000, 16000], quiet_gain)
+}
+// Shared by several integration binaries; only delivery tests need mixed rates.
+#[allow(dead_code)]
+pub fn session_at_rates(
+    rates: [u32; 2],
+) -> (
+    PathBuf,
+    Project,
+    Vec<PreparedAnalysisAudio>,
+    DiarizationEvidence,
+) {
+    session_rates_gain(rates, 1.0)
+}
+fn session_rates_gain(
+    rates: [u32; 2],
+    quiet_gain: f32,
+) -> (
+    PathBuf,
+    Project,
+    Vec<PreparedAnalysisAudio>,
+    DiarizationEvidence,
+) {
     let root = std::env::temp_dir().join(format!(
         "cleanslate-ownership-{}-{}",
         std::process::id(),
@@ -36,18 +59,18 @@ pub fn session_gain(
         })
         .collect();
     let mut paths = vec![];
-    for track in 0..2 {
+    for (track, &rate) in rates.iter().enumerate() {
         let path = root.join(format!("speaker-{track}.wav"));
-        let mut format = bwavfile::WaveFmt::new_pcm_mono(16000, 32);
+        let mut format = bwavfile::WaveFmt::new_pcm_mono(rate, 32);
         format.tag = 3;
         let mut writer = bwavfile::WaveWriter::create(&path, format)
             .unwrap()
             .audio_frame_writer()
             .unwrap();
-        let samples: Vec<_> = noise
-            .iter()
-            .enumerate()
-            .map(|(i, &a)| {
+        let samples: Vec<_> = (0..rate as usize * 4)
+            .map(|frame| {
+                let i = frame * 16000 / rate as usize;
+                let a = noise[i];
                 let b = noise[(i + 700) % noise.len()];
                 let active_a = (8000..24000).contains(&i) || (48000..60000).contains(&i);
                 let active_b = (32000..44000).contains(&i) || (52000..60000).contains(&i);

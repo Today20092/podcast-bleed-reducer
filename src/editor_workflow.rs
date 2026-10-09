@@ -11,6 +11,27 @@ use std::{
 
 pub const EDITOR_ANALYSIS_RECIPE: &str = "offline-supervised-native06-model09-temporal10-v1";
 
+pub fn verify_installed_editor_runtime(
+    runtime: &crate::model::RuntimeProvenance,
+    cancel: &AtomicBool,
+) -> Result<(), RenderBlocker> {
+    let helper = std::env::current_exe()?.with_file_name(if cfg!(windows) {
+        "model-check.exe"
+    } else {
+        "model-check"
+    });
+    let native = crate::model::runtime_directory().map_err(RenderBlocker)?;
+    let mut command = std::process::Command::new(helper);
+    command.arg("--verify-only").arg("--runtime").arg(native);
+    let actual = crate::model::verify_native_runtime(command, cancel).map_err(RenderBlocker)?;
+    if &actual != runtime {
+        return Err(RenderBlocker(
+            "Installed model/runtime changed; verify it before final delivery.".into(),
+        ));
+    }
+    Ok(())
+}
+
 pub fn original_envelopes(project: &Project) -> Result<Vec<crate::GainEnvelope>, RenderBlocker> {
     project
         .require_alignment()

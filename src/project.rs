@@ -160,6 +160,8 @@ pub struct Project {
     render: RenderState,
     last_render: Option<PathBuf>,
     render_sources: Vec<SourceBinding>,
+    #[serde(default)]
+    render_record: Option<crate::supervised_render::RenderRecord>,
     step: WorkflowStep,
 }
 
@@ -209,6 +211,7 @@ impl Project {
             render: RenderState::None,
             last_render: None,
             render_sources: vec![],
+            render_record: None,
             step: WorkflowStep::Validate,
         };
         project.rebuild_runtime()?;
@@ -583,6 +586,60 @@ impl Project {
     pub fn path(&self) -> &Path {
         &self.path
     }
+
+    pub(crate) fn sound_identity(&self) -> io::Result<String> {
+        let data = serde_json::to_vec(&(
+            &self.sources,
+            self.supplied_alignment,
+            &self.references,
+            self.gain_constraints(),
+            self.parameters,
+            &self.analysis_recipe,
+            &self.result,
+        ))
+        .map_err(invalid_json)?;
+        Ok(format!("{:x}", Sha256::digest(data)))
+    }
+    pub(crate) fn saved_sound_identity(path: &Path) -> io::Result<String> {
+        let project: Self = serde_json::from_slice(&fs::read(path)?).map_err(invalid_json)?;
+        project.validate_contract()?;
+        project.sound_identity()
+    }
+    pub(crate) fn delivery_identity(&self) -> io::Result<String> {
+        Ok(format!(
+            "{:x}",
+            Sha256::digest(
+                serde_json::to_vec(&(self.sound_identity()?, &self.render, &self.render_record))
+                    .map_err(invalid_json)?
+            )
+        ))
+    }
+    pub(crate) fn saved_delivery_identity(path: &Path) -> io::Result<String> {
+        let project: Self = serde_json::from_slice(&fs::read(path)?).map_err(invalid_json)?;
+        project.validate_contract()?;
+        project.delivery_identity()
+    }
+    pub(crate) fn render_record(&self) -> Option<&crate::supervised_render::RenderRecord> {
+        self.render_record.as_ref()
+    }
+    pub(crate) fn install_render_record(
+        &mut self,
+        record: crate::supervised_render::RenderRecord,
+    ) -> io::Result<()> {
+        self.transaction(|next| {
+            if !record.snapshot.matches(next) {
+                return Err(invalid("Render snapshot is no longer current."));
+            }
+            next.render = RenderState::Current {
+                identity: record.report.clone(),
+            };
+            next.last_render = Some(record.report.clone());
+            next.render_sources = next.bindings();
+            next.render_record = Some(record);
+            next.step = WorkflowStep::Review;
+            Ok(())
+        })
+    }
     pub fn step(&self) -> WorkflowStep {
         self.step
     }
@@ -671,6 +728,13 @@ impl Project {
     }
 
     fn render_bindings_current(&self) -> bool {
+        if self
+            .render_record
+            .as_ref()
+            .is_some_and(|record| !record.snapshot.matches(self))
+        {
+            return false;
+        }
         self.render_sources
             .iter()
             .map(|b| b.track)

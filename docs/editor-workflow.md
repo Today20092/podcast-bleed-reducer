@@ -20,7 +20,9 @@ Open/close settings specify finite exponential-shaped fade durations with exact 
 
 Review controls select an uncertainty reason, seek the range and highlight its tracks without changing the comparison mode. Review keys include the accepted temporal identity and can be marked reviewed in the project. Original works before analysis. When a preview exists, Original, Processed and Removed retain the same effective envelopes behind their modes, preserving transport and seek context.
 
-Save project persists labels, gain overrides, protections, review states and recipe identities. Opening a project validates sources; Analyze reconstructs its preview using reusable fixed evidence. This ticket does not publish a final render. Ticket 13 supplies current-result native export and playback/export parity.
+Save project persists labels, gain overrides, protections, review states and recipe identities. Opening a project validates sources; Analyze reconstructs its preview using reusable fixed evidence.
+
+Create final WAV render publishes the accepted effective envelopes directly at each source's native sample rate. Export copies only that accepted render after verifying its report, WAV hashes, source identities and saved project identity. Monitoring gain and comparison mode never enter exported audio. Label/model/source changes require current analysis; gain edits require a fresh render without repeating inference. Both final render and delivery can be cancelled. Incomplete or obsolete private attempts never replace prior deliverables. A published attempt that cannot be accepted remains beside the project as recovery material; deleting it is an explicit file operation.
 
 ## Validation
 

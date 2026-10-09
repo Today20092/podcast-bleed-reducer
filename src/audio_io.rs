@@ -20,11 +20,23 @@ impl AtomicOutput {
             .file_name()
             .and_then(|name| name.to_str())
             .unwrap_or("rendered");
-        let staging = parent.join(format!(".{name}.{}.tmp", std::process::id()));
-        if staging.exists() {
-            fs::remove_dir_all(&staging)?;
-        }
-        fs::create_dir(&staging)?;
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        let staging = loop {
+            let sequence = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            let path = parent.join(format!(
+                ".{name}.{}.{nonce}.{sequence}.tmp",
+                std::process::id()
+            ));
+            match fs::create_dir(&path) {
+                Ok(()) => break path,
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                Err(error) => return Err(error.into()),
+            }
+        };
         Ok(Self {
             staging,
             destination: destination.into(),
@@ -39,6 +51,11 @@ impl AtomicOutput {
         fs::write(self.path("report.json"), report).map_err(Into::into)
     }
     pub(crate) fn commit(mut self) -> Result<(), RenderBlocker> {
+        if self.destination.exists() {
+            // remove_dir is atomic and refuses a nonempty directory, including a
+            // destination filled by another attempt after its initial check.
+            fs::remove_dir(&self.destination)?;
+        }
         fs::rename(&self.staging, &self.destination)?;
         self.committed = true;
         Ok(())

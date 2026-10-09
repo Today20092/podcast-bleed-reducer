@@ -1,12 +1,12 @@
 use crate::audio_io::waveform;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
     fs, io,
     path::{Path, PathBuf},
 };
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ReviewWarning {
     pub start: crate::TimePosition,
     pub end: crate::TimePosition,
@@ -70,6 +70,8 @@ impl ReviewRegion {
 struct Report {
     regions: Vec<ReviewRegion>,
     output: Output,
+    #[serde(default)]
+    supervised_warnings: Option<Vec<ReviewWarning>>,
 }
 
 #[derive(Deserialize)]
@@ -190,6 +192,7 @@ impl ReviewWorkspace {
                 }
             })
             .collect();
+        let warnings = report.supervised_warnings.unwrap_or(warnings);
         Ok(Self {
             regions: report.regions,
             warnings,

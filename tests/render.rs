@@ -10,13 +10,26 @@ use std::sync::{
 use std::time::{Duration, Instant};
 use std::{fs, path::Path};
 
-fn wait_for(path: &Path) {
+fn wait_for_staging(root: &Path) -> std::path::PathBuf {
     let deadline = Instant::now() + Duration::from_secs(5);
-    while !path.exists() {
+    loop {
+        if let Some(path) = fs::read_dir(root)
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .find(|path| {
+                path.file_name()
+                    .unwrap()
+                    .to_string_lossy()
+                    .starts_with(".rendered.")
+                    && path.join("01-a.wav").exists()
+            })
+        {
+            return path;
+        }
         assert!(
             Instant::now() < deadline,
-            "timed out waiting for {}",
-            path.display()
+            "timed out waiting for a private render in {}",
+            root.display()
         );
         std::thread::yield_now();
     }
@@ -324,12 +337,10 @@ fn blocks_bad_alignment_and_cleans_up_failure_and_cancellation() {
 
     wav(&a, 1, &vec![0.0; 1_000_000], Some(1));
     wav(&b, 1, &vec![0.0; 1_000_000], Some(1));
-    let staging = root.join(format!(".rendered.{}.tmp", std::process::id()));
-    let first_stem = staging.join("01-a.wav");
-    let blocked_second_stem = staging.join("02-b.wav");
+    let attempt_root = root.clone();
     let blocker = std::thread::spawn(move || {
-        wait_for(&first_stem);
-        fs::create_dir(blocked_second_stem).unwrap();
+        let staging = wait_for_staging(&attempt_root);
+        fs::create_dir(staging.join("02-b.wav")).unwrap();
     });
     let error = run(RunRequest {
         supplied_alignment: true,
@@ -346,9 +357,9 @@ fn blocks_bad_alignment_and_cleans_up_failure_and_cancellation() {
 
     let cancelled = Arc::new(AtomicBool::new(false));
     let cancel = cancelled.clone();
-    let first_stem = staging.join("01-a.wav");
+    let attempt_root = root.clone();
     let canceller = std::thread::spawn(move || {
-        wait_for(&first_stem);
+        wait_for_staging(&attempt_root);
         cancel.store(true, std::sync::atomic::Ordering::Relaxed);
     });
     let error = run(RunRequest {

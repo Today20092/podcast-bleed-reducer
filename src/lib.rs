@@ -22,6 +22,7 @@ mod references;
 pub mod release_gate;
 mod review;
 mod session_ownership;
+mod supervised_render;
 mod temporal_ownership;
 mod timebase;
 pub mod timeline;
@@ -55,6 +56,7 @@ pub use references::{
 };
 pub use review::*;
 pub use session_ownership::*;
+pub use supervised_render::*;
 pub use temporal_ownership::*;
 pub use timebase::{
     Rounding, SourceTimebase, TICKS_PER_SECOND, TimePosition, TimeRange, time_from_seconds,

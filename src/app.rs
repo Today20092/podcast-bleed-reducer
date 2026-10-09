@@ -1,8 +1,7 @@
 use crate::{
-    AnalysisPreview, AutomixParameters, CalibrationKind, Comparison, OwnershipSettings, Project,
-    RenderState, ReviewState, ReviewWorkspace, SpeakerId, TimeRange, WorkflowStep,
+    AnalysisPreview, AutomixParameters, CalibrationKind, Comparison, Project, RenderState,
+    ReviewState, ReviewWorkspace, SpeakerId, TimeRange, WorkflowStep,
     audition::{AuditionMode, AuditionPreparation, LiveAudition},
-    export,
     prepared_analysis::source_stamps,
     timebase::{Rounding, TICKS_PER_SECOND, TimePosition, time_from_seconds},
     timeline::{TimelineEvent, TimelineViewport},
@@ -210,105 +209,6 @@ mod tests {
                 .any(|message| message.contains("current supervised"))
         );
         // The worker owns these temporary inputs until it exits.
-    }
-
-    #[test]
-    fn completed_render_cannot_replace_changed_session() {
-        for change in 0..8 {
-            let directory = std::env::temp_dir().join(format!(
-                "cleanslate-render-snapshot-{}-{change}",
-                std::process::id()
-            ));
-            std::fs::create_dir_all(&directory).unwrap();
-            let source = directory.join("voice.wav");
-            write_wav(&source, &vec![0.0; 48_000]);
-            let project =
-                synchronized_project(directory.join("episode.cleanslate"), vec![source.clone()])
-                    .unwrap();
-            let snapshot = super::RenderSnapshot::read(&project).unwrap();
-            assert!(super::RenderSnapshot::read(&project).unwrap() == snapshot);
-            let (sender, result) = super::mpsc::channel();
-            let mut app = super::CleanSlateApp {
-                project: Some(project),
-                processing: Some(super::Processing {
-                    cancelled: super::Arc::new(super::AtomicBool::new(false)),
-                    progress: super::Arc::new(super::AtomicU8::new(100)),
-                    result,
-                    snapshot,
-                }),
-                ..Default::default()
-            };
-            match change {
-                0 => {
-                    let project = app.project.as_mut().unwrap();
-                    let mut parameters = project.parameters();
-                    parameters.attenuation_db = -12.0;
-                    project.set_parameters(parameters).unwrap();
-                }
-                1 => app
-                    .project
-                    .as_mut()
-                    .unwrap()
-                    .protect_range(
-                        crate::timebase::detector_time(0),
-                        crate::timebase::detector_time(100),
-                    )
-                    .unwrap(),
-                2 => write_wav(&source, &[0.0; 3073]),
-                3 => app.project = None,
-                4 => {
-                    let mut other = synchronized_project(
-                        directory.join("other.cleanslate"),
-                        vec![source.clone()],
-                    )
-                    .unwrap();
-                    other
-                        .mark_render_current(directory.join("other-report.json"))
-                        .unwrap();
-                    app.project = Some(other);
-                }
-                7 => {
-                    let _ = app.update(super::Message::Attenuation(-12.0));
-                }
-                _ => {
-                    let project = app.project.as_mut().unwrap();
-                    let mut settings = project.ownership_settings().clone();
-                    if change == 5 {
-                        settings.enabled = false;
-                    } else {
-                        settings.sources = super::source_stamps(&project.source_paths()).unwrap();
-                        settings.examples.push(crate::CalibrationExample {
-                            kind: crate::CalibrationKind::RoomTone,
-                            track: 0,
-                            start: crate::timebase::detector_time(0),
-                            end: crate::timebase::detector_time(24_000),
-                        });
-                    }
-                    project.set_ownership_settings(settings).unwrap();
-                }
-            }
-            sender
-                .send(Ok(directory.join("old-report.json").display().to_string()))
-                .unwrap();
-            app.poll_processing();
-            assert!(app.processing.is_none());
-            assert!(app.messages[0].contains("earlier settings or sources"));
-            assert!(!app.export_ready());
-            if let Some(project) = app.project {
-                if change == 4 {
-                    assert_eq!(
-                        project.render(),
-                        &crate::RenderState::Current {
-                            identity: directory.join("other-report.json")
-                        }
-                    );
-                } else {
-                    assert_eq!(project.render(), &crate::RenderState::Stale);
-                    assert!(project.review_identity().is_none());
-                }
-            }
-            std::fs::remove_dir_all(directory).unwrap();
-        }
     }
 
     #[test]
@@ -996,6 +896,8 @@ pub struct CleanSlateApp {
     source_loading: Option<SourceLoading>,
     messages: Vec<String>,
     processing: Option<Processing>,
+    exporting: Option<ExportProcessing>,
+    render_generation: Arc<crate::RenderGeneration>,
     review: Option<ReviewWorkspace>,
     audition: Option<LiveAudition>,
     audition_preparation: AuditionPreparation,
@@ -1044,6 +946,8 @@ impl Default for CleanSlateApp {
             source_loading: None,
             messages: vec![],
             processing: None,
+            exporting: None,
+            render_generation: Arc::new(crate::RenderGeneration::default()),
             review: None,
             audition: None,
             audition_preparation: AuditionPreparation::default(),
@@ -1252,28 +1156,22 @@ fn load_sources(
 struct Processing {
     cancelled: Arc<AtomicBool>,
     progress: Arc<AtomicU8>,
-    result: Receiver<Result<String, String>>,
-    snapshot: RenderSnapshot,
+    result: Receiver<Result<crate::PublishedSupervisedRender, String>>,
+    snapshot: crate::SupervisedRenderSnapshot,
+    generation: u64,
 }
-
-#[derive(PartialEq)]
-struct RenderSnapshot {
-    project: PathBuf,
-    sources: Vec<waveform::SourceStamp>,
-    parameters: AutomixParameters,
-    protections: Vec<crate::Protection>,
-    ownership: OwnershipSettings,
+impl Drop for Processing {
+    fn drop(&mut self) {
+        self.cancelled.store(true, Ordering::Relaxed);
+    }
 }
-
-impl RenderSnapshot {
-    fn read(project: &Project) -> Result<Self, String> {
-        Ok(Self {
-            project: project.path().to_owned(),
-            sources: source_stamps(&project.source_paths()).map_err(|error| error.to_string())?,
-            parameters: project.parameters(),
-            protections: project.protections().to_vec(),
-            ownership: project.ownership_settings().clone(),
-        })
+struct ExportProcessing {
+    cancelled: Arc<AtomicBool>,
+    result: Receiver<Result<PathBuf, String>>,
+}
+impl Drop for ExportProcessing {
+    fn drop(&mut self) {
+        self.cancelled.store(true, Ordering::Relaxed);
     }
 }
 
@@ -1645,6 +1543,89 @@ impl CleanSlateApp {
         self.export_to(destination);
     }
 
+    fn start_processing(&mut self) {
+        if self.processing.is_some() {
+            return;
+        }
+        let (Some(project), Some(analysis), Some(effective), Some(runtime)) = (
+            &self.project,
+            &self.supervised_result,
+            &self.effective_result,
+            self.model_acquisition.provenance(),
+        ) else {
+            self.messages = vec![
+                "Final export requires current supervised analysis and a verified model.".into(),
+            ];
+            return;
+        };
+        if self.reference_stale
+            || self.gain_drag.is_some()
+            || self.preview_processing.is_some()
+            || self.preview_pending.is_some()
+        {
+            self.messages = vec![
+                "Finish editing and Analyze before rendering the current supervised preview."
+                    .into(),
+            ];
+            return;
+        }
+        let snapshot =
+            match crate::SupervisedRenderSnapshot::capture(project, analysis, effective, runtime) {
+                Ok(snapshot) => snapshot,
+                Err(error) => {
+                    self.messages = vec![error.to_string()];
+                    return;
+                }
+            };
+        let project = project.clone();
+        let analysis = analysis.clone();
+        let effective = effective.clone();
+        let runtime = runtime.clone();
+        let generation = self.render_generation.current();
+        let gate = self.render_generation.clone();
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        let destination = project
+            .path()
+            .with_extension("renders")
+            .join(format!("{}-{generation}-{nonce}", std::process::id()));
+        let cancelled = Arc::new(AtomicBool::new(false));
+        let progress = Arc::new(AtomicU8::new(0));
+        let (sender, result) = mpsc::channel();
+        let worker_cancel = cancelled.clone();
+        let worker_progress = progress.clone();
+        let worker_snapshot = snapshot.clone();
+        std::thread::spawn(move || {
+            let completed = (|| {
+                crate::verify_installed_editor_runtime(&runtime, &worker_cancel)?;
+                let private = crate::prepare_supervised_render(
+                    &project,
+                    &analysis,
+                    &effective,
+                    &worker_snapshot,
+                    &destination,
+                    &worker_progress,
+                    Some(&worker_cancel),
+                )?;
+                crate::verify_installed_editor_runtime(&runtime, &worker_cancel)?;
+                private.publish(&project, &runtime, &gate, generation, Some(&worker_cancel))
+            })()
+            .map_err(|error: crate::RenderBlocker| error.to_string());
+            let _ = sender.send(completed);
+        });
+        self.processing = Some(Processing {
+            cancelled,
+            progress,
+            result,
+            snapshot,
+            generation,
+        });
+        self.messages =
+            vec!["Rendering the current effective envelopes at each source's native rate.".into()];
+    }
+
     fn export_to(&mut self, destination: PathBuf) {
         if !self.export_ready() {
             self.messages =
@@ -1652,14 +1633,48 @@ impl CleanSlateApp {
             return;
         }
         let Some(project) = &self.project else { return };
-        match export(project, &destination, None) {
-            Ok(()) => {
-                self.messages = vec![format!("Export committed to {}", destination.display())]
-            }
-            Err(error) => self.messages = vec![format!("Export blocked: {error}")],
-        }
+        let Some(runtime) = self.model_acquisition.provenance().cloned() else {
+            return;
+        };
+        let project = project.clone();
+        let gate = self.render_generation.clone();
+        let generation = gate.current();
+        let cancelled = Arc::new(AtomicBool::new(false));
+        let worker_cancel = cancelled.clone();
+        let (sender, result) = mpsc::channel();
+        std::thread::spawn(move || {
+            let completed = (|| {
+                crate::verify_installed_editor_runtime(&runtime, &worker_cancel)?;
+                let private = crate::prepare_export(&project, &destination, Some(&worker_cancel))?;
+                crate::verify_installed_editor_runtime(&runtime, &worker_cancel)?;
+                private.publish(&project, &gate, generation, Some(&worker_cancel))?;
+                Ok(destination)
+            })()
+            .map_err(|error: crate::RenderBlocker| error.to_string());
+            let _ = sender.send(completed);
+        });
+        self.exporting = Some(ExportProcessing { cancelled, result });
+        self.messages =
+            vec!["Verifying and exporting current native WAVs in the background.".into()];
     }
 
+    fn poll_exporting(&mut self) {
+        let Some(exporting) = &self.exporting else {
+            return;
+        };
+        let completed = match exporting.result.try_recv() {
+            Ok(result) => result,
+            Err(mpsc::TryRecvError::Empty) => return,
+            Err(mpsc::TryRecvError::Disconnected) => {
+                Err("Delivery worker stopped unexpectedly".into())
+            }
+        };
+        self.exporting = None;
+        self.messages = vec![match completed {
+            Ok(destination) => format!("Export committed to {}", destination.display()),
+            Err(error) => format!("Export was not committed: {error}"),
+        }];
+    }
     fn export_ready(&self) -> bool {
         !self.sources_busy()
             && !self.reference_stale
@@ -1670,6 +1685,7 @@ impl CleanSlateApp {
             && self.supervised_result.as_ref().is_some_and(|result| self.project.as_ref().is_some_and(|project| result.snapshot.matches(project)))
             && self.effective_result.as_ref().is_some_and(|effective| effective.analysis_current)
             && self.processing.is_none()
+            && self.exporting.is_none()
             && self.export_error.is_none()
               && self.project.as_ref().is_some_and(|project| {
                 project.sources.iter().all(|source| source.available)
@@ -1679,9 +1695,11 @@ impl CleanSlateApp {
     }
 
     fn refresh_export_readiness(&mut self) {
+        // Strong source/report/payload verification runs on the delivery worker.
         self.export_error = self.project.as_ref().and_then(|project| {
             if matches!(project.render(), RenderState::Current { .. }) {
-                validate_export(project)
+                project
+                    .validate_interactive_sources()
                     .err()
                     .map(|error| error.to_string())
             } else {
@@ -1689,7 +1707,6 @@ impl CleanSlateApp {
             }
         });
     }
-
     fn open_project(&mut self) {
         let Some(path) = rfd::FileDialog::new()
             .set_directory(dialog_start_directory())
@@ -1830,17 +1847,6 @@ impl CleanSlateApp {
             Err(error) => self.preview_error = Some(error.to_string()),
         }
     }
-    fn load_review(&mut self) {
-        self.review = self.project.as_ref().and_then(|project| {
-            let identity = project.review_identity()?;
-            ReviewWorkspace::open(identity, &project.source_paths()).ok()
-        });
-        if let Some(review) = &self.review {
-            self.timeline.seek(review.playhead());
-            self.timeline.set_selection(review.selection());
-        }
-    }
-
     fn audition(&mut self, selection_only: bool) {
         let Some(project) = &self.project else { return };
         let envelopes = match crate::editor_audition_envelopes(
@@ -1876,6 +1882,7 @@ impl CleanSlateApp {
     }
 
     fn gain_event(&mut self, track: usize, event: crate::GainEditorEvent) {
+        self.render_generation.invalidate();
         match event {
             crate::GainEditorEvent::Begin(id, point) => {
                 if let Some(project) = &self.project
@@ -2115,55 +2122,41 @@ impl CleanSlateApp {
         let Some(processing) = &self.processing else {
             return;
         };
-        let Ok(result) = processing.result.try_recv() else {
-            return;
+        let completed = match processing.result.try_recv() {
+            Ok(completed) => completed,
+            Err(mpsc::TryRecvError::Empty) => return,
+            Err(mpsc::TryRecvError::Disconnected) => {
+                Err("Final render worker stopped unexpectedly".into())
+            }
         };
-        let cancelled = processing.cancelled.load(Ordering::Relaxed);
-        let current = self
-            .project
-            .as_ref()
-            .and_then(|project| RenderSnapshot::read(project).ok());
-        let current = current.as_ref() == Some(&processing.snapshot)
-            && self.preview_parameters == processing.snapshot.parameters;
-        let same_project = self
-            .project
-            .as_ref()
-            .is_some_and(|project| project.path() == processing.snapshot.project);
-        self.processing = None;
-        match result {
-            Ok(_) if !current => {
-                self.messages = vec!["Final render completed for earlier settings or sources; render again before exporting".into()];
-                if same_project
-                    && let Some(project) = &mut self.project
-                    && let Err(error) = project.mark_render_stale()
-                {
-                    self.messages.push(error.to_string());
-                }
-                self.refresh_export_readiness();
-            }
-            Ok(identity) => {
+        let processing = self.processing.take().unwrap();
+        let current = !processing.cancelled.load(Ordering::Relaxed)
+            && self.render_generation.current() == processing.generation
+            && self.model_acquisition.provenance() == Some(&processing.snapshot.runtime)
+            && self
+                .project
+                .as_ref()
+                .is_some_and(|project| processing.snapshot.matches(project));
+        match completed {
+            Ok(artifact) if current => {
                 let project = self.project.as_mut().unwrap();
-                self.messages = vec!["Final render current; ready to export WAVs".into()];
-                if let Err(error) = project.mark_render_current(identity) {
-                    self.messages.push(error.to_string());
+                match artifact.accept(project) {
+                    Ok(()) => {
+                        self.messages = vec!["Final render current; ready to export WAVs".into()];
+                        self.refresh_export_readiness();
+                    }
+                    Err(error) => {
+                        self.messages = vec![format!("Final render not accepted: {error}")]
+                    }
                 }
-                self.refresh_export_readiness();
-                if let Some(error) = &self.export_error {
-                    self.messages =
-                        vec![format!("Final render completed; export blocked: {error}")];
-                }
-                self.load_review();
             }
-            Err(error) => {
-                self.messages = vec![if cancelled {
-                    "Final render cancelled; no output committed".into()
-                } else {
-                    format!("Final render failed: {error}")
-                }]
+            Ok(_) => {
+                self.messages =
+                    vec!["Final render became obsolete; previous accepted output retained.".into()]
             }
+            Err(error) => self.messages = vec![format!("Final render not committed: {error}")],
         }
     }
-
     fn poll_audition(&mut self) {
         if let Some(result) = self.audition_preparation.poll()
             && let Some((start, end)) = self.audition_range.take()
@@ -2407,6 +2400,41 @@ impl CleanSlateApp {
         {
             return Task::none();
         }
+        if matches!(
+            &message,
+            Message::AnalyzeReferences
+                | Message::Cancel
+                | Message::CancelAnalysis
+                | Message::DownloadModel
+                | Message::VerifyModel
+                | Message::CancelModelDownload
+                | Message::Attenuation(_)
+                | Message::OpenTime(_)
+                | Message::CloseTime(_)
+                | Message::RefreshPreview
+                | Message::GainEvent(_, _)
+                | Message::GainAction(_, _)
+                | Message::UndoGain
+                | Message::RedoGain
+                | Message::DeleteGain
+                | Message::InsertGainPoint
+                | Message::SaveReference(_)
+                | Message::RemoveReference(_)
+                | Message::UndoReferences
+                | Message::RedoReferences
+                | Message::SaveCalibration(_, _)
+                | Message::SuppliedAlignment(_)
+                | Message::RebindSource(_)
+                | Message::ProtectTrack(_)
+                | Message::ProtectRegion
+                | Message::ProtectSelection
+                | Message::ImportStems
+                | Message::OpenProject
+                | Message::FileDropped(_)
+                | Message::Relink(_)
+        ) {
+            self.render_generation.invalidate();
+        }
         let previous_parameters = self.preview_parameters;
         match message {
             Message::DownloadModel => self.model_acquisition.begin(true),
@@ -2458,12 +2486,13 @@ impl CleanSlateApp {
                     }
                 }
             }
-            Message::Process => {
-                self.messages = vec!["Final export requires a current supervised preview and matching delivery settings.".into()];
-            }
+            Message::Process => self.start_processing(),
             Message::Cancel => {
                 if let Some(processing) = &self.processing {
                     processing.cancelled.store(true, Ordering::Relaxed);
+                }
+                if let Some(exporting) = &self.exporting {
+                    exporting.cancelled.store(true, Ordering::Relaxed);
                 }
             }
             Message::Tick => {
@@ -2473,6 +2502,7 @@ impl CleanSlateApp {
                     self.poll_processing();
                 }
                 self.poll_audition();
+                self.poll_exporting();
             }
             #[cfg(test)]
             Message::SpeechSensitivity(value) => {
@@ -2864,6 +2894,7 @@ impl CleanSlateApp {
             _ => None,
         });
         let processing = if self.processing.is_some()
+            || self.exporting.is_some()
             || self.model_acquisition.is_busy()
             || self.sources_busy()
             || self.preview_processing.is_some()
@@ -3463,6 +3494,11 @@ impl CleanSlateApp {
                     if self.export_ready() {
                         timeline_content = timeline_content
                             .push(button("Export current render").on_press(Message::Export));
+                    }
+                    if self.exporting.is_some() {
+                        timeline_content = timeline_content
+                            .push(text("Verifying and copying current delivery…"))
+                            .push(button("Cancel delivery").on_press(Message::Cancel));
                     }
                 }
                 WorkflowStep::Export => {
