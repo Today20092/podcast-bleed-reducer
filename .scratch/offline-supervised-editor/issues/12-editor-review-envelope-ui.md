@@ -1,6 +1,7 @@
 # Expose ownership review and envelope editing in Iced
 
-Status: ready-for-agent
+Status: claimed
+Assignee: editor_workflow
 Blocked by: 07, 10, 11
 Spec: ../spec.md
 
