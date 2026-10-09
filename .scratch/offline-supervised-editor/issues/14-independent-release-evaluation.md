@@ -24,3 +24,13 @@ src/detector_quality.rs read_labels/compare_ownership/ownership_metrics, src/rel
 - Old failing cases remain visible; unseen/generalization claims identify what was actually held out.
 - Two-hour/eight-track CPU evidence includes early model probabilities after native compaction and final-tail completeness.
 - Measured performance and listening-ready Original/Processed/Removed regions are recorded for owner sign-off. A failed result blocks release.
+
+## Independent tooling checkpoint (2026-10-08)
+
+The strict frozen-manifest seam now verifies actual source fingerprints, native grids, supplied alignment and reference identity. It rejects held-out ranges intersecting development references, contradictory labels including native-sample rounding collisions, unknown fields and false independent claims for declared previously used material. Duplicate physical truth is unioned before scoring.
+
+Streaming applied-gain scoring decodes bounded chunks and counts wanted attenuation even where source PCM is zero. Reports retain each track's native sample denominator and measure simultaneous preservation on the common time clock. These are mechanical evaluation tools; automatic/manual/ownership separation, accepted-project CLI composition, frozen comparison integration and full performance evidence remain pending.
+
+Public release-gate tests: 7 passed, 0 failed (0.22 s). Strict library/tests Clippy passed. Exact frozen commit `6a60cc2bfe187ea889fd2d8bcc3344311cfd706b` built offline with its unchanged lockfile in a separate managed checkout. Four original binaries and DirectML DLL were copied and hashed into external `ticket14-frozen-artifacts`, with a build receipt. The copied ownership evaluator executed all four original variants on two controlled two-second 48 kHz synthetic fixtures (exit 0, 0.62 s), exercising embedded Silero inference. This establishes executable provenance and runtime mechanics, not independent quality or baseline selection.
+
+Ticket remains claimed. Real independent truth, listening approval and measured timing approval are not available; no release acceptance is asserted and ticket 15 remains blocked.
