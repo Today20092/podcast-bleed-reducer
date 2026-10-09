@@ -22,3 +22,5 @@ Add one compact Mermaid diagram to README's Try it section, using podcast-editor
 2026-10-09: Owner explicitly authorized this diagram. Claimed before editing. The wider visual documentation work is deferred in ticket 20 until the GUI is settled.
 
 2026-10-09: Added the five-step Mermaid flow under Try it, with a label-correction loop to Analyze and listening before delivery. The existing numbered steps remain its text equivalent; a synchronization reminder prevents implying automatic alignment. Added tickets 19/20 to the implementation index. Markdown fence/node and ticket/link checks passed; git diff --check passed. No app code or dependencies changed. Visual rendering in a Markdown viewer was not checked.
+
+2026-10-09: Reclaimed for owner feedback that the diagram was too tall. Changed to left-to-right flow, shortened node labels and retained the relabel/Analyze loop. The numbered instructions supply the full details. Scoped git diff --check passed; visual rendering was not checked. Marked done after the documentation check.

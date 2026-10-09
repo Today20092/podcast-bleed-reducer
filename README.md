@@ -18,15 +18,14 @@ CleanSlate is an offline microphone bleed-reduction tool for multitrack podcasts
 CleanSlate is in development, with Windows as the first release target. Start with the [build guide](docs/development.md) to build and open the editor from this checkout.
 
 ```mermaid
-flowchart TD
-    tracks["Import synchronized microphone tracks<br/>One microphone per speaker"]
-    examples["Mark examples<br/>Solo speech for each speaker and room tone"]
-    analyze["Analyze the whole recording"]
-    listen["Listen and adjust gain<br/>Compare Original, Processed and Removed"]
-    save["Save the editable project<br/>Create individual processed WAVs"]
-    tracks --> examples --> analyze --> listen
-    listen -->|"Correct labels, then Analyze again"| analyze
-    listen -->|"When the result sounds right"| save
+flowchart LR
+    tracks["Import<br/>Aligned tracks"]
+    examples["Label<br/>Solo speech + room tone"]
+    analyze["Analyze"]
+    listen["Listen<br/>Adjust gain"]
+    save["Save project<br/>Render WAVs"]
+    tracks --> examples --> analyze --> listen --> save
+    listen -->|"Relabel"| analyze
 ```
 
 The steps below describe the same workflow. Tracks must already be synchronized; CleanSlate does not align them for you.
