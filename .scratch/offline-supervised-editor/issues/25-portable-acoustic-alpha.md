@@ -95,3 +95,18 @@ frozen clock and verifies deleting one cannot invalidate the other source.
 Full local validation with 64 test threads: 216 passed, 15 ignored. CI omits PDBs
 from its build cache after observed cache uploads delayed diagnostics by nine
 minutes. Corrected hosted integration/package verification remains pending.
+
+Hosted run 38018772731 passed all 216 ordinary tests (15 ignored), formatting
+and strict Clippy, then compiled the release executable. Packaging failed because
+the windows-2025 runner now supplies Visual Studio 2026 while discovery accepted
+only 2022. Runtime discovery now accepts both supported installations and locates
+their VC143/VC145 CRT folder; the bundled redistribution notice covers both.
+Local packaging and its offline self-check passed with the existing 2022 toolset.
+
+Tagged run 38020644134 passed check/test, portable ZIP verification and draft
+asset upload for source dbc7326a19d6540b83f000d32e884be6e41ca70d. The downloaded
+GitHub ZIP also passed the offline package checker on the host, and its manifest
+identifies that source commit. ZIP SHA-256:
+`b2b404e54561c3f19154569f554d1e17c01e2e14ff5765649047074ed55ab41a`.
+Release remains an unpublished prerelease draft. Clean Windows 11 testing of this
+GitHub-built artifact and real-device listening remain pending before publication.
