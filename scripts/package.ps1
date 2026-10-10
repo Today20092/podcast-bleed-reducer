@@ -60,7 +60,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Cannot read build commit' }
     $rustc = & rustc --version
     if ($LASTEXITCODE -ne 0) { throw 'Cannot read compiler version' }
-    $dirty = & git -C $root status --porcelain
+    $dirty = & git -C $root status --porcelain -- Cargo.toml Cargo.lock src scripts docs .github LICENSE README.md
     if ($LASTEXITCODE -ne 0) { throw 'Cannot read working-tree state' }
     $inventory = @(Get-ChildItem -LiteralPath $stage -File -Recurse | Sort-Object FullName | ForEach-Object {
         @{ path = [IO.Path]::GetRelativePath($stage, $_.FullName).Replace('\', '/'); sha256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant() }
