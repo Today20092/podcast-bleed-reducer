@@ -74,9 +74,16 @@ try {
     # Replace the old package only after build, validation and archive creation succeed.
     if (Test-Path -LiteralPath $package) {
         if (-not ([IO.Path]::GetFullPath($package)).StartsWith($dist + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) { throw 'Package path escaped dist' }
-        Remove-Item -LiteralPath $package -Recurse -Force
+        $backup = Join-Path $stageRoot 'previous-package'
+        if (-not ([IO.Path]::GetFullPath($backup)).StartsWith($dist + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) { throw 'Backup path escaped dist' }
+        Move-Item -LiteralPath $package -Destination $backup
     }
-    Move-Item -LiteralPath $stage -Destination $package
+    try {
+        Move-Item -LiteralPath $stage -Destination $package
+    } catch {
+        if (Test-Path -LiteralPath (Join-Path $stageRoot 'previous-package')) { Move-Item -LiteralPath (Join-Path $stageRoot 'previous-package') -Destination $package }
+        throw
+    }
     Move-Item -LiteralPath $stagedZip -Destination "$package.zip" -Force
     "$zipHash  $name.zip" | Set-Content -LiteralPath "$package.zip.sha256" -Encoding ascii
     Write-Output "$package.zip"
