@@ -56,5 +56,10 @@ in alpha instructions. Explicit overlap labels remain authoritative and pass.
 Ordinary tests do not claim independent audio quality or 2-hour qualification.
 
 Release process and tag-triggered GitHub draft-prerelease workflow are written.
-Commit/tag/draft upload and remote CI verification remain pending. Ticket stays
-claimed until candidate delivery and its remaining owner checks are recorded.
+Implementation and packaging fixes are committed and pushed. Tag
+`v0.1.0-alpha.1` points to `fea493f`. The final committed package passed its
+offline checker, and its ZIP (16,530,465 bytes) and SHA-256 file are uploaded to
+GitHub draft prerelease 408491229. Publication remains manual as agreed.
+Tag-triggered workflow 38013248811 is running its check/test step; remote CI
+verification and the owner listening/interactive checks remain pending. Ticket
+stays claimed until those remaining checks are recorded.
