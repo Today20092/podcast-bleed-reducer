@@ -25,6 +25,8 @@ app-local C++ runtime DLLs from the licensed Visual Studio Build Tools installat
 collects dependency/model license texts, checks the exact file inventory and hashes,
 and runs the shipped executable's offline analysis/save/reopen/render/cancellation
 self-check. The ZIP, SHA-256 file and internal build manifest identify the candidate.
+The manifest's dirty flag covers application, build and documentation inputs;
+local `.scratch` test reports and ignored recordings are outside that scope.
 Inspect PE imports after dependency changes: every non-system DLL must be included.
 If a dependency adds a redistributable DLL, package and license it before publishing.
 
