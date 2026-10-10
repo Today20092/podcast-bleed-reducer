@@ -63,3 +63,10 @@ GitHub draft prerelease 408491229. Publication remains manual as agreed.
 Tag-triggered workflow 38013248811 is running its check/test step; remote CI
 verification and the owner listening/interactive checks remain pending. Ticket
 stays claimed until those remaining checks are recorded.
+
+Remote workflow 38013248811 failed after formatting and Clippy passed: the first
+library test process exited with Windows STATUS_ACCESS_VIOLATION (0xc0000005).
+The same library tests pass locally with serial and parallel execution. A manual
+workflow entry and serial, uncaptured test execution are being added to identify
+the failing test on the hosted runner before considering the candidate verified.
+Repository discovery topics were added; the alpha version tag already exists.
