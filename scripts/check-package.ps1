@@ -1,21 +1,23 @@
+param([string]$Package = (Join-Path $PSScriptRoot '../dist/CleanSlate-0.1.0-alpha.1-windows-x64'))
 $ErrorActionPreference = 'Stop'
-$package = Join-Path $PSScriptRoot '..\dist\CleanSlate-windows-x64'
-$files = Get-ChildItem -LiteralPath $package -File
-if (($files.Name | Sort-Object) -join ',' -ne 'CleanSlate.exe,model-check.exe') {
-    throw "package contains unexpected or missing files: $($files.Name -join ', ')"
+Set-StrictMode -Version Latest
+$Package = (Resolve-Path -LiteralPath $Package).Path
+$manifest = Get-Content -LiteralPath (Join-Path $Package 'package-manifest.json') -Raw | ConvertFrom-Json
+if ($manifest.platform -ne 'windows-x64' -or $manifest.version -notmatch '^\d+\.\d+\.\d+(?:-[0-9A-Za-z]+(?:\.[0-9A-Za-z]+)*)?$') { throw 'Invalid package identity' }
+$required = @('CleanSlate.exe', 'LICENSE', 'README.txt', 'THIRD-PARTY-NOTICES.txt', 'concrt140.dll', 'msvcp140.dll', 'msvcp140_1.dll', 'msvcp140_2.dll', 'msvcp140_atomic_wait.dll', 'msvcp140_codecvt_ids.dll', 'vcruntime140.dll', 'vcruntime140_1.dll')
+$expected = @($manifest.files.path)
+if (@($expected | Sort-Object -Unique).Count -ne $expected.Count) { throw 'Duplicate manifest paths' }
+foreach ($file in $required) { if ($file -notin $expected) { throw "Package missing $file" } }
+if (-not @($expected | Where-Object { $_ -like 'licenses/*' }).Count) { throw 'Dependency license texts missing' }
+foreach ($file in $manifest.files) {
+    if ($file.path -notin $required -and $file.path -notmatch '^licenses/[A-Za-z0-9._+/-]+$') { throw "Unexpected package file: $($file.path)" }
+    if ($file.path -match '(^|/)\.\.?(/|$)' -or $file.sha256 -notmatch '^[0-9a-f]{64}$') { throw 'Invalid manifest path or checksum' }
+    $path = [IO.Path]::GetFullPath((Join-Path $Package $file.path))
+    if (-not $path.StartsWith($Package + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) { throw 'Manifest path escaped package' }
+    if ((Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant() -ne $file.sha256) { throw "Integrity failure: $($file.path)" }
 }
-if ($files.Name -match 'onnxruntime.*\.dll') {
-    throw 'ONNX Runtime must be linked into the executable'
-}
-$native = Join-Path $package 'native-runtime'
-$manifest = Get-Content -LiteralPath (Join-Path $native 'runtime-manifest.json') -Raw | ConvertFrom-Json
-if ($manifest.revision -ne '8642eaa5cc51efbc17ad0f3e433944ba858a873f') { throw 'Unexpected native runtime revision' }
-foreach ($binary in $manifest.binaries.PSObject.Properties) {
-    if ((Get-FileHash -LiteralPath (Join-Path $native $binary.Name) -Algorithm SHA256).Hash.ToLowerInvariant() -ne $binary.Value) {
-        throw "Packaged native dependency integrity failure: $($binary.Name)"
-    }
-}
-if (-not (Test-Path -LiteralPath (Join-Path $package 'licenses\OpenMDW-1.1.txt'))) { throw 'Model agreement missing' }
-& (Join-Path $package 'model-check.exe') --runtime $native
-if ($LASTEXITCODE -ne 0) { throw 'Packaged offline native/model inference failed; explicitly acquire the model first' }
-Write-Output 'verified offline CPU package: pass'
+$actual = @(Get-ChildItem -LiteralPath $Package -File -Recurse | ForEach-Object { [IO.Path]::GetRelativePath($Package, $_.FullName).Replace('\', '/') })
+if (Compare-Object ($expected + 'package-manifest.json' | Sort-Object) ($actual | Sort-Object)) { throw 'Package contains unexpected or missing files' }
+$check = Start-Process -FilePath (Join-Path $Package 'CleanSlate.exe') -ArgumentList '--package-self-check' -Wait -PassThru -WindowStyle Hidden
+if ($check.ExitCode -ne 0) { throw "Packaged offline acoustic inference failed: $($check.ExitCode)" }
+Write-Output 'Verified offline acoustic package: pass'

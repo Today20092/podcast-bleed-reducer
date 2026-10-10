@@ -1,0 +1,14 @@
+Microsoft Visual C++ runtime redistribution
+
+The portable Windows ZIP includes the unmodified x64 Microsoft.VC143.CRT
+redistributable DLLs from Microsoft Visual Studio Build Tools 2022.
+These files are Microsoft components, separately licensed from CleanSlate.
+Copyright Microsoft Corporation. All rights reserved.
+
+Redistribution is governed by the Microsoft Visual Studio Build Tools 2022
+license terms and its REDIST list, which permits these runtime libraries as
+part of an application. They are supplied app-local, without a separate
+installer. Retain this notice when redistributing the complete ZIP.
+
+License terms: https://visualstudio.microsoft.com/license-terms/vs2022-ga-diagnosticbuildtools/
+Redistributable list: https://learn.microsoft.com/en-us/visualstudio/releases/2022/redistribution

@@ -27,6 +27,72 @@ use std::{
     time::{Duration, Instant},
 };
 
+fn editor_theme() -> Theme {
+    Theme::custom(
+        "CleanSlate",
+        iced::theme::Palette {
+            background: iced::color!(0x202226),
+            text: iced::color!(0xE4E7EB),
+            primary: iced::color!(0x779BC7),
+            success: iced::color!(0x76B99A),
+            warning: iced::color!(0xD8B579),
+            danger: iced::color!(0xDB8B8B),
+        },
+    )
+}
+
+fn secondary_button(theme: &Theme, status: button::Status) -> button::Style {
+    let mut style = button::secondary(theme, status);
+    style.background = Some(iced::Background::Color(match status {
+        button::Status::Hovered => iced::color!(0x414750),
+        button::Status::Pressed => iced::color!(0x272B31),
+        _ => iced::color!(0x343940),
+    }));
+    style.text_color = if status == button::Status::Disabled {
+        iced::color!(0x8C949F)
+    } else {
+        theme.palette().text
+    };
+    style.border = iced::Border {
+        color: iced::color!(0x4A515B),
+        width: 1.0,
+        radius: 4.0.into(),
+    };
+    style
+}
+
+fn primary_button(theme: &Theme, status: button::Status) -> button::Style {
+    if status == button::Status::Disabled {
+        return secondary_button(theme, status);
+    }
+    button::Style {
+        background: Some(iced::Background::Color(match status {
+            button::Status::Hovered => iced::color!(0x8FB0D8),
+            button::Status::Pressed => iced::color!(0x6B8DB8),
+            _ => theme.palette().primary,
+        })),
+        text_color: iced::color!(0x152233),
+        border: iced::Border {
+            radius: 4.0.into(),
+            ..iced::Border::default()
+        },
+        ..button::primary(theme, status)
+    }
+}
+
+fn editor_panel(theme: &Theme) -> container::Style {
+    container::Style {
+        background: Some(iced::color!(0x292D33).into()),
+        text_color: Some(theme.palette().text),
+        border: iced::Border {
+            color: iced::color!(0x3D434C),
+            width: 1.0,
+            radius: 5.0.into(),
+        },
+        ..container::Style::default()
+    }
+}
+
 // Match the detector's rounding of 1536-sample frames at 48 kHz.
 #[cfg(test)]
 fn effective_padding_ms(value: f32) -> f32 {
@@ -69,7 +135,7 @@ fn ownership_summary(speakers: &[SpeakerId], states: &[crate::TemporalTrackState
     let uncertain = states.contains(&UncertainUnity);
     let mut summary = if owners.is_empty() {
         if uncertain {
-            "Uncertain ownership"
+            "Speaker activity uncertain"
         } else {
             "No active speaker"
         }
@@ -86,7 +152,7 @@ fn ownership_summary(speakers: &[SpeakerId], states: &[crate::TemporalTrackState
         )
     };
     if uncertain && !owners.is_empty() {
-        summary.push_str(" · other ownership uncertain");
+        summary.push_str(" · other speakers uncertain");
     }
     summary
 }
@@ -137,6 +203,234 @@ fn example_speakers(label: &crate::ReferenceLabel) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn new_project_cancels_preview_clears_workspace_and_preserves_saved_files() {
+        let root =
+            std::env::temp_dir().join(format!("cleanslate-new-project-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let source = root.join("voice.wav");
+        write_wav(&source, &[0.0; 48_000]);
+        let mut app = super::CleanSlateApp::default();
+        app.add_stems([source.clone()]);
+        finish_import(&mut app);
+        let old_path = app.project.as_ref().unwrap().path().to_owned();
+        let speaker = app.project.as_ref().unwrap().sources[0].speaker_id;
+        app.project
+            .as_mut()
+            .unwrap()
+            .add_reference_label(
+                crate::TimeRange::new(0, crate::TICKS_PER_SECOND / 2).unwrap(),
+                vec![speaker],
+                &[],
+            )
+            .unwrap();
+        app.timeline
+            .set_selection(Some((0, crate::TICKS_PER_SECOND / 2)));
+        let _ = app.update(super::Message::GainAction(0, false));
+        app.timeline.seek(crate::TICKS_PER_SECOND / 4);
+        app.track_name_draft = Some((0, "Draft".into()));
+        app.selected_example = Some(1);
+        app.reference_menu = Some((0, iced::Point::ORIGIN));
+        app.gain_tool = true;
+        app.solo_tracks = 1;
+        app.audition_range = Some((0, crate::TICKS_PER_SECOND));
+        app.preview = Some(crate::AnalysisPreview {
+            stems: vec![source.clone()],
+            regions: vec![],
+            envelopes: vec![crate::GainEnvelope::constant(48_000, 1.0)],
+            protections: vec![],
+            parameters: Default::default(),
+        });
+        let project_bytes = std::fs::read(&old_path).unwrap();
+        let source_bytes = std::fs::read(&source).unwrap();
+        let old_render_generation = app.render_generation.clone();
+        let cancelled = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let (_sender, result) = super::mpsc::channel();
+        app.preview_processing = Some(super::PreviewProcessing {
+            started_at: std::time::Instant::now(),
+            snapshot: crate::EditorAnalysisIdentity {
+                key: String::new(),
+                project: Default::default(),
+            },
+            progress: Default::default(),
+            cancelled: cancelled.clone(),
+            generation: 0,
+            source_generation: 0,
+            sources: vec![],
+            result,
+        });
+
+        app.reset_project(false);
+        assert!(app.project.is_some() && app.preview.is_some());
+        assert!(app.track_name_draft.is_some());
+        assert!(!cancelled.load(super::Ordering::Relaxed));
+        app.reset_project(true);
+        assert!(cancelled.load(super::Ordering::Relaxed));
+        assert!(!std::sync::Arc::ptr_eq(
+            &old_render_generation,
+            &app.render_generation
+        ));
+        assert!(app.project.is_none() && app.waveforms.is_empty());
+        assert!(app.review.is_none() && app.preview.is_none());
+        assert!(app.supervised_result.is_none() && app.effective_result.is_none());
+        assert!(app.preview_processing.is_none() && app.preview_pending.is_none());
+        assert!(app.audition.is_none() && app.audition_range.is_none());
+        assert!(!app.audition_preparation.is_busy());
+        assert_eq!(app.timeline.playhead(), 0);
+        assert!(app.timeline.selection().is_none());
+        assert!(app.track_name_draft.is_none() && app.selected_example.is_none());
+        assert!(app.reference_menu.is_none() && app.gain_menu.is_none());
+        assert!(app.reference_speakers.is_empty() && app.gain_drag.is_none());
+        assert!(app.gain_constraints.manual_edits.is_empty());
+        assert!(app.gain_constraints.protections.is_empty());
+        assert!(!app.gain_tool && app.solo_tracks == 0);
+        assert!(app.pending_imports.is_empty() && app.import_choices.is_empty());
+        assert!(app.import_due.is_none() && app.source_loading.is_none());
+        let _ = app.update(super::Message::UndoGain);
+        let _ = app.update(super::Message::UndoReferences);
+        assert!(app.project.is_none());
+
+        app.add_stems([source.clone()]);
+        finish_import(&mut app);
+        assert_ne!(app.project.as_ref().unwrap().path(), old_path);
+        assert!(app.project.as_ref().unwrap().reference_labels().is_empty());
+        assert!(
+            app.project
+                .as_ref()
+                .unwrap()
+                .gain_constraints()
+                .manual_edits
+                .is_empty()
+        );
+        assert_eq!(std::fs::read(old_path).unwrap(), project_bytes);
+        assert_eq!(std::fs::read(source).unwrap(), source_bytes);
+        app.stop_audition();
+        drop(app);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn new_project_is_blocked_while_importing_or_exporting() {
+        let mut app = super::CleanSlateApp::default();
+        app.pending_imports.push("queued.wav".into());
+        assert!(!app.can_start_new_project());
+        app.reset_project(true);
+        assert_eq!(app.pending_imports.len(), 1);
+        app.pending_imports.clear();
+        let cancelled = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let (_sender, result) = super::mpsc::channel();
+        app.exporting = Some(super::ExportProcessing {
+            cancelled: cancelled.clone(),
+            result,
+        });
+        assert!(!app.can_start_new_project());
+        app.reset_project(true);
+        assert!(app.exporting.is_some());
+        assert!(!cancelled.load(super::Ordering::Relaxed));
+        app.exporting = None;
+        assert!(app.can_start_new_project());
+        let _ = app.update(super::Message::NewProject);
+        assert!(app.project.is_none());
+    }
+
+    #[test]
+    fn inline_track_names_validate_cancel_and_persist_without_playback_shortcuts() {
+        use super::{CleanSlateApp, Message};
+        let directory =
+            std::env::temp_dir().join(format!("cleanslate-inline-name-{}", std::process::id()));
+        std::fs::create_dir_all(&directory).unwrap();
+        let audio = directory.join("voice.wav");
+        write_wav(&audio, &[0.0; 16]);
+        let mut app = CleanSlateApp::default();
+        app.add_stems([audio]);
+        finish_import(&mut app);
+        let original = app.project.as_ref().unwrap().sources[0].display_name();
+        let path = app.project.as_ref().unwrap().path().to_path_buf();
+        let _ = app.update(Message::EditTrackName(0));
+        let _ = app.update(Message::TrackName("Unsaved name".into()));
+        let _ = app.update(Message::KeyPressed(
+            iced::keyboard::Key::Character("3".into()),
+            iced::keyboard::Modifiers::default(),
+        ));
+        assert_eq!(app.audition_mode, super::AuditionMode::Original);
+        let _ = app.update(Message::KeyPressed(
+            iced::keyboard::Key::Named(iced::keyboard::key::Named::Escape),
+            iced::keyboard::Modifiers::default(),
+        ));
+        assert!(app.track_name_draft.is_none());
+        assert_eq!(
+            app.project.as_ref().unwrap().sources[0].display_name(),
+            original
+        );
+        let _ = app.update(Message::EditTrackName(0));
+        let _ = app.update(Message::TrackName("  ".into()));
+        let _ = app.update(Message::SaveTrackName);
+        assert!(app.track_name_draft.is_some());
+        assert!(!app.messages.is_empty());
+        assert_eq!(
+            app.project.as_ref().unwrap().sources[0].display_name(),
+            original
+        );
+        let _ = app.update(Message::TrackName("  Alice  ".into()));
+        let _ = app.update(Message::SaveTrackName);
+        assert!(app.track_name_draft.is_none() && app.messages.is_empty());
+        assert_eq!(
+            app.project.as_ref().unwrap().sources[0].display_name(),
+            "Alice"
+        );
+        assert_eq!(
+            crate::Project::open(&path).unwrap().sources[0].display_name(),
+            "Alice"
+        );
+        let _ = app.update(Message::EditTrackName(0));
+        let _ = app.update(Message::TrackName("Discard this".into()));
+        let _ = app.update(Message::CancelTrackName);
+        assert_eq!(
+            crate::Project::open(&path).unwrap().sources[0].display_name(),
+            "Alice"
+        );
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn editor_text_and_enabled_buttons_have_readable_contrast() {
+        fn luminance(color: iced::Color) -> f32 {
+            let linear = |channel: f32| {
+                if channel <= 0.04045 {
+                    channel / 12.92
+                } else {
+                    ((channel + 0.055) / 1.055).powf(2.4)
+                }
+            };
+            0.2126 * linear(color.r) + 0.7152 * linear(color.g) + 0.0722 * linear(color.b)
+        }
+        let contrast = |foreground, background| {
+            let a = luminance(foreground);
+            let b = luminance(background);
+            (a.max(b) + 0.05) / (a.min(b) + 0.05)
+        };
+        let theme = super::editor_theme();
+        for background in [theme.palette().background, iced::color!(0x292D33)] {
+            assert!(contrast(theme.palette().text, background) >= 4.5);
+            assert!(contrast(iced::color!(0xADB5C0), background) >= 4.5);
+        }
+        for status in [
+            iced::widget::button::Status::Active,
+            iced::widget::button::Status::Hovered,
+            iced::widget::button::Status::Pressed,
+        ] {
+            for style in [
+                super::secondary_button(&theme, status),
+                super::primary_button(&theme, status),
+            ] {
+                let Some(iced::Background::Color(background)) = style.background else {
+                    panic!("Expected solid button background");
+                };
+                assert!(contrast(style.text_color, background) >= 4.5, "{status:?}");
+            }
+        }
+    }
+
     #[test]
     fn saved_examples_edit_exact_endpoints_speakers_and_history() {
         use super::{ExampleEvent, Message};
@@ -441,11 +735,11 @@ mod tests {
         );
         assert_eq!(
             super::ownership_summary(&speakers, &[Absent, UncertainUnity]),
-            "Uncertain ownership"
+            "Speaker activity uncertain"
         );
         assert_eq!(
             super::ownership_summary(&speakers, &[Owned, UncertainUnity]),
-            "Active: Speaker 3 · other ownership uncertain"
+            "Active: Speaker 3 · other speakers uncertain"
         );
     }
 
@@ -678,7 +972,7 @@ mod tests {
             ),
             ..Default::default()
         };
-        assert_eq!(app.workspace_status(), "ADD SPEAKER / ROOM REFERENCES");
+        assert_eq!(app.workspace_status(), "Add speaker and room-tone examples");
         std::fs::remove_dir_all(directory).unwrap();
     }
 
@@ -767,7 +1061,6 @@ mod tests {
     ) -> std::io::Result<crate::Project> {
         let mut project = crate::Project::create(path, sources)?;
         project.set_supplied_alignment(true)?;
-        project.set_nemotron_enabled(true)?;
         Ok(project)
     }
     #[test]
@@ -1403,7 +1696,7 @@ mod tests {
         app.poll_sources();
         assert_eq!(app.source_loading.as_ref().unwrap().waveforms.len(), 1);
         assert_eq!(app.project.as_ref().unwrap().sources.len(), 2);
-        let _ = app.workspace(false, 900.0);
+        let _ = app.workspace(false, 900.0, 960.0);
         drop(sender);
         app.poll_sources();
         assert!(!app.sources_busy());
@@ -1632,7 +1925,7 @@ mod tests {
         app.export_to(delivery.clone());
         assert!(!delivery.exists());
         assert!(!delivery.join("report.json").exists());
-        assert!(app.messages[0].starts_with("Export blocked"));
+        assert!(app.messages[0].starts_with("Prepare WAV files"));
         let _ = app.update(super::Message::Attenuation(-12.0));
         assert!(!app.export_ready());
         let blocked = directory.join("during-drag");
@@ -1656,7 +1949,6 @@ mod tests {
 }
 
 pub struct CleanSlateApp {
-    model_acquisition: crate::model::ModelAcquisition,
     project: Option<Project>,
     pending_imports: Vec<PathBuf>,
     source_inspection: Option<SourceInspection>,
@@ -1686,7 +1978,6 @@ pub struct CleanSlateApp {
     selected_example: Option<u64>,
     example_draft: Option<TimeRange>,
     gain_menu: Option<(usize, u64, iced::Point)>,
-    model_details: bool,
     setup_details: bool,
     reference_stale: bool,
     reference_analyze_requested: bool,
@@ -1719,7 +2010,6 @@ pub struct CleanSlateApp {
 impl Default for CleanSlateApp {
     fn default() -> Self {
         Self {
-            model_acquisition: crate::model::ModelAcquisition::default(),
             project: None,
             pending_imports: vec![],
             source_inspection: None,
@@ -1749,7 +2039,6 @@ impl Default for CleanSlateApp {
             selected_example: None,
             example_draft: None,
             gain_menu: None,
-            model_details: false,
             setup_details: false,
             reference_stale: false,
             reference_analyze_requested: false,
@@ -2030,13 +2319,9 @@ enum Message {
     DeleteRegion(usize, u64),
     DismissReferenceMenu,
     ContextReference(Vec<SpeakerId>, bool),
-    ModelDetails(bool),
-    NemotronEnabled(bool),
-    DownloadModel,
-    VerifyModel,
-    CancelModelDownload,
     SuppliedAlignment(bool),
     ImportStems,
+    NewProject,
     OpenProject,
     FileDropped(PathBuf),
     Relink(usize),
@@ -2121,6 +2406,7 @@ pub fn run() -> iced::Result {
         },
     )
     .theme(CleanSlateApp::theme)
+    .default_font(iced::Font::with_name("Segoe UI"))
     .subscription(CleanSlateApp::subscription)
     .window(window::Settings {
         maximized: true,
@@ -2156,12 +2442,6 @@ fn waveform_height(workspace_height: f32, stem_count: usize, compact: bool) -> f
 }
 
 impl CleanSlateApp {
-    fn analysis_runtime(&self) -> Option<&crate::model::RuntimeProvenance> {
-        self.project
-            .as_ref()
-            .filter(|project| project.nemotron_enabled())
-            .and_then(|_| self.model_acquisition.provenance())
-    }
     fn install_waveforms(&mut self, waveforms: Vec<WaveformCache>) {
         self.selected_example = None;
         self.example_draft = None;
@@ -2219,7 +2499,7 @@ impl CleanSlateApp {
     fn add_stems(&mut self, paths: impl IntoIterator<Item = PathBuf>) {
         if self.processing.is_some() {
             self.messages =
-                vec!["Wait for the final render to finish before importing tracks.".into()];
+                vec!["Wait for WAV preparation to finish before importing tracks.".into()];
             return;
         }
         let existing = self.loading_paths();
@@ -2301,6 +2581,7 @@ impl CleanSlateApp {
             return;
         }
         self.stop_audition();
+        self.track_name_draft = None;
         self.preview_pending = None;
         self.preview_generation += 1;
         self.preview_processing = None;
@@ -2484,7 +2765,7 @@ impl CleanSlateApp {
     }
 
     fn theme(&self) -> Theme {
-        Theme::Dark
+        editor_theme()
     }
 
     fn export_current(&mut self) {
@@ -2514,30 +2795,26 @@ impl CleanSlateApp {
             self.messages = vec!["Final export requires current supervised analysis.".into()];
             return;
         };
-        let runtime = self.analysis_runtime();
         if self.reference_stale
             || self.gain_drag.is_some()
             || self.preview_processing.is_some()
             || self.preview_pending.is_some()
         {
-            self.messages = vec![
-                "Finish editing and Analyze before rendering the current supervised preview."
-                    .into(),
-            ];
+            self.messages =
+                vec!["Finish editing and run Analyze before preparing WAV files.".into()];
             return;
         }
-        let snapshot =
-            match crate::SupervisedRenderSnapshot::capture(project, analysis, effective, runtime) {
-                Ok(snapshot) => snapshot,
-                Err(error) => {
-                    self.messages = vec![error.to_string()];
-                    return;
-                }
-            };
+        let snapshot = match crate::SupervisedRenderSnapshot::capture(project, analysis, effective)
+        {
+            Ok(snapshot) => snapshot,
+            Err(error) => {
+                self.messages = vec![error.to_string()];
+                return;
+            }
+        };
         let project = project.clone();
         let analysis = analysis.clone();
         let effective = effective.clone();
-        let runtime = runtime.cloned();
         let generation = self.render_generation.current();
         let gate = self.render_generation.clone();
         let nonce = std::time::SystemTime::now()
@@ -2556,9 +2833,6 @@ impl CleanSlateApp {
         let worker_snapshot = snapshot.clone();
         std::thread::spawn(move || {
             let completed = (|| {
-                if let Some(runtime) = &runtime {
-                    crate::verify_installed_editor_runtime(runtime, &worker_cancel)?;
-                }
                 let private = crate::prepare_supervised_render(
                     &project,
                     &analysis,
@@ -2568,16 +2842,7 @@ impl CleanSlateApp {
                     &worker_progress,
                     Some(&worker_cancel),
                 )?;
-                if let Some(runtime) = &runtime {
-                    crate::verify_installed_editor_runtime(runtime, &worker_cancel)?;
-                }
-                private.publish(
-                    &project,
-                    runtime.as_ref(),
-                    &gate,
-                    generation,
-                    Some(&worker_cancel),
-                )
+                private.publish(&project, &gate, generation, Some(&worker_cancel))
             })()
             .map_err(|error: crate::RenderBlocker| error.to_string());
             let _ = sender.send(completed);
@@ -2589,18 +2854,16 @@ impl CleanSlateApp {
             snapshot,
             generation,
         });
-        self.messages =
-            vec!["Rendering the current effective envelopes at each source's native rate.".into()];
+        self.messages = vec!["Preparing processed WAV files at the original sample rates.".into()];
     }
 
     fn export_to(&mut self, destination: PathBuf) {
         if !self.export_ready() {
             self.messages =
-                vec!["Export blocked: render the current settings before exporting".into()];
+                vec!["Prepare WAV files with the current settings before saving.".into()];
             return;
         }
         let Some(project) = &self.project else { return };
-        let runtime = self.analysis_runtime().cloned();
         let project = project.clone();
         let gate = self.render_generation.clone();
         let generation = gate.current();
@@ -2609,13 +2872,7 @@ impl CleanSlateApp {
         let (sender, result) = mpsc::channel();
         std::thread::spawn(move || {
             let completed = (|| {
-                if let Some(runtime) = &runtime {
-                    crate::verify_installed_editor_runtime(runtime, &worker_cancel)?;
-                }
                 let private = crate::prepare_export(&project, &destination, Some(&worker_cancel))?;
-                if let Some(runtime) = &runtime {
-                    crate::verify_installed_editor_runtime(runtime, &worker_cancel)?;
-                }
                 private.publish(&project, &gate, generation, Some(&worker_cancel))?;
                 Ok(destination)
             })()
@@ -2623,8 +2880,7 @@ impl CleanSlateApp {
             let _ = sender.send(completed);
         });
         self.exporting = Some(ExportProcessing { cancelled, result });
-        self.messages =
-            vec!["Verifying and exporting current native WAVs in the background.".into()];
+        self.messages = vec!["Checking and saving WAV files in the background.".into()];
     }
 
     fn poll_exporting(&mut self) {
@@ -2635,13 +2891,13 @@ impl CleanSlateApp {
             Ok(result) => result,
             Err(mpsc::TryRecvError::Empty) => return,
             Err(mpsc::TryRecvError::Disconnected) => {
-                Err("Delivery worker stopped unexpectedly".into())
+                Err("Saving WAV files stopped unexpectedly".into())
             }
         };
         self.exporting = None;
         self.messages = vec![match completed {
-            Ok(destination) => format!("Export committed to {}", destination.display()),
-            Err(error) => format!("Export was not committed: {error}"),
+            Ok(destination) => format!("WAV files saved to {}", destination.display()),
+            Err(error) => format!("WAV files were not saved: {error}"),
         }];
     }
     fn export_ready(&self) -> bool {
@@ -2650,7 +2906,6 @@ impl CleanSlateApp {
             && self.gain_drag.is_none()
             && self.preview_pending.is_none()
             && self.preview_processing.is_none()
-            && self.supervised_result.as_ref().is_some_and(|result| self.analysis_runtime() == result.runtime.as_ref())
             && self.supervised_result.as_ref().is_some_and(|result| self.project.as_ref().is_some_and(|project| result.snapshot.matches(project)))
             && self.effective_result.as_ref().is_some_and(|effective| effective.analysis_current)
             && self.processing.is_none()
@@ -2676,6 +2931,23 @@ impl CleanSlateApp {
             }
         });
     }
+    fn can_start_new_project(&self) -> bool {
+        !self.sources_busy() && self.processing.is_none() && self.exporting.is_none()
+    }
+
+    fn reset_project(&mut self, confirmed: bool) {
+        if !confirmed || !self.can_start_new_project() {
+            return;
+        }
+        self.stop_audition();
+        self.render_generation.invalidate();
+        *self = Self {
+            drawing_revision: self.drawing_revision.wrapping_add(1),
+            messages: vec!["New project. Import tracks to begin.".into()],
+            ..Self::default()
+        };
+    }
+
     fn open_project(&mut self) {
         let Some(path) = rfd::FileDialog::new()
             .set_directory(dialog_start_directory())
@@ -2755,7 +3027,6 @@ impl CleanSlateApp {
         };
         let source_project = project.clone();
         let cache_directory = project.path().with_extension("analysis-cache");
-        let runtime = self.analysis_runtime().cloned();
         let progress = Arc::new(AtomicU8::new(0));
         let worker_progress = progress.clone();
         let cancelled = Arc::new(AtomicBool::new(false));
@@ -2767,7 +3038,6 @@ impl CleanSlateApp {
                 .analyze(
                     &source_project,
                     &cache_directory,
-                    runtime.as_ref(),
                     &worker_progress,
                     &worker_cancelled,
                 )
@@ -2800,8 +3070,7 @@ impl CleanSlateApp {
         });
         match result {
             Ok(effective) => {
-                self.reference_stale = !effective.analysis_current
-                    || self.analysis_runtime() != analysis.runtime.as_ref();
+                self.reference_stale = !effective.analysis_current;
                 if let Some(audition) = &self.audition {
                     audition.replace_envelopes(effective.envelopes.clone());
                 }
@@ -3091,16 +3360,7 @@ impl CleanSlateApp {
                     match completed {
                         Ok(analysis) => {
                             let project = self.project.as_mut().unwrap();
-                            match analysis.install(
-                                project,
-                                &mut self.effective_cache,
-                                if project.nemotron_enabled() {
-                                    self.model_acquisition.provenance()
-                                } else {
-                                    None
-                                },
-                                None,
-                            ) {
+                            match analysis.install(project, &mut self.effective_cache, None) {
                                 Ok(effective) => {
                                     let preview = analysis.preview(project, &effective);
                                     if let Some(audition) = &self.audition {
@@ -3138,13 +3398,12 @@ impl CleanSlateApp {
             Ok(completed) => completed,
             Err(mpsc::TryRecvError::Empty) => return,
             Err(mpsc::TryRecvError::Disconnected) => {
-                Err("Final render worker stopped unexpectedly".into())
+                Err("WAV preparation stopped unexpectedly".into())
             }
         };
         let processing = self.processing.take().unwrap();
         let current = !processing.cancelled.load(Ordering::Relaxed)
             && self.render_generation.current() == processing.generation
-            && self.analysis_runtime() == processing.snapshot.runtime.as_ref()
             && self
                 .project
                 .as_ref()
@@ -3154,19 +3413,21 @@ impl CleanSlateApp {
                 let project = self.project.as_mut().unwrap();
                 match artifact.accept(project) {
                     Ok(()) => {
-                        self.messages = vec!["Final render current; ready to export WAVs".into()];
+                        self.messages = vec!["WAV files prepared · ready to save".into()];
                         self.refresh_export_readiness();
                     }
                     Err(error) => {
-                        self.messages = vec![format!("Final render not accepted: {error}")]
+                        self.messages = vec![format!("WAV preparation failed validation: {error}")]
                     }
                 }
             }
             Ok(_) => {
-                self.messages =
-                    vec!["Final render became obsolete; previous accepted output retained.".into()]
+                self.messages = vec![
+                    "Settings changed during WAV preparation. Previous output is still available."
+                        .into(),
+                ]
             }
-            Err(error) => self.messages = vec![format!("Final render not committed: {error}")],
+            Err(error) => self.messages = vec![format!("WAV files could not be prepared: {error}")],
         }
     }
     fn poll_audition(&mut self) {
@@ -3285,7 +3546,7 @@ impl CleanSlateApp {
             return;
         };
         if !project.ownership_settings().enabled {
-            self.calibration_error = Some("Enable joint ownership before adding examples.".into());
+            self.calibration_error = Some("Enable speaker analysis before adding examples.".into());
             return;
         }
         let Some(source) = project.sources.get(track) else {
@@ -3465,9 +3726,6 @@ impl CleanSlateApp {
                     | Message::ImportChannelName(_, _)
                     | Message::ConfirmChannels
                     | Message::CancelChannels
-                    | Message::DownloadModel
-                    | Message::VerifyModel
-                    | Message::CancelModelDownload
                     | Message::ImportStems
                     | Message::Tick
                     | Message::Stop
@@ -3482,10 +3740,6 @@ impl CleanSlateApp {
             Message::AnalyzeReferences
                 | Message::Cancel
                 | Message::CancelAnalysis
-                | Message::DownloadModel
-                | Message::VerifyModel
-                | Message::NemotronEnabled(_)
-                | Message::CancelModelDownload
                 | Message::Attenuation(_)
                 | Message::OpenTime(_)
                 | Message::CloseTime(_)
@@ -3567,6 +3821,9 @@ impl CleanSlateApp {
             Message::EditTrackName(index) => {
                 if let Some(source) = self.project.as_ref().and_then(|p| p.sources.get(index)) {
                     self.track_name_draft = Some((index, source.display_name()));
+                    self.messages.clear();
+                    return iced::widget::operation::focus("track-name")
+                        .chain(iced::widget::operation::select_all("track-name"));
                 }
             }
             Message::TrackName(name) => {
@@ -3579,6 +3836,7 @@ impl CleanSlateApp {
                     match self.project.as_mut().unwrap().rename_track(index, name) {
                         Ok(()) => {
                             self.track_name_draft = None;
+                            self.messages.clear();
                             self.render_generation.invalidate();
                             self.mark_reference_edit();
                         }
@@ -3586,7 +3844,10 @@ impl CleanSlateApp {
                     }
                 }
             }
-            Message::CancelTrackName => self.track_name_draft = None,
+            Message::CancelTrackName => {
+                self.track_name_draft = None;
+                self.messages.clear();
+            }
             Message::ShowExample(id) | Message::PlayExample(id) => {
                 let play = matches!(message, Message::PlayExample(_));
                 self.stop_audition();
@@ -3748,7 +4009,6 @@ impl CleanSlateApp {
                 self.reference_menu = None;
                 self.gain_menu = None;
             }
-            Message::ModelDetails(show) => self.model_details = show,
             Message::SetupDetails(show) => self.setup_details = show,
             Message::LockPlayhead => {
                 if self.playback_scroll == PlaybackScroll::Locked {
@@ -3773,21 +4033,6 @@ impl CleanSlateApp {
                     }
                 }
             }
-            Message::NemotronEnabled(enabled) => {
-                if let Some(project) = &mut self.project {
-                    match project.set_nemotron_enabled(enabled) {
-                        Ok(()) => {
-                            self.mark_reference_edit();
-                            if let Some(processing) = &self.preview_processing {
-                                processing.cancelled.store(true, Ordering::Relaxed);
-                            }
-                        }
-                        Err(error) => {
-                            self.preview_error = Some(format!("Analysis option not saved: {error}"))
-                        }
-                    }
-                }
-            }
             Message::ContextReference(speakers, replace) => {
                 if let Some((track, _)) = self.reference_menu
                     && self.selection_track == Some(track)
@@ -3800,10 +4045,21 @@ impl CleanSlateApp {
                     }
                 }
             }
-            Message::DownloadModel => self.model_acquisition.begin(true),
-            Message::VerifyModel => self.model_acquisition.begin(false),
-            Message::CancelModelDownload => self.model_acquisition.cancel(),
             Message::ImportStems => self.import_stems(),
+            Message::NewProject => {
+                if self.can_start_new_project() {
+                    let confirmed = self.project.is_none()
+                        || rfd::MessageDialog::new()
+                            .set_title("Start a new project?")
+                            .set_description("This clears the current workspace. Unsaved changes will be lost. Choose No and save your project first if you want to keep them. Saved projects and source audio stay on disk.")
+                            .set_level(rfd::MessageLevel::Warning)
+                            .set_buttons(rfd::MessageButtons::YesNo)
+                            .show()
+                            == rfd::MessageDialogResult::Yes;
+                    self.reset_project(confirmed);
+                }
+                return Task::none();
+            }
             Message::OpenProject => self.open_project(),
             Message::FileDropped(path) => {
                 if path.extension().is_some_and(|extension| {
@@ -3859,7 +4115,6 @@ impl CleanSlateApp {
                 }
             }
             Message::Tick => {
-                self.model_acquisition.poll();
                 self.poll_sources();
                 if !self.sources_busy() {
                     self.poll_processing();
@@ -3917,6 +4172,12 @@ impl CleanSlateApp {
                 }
             }
             Message::KeyPressed(key, modifiers) => {
+                if self.track_name_draft.is_some() {
+                    if key == keyboard::Key::Named(keyboard::key::Named::Escape) {
+                        return self.update(Message::CancelTrackName);
+                    }
+                    return Task::none();
+                }
                 if self.handle_edit_key(&key, modifiers) {
                     return Task::none();
                 }
@@ -4204,7 +4465,6 @@ impl CleanSlateApp {
         });
         let processing = if self.processing.is_some()
             || self.exporting.is_some()
-            || self.model_acquisition.is_busy()
             || self.sources_busy()
             || self.preview_processing.is_some()
             || self.preview_pending.is_some()
@@ -4227,19 +4487,37 @@ impl CleanSlateApp {
         } else {
             Subscription::none()
         };
-        Subscription::batch([drops, processing, playback])
+        let rename_keys = if self.track_name_draft.is_some() {
+            // Text inputs capture Escape, so cancellation must also see captured events.
+            iced::event::listen_with(|event, _, _| match event {
+                iced::Event::Keyboard(keyboard::Event::KeyPressed {
+                    key: keyboard::Key::Named(keyboard::key::Named::Escape),
+                    ..
+                }) => Some(Message::CancelTrackName),
+                _ => None,
+            })
+        } else {
+            Subscription::none()
+        };
+        Subscription::batch([drops, processing, playback, rename_keys])
     }
 
     fn view(&self) -> Element<'_, Message> {
         if !self.import_choices.is_empty() {
-            let mut choices = column![text("Choose speaker channels").size(24), text("Keep the microphone channels you want to edit. All channels keep their recording timing.")].spacing(12);
+            let mut choices = column![
+                text("Choose speaker channels").size(24),
+                text(
+                    "Choose the microphone channels to edit. Their original timing stays aligned."
+                )
+            ]
+            .spacing(12);
             choices = choices.push(
                 text(format!(
                     "{} selected · {} existing tracks · maximum 8",
                     self.import_choices.iter().filter(|c| c.selected).count(),
                     self.project.as_ref().map_or(0, |p| p.sources.len())
                 ))
-                .size(12),
+                .size(14),
             );
             for (index, choice) in self.import_choices.iter().enumerate() {
                 choices = choices.push(
@@ -4262,7 +4540,7 @@ impl CleanSlateApp {
                                 .to_string_lossy()
                                 .to_string()
                         )
-                        .size(12),
+                        .size(14),
                     ]
                     .spacing(12),
                 );
@@ -4272,9 +4550,11 @@ impl CleanSlateApp {
             }
             choices = choices.push(
                 row![
-                    button("Import selected channels").on_press(Message::ConfirmChannels),
+                    button("Import selected channels")
+                        .style(primary_button)
+                        .on_press(Message::ConfirmChannels),
                     button("Cancel")
-                        .style(button::secondary)
+                        .style(secondary_button)
                         .on_press(Message::CancelChannels)
                 ]
                 .spacing(12),
@@ -4285,28 +4565,16 @@ impl CleanSlateApp {
                 .height(Fill)
                 .into();
         }
-        if let Some((_, name)) = &self.track_name_draft {
-            let mut form = column![
-                text("Rename track").size(24),
-                text_input("Track name", name).on_input(Message::TrackName),
-                row![
-                    button("Save name").on_press(Message::SaveTrackName),
-                    button("Cancel").on_press(Message::CancelTrackName)
-                ]
-                .spacing(12)
-            ]
-            .spacing(12);
-            for message in &self.messages {
-                form = form.push(text(message));
-            }
-            return container(form).padding(24).width(Fill).into();
-        }
         responsive(|size| {
             let count = self
                 .project
                 .as_ref()
                 .map_or(0, |project| project.sources.len());
-            self.workspace(compact_workspace(size.width) && count <= 3, size.height)
+            self.workspace(
+                compact_workspace(size.width) && count <= 3,
+                size.height,
+                size.width,
+            )
         })
         .into()
     }
@@ -4334,38 +4602,25 @@ impl CleanSlateApp {
 
     fn workspace_status(&self) -> String {
         if self.sources_busy() {
-            return "LOADING TRACKS".into();
+            return "Loading tracks".into();
         }
         let Some(project) = &self.project else {
-            return "IMPORT TRACKS".into();
+            return "Import tracks to begin".into();
         };
         if self.preview_processing.is_some() {
-            return "ANALYZING".into();
-        }
-        if self.model_acquisition.is_busy() {
-            return "MODEL SETUP".into();
+            return "Analyzing".into();
         }
         let (missing, room) = self.missing_references();
-        if project.nemotron_enabled() && self.model_acquisition.provenance().is_none() {
-            return if missing.is_empty() && room {
-                "VERIFY MODEL"
-            } else {
-                "VERIFY MODEL · ADD REFERENCES"
-            }
-            .into();
-        }
         if !missing.is_empty() || !room {
-            return "ADD SPEAKER / ROOM REFERENCES".into();
+            return "Add speaker and room-tone examples".into();
         }
         if let Some(result) = &self.supervised_result {
-            if !result.snapshot.matches(project)
-                || self.analysis_runtime() != result.runtime.as_ref()
-            {
-                return "ANALYSIS OUT OF DATE".into();
+            if !result.snapshot.matches(project) {
+                return "Analysis needs updating".into();
             }
-            return "ANALYSIS COMPLETE".into();
+            return "Analysis complete".into();
         }
-        "REFERENCES SAVED · ANALYZE TO VALIDATE".into()
+        "Examples ready · run Analyze".into()
     }
 
     fn next_action(&self) -> &'static str {
@@ -4377,18 +4632,15 @@ impl CleanSlateApp {
         }
         let (missing, room) = self.missing_references();
         if !missing.is_empty() || !room {
-            return "Listen in Original. Drag a few solo examples and room tone, then label them.";
+            return "Listen to the original. Mark solo speech and room tone as examples.";
         }
         if project.require_alignment().is_err() {
             return "Confirm synchronized recording starts below before Analyze.";
         }
-        if project.nemotron_enabled() && self.model_acquisition.provenance().is_none() {
-            return "Verify the model below, then Analyze your references.";
-        }
         if self.reference_stale || self.supervised_result.is_none() {
-            return "Click Analyze to learn from your saved references.";
+            return "Run Analyze to apply your saved examples.";
         }
-        "Listen in Processed and Removed. Adjust attenuation and fades, then export."
+        "Listen to the processed and removed audio. Adjust the sound, then export."
     }
 
     fn calibration_controls(&self) -> Element<'_, Message> {
@@ -4396,34 +4648,50 @@ impl CleanSlateApp {
             return column![].into();
         };
         let mut controls = column![
-            text("Speaker examples & analysis").size(18),
-            text("Drag a clear example on any track, then choose who is talking.").size(12),
+            text("Speaker examples").size(18).font(iced::Font {
+                weight: iced::font::Weight::Semibold,
+                ..iced::Font::with_name("Segoe UI")
+            }),
+            text("Drag a clear example on any track, then choose who is talking.").size(14),
             text(format!(
                 "{} saved examples",
                 project.reference_labels().len()
             ))
-            .size(12),
+            .size(14),
         ]
         .spacing(8);
         controls = controls.push(
             row![
-                button("Undo label")
-                    .style(button::secondary)
+                button(text("Undo").size(14))
+                    .padding([7, 10])
+                    .width(Fill)
+                    .style(secondary_button)
                     .on_press(Message::UndoReferences),
-                button("Redo label")
-                    .style(button::secondary)
-                    .on_press(Message::RedoReferences)
+                button(text("Redo").size(14))
+                    .padding([7, 10])
+                    .width(Fill)
+                    .style(secondary_button)
+                    .on_press(Message::RedoReferences),
+                button(text("Analyze").size(14))
+                    .padding([7, 10])
+                    .width(Fill)
+                    .style(primary_button)
+                    .on_press(Message::AnalyzeReferences),
             ]
-            .spacing(8),
+            .spacing(6)
+            .width(280),
         );
-        controls = controls.push(button("Analyze").on_press(Message::AnalyzeReferences));
         if self.preview_processing.is_some() {
-            controls = controls.push(button("Cancel analysis").on_press(Message::CancelAnalysis));
+            controls = controls.push(
+                button("Cancel analysis")
+                    .style(secondary_button)
+                    .on_press(Message::CancelAnalysis),
+            );
         }
         let (missing, room) = self.missing_references();
         controls = controls.push(
             text(if missing.is_empty() && room {
-                "Examples supplied. Analyze checks usable speech and room tone.".into()
+                "Analyze checks your speech and room-tone examples.".into()
             } else {
                 format!(
                     "Examples needed: {}{}",
@@ -4431,15 +4699,15 @@ impl CleanSlateApp {
                     if room { "" } else { "; room tone" }
                 )
             })
-            .size(12),
+            .size(14),
         );
         controls = controls.push(
             button(if self.calibration_timing {
                 "Hide speaker examples"
             } else {
-                "Speaker examples"
+                "Show examples"
             })
-            .style(button::secondary)
+            .style(secondary_button)
             .on_press(Message::CalibrationTiming(!self.calibration_timing)),
         );
         if let Some(notice) = project.calibration_notice()
@@ -4455,11 +4723,11 @@ impl CleanSlateApp {
             controls = controls.push(text(format!("Example not saved: {error}")));
         }
         if self.calibration_timing {
-            controls = controls.push(text("Click an example on the waveform to drag its ends. Right-click to change speakers or delete it.").size(12));
+            controls = controls.push(text("Click an example on the waveform to drag its ends. Right-click to change speakers or delete it.").size(14));
             if project.reference_labels().is_empty() {
                 controls = controls.push(
                     text("No examples yet. Drag across a waveform and choose who is talking.")
-                        .size(12),
+                        .size(14),
                 );
             }
             for label in project.reference_labels() {
@@ -4474,15 +4742,15 @@ impl CleanSlateApp {
                                 (label.range.end - label.range.start) as f64
                                     / TICKS_PER_SECOND as f64
                             ))
-                            .size(12),
+                            .size(14),
                             row![
-                                button(text("Play").size(12))
+                                button(text("Play").size(14))
                                     .style(button::text)
                                     .on_press(Message::PlayExample(label.id)),
-                                button(text("Show on timeline").size(12))
+                                button(text("Show on timeline").size(14))
                                     .style(button::text)
                                     .on_press(Message::ShowExample(label.id)),
-                                button(text("Delete").size(11))
+                                button(text("Delete").size(13))
                                     .style(button::text)
                                     .on_press(Message::RemoveReference(label.id)),
                             ]
@@ -4498,75 +4766,6 @@ impl CleanSlateApp {
         controls.into()
     }
 
-    fn model_controls(&self) -> Element<'_, Message> {
-        let enabled = self
-            .project
-            .as_ref()
-            .is_some_and(|project| project.nemotron_enabled());
-        let ready =
-            self.model_acquisition.provenance().is_some() && !self.model_acquisition.is_busy();
-        let mut controls = column![
-            iced::widget::checkbox(enabled)
-                .label("Use Nemotron (optional)")
-                .on_toggle(Message::NemotronEnabled),
-            text(if ready {
-                "Model ready · offline"
-            } else {
-                self.model_acquisition.status()
-            })
-            .size(12),
-            button(if self.model_details {
-                "Hide model details"
-            } else {
-                "Model details"
-            })
-            .on_press(Message::ModelDetails(!self.model_details)),
-        ]
-        .spacing(6);
-        if !enabled && !self.model_details && !self.model_acquisition.is_busy() {
-            return column![
-                iced::widget::checkbox(false)
-                    .label("Use Nemotron (optional)")
-                    .on_toggle(Message::NemotronEnabled),
-                text("Acoustic analysis from your references").size(12),
-                button("Model details").on_press(Message::ModelDetails(true)),
-            ]
-            .spacing(6)
-            .into();
-        }
-        if ready && !self.model_details {
-            return controls.into();
-        }
-        let actions = if self.model_acquisition.is_busy() {
-            column![
-                progress_bar(0.0..=1.0, self.model_acquisition.progress()),
-                button("Cancel model acquisition").on_press(Message::CancelModelDownload),
-            ]
-        } else {
-            column![
-                button("Download / verify Nemotron").on_press(Message::DownloadModel),
-                button("Verify installed model offline").on_press(Message::VerifyModel),
-            ]
-        }
-        .spacing(6);
-        if !ready {
-            controls = controls.push(actions);
-        }
-        if self.model_details {
-            controls = controls.push(column![
-            iced::widget::tooltip(
-                text("Nemotron q8_0 · 107 MB · CPU / offline").size(12),
-                text(format!("Pinned {} · SHA-256 {}",crate::model::MODEL_REVISION,crate::model::NEMOTRON.sha256)).size(12),
-                iced::widget::tooltip::Position::Bottom,
-            ),
-            text("Weights: OpenMDW 1.1 · runtime: Apache-2.0").size(11),
-            text("Download: NVIDIA / Hugging Face. Agreement: https://openmdw.ai/license/1-1/. Notices accompany the installed files.").size(11),
-            button("Verify installed model offline").on_press(Message::VerifyModel),
-        ].spacing(6));
-        }
-        controls.into()
-    }
-
     fn gain_controls(&self) -> Element<'_, Message> {
         let mut controls = column![
             iced::widget::checkbox(self.gain_tool)
@@ -4576,20 +4775,20 @@ impl CleanSlateApp {
         .spacing(8);
         if self.gain_tool {
             controls = controls
-                .push(text("Drag pink points to adjust gain and fades. Arrow keys move the selected point; Delete removes its override.").size(12))
+                .push(text("Drag pink points to adjust gain and fades. Arrow keys move the selected point; Delete removes its override.").size(14))
                 .push(row![
-                    button("Undo gain").style(button::secondary).on_press(Message::UndoGain),
-                    button("Redo gain").style(button::secondary).on_press(Message::RedoGain),
+                    button("Undo gain").style(secondary_button).on_press(Message::UndoGain),
+                    button("Redo gain").style(secondary_button).on_press(Message::RedoGain),
                 ].spacing(6))
-                .push(button("Add point at cursor").style(button::secondary).on_press(Message::InsertGainPoint))
-                .push(button("Remove selected override").style(button::secondary).on_press(Message::DeleteGain))
+                .push(button("Add point at cursor").style(secondary_button).on_press(Message::InsertGainPoint))
+                .push(button("Remove selected override").style(secondary_button).on_press(Message::DeleteGain))
                 .push(iced::widget::checkbox(self.replace_gain_constraints)
                     .label("Replace overlapping overrides and protections")
                     .on_toggle(Message::ReplaceGainConstraints));
             if self.can_protect_selection() {
                 controls = controls.push(
                     button("Preserve selection on all tracks")
-                        .style(button::secondary)
+                        .style(secondary_button)
                         .on_press(Message::ProtectSelection),
                 );
             }
@@ -4604,7 +4803,7 @@ impl CleanSlateApp {
         let mut controls = column![
             text("Sources").size(16),
             button("Recheck source files")
-                .style(button::secondary)
+                .style(secondary_button)
                 .on_press(Message::Validate),
         ]
         .spacing(8);
@@ -4612,26 +4811,31 @@ impl CleanSlateApp {
             controls = controls
                 .push(
                     text("Before Analyze: confirm the tracks share the same recording start.")
-                        .size(12),
+                        .size(14),
                 )
                 .push(
                     iced::widget::checkbox(project.supplied_alignment())
                         .label("Tracks are synchronized")
                         .on_toggle(Message::SuppliedAlignment),
                 )
-                .push(text(error.to_string()).size(12));
+                .push(text(error.to_string()).size(14));
         }
         for (index, source) in project.sources.iter().enumerate() {
             let mut source_controls =
-                column![text(format!("Speaker {} source", source.speaker_id.0)).size(12)]
+                column![text(format!("Speaker {} source", source.speaker_id.0)).size(14)]
                     .spacing(4);
             if !source.available {
-                source_controls =
-                    source_controls.push(button("Relink source").on_press(Message::Relink(index)));
+                source_controls = source_controls.push(
+                    button("Relink source")
+                        .style(primary_button)
+                        .on_press(Message::Relink(index)),
+                );
             }
             if project.pending_source_reviews().contains(&source.track_id) {
                 source_controls = source_controls.push(
-                    button("Accept changed source bindings").on_press(Message::RebindSource(index)),
+                    button("Accept source changes")
+                        .style(primary_button)
+                        .on_press(Message::RebindSource(index)),
                 );
             }
             if !source.available || project.pending_source_reviews().contains(&source.track_id) {
@@ -4642,30 +4846,45 @@ impl CleanSlateApp {
     }
 
     fn export_controls(&self) -> Element<'_, Message> {
-        let mut controls = column![text("Export").size(18)].spacing(8);
+        let mut controls = column![text("Export").size(18).font(iced::Font {
+            weight: iced::font::Weight::Semibold,
+            ..iced::Font::with_name("Segoe UI")
+        })]
+        .spacing(8);
         if let Some(processing) = &self.processing {
             controls = controls
                 .push(text(format!(
-                    "Final render: {}%",
+                    "Preparing WAV files: {}%",
                     processing.progress.load(Ordering::Relaxed)
                 )))
-                .push(button("Cancel final render").on_press(Message::Cancel));
+                .push(
+                    button("Cancel WAV preparation")
+                        .style(secondary_button)
+                        .on_press(Message::Cancel),
+                );
         } else {
             controls = controls.push(
-                button("Render WAV files")
+                button("Prepare WAV export")
+                    .style(primary_button)
                     .on_press_maybe(self.supervised_result.as_ref().map(|_| Message::Process)),
             );
         }
         if self.export_ready() {
-            controls = controls.push(button("Export current render").on_press(Message::Export));
+            controls = controls.push(
+                button("Save WAV files")
+                    .style(primary_button)
+                    .on_press(Message::Export),
+            );
         }
         if let Some(error) = &self.export_error {
             controls = controls.push(text(format!("Export blocked: {error}")));
         }
         if self.exporting.is_some() {
-            controls = controls
-                .push(text("Verifying and copying current delivery…"))
-                .push(button("Cancel delivery").on_press(Message::Cancel));
+            controls = controls.push(text("Checking and saving WAV files…")).push(
+                button("Cancel saving")
+                    .style(secondary_button)
+                    .on_press(Message::Cancel),
+            );
         }
         for message in &self.messages {
             controls = controls.push(text(message));
@@ -4673,12 +4892,8 @@ impl CleanSlateApp {
         controls.into()
     }
 
-    fn workspace(&self, compact: bool, height: f32) -> Element<'_, Message> {
-        let ownership_stale = self.reference_stale
-            || self
-                .supervised_result
-                .as_ref()
-                .is_some_and(|analysis| self.analysis_runtime() != analysis.runtime.as_ref());
+    fn workspace(&self, compact: bool, height: f32, width: f32) -> Element<'_, Message> {
+        let ownership_stale = self.reference_stale;
         let ownership_states = self
             .supervised_result
             .as_ref()
@@ -4704,31 +4919,44 @@ impl CleanSlateApp {
                 }
             }
             (_, Some(_), None) => "Ownership · outside analyzed audio".into(),
-            _ => "Ownership · Analyze to see active speakers".into(),
+            _ => "Speaker activity · run Analyze to see estimates".into(),
         };
         let header = row![
             column![
-                text("CLEANSLATE").size(24),
+                text("CleanSlate").size(24).font(iced::Font {
+                    weight: iced::font::Weight::Semibold,
+                    ..iced::Font::with_name("Segoe UI")
+                }),
                 text(
                     self.project
                         .as_ref()
                         .and_then(|project| project.path().file_stem())
                         .map_or_else(
-                            || "UNTITLED SESSION".into(),
+                            || "Untitled project".into(),
                             |name| name.to_string_lossy().into_owned()
                         )
                 )
-                .size(12)
+                .size(14)
             ]
             .spacing(2),
             Space::new().width(Fill),
-            text(self.workspace_status()).size(12),
-            button("Import stems").on_press(Message::ImportStems),
-            button("Open session").on_press_maybe(
-                (!self.sources_busy() && self.processing.is_none()).then_some(Message::OpenProject)
-            ),
+            text(self.workspace_status())
+                .size(14)
+                .color(iced::color!(0xADB5C0)),
+            button("Import tracks")
+                .style(primary_button)
+                .on_press(Message::ImportStems),
+            button("New project")
+                .style(secondary_button)
+                .on_press_maybe(self.can_start_new_project().then_some(Message::NewProject)),
+            button("Open project")
+                .style(secondary_button)
+                .on_press_maybe(
+                    (!self.sources_busy() && self.processing.is_none())
+                        .then_some(Message::OpenProject)
+                ),
             button("Save project")
-                .style(button::secondary)
+                .style(secondary_button)
                 .on_press_maybe(
                     (self.project.is_some() && !self.sources_busy())
                         .then_some(Message::SaveProject)
@@ -4784,18 +5012,18 @@ impl CleanSlateApp {
                     )
                     .padding(12)
                     .width(Fill)
-                    .style(container::bordered_box),
+                    .style(editor_panel),
                 );
             }
         } else if self.project.is_none() {
             timeline_content = timeline_content.push(
                 container(
                     column![
-                        text("NO STEMS IMPORTED").size(22),
+                        text("Start with your speaker tracks").size(22),
                         text(
                             "Import synchronized speaker tracks or a multichannel WAV, or drop them anywhere in this window."
                         ),
-                        button("Import tracks").on_press(Message::ImportStems),
+                        button("Import tracks").style(primary_button).on_press(Message::ImportStems),
                     ]
                     .spacing(12)
                     .align_x(iced::Center),
@@ -4826,6 +5054,54 @@ impl CleanSlateApp {
                 if filename.chars().count() > 24 {
                     short_name.push('…');
                 }
+                let title: Element<'_, Message> = if let Some((editing, name)) =
+                    &self.track_name_draft
+                    && *editing == index
+                {
+                    let mut editor = column![
+                        row![
+                            text(format!("Speaker {}", source.speaker_id.0)).size(14),
+                            text_input("Track name", name)
+                                .id("track-name")
+                                .size(14)
+                                .padding([4, 6])
+                                .on_input(Message::TrackName)
+                                .on_submit(Message::SaveTrackName)
+                                .width(280),
+                            button(text("Save").size(14))
+                                .style(primary_button)
+                                .on_press(Message::SaveTrackName),
+                            button(text("Cancel").size(14))
+                                .style(secondary_button)
+                                .on_press(Message::CancelTrackName),
+                        ]
+                        .spacing(8)
+                        .align_y(iced::Center)
+                    ]
+                    .spacing(4);
+                    if !self.messages.is_empty() {
+                        editor = editor.push(
+                            text(self.messages.join("\n"))
+                                .size(13)
+                                .color(iced::color!(0xDB8B8B)),
+                        );
+                    }
+                    editor.into()
+                } else {
+                    iced::widget::tooltip(
+                        button(
+                            text(format!("Speaker {} · {short_name}", source.speaker_id.0))
+                                .size(14)
+                                .color(iced::color!(0xE4E7EB)),
+                        )
+                        .style(button::text)
+                        .padding([3, 6])
+                        .on_press(Message::EditTrackName(index)),
+                        text(format!("Click to rename · {}", source.path.display())).size(14),
+                        iced::widget::tooltip::Position::Bottom,
+                    )
+                    .into()
+                };
                 let mut header = row![
                     button(
                         text(if self.solo_tracks & (1u64 << index) != 0 {
@@ -4833,42 +5109,38 @@ impl CleanSlateApp {
                         } else {
                             "Solo"
                         })
-                        .size(12)
+                        .size(14)
                     )
                     .style(if self.solo_tracks & (1u64 << index) != 0 {
-                        button::primary
+                        primary_button
                     } else {
-                        button::secondary
+                        secondary_button
                     })
                     .on_press(Message::SoloTrack(index)),
-                    iced::widget::tooltip(
-                        text(format!("Speaker {} · {short_name}", source.speaker_id.0))
-                            .size(13)
-                            .width(Fill),
-                        text(source.path.display().to_string()).size(12),
-                        iced::widget::tooltip::Position::Bottom,
-                    ),
-                    button(text("Rename").size(12))
-                        .style(button::secondary)
-                        .on_press(Message::EditTrackName(index)),
-                    button(text("Preserve").size(12)).on_press_maybe(
-                        self.timeline
-                            .selection()
-                            .map(|_| Message::GainAction(index, true))
-                    ),
-                    button(text("Attenuate").size(12)).on_press_maybe(
-                        self.timeline
-                            .selection()
-                            .map(|_| Message::GainAction(index, false))
-                    ),
+                    title,
+                    Space::new().width(Fill),
+                    button(text("Preserve").size(14))
+                        .style(secondary_button)
+                        .on_press_maybe(
+                            self.timeline
+                                .selection()
+                                .map(|_| Message::GainAction(index, true))
+                        ),
+                    button(text("Attenuate").size(14))
+                        .style(secondary_button)
+                        .on_press_maybe(
+                            self.timeline
+                                .selection()
+                                .map(|_| Message::GainAction(index, false))
+                        ),
                 ]
                 .spacing(8)
                 .align_y(iced::Center);
                 if !source.available {
-                    header = header.push(text("Missing source").size(12));
+                    header = header.push(text("Missing source").size(14));
                 }
                 if project.pending_source_reviews().contains(&source.track_id) {
-                    header = header.push(text("Review source").size(12));
+                    header = header.push(text("Review source").size(14));
                 }
                 let mut moving_meter: Option<Element<'_, Message>> = None;
                 if let Some(estimates) = &ownership_estimates
@@ -4903,7 +5175,7 @@ impl CleanSlateApp {
                     let probability = estimate.probability.unwrap_or(0.0);
                     let meter = move || {
                         column![
-                            text(meter_label.clone()).size(12),
+                            text(meter_label.clone()).size(14),
                             progress_bar(0.0..=1.0, probability)
                                 .girth(8)
                                 .style(move |theme| iced::widget::progress_bar::Style {
@@ -5007,7 +5279,7 @@ impl CleanSlateApp {
                     .padding(4)
                     .height(Length::FillPortion(1))
                     .width(Fill)
-                    .style(container::bordered_box),
+                    .style(editor_panel),
                 );
             }
         }
@@ -5019,22 +5291,25 @@ impl CleanSlateApp {
         };
         let timeline = column![
             row![
-                text("SESSION TIMELINE").size(12),
+                text("Timeline").size(16).font(iced::Font { weight: iced::font::Weight::Semibold, ..iced::Font::with_name("Segoe UI") }),
                 Space::new().width(Fill),
                 button(text(if self.playback_scroll == PlaybackScroll::Locked {
                     "Unlock playhead"
                 } else {
                     "Lock playhead"
-                }).size(12)).on_press(Message::LockPlayhead)
-                    .style(if self.playback_scroll == PlaybackScroll::Locked { button::primary } else { button::secondary }),
-                button(text("Center playhead").size(12)).on_press(Message::CenterPlayhead),
-                button(text(if self.meters_at_playhead { "Meters: Playhead" } else { "Meters: Right" }).size(12))
-                    .on_press(Message::ToggleMeterPlacement),
+                }).size(14)).on_press(Message::LockPlayhead)
+                    .style(if self.playback_scroll == PlaybackScroll::Locked { primary_button } else { secondary_button }),
+                button(text("Center playhead").size(14)).style(secondary_button).on_press(Message::CenterPlayhead),
+                button(text(if self.meters_at_playhead { "Meters: Playhead" } else { "Meters: Right" }).size(14))
+                    .style(secondary_button).on_press(Message::ToggleMeterPlacement),
             ].spacing(8).align_y(iced::Center),
-            text(
-                "Red background = reduced gain · Click to seek · drag to label · wheel to zoom · Ctrl-wheel or middle-drag to pan"
-            )
-            .size(11),
+            iced::widget::tooltip(
+                text("Drag to mark a speaker example · red shading shows reduced volume")
+                    .size(14).color(iced::color!(0xADB5C0)),
+                container(text("Click to seek. Drag to label speech or room tone.\nWheel to zoom. Ctrl-wheel or middle-drag to pan.").size(14))
+                    .padding(12).style(editor_panel),
+                iced::widget::tooltip::Position::Bottom,
+            ),
             tracks,
         ]
         .spacing(10)
@@ -5043,10 +5318,10 @@ impl CleanSlateApp {
         let preview_state: Element<'_, Message> = if let Some(processing) = &self.preview_processing
         {
             let stage = match processing.progress.load(Ordering::Relaxed) {
-                0..=19 => "Preparing audio and validating references",
+                0..=19 => "Preparing audio and checking examples",
                 20..=54 => "Analyzing optional speaker-activity evidence on CPU",
-                55..=79 => "Fitting session ownership estimates",
-                80..=94 => "Resolving ownership and uncertainty",
+                55..=79 => "Learning speaker activity from your examples",
+                80..=94 => "Checking speaker activity and uncertain sections",
                 _ => "Composing the current gain preview",
             };
             column![
@@ -5056,7 +5331,7 @@ impl CleanSlateApp {
                     processing.started_at.elapsed().as_secs() / 60,
                     processing.started_at.elapsed().as_secs() % 60
                 ))
-                .size(12),
+                .size(14),
                 text(if self.preview.is_some() {
                     "Previous completed preview remains available"
                 } else {
@@ -5067,48 +5342,49 @@ impl CleanSlateApp {
             .into()
         } else if let Some(error) = &self.preview_error {
             text(format!("Preview failed: {error}")).into()
-        } else if self.reference_stale
-            || self
-                .supervised_result
-                .as_ref()
-                .is_some_and(|analysis| self.analysis_runtime() != analysis.runtime.as_ref())
-        {
-            text("Analysis out of date · click Analyze").into()
+        } else if self.reference_stale {
+            text("Analysis needs updating")
+                .color(iced::color!(0xD8B579))
+                .font(iced::Font {
+                    weight: iced::font::Weight::Semibold,
+                    ..iced::Font::with_name("Segoe UI")
+                })
+                .into()
         } else if self.preview.is_some() {
-            text("Preview ready").into()
+            text("Processed audio ready").into()
         } else {
-            text("Preview not analyzed").into()
+            text("Ready to add examples").into()
         };
         let parameters = &self.preview_parameters;
         let setup_required = self.project.as_ref().is_some_and(|project| {
             project.require_alignment().is_err()
                 || !project.pending_source_reviews().is_empty()
                 || project.sources.iter().any(|source| !source.available)
-                || project.nemotron_enabled() && self.model_acquisition.provenance().is_none()
         });
         let mut setup = column![
             button(if self.setup_details || setup_required {
-                "Model & source setup ▾"
+                "Sources ▾"
             } else {
-                "Model & source setup ▸"
+                "Sources ▸"
             })
-            .style(button::secondary)
+            .style(secondary_button)
             .on_press(Message::SetupDetails(!self.setup_details))
         ]
         .spacing(12);
-        if self.setup_details || setup_required || self.model_acquisition.is_busy() {
-            setup = setup
-                .push(self.model_controls())
-                .push(self.source_controls());
+        if self.setup_details || setup_required {
+            setup = setup.push(self.source_controls());
         }
         let inspector = container(
             column![
                 preview_state,
-                text(self.next_action()).size(12),
+                text(self.next_action()).size(14),
                 container(self.calibration_controls()).width(Fill),
                 container(
                     column![
-                        text("Sound").size(18),
+                        text("Sound").size(18).font(iced::Font {
+                            weight: iced::font::Weight::Semibold,
+                            ..iced::Font::with_name("Segoe UI")
+                        }),
                         text(format!("Attenuation: {:.1} dB", parameters.attenuation_db)),
                         slider(
                             -30.0..=-3.0,
@@ -5117,12 +5393,12 @@ impl CleanSlateApp {
                         )
                         .step(1.0_f32)
                         .on_release(Message::RefreshPreview),
-                        text(format!("Open fade duration: {:.0} ms", parameters.open_ms)),
+                        text(format!("Fade to full volume: {:.0} ms", parameters.open_ms)),
                         slider(1.0..=1000.0, parameters.open_ms, Message::OpenTime)
                             .step(1.0_f32)
                             .on_release(Message::RefreshPreview),
                         text(format!(
-                            "Close fade duration: {:.0} ms",
+                            "Fade to reduced volume: {:.0} ms",
                             parameters.close_ms
                         )),
                         slider(1.0..=2000.0, parameters.close_ms, Message::CloseTime)
@@ -5150,19 +5426,19 @@ impl CleanSlateApp {
             .spacing(20),
         )
         .padding(18)
-        .width(if compact { Fill } else { Length::Fixed(280.0) })
-        .style(container::bordered_box);
+        .width(if compact { Fill } else { Length::Fixed(320.0) })
+        .style(editor_panel);
         let inspector: Element<'_, Message> = if self.sources_busy() {
             container(column![text("Loading tracks").size(20),
-                text("Waveforms appear as each track is read. Validation and source checks run in the background, then choose references and click Analyze."),
+                text("Waveforms appear as tracks load. Once the source checks finish, add speaker examples and run Analyze."),
                 text("You can scroll the tracks and drop more audio files. Editing becomes available when the import is validated."),
-            ].spacing(12)).padding(18).width(if compact { Fill } else { Length::Fixed(280.0) }).into()
+            ].spacing(12)).padding(18).width(if compact { Fill } else { Length::Fixed(320.0) }).into()
         } else {
             scrollable(inspector)
                 .height(if compact { Length::Fixed(240.0) } else { Fill })
                 .into()
         };
-        let transport = row![
+        let playback = row![
             text(format!(
                 "{:02}:{:06.3}",
                 self.timeline.playhead() / TICKS_PER_SECOND / 60,
@@ -5170,7 +5446,9 @@ impl CleanSlateApp {
                     / TICKS_PER_SECOND as f64
             )),
             Space::new().width(Fill),
-            button("Previous").on_press(Message::Previous),
+            button("Previous")
+                .style(secondary_button)
+                .on_press(Message::Previous),
             button(if self.audition_range.is_some() {
                 "Preparing audio…"
             } else if self.audition.is_some() {
@@ -5178,6 +5456,7 @@ impl CleanSlateApp {
             } else {
                 "Play"
             })
+            .style(primary_button)
             .on_press_maybe(
                 (self.preview.is_some()
                     || self.audition_mode == AuditionMode::Original
@@ -5187,7 +5466,7 @@ impl CleanSlateApp {
                             .is_some_and(|project| crate::original_envelopes(project).is_ok()))
                 .then_some(Message::Audition)
             ),
-            button("Stop").on_press_maybe(
+            button("Stop").style(secondary_button).on_press_maybe(
                 (self.audition.is_some()
                     || self.audition_range.is_some()
                     || self.audition_preparation.is_busy())
@@ -5200,13 +5479,21 @@ impl CleanSlateApp {
             } else {
                 ""
             })
-            .size(11),
-            Space::new().width(Fill),
-            text("AUDITION"),
+            .size(13),
+        ]
+        .spacing(8)
+        .align_y(iced::Center);
+        let listening = row![
+            text("Listen"),
             button(if self.audition_mode == AuditionMode::Original {
                 "Original ✓"
             } else {
                 "Original"
+            })
+            .style(if self.audition_mode == AuditionMode::Original {
+                primary_button
+            } else {
+                secondary_button
             })
             .on_press(Message::Original),
             button(if self.audition_mode == AuditionMode::Processed {
@@ -5214,11 +5501,21 @@ impl CleanSlateApp {
             } else {
                 "Processed"
             })
+            .style(if self.audition_mode == AuditionMode::Processed {
+                primary_button
+            } else {
+                secondary_button
+            })
             .on_press_maybe(self.preview.as_ref().map(|_| Message::Processed)),
             button(if self.audition_mode == AuditionMode::Removed {
                 "Removed ✓"
             } else {
                 "Removed"
+            })
+            .style(if self.audition_mode == AuditionMode::Removed {
+                primary_button
+            } else {
+                secondary_button
             })
             .on_press_maybe(self.preview.as_ref().map(|_| Message::Removed)),
             text(format!("Monitor {:+.1} dB", self.monitor_db)),
@@ -5228,6 +5525,14 @@ impl CleanSlateApp {
         ]
         .spacing(8)
         .align_y(iced::Center);
+        let transport: Element<'_, Message> = if width < 1250.0 {
+            column![playback, listening].spacing(10).into()
+        } else {
+            row![playback, Space::new().width(Fill), listening]
+                .spacing(16)
+                .align_y(iced::Center)
+                .into()
+        };
         let editor: Element<'_, Message> = if compact {
             column![timeline, inspector].spacing(12).height(Fill).into()
         } else {
@@ -5236,7 +5541,7 @@ impl CleanSlateApp {
 
         let ownership_monitor = row![
             text(ownership_status).size(16).width(Fill),
-            text("Ownership estimate · bars are not audio level or gain").size(11),
+            text("Speaker estimates · bars do not show volume").size(13),
         ]
         .spacing(8)
         .align_y(iced::Center);
@@ -5257,15 +5562,18 @@ impl CleanSlateApp {
             if let Some((track, time, _)) = self.gain_menu {
                 let panel = container(
                     column![
-                        button("Delete Preserve / Attenuate mark")
+                        button("Remove manual gain adjustment")
+                            .style(primary_button)
                             .on_press(Message::DeleteRegion(track, time)),
-                        text("Restore automatic gain for this section.").size(12),
-                        button("Cancel").on_press(Message::DismissReferenceMenu),
+                        text("Restore automatic gain for this section.").size(14),
+                        button("Cancel")
+                            .style(secondary_button)
+                            .on_press(Message::DismissReferenceMenu),
                     ]
                     .spacing(6),
                 )
                 .padding(10)
-                .style(container::bordered_box);
+                .style(editor_panel);
                 let positioned =
                     iced::widget::float(opaque(panel)).translate(move |bounds, viewport| {
                         iced::Vector::new(
@@ -5288,8 +5596,8 @@ impl CleanSlateApp {
             }
             let mut menu = column![
                 text("Who is talking?").size(16),
-                text("Select everyone speaking. None means room tone.").size(12),
-                text("1–8: toggle · R: clear · Enter: save · Esc: close").size(11)
+                text("Select everyone speaking, or leave all unchecked for room tone.").size(14),
+                text("1–8: toggle · R: clear · Enter: save · Esc: close").size(13)
             ]
             .spacing(6);
             if let Some(project) = &self.project {
@@ -5308,11 +5616,14 @@ impl CleanSlateApp {
                         } else {
                             "Save example"
                         })
+                        .style(primary_button)
                         .on_press(Message::ContextReference(
                             self.reference_speakers.clone(),
                             false
                         )),
-                        button("Cancel").on_press(Message::DismissReferenceMenu)
+                        button("Cancel")
+                            .style(secondary_button)
+                            .on_press(Message::DismissReferenceMenu)
                     ]
                     .spacing(8),
                 );
@@ -5321,31 +5632,36 @@ impl CleanSlateApp {
                         text(
                             "Drag the left or right handle on the waveform to adjust this example.",
                         )
-                        .size(12),
+                        .size(14),
                     );
                     menu = menu.push(
                         button("Delete example")
-                            .style(button::secondary)
+                            .style(secondary_button)
                             .on_press(Message::RemoveReference(id)),
                     );
                 }
             }
             if let Some(error) = &self.calibration_error {
                 menu = menu.push(iced::widget::tooltip(
-                    text("Label not saved. Show details").size(12),
-                    text(error).size(12),
+                    text("Example not saved · hover for details").size(14),
+                    text(error).size(14),
                     iced::widget::tooltip::Position::Top,
                 ));
                 if !self.reference_conflicts().is_empty() {
-                    menu = menu.push(button("Replace conflicting whole labels").on_press(
-                        Message::ContextReference(self.reference_speakers.clone(), true),
-                    ));
+                    menu = menu.push(
+                        button("Replace conflicting examples")
+                            .style(primary_button)
+                            .on_press(Message::ContextReference(
+                                self.reference_speakers.clone(),
+                                true,
+                            )),
+                    );
                 }
             }
             let panel = container(menu)
                 .padding(10)
                 .width(320.0_f32.min(size.width))
-                .style(container::bordered_box);
+                .style(editor_panel);
             let positioned =
                 iced::widget::float(opaque(panel)).translate(move |bounds, viewport| {
                     iced::Vector::new(

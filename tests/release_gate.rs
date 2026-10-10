@@ -68,7 +68,7 @@ fn baseline_comparison_requires_matching_truth_and_automatic_bleed_improvement()
 
 #[test]
 fn heldout_truth_cannot_share_native_sample_with_adjacent_development_reference() {
-    let (root, mut project, _, _) = fixture::session_at_rates([48000, 48000]);
+    let (root, mut project, _) = fixture::session_at_rates([48000, 48000]);
     let mut references = project.reference_labels().to_vec();
     let boundary = references[1].range.end + 1;
     references[1].range.end = boundary;
@@ -90,7 +90,7 @@ fn heldout_truth_cannot_share_native_sample_with_adjacent_development_reference(
 #[ignore = "requires pinned frozen baseline executable closure"]
 fn actual_frozen_comparison_scores_only_preselected_native_truth() {
     use sha2::{Digest, Sha256};
-    let (root, project, _, _) = fixture::session_at_rates([48000, 48000]);
+    let (root, project, _) = fixture::session_at_rates([48000, 48000]);
     let receipt = std::env::var("CLEANSLATE_FROZEN_RECEIPT").unwrap();
     let receipt_sha256 = std::env::var("CLEANSLATE_FROZEN_RECEIPT_SHA256").unwrap();
     let settings = serde_json::json!({"enabled":true,"examples":[{"kind":"SoloSpeech","track":0,"start":24000,"end":72000},{"kind":"SoloSpeech","track":1,"start":96000,"end":132000},{"kind":"RoomTone","track":0,"start":0,"end":12000}],"sources":project.sources.iter().map(|s|rust_app::SourceStamp::read(&s.path).unwrap()).collect::<Vec<_>>()});
@@ -123,7 +123,7 @@ fn actual_frozen_comparison_scores_only_preselected_native_truth() {
 
 #[test]
 fn frozen_csv_uses_unique_physical_native_intervals_without_fixed_rate_reinterpretation() {
-    let (root, project, _, _) = fixture::session_at_rates([48000, 48000]);
+    let (root, project, _) = fixture::session_at_rates([48000, 48000]);
     let label = serde_json::json!({"track":project.sources[0].track_id,"start":3*rust_app::TICKS_PER_SECOND,"end":4*rust_app::TICKS_PER_SECOND,"kind":"preserve","case":"quiet_speech"});
     let json = serde_json::json!({"version":1,"claim":"controlled","provenance":"CSV unit adapter mechanics","prior_use":["controlled"],"reference_identity":rust_app::release_gate::FrozenEvaluationManifest::reference_identity(&project),"sources":project.sources.iter().map(|s|serde_json::json!({"track":s.track_id,"fingerprint":s.fingerprint,"grid":s.metadata.grid})).collect::<Vec<_>>(),"labels":[label.clone(),label]});
     let manifest =
@@ -156,7 +156,7 @@ fn actual_frozen_baseline_checkout_and_artifacts_verify_without_modification() {
 
 #[test]
 fn frozen_guidance_cannot_use_held_out_intervals_as_calibration() {
-    let (root, mut project, _, _) = fixture::session_at_rates([48000, 48000]);
+    let (root, mut project, _) = fixture::session_at_rates([48000, 48000]);
     let mut settings = serde_json::json!({"enabled":true,"examples":[{"kind":"SoloSpeech","track":0,"start":24000,"end":48000}],"sources":project.sources.iter().map(|s|rust_app::SourceStamp::read(&s.path).unwrap()).collect::<Vec<_>>()});
     rust_app::release_gate::validate_frozen_development_settings(
         &project,
@@ -194,7 +194,7 @@ fn frozen_guidance_cannot_use_held_out_intervals_as_calibration() {
 
 #[test]
 fn independent_manifest_requires_frozen_sound_model_and_baseline_declarations() {
-    let (root, project, _, _) = fixture::session();
+    let (root, project, _) = fixture::session();
     let manifest = serde_json::json!({"version":1,"claim":"independent","provenance":"independent contract validation","prior_use":[],"reference_identity":rust_app::release_gate::FrozenEvaluationManifest::reference_identity(&project),"sources":project.sources.iter().map(|s|serde_json::json!({"track":s.track_id,"fingerprint":s.fingerprint,"grid":s.metadata.grid})).collect::<Vec<_>>(),"labels":[{"track":project.sources[0].track_id,"start":3*rust_app::TICKS_PER_SECOND,"end":4*rust_app::TICKS_PER_SECOND,"kind":"preserve","case":"quiet_speech"}]});
     assert!(
         rust_app::release_gate::FrozenEvaluationManifest::read(
@@ -210,7 +210,7 @@ fn independent_manifest_requires_frozen_sound_model_and_baseline_declarations() 
 #[test]
 fn baseline_artifact_receipt_rejects_changed_executable_bytes() {
     use sha2::{Digest, Sha256};
-    let (root, _, _, _) = fixture::session();
+    let (root, _, _) = fixture::session();
     let executable = root.join("ownership_evaluate.exe");
     std::fs::write(&executable, b"controlled executable bytes").unwrap();
     let receipt = serde_json::json!({"version":1,"commit":"6a60cc2bfe187ea889fd2d8bcc3344311cfd706b","checkout":root,"checkout_clean":true,"lock_sha256":"0".repeat(64),"silero_model_sha256":"1".repeat(64),"rustc":"controlled test","build_command":["cargo","build","--locked"],"artifacts":[{"name":"ownership_evaluate.exe","path":executable,"sha256":format!("{:x}",Sha256::digest(b"controlled executable bytes"))}],"allowed_variants":["legacy_default"],"comparison_requires_identical_48khz_sources":true,"quality_claim":"controlled artifact integrity only"});
@@ -224,7 +224,7 @@ fn baseline_artifact_receipt_rejects_changed_executable_bytes() {
 
 #[test]
 fn accepted_evaluation_reuses_editor_analysis_without_installing_or_training_on_truth() {
-    let (root, mut project, audio, neural) = fixture::session();
+    let (root, mut project, audio) = fixture::session();
     let frozen = serde_json::json!({"version":1,"claim":"controlled","provenance":"scripted held-out mechanics","prior_use":["controlled"],"reference_identity":rust_app::release_gate::FrozenEvaluationManifest::reference_identity(&project),"sources":project.sources.iter().map(|s|serde_json::json!({"track":s.track_id,"fingerprint":s.fingerprint,"grid":s.metadata.grid})).collect::<Vec<_>>(),"labels":[{"track":project.sources[0].track_id,"start":3*rust_app::TICKS_PER_SECOND,"end":4*rust_app::TICKS_PER_SECOND,"kind":"preserve","case":"quiet_speech"}]});
     let manifest =
         rust_app::release_gate::FrozenEvaluationManifest::read(&project, &frozen.to_string(), None)
@@ -233,10 +233,9 @@ fn accepted_evaluation_reuses_editor_analysis_without_installing_or_training_on_
     let cancel = std::sync::atomic::AtomicBool::new(false);
     let mut worker = rust_app::EditorAnalysisWorker::default();
     let analysis = worker
-        .analyze_verified_evidence(
+        .analyze_acoustic_evidence(
             &project,
             &audio,
-            &neural,
             &std::sync::atomic::AtomicU8::new(0),
             &cancel,
         )
@@ -293,7 +292,7 @@ fn accepted_evaluation_reuses_editor_analysis_without_installing_or_training_on_
 
 #[test]
 fn streaming_native_scores_keep_track_denominators_and_common_time_overlap() {
-    let (root, _, _, _) = fixture::session();
+    let (root, _, _) = fixture::session();
     let paths: Vec<_> = [2, 4]
         .into_iter()
         .enumerate()
@@ -340,7 +339,7 @@ fn streaming_native_scores_keep_track_denominators_and_common_time_overlap() {
 
 #[test]
 fn frozen_truth_rejects_contradictions_that_round_to_one_native_sample() {
-    let (root, project, _, _) = fixture::session();
+    let (root, project, _) = fixture::session();
     let track = project.sources[0].track_id;
     let start = 3 * rust_app::TICKS_PER_SECOND;
     let manifest = serde_json::json!({"version":1,"claim":"controlled","provenance":"synthetic sub-sample geometry check","prior_use":["controlled"],"reference_identity":rust_app::release_gate::FrozenEvaluationManifest::reference_identity(&project),"sources":project.sources.iter().map(|source|serde_json::json!({"track":source.track_id,"fingerprint":source.fingerprint,"grid":source.metadata.grid})).collect::<Vec<_>>(),"labels":[{"track":track,"start":start,"end":start+1,"kind":"preserve","case":"quiet_speech"},{"track":track,"start":start+1,"end":start+2,"kind":"bleed","case":"changing_delay"}]});
@@ -357,7 +356,7 @@ fn frozen_truth_rejects_contradictions_that_round_to_one_native_sample() {
 
 #[test]
 fn applied_gain_counts_attenuated_zero_samples_and_unique_truth() {
-    let (root, _, _, _) = fixture::session();
+    let (root, _, _) = fixture::session();
     let source = root.join("zero.wav");
     let writer =
         bwavfile::WaveWriter::create(&source, bwavfile::WaveFmt::new_pcm_mono(4, 16)).unwrap();
@@ -403,7 +402,7 @@ fn applied_gain_counts_attenuated_zero_samples_and_unique_truth() {
 
 #[test]
 fn frozen_evaluation_rejects_training_leakage_and_unions_physical_truth() {
-    let (root, project, _, _) = fixture::session();
+    let (root, project, _) = fixture::session();
     let track = project.sources[0].track_id;
     let label = serde_json::json!({"track":track,"start":3*rust_app::TICKS_PER_SECOND,"end":4*rust_app::TICKS_PER_SECOND,"kind":"preserve","case":"quiet_speech"});
     let mut manifest = serde_json::json!({"version":1,"claim":"controlled","provenance":"synthetic mechanical fixture, not release truth","prior_use":["controlled development"],"reference_identity":rust_app::release_gate::FrozenEvaluationManifest::reference_identity(&project),"sources":project.sources.iter().map(|source|serde_json::json!({"track":source.track_id,"fingerprint":source.fingerprint,"grid":source.metadata.grid})).collect::<Vec<_>>(),"labels":[label.clone(),label]});

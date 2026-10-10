@@ -4,11 +4,11 @@ mod fixture;
 #[test]
 fn mixed_native_exports_and_monitored_playback_share_the_effective_time_evaluator() {
     for rates in [[44100, 96000], [48000, 47999]] {
-        let (root, mut project, audio, evidence) = fixture::session_at_rates(rates);
+        let (root, mut project, audio) = fixture::session_at_rates(rates);
         let progress = std::sync::atomic::AtomicU8::new(0);
         let cancel = std::sync::atomic::AtomicBool::new(false);
         let analysis = rust_app::EditorAnalysisWorker::default()
-            .analyze_verified_evidence(&project, &audio, &evidence, &progress, &cancel)
+            .analyze_acoustic_evidence(&project, &audio, &progress, &cancel)
             .unwrap();
         let draft = project
             .region_gain_edit(
@@ -26,17 +26,11 @@ fn mixed_native_exports_and_monitored_playback_share_the_effective_time_evaluato
             .install(
                 &mut project,
                 &mut rust_app::EffectiveEnvelopeCache::default(),
-                Some(&evidence.runtime),
                 None,
             )
             .unwrap();
-        let snapshot = rust_app::SupervisedRenderSnapshot::capture(
-            &project,
-            &analysis,
-            &effective,
-            &evidence.runtime,
-        )
-        .unwrap();
+        let snapshot =
+            rust_app::SupervisedRenderSnapshot::capture(&project, &analysis, &effective).unwrap();
         let original_sound = snapshot.sound_identity.clone();
         let destination = root.join("native");
         let gate = rust_app::RenderGeneration::default();
@@ -50,7 +44,7 @@ fn mixed_native_exports_and_monitored_playback_share_the_effective_time_evaluato
             None,
         )
         .unwrap()
-        .publish(&project, &evidence.runtime, &gate, gate.current(), None)
+        .publish(&project, &gate, gate.current(), None)
         .unwrap()
         .accept(&mut project)
         .unwrap();
@@ -123,14 +117,9 @@ fn mixed_native_exports_and_monitored_playback_share_the_effective_time_evaluato
         playback.replace_envelopes(effective.envelopes.clone());
         assert_eq!(playback.position_frame(), position);
         assert_eq!(
-            rust_app::SupervisedRenderSnapshot::capture(
-                &project,
-                &analysis,
-                &effective,
-                &evidence.runtime
-            )
-            .unwrap()
-            .sound_identity,
+            rust_app::SupervisedRenderSnapshot::capture(&project, &analysis, &effective,)
+                .unwrap()
+                .sound_identity,
             original_sound
         );
         drop(playback);
@@ -143,29 +132,23 @@ fn mixed_native_exports_and_monitored_playback_share_the_effective_time_evaluato
 fn accepted_envelopes_render_directly_and_obsolete_private_completion_cannot_publish() {
     use sha2::Digest;
 
-    let (root, mut project, audio, evidence) = fixture::session();
+    let (root, mut project, audio) = fixture::session();
     let cancelled = std::sync::atomic::AtomicBool::new(false);
     let progress = std::sync::atomic::AtomicU8::new(0);
     let analysis = rust_app::EditorAnalysisWorker::default()
-        .analyze_verified_evidence(&project, &audio, &evidence, &progress, &cancelled)
+        .analyze_acoustic_evidence(&project, &audio, &progress, &cancelled)
         .unwrap();
     let effective = analysis
         .install(
             &mut project,
             &mut rust_app::EffectiveEnvelopeCache::default(),
-            Some(&evidence.runtime),
             None,
         )
         .unwrap();
     let original = std::fs::read(&project.sources[0].path).unwrap();
     let generation = rust_app::RenderGeneration::default();
-    let snapshot = rust_app::SupervisedRenderSnapshot::capture(
-        &project,
-        &analysis,
-        &effective,
-        &evidence.runtime,
-    )
-    .unwrap();
+    let snapshot =
+        rust_app::SupervisedRenderSnapshot::capture(&project, &analysis, &effective).unwrap();
     let mut old_curve_snapshot = snapshot.clone();
     old_curve_snapshot.sound_identity = format!(
         "{:x}",
@@ -173,7 +156,6 @@ fn accepted_envelopes_render_directly_and_obsolete_private_completion_cannot_pub
             serde_json::to_vec(&(
                 &project.sources,
                 project.supplied_alignment(),
-                project.nemotron_enabled(),
                 project.reference_labels(),
                 project.gain_constraints(),
                 project.parameters(),
@@ -216,7 +198,6 @@ fn accepted_envelopes_render_directly_and_obsolete_private_completion_cannot_pub
     let artifact = prepared
         .publish(
             &project,
-            &evidence.runtime,
             &generation,
             generation.current(),
             Some(&cancelled),
@@ -262,20 +243,14 @@ fn accepted_envelopes_render_directly_and_obsolete_private_completion_cannot_pub
     generation.invalidate();
     assert!(
         prepared
-            .publish(
-                &project,
-                &evidence.runtime,
-                &generation,
-                old_generation,
-                None
-            )
+            .publish(&project, &generation, old_generation, None)
             .is_err()
     );
     assert!(!obsolete_destination.exists());
     assert_eq!(std::fs::read(&project.sources[0].path).unwrap(), original);
     assert!(destination.join("01-speaker-0.wav").exists());
     let accepted_project = project.clone();
-    for change in 0..4 {
+    for change in 0..3 {
         let failed_destination = root.join(format!("changed-{change}"));
         let prepared = rust_app::prepare_supervised_render(
             &project,
@@ -287,11 +262,9 @@ fn accepted_envelopes_render_directly_and_obsolete_private_completion_cannot_pub
             None,
         )
         .unwrap();
-        let mut runtime = evidence.runtime.clone();
         let cancelled = std::sync::atomic::AtomicBool::new(change == 0);
         match change {
-            1 => runtime.recipe_sha256.push('0'),
-            2 => {
+            1 => {
                 let draft = project
                     .region_gain_edit(
                         project.sources[0].track_id,
@@ -305,7 +278,7 @@ fn accepted_envelopes_render_directly_and_obsolete_private_completion_cannot_pub
                     .unwrap();
                 project.commit_gain_edit(draft).unwrap();
             }
-            3 => {
+            2 => {
                 let mut changed = original.clone();
                 *changed.last_mut().unwrap() ^= 1;
                 std::fs::write(&project.sources[0].path, changed).unwrap();
@@ -316,7 +289,6 @@ fn accepted_envelopes_render_directly_and_obsolete_private_completion_cannot_pub
             prepared
                 .publish(
                     &project,
-                    &runtime,
                     &generation,
                     generation.current(),
                     Some(&cancelled)
@@ -334,40 +306,28 @@ fn accepted_envelopes_render_directly_and_obsolete_private_completion_cannot_pub
 
 #[test]
 fn current_delivery_rejects_finite_rendered_payload_replacement_after_acceptance() {
-    let (root, mut project, audio, evidence) = fixture::session();
+    let (root, mut project, audio) = fixture::session();
     let progress = std::sync::atomic::AtomicU8::new(0);
     let cancelled = std::sync::atomic::AtomicBool::new(false);
     let analysis = rust_app::EditorAnalysisWorker::default()
-        .analyze_verified_evidence(&project, &audio, &evidence, &progress, &cancelled)
+        .analyze_acoustic_evidence(&project, &audio, &progress, &cancelled)
         .unwrap();
     let effective = analysis
         .install(
             &mut project,
             &mut rust_app::EffectiveEnvelopeCache::default(),
-            Some(&evidence.runtime),
             None,
         )
         .unwrap();
-    let snapshot = rust_app::SupervisedRenderSnapshot::capture(
-        &project,
-        &analysis,
-        &effective,
-        &evidence.runtime,
-    )
-    .unwrap();
+    let snapshot =
+        rust_app::SupervisedRenderSnapshot::capture(&project, &analysis, &effective).unwrap();
     let directory = root.join("render");
     let generation = rust_app::RenderGeneration::default();
     rust_app::prepare_supervised_render(
         &project, &analysis, &effective, &snapshot, &directory, &progress, None,
     )
     .unwrap()
-    .publish(
-        &project,
-        &evidence.runtime,
-        &generation,
-        generation.current(),
-        None,
-    )
+    .publish(&project, &generation, generation.current(), None)
     .unwrap()
     .accept(&mut project)
     .unwrap();
@@ -392,27 +352,21 @@ fn current_delivery_rejects_finite_rendered_payload_replacement_after_acceptance
 
 #[test]
 fn failed_acceptance_keeps_a_published_payload_that_was_modified_for_recovery() {
-    let (root, mut project, audio, evidence) = fixture::session();
+    let (root, mut project, audio) = fixture::session();
     let progress = std::sync::atomic::AtomicU8::new(0);
     let cancel = std::sync::atomic::AtomicBool::new(false);
     let analysis = rust_app::EditorAnalysisWorker::default()
-        .analyze_verified_evidence(&project, &audio, &evidence, &progress, &cancel)
+        .analyze_acoustic_evidence(&project, &audio, &progress, &cancel)
         .unwrap();
     let effective = analysis
         .install(
             &mut project,
             &mut rust_app::EffectiveEnvelopeCache::default(),
-            Some(&evidence.runtime),
             None,
         )
         .unwrap();
-    let snapshot = rust_app::SupervisedRenderSnapshot::capture(
-        &project,
-        &analysis,
-        &effective,
-        &evidence.runtime,
-    )
-    .unwrap();
+    let snapshot =
+        rust_app::SupervisedRenderSnapshot::capture(&project, &analysis, &effective).unwrap();
     let destination = root.join("recovery");
     let generation = rust_app::RenderGeneration::default();
     let artifact = rust_app::prepare_supervised_render(
@@ -425,13 +379,7 @@ fn failed_acceptance_keeps_a_published_payload_that_was_modified_for_recovery() 
         None,
     )
     .unwrap()
-    .publish(
-        &project,
-        &evidence.runtime,
-        &generation,
-        generation.current(),
-        None,
-    )
+    .publish(&project, &generation, generation.current(), None)
     .unwrap();
     let changed = destination.join("01-speaker-0.wav");
     std::fs::write(&changed, b"preserve this changed payload for recovery").unwrap();

@@ -60,7 +60,7 @@ Every 32 milliseconds, CleanSlate supplies these measurements:
 
 Fit reliability describes the acoustic fit. It is not the probability that a person is speaking.
 
-These measurements do not decide ownership by themselves. Acoustic mode combines them with Silero speech activity in a learned model for each track. Experimental Nemotron can add speaker-activity evidence, but it is off by default and its benefit is unproven.
+These measurements do not decide ownership by themselves. Acoustic mode combines them with Silero speech activity in a learned model for each track. Nemotron has been removed from the application; the earlier experiment is retained only as a research idea.
 
 ## What happens if the examples are poor?
 

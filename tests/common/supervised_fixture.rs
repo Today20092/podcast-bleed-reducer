@@ -1,47 +1,20 @@
-use rust_app::model::{
-    DiarizationEvidence, ProbabilityFrames, ProbabilityHistoryWriter, RuntimeProvenance,
-};
 use rust_app::{PreparedAnalysisAudio, Project, TICKS_PER_SECOND, TimeRange};
 use std::path::PathBuf;
-pub fn session() -> (
-    PathBuf,
-    Project,
-    Vec<PreparedAnalysisAudio>,
-    DiarizationEvidence,
-) {
+pub fn session() -> (PathBuf, Project, Vec<PreparedAnalysisAudio>) {
     session_gain(1.0)
 }
-pub fn session_gain(
-    quiet_gain: f32,
-) -> (
-    PathBuf,
-    Project,
-    Vec<PreparedAnalysisAudio>,
-    DiarizationEvidence,
-) {
+pub fn session_gain(quiet_gain: f32) -> (PathBuf, Project, Vec<PreparedAnalysisAudio>) {
     session_rates_gain([16000, 16000], quiet_gain)
 }
 // Shared by several integration binaries; only delivery tests need mixed rates.
 #[allow(dead_code)]
-pub fn session_at_rates(
-    rates: [u32; 2],
-) -> (
-    PathBuf,
-    Project,
-    Vec<PreparedAnalysisAudio>,
-    DiarizationEvidence,
-) {
+pub fn session_at_rates(rates: [u32; 2]) -> (PathBuf, Project, Vec<PreparedAnalysisAudio>) {
     session_rates_gain(rates, 1.0)
 }
 fn session_rates_gain(
     rates: [u32; 2],
     quiet_gain: f32,
-) -> (
-    PathBuf,
-    Project,
-    Vec<PreparedAnalysisAudio>,
-    DiarizationEvidence,
-) {
+) -> (PathBuf, Project, Vec<PreparedAnalysisAudio>) {
     let root = std::env::temp_dir().join(format!(
         "cleanslate-ownership-{}-{}",
         std::process::id(),
@@ -91,7 +64,6 @@ fn session_rates_gain(
     }
     let mut project = Project::create(root.join("project.cleanslate"), paths).unwrap();
     project.set_supplied_alignment(true).unwrap();
-    project.set_nemotron_enabled(true).unwrap();
     project
         .add_reference_label(
             TimeRange::new(0, TICKS_PER_SECOND / 4).unwrap(),
@@ -119,48 +91,5 @@ fn session_rates_gain(
         .iter()
         .map(|path| rust_app::prepare_analysis_audio_in(path, &root.join("copies"), None).unwrap())
         .collect();
-    let mut writer = ProbabilityHistoryWriter::create(&root.join("neural.f32")).unwrap();
-    let probabilities: Vec<_> = (0..401)
-        .flat_map(|frame| {
-            (0..8).map(move |channel| {
-                let active = match channel {
-                    0 => (50..150).contains(&frame) || (300..375).contains(&frame),
-                    1 => (200..275).contains(&frame) || (325..375).contains(&frame),
-                    _ => false,
-                };
-                if active { 0.95 } else { 0.01 }
-            })
-        })
-        .collect();
-    writer
-        .append(&ProbabilityFrames {
-            start: 0,
-            frames: 401,
-            speakers: 8,
-            seconds_per_frame: 0.01,
-            probabilities,
-        })
-        .unwrap();
-    let evidence = DiarizationEvidence {
-        schema: 2,
-        sources: audio.iter().map(|a| a.identity.clone()).collect(),
-        input_sha256: audio.iter().map(|a| a.audio_sha256().to_string()).collect(),
-        history: writer.finish().unwrap(),
-        runtime: RuntimeProvenance {
-            revision: rust_app::model::RUNTIME_REVISION.into(),
-            recipe_sha256: "1".repeat(64),
-            binaries: Default::default(),
-        },
-        model_revision: rust_app::model::MODEL_REVISION.into(),
-        model_sha256: rust_app::model::NEMOTRON.sha256.into(),
-        preset: "v3-offline".into(),
-        mix_recipe: "mean-global-peak-floor-one-v1".into(),
-        mix_peak: 1.0,
-        mix_gains: vec![0.5; 2],
-        sample_count: 64000,
-        reported_seconds_per_frame: 0.01,
-        compactions: 0,
-        maximum_retained_frames: 401,
-    };
-    (root, project, audio, evidence)
+    (root, project, audio)
 }

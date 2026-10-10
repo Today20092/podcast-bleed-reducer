@@ -13,3 +13,11 @@ This supersedes ADR-0002's read-only-envelope portion and ADR-0004's asymptotic-
 The owner requires Nemotron for the Windows-first release, with a verified first-use model download and later offline CPU operation. The native runtime and model have different licenses. Two-hour/eight-speaker tests, independent wanted-speech/overlap preservation, measured bleed improvement and owner listening/timing approval gate release; model support documentation does not establish success.
 
 See the [accepted specification](../../.scratch/offline-supervised-migration/spec.md) and [resolved decision map](../../.scratch/offline-supervised-migration/map.md).
+
+## 2026-10-09 owner override
+
+Nemotron is removed entirely, superseding both the required and optional native
+diarization modes recorded above. Acoustic-only analysis uses human labels,
+embedded Silero and per-track ownership models. Old native results become stale
+while human labels and gain edits remain. The portable public alpha is explicitly
+unqualified; stable release quality and long-session gates remain in tickets 14/15.

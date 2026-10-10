@@ -1,0 +1,4 @@
+# ONNX Runtime's prebuilt libraries use the shared Microsoft CRT.
+# package.ps1 supplies its app-local redistributable DLLs.
+[profile.release]
+debug = false

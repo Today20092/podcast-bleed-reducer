@@ -2,6 +2,15 @@
 
 Status: accepted implementation plan, 2026-10-08
 
+2026-10-09 owner override: Nemotron is removed from the application and shipping
+package. Tickets 05/06 and native mapping portions of 07 are historical retired
+implementation; acoustic ownership and source/output safeguards remain active.
+25. [Package the acoustic-only Windows portable alpha](../offline-supervised-editor/issues/25-portable-acoustic-alpha.md).
+    Claimed for unsigned `v0.1.0-alpha.1`, local clean-machine checks and future
+    GitHub draft releases. Explicitly unqualified alpha; independent of stable gates 14/15.
+
+2026-10-09 completion update: ticket 16 is done following owner workflow acceptance of integrated checkpoint 6991d39. Its prior pending owner-workflow status below is historical. Owner preparation timing was not measured; audio-quality and release gates remain in tickets 14 and 15.
+
 The architecture is [specified here](spec.md). The six wayfinder child tickets resolve architecture decisions; the fifteen tickets below are build work, not additional unresolved product decisions. Dependency fields, not this list alone, govern execution.
 
 1. [Establish the accepted development baseline](../offline-supervised-editor/issues/01-establish-baseline.md)
@@ -29,8 +38,12 @@ The architecture is [specified here](spec.md). The six wayfinder child tickets r
 
 ## Deferred backlog
 
+24. [Start a new project from the GUI](../offline-supervised-editor/issues/24-new-project-action.md). Owner authorized a subagent implementation on 2026-10-09. Adds a New project action with explicit discard confirmation and an empty workspace while preserving saved projects and source audio. Dependencies 16/21 and scoped tests, checks and development build are done; the button was visually verified in the reopened app.
 
-20. [Add editor-first documentation visuals after the GUI is settled](../offline-supervised-editor/issues/20-editor-first-documentation-visuals.md). One consolidated future pass for screenshots, labeled input examples, bleed, S-shaped fades and gain composition. Blocked by ticket 16 and owner confirmation that the GUI is settled; interactive delivery needs triage. Not a new release requirement.
+23. [Polish application text and visual hierarchy](../offline-supervised-editor/issues/23-gui-frontend-polish.md). Owner confirmed the full frontend polish brief on 2026-10-09: restrained dark styling, clearer typography and plain language throughout, contextual gesture help and useful layout changes. Dependencies 16/21 are done; claimed by Codex. No audio behavior changes or release qualification.
+
+
+20. [Add editor-first documentation visuals after the GUI is settled](../offline-supervised-editor/issues/20-editor-first-documentation-visuals.md). Owner authorized screenshots from the open development build on 2026-10-09; README/workflow screenshot pass is implemented and the ticket remains claimed. Wider labeled examples, bleed, S-shaped fades and gain-composition visuals remain pending; interactive delivery needs triage. Not a new release requirement.
 
 17. [Add an advanced training panel](../offline-supervised-editor/issues/17-advanced-training-panel.md). Requested on 2026-10-09 for future work only. Needs triage and explicit implementation authorization; it is not part of current GUI work or a new release requirement.
 

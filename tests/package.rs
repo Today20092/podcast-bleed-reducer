@@ -40,3 +40,11 @@ fn packaged_gate_exercises_safe_cancellation() {
     assert!(!output.exists());
     fs::remove_dir_all(dir).unwrap();
 }
+#[test]
+fn shipped_executable_exercises_offline_analysis_and_delivery() {
+    let status = std::process::Command::new(env!("CARGO_BIN_EXE_rust-app"))
+        .arg("--package-self-check")
+        .status()
+        .unwrap();
+    assert!(status.success());
+}

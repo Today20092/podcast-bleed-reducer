@@ -5,7 +5,7 @@ mod fixture;
 fn multichannel_sources_train_and_deliver_the_same_native_samples_as_audition() {
     use rust_app::{Project, TICKS_PER_SECOND, TimeRange};
     use std::sync::atomic::{AtomicBool, AtomicU8};
-    let (root, mono_project, _, _) = fixture::session();
+    let (root, mono_project, _) = fixture::session();
     let mut signals = Vec::new();
     for source in &mono_project.sources {
         let mut reader = bwavfile::WaveReader::open(&source.path)
@@ -63,18 +63,17 @@ fn multichannel_sources_train_and_deliver_the_same_native_samples_as_audition() 
     let progress = AtomicU8::new(0);
     let cancel = AtomicBool::new(false);
     let analysis = rust_app::EditorAnalysisWorker::default()
-        .analyze(&project, &root.join("poly-cache"), None, &progress, &cancel)
+        .analyze(&project, &root.join("poly-cache"), &progress, &cancel)
         .unwrap();
     let effective = analysis
         .install(
             &mut project,
             &mut rust_app::EffectiveEnvelopeCache::default(),
             None,
-            None,
         )
         .unwrap();
     let snapshot =
-        rust_app::SupervisedRenderSnapshot::capture(&project, &analysis, &effective, None).unwrap();
+        rust_app::SupervisedRenderSnapshot::capture(&project, &analysis, &effective).unwrap();
     let destination = root.join("delivery");
     let gate = rust_app::RenderGeneration::default();
     rust_app::prepare_supervised_render(
@@ -87,7 +86,7 @@ fn multichannel_sources_train_and_deliver_the_same_native_samples_as_audition() 
         None,
     )
     .unwrap()
-    .publish(&project, None, &gate, gate.current(), None)
+    .publish(&project, &gate, gate.current(), None)
     .unwrap()
     .accept(&mut project)
     .unwrap();

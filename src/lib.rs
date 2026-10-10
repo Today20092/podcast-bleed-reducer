@@ -15,8 +15,8 @@ mod export;
 mod gain_editor;
 mod joint_detector;
 mod media;
-pub mod model;
 mod ownership_model;
+mod package_check;
 mod prepared_analysis;
 mod project;
 mod references;
@@ -51,11 +51,12 @@ pub use engine::*;
 pub use export::*;
 pub use gain_editor::{GainEditorEvent, GainPointer, hit_gain_point};
 pub use ownership_model::*;
+pub use package_check::package_self_check;
 pub use prepared_analysis::{JointDiagnostics, PreviewCache, PreviewCacheStats, preview_stage};
 pub use project::*;
 pub use references::{
     IdentityReview, REFERENCE_MAPPING_RECIPE, ReferenceReadiness, SpeakerMapping,
-    reference_readiness, resolve_speaker_mapping,
+    reference_readiness,
 };
 pub use review::*;
 pub use session_ownership::*;

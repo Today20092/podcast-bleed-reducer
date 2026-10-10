@@ -15,11 +15,11 @@ The development editor after Analyze. Each lane is a microphone track. The gain 
   <a href="Cargo.toml"><img alt="Desktop GUI: Iced 0.14" src="https://img.shields.io/badge/GUI-Iced%200.14-B5DFE8?style=for-the-badge&amp;labelColor=29626B"></a>
 </p>
 
-[Usage guide](docs/editor-workflow.md) · [How ownership and bleed work](docs/ownership-explained.md) · [Build from source](docs/development.md) · [Development status](.scratch/offline-supervised-migration/implementation.md)
+[Usage guide](docs/editor-workflow.md) · [How ownership and bleed work](docs/ownership-explained.md) · [Build from source](docs/development.md) · [Release guide](docs/releasing.md) · [Development status](.scratch/offline-supervised-migration/implementation.md)
 
 ## Try it
 
-CleanSlate is in development, with Windows as the first release target. Start with the [build guide](docs/development.md) to build and open the editor from this checkout.
+CleanSlate is in development. We are preparing `v0.1.0-alpha.1` as an unsigned portable ZIP for Windows 11 x64. Package checks and a clean offline Windows smoke test must finish before publication. Until then, use the [build guide](docs/development.md) to build and open the editor from this checkout.
 
 ```mermaid
 flowchart LR
@@ -57,15 +57,11 @@ Manual gain points use straight lines between points and remain authoritative af
 
 ## Defaults and limits
 
-Acoustic-first analysis is the default and the current development focus. It runs locally and needs no Nemotron download.
+Analysis uses acoustic measurements and your speaker examples. It runs locally; there is no Nemotron runtime, download or analysis option.
 
 Supply aligned tracks; CleanSlate does not automatically synchronize them. Ownership scores are model estimates, not guaranteed accuracy. Review the result by listening, especially to Removed audio. Independent quality, listening and eight-speaker/two-hour Windows release qualification remain pending.
 
-## Work in progress
-
-Nemotron-assisted analysis is experimental and disabled by default. An implementation exists, but its benefit over acoustic-only analysis has not been established. Comparative evaluation must check wanted-speech preservation, bleed reduction, listening quality and processing cost before deciding whether to promote it as a supported feature. See the [evaluation tracker](.scratch/offline-supervised-editor/issues/14-independent-release-evaluation.md).
-
-Developer setup remains documented in the [experimental runtime guide](docs/development.md#experimental-nemotron-runtime), with [model and runtime notices](docs/runtime-notices.md).
+The planned alpha remains experimental while independent quality, listening and long-session checks are pending. See the [evaluation tracker](.scratch/offline-supervised-editor/issues/14-independent-release-evaluation.md). The earlier Nemotron experiment is retained as a [research idea](docs/research/nemotron.md).
 
 ## Documentation and development
 
@@ -82,12 +78,12 @@ All coding for this project is done with AI agents using GPT Astra and GPT 6.1 S
 | Fixed speech detection | Silero VAD through ONNX Runtime |
 | Audio decoding and analysis resampling | Symphonia and Rubato |
 | Playback | Rodio |
-| Experimental speaker activity | Nemotron through the native NeMo-Speech.cpp runtime |
 
 ### Guides
 
 - [Ownership architecture](docs/ownership-explained.md): labels, acoustic inputs, bleed calibration, weights, logistic regression and gain decisions, with a Mermaid diagram.
-- [Developer guide](docs/development.md): builds, checks, optional native runtime and packaging.
+- [Developer guide](docs/development.md): builds and checks.
+- [Release guide](docs/releasing.md): portable packages, clean Windows checks and future GitHub draft releases.
 - [GUI development](docs/gui-development.md): repeatable build-and-launch workflow using a separate project copy.
 - [Technical model recipe](docs/supervised-ownership-models.md) and [acoustic evidence](docs/acoustic-evidence.md).
 - [Domain glossary](CONTEXT.md), [architecture decision](docs/adr/0006-offline-supervised-editable-envelopes.md) and [active roadmap](.scratch/offline-supervised-migration/map.md).

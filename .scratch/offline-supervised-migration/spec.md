@@ -2,6 +2,15 @@
 
 Status: accepted architecture, 2026-10-08
 
+2026-10-09 portable-alpha owner override: Nemotron is removed entirely from the
+application, GUI and package, superseding all required/optional native diarization
+language below. Acoustic ownership uses human labels and embedded Silero only.
+Legacy native-analysis results become stale; human edits and labels remain intact.
+The owner authorized an unsigned Windows 11 x64 public `v0.1.0-alpha.1` portable ZIP
+with explicit incomplete quality qualification. Tickets 14/15 still gate stable
+qualification; ticket 25 owns packaging and clean-machine checks. Historical native
+experiments remain only in Git history and `docs/research/nemotron.md`.
+
 This is the target architecture, not a description of completed code. Decision detail lives in the [map's child tickets](map.md); documentation findings live in [feasibility notes](feasibility-notes.md). Implementation begins after planning is settled.
 
 ## Product and release scope

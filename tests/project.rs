@@ -135,6 +135,58 @@ fn reordering_and_identical_relink_preserve_track_and_speaker_bindings() {
 }
 
 #[test]
+fn retired_native_project_preserves_human_decisions_and_requires_reanalysis() {
+    let dir = temp_dir();
+    let mut project = session(&dir);
+    project
+        .replace_reference_labels(vec![label(&project)])
+        .unwrap();
+    project
+        .protect_region(&[0], TICKS_PER_SECOND / 2, TICKS_PER_SECOND)
+        .unwrap();
+    let draft = project
+        .region_gain_edit(
+            project.sources[1].track_id,
+            TimeRange::new(0, TICKS_PER_SECOND / 4).unwrap(),
+            rust_app::GainRegionAction::Attenuate(0.5),
+        )
+        .unwrap();
+    project.commit_gain_edit(draft).unwrap();
+    project
+        .set_result(
+            rust_app::ResultState::Current {
+                identity: "legacy-analysis".into(),
+            },
+            None,
+        )
+        .unwrap();
+    let mut legacy: serde_json::Value =
+        serde_json::from_slice(&fs::read(project.path()).unwrap()).unwrap();
+    legacy["nemotron_enabled"] = serde_json::json!(true);
+    fs::write(project.path(), serde_json::to_vec(&legacy).unwrap()).unwrap();
+    let reopened = Project::open(project.path()).unwrap();
+    assert_eq!(reopened.reference_labels(), project.reference_labels());
+    assert_eq!(reopened.manual_gain_edits(), project.manual_gain_edits());
+    assert_eq!(
+        reopened.recorded_protections(),
+        project.recorded_protections()
+    );
+    assert_eq!(reopened.sources.len(), project.sources.len());
+    assert!(reopened.calibration_notice().unwrap().contains("removed"));
+    assert_eq!(
+        reopened.result(),
+        &rust_app::ResultState::Stale {
+            identity: "legacy-analysis".into()
+        }
+    );
+    reopened.save().unwrap();
+    let saved: serde_json::Value =
+        serde_json::from_slice(&fs::read(project.path()).unwrap()).unwrap();
+    assert!(saved.get("nemotron_enabled").is_none());
+    fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
 fn changed_audio_keeps_decisions_dormant_until_explicit_rebind() {
     let dir = temp_dir();
     let mut project = session(&dir);

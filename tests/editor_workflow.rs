@@ -4,8 +4,7 @@ mod fixture;
 
 #[test]
 fn acoustic_analysis_trains_every_track_and_applies_beyond_reference_ranges() {
-    let (root, mut project, audio, _) = fixture::session_gain(0.0);
-    project.set_nemotron_enabled(false).unwrap();
+    let (root, mut project, audio) = fixture::session_gain(0.0);
     let mut parameters = project.parameters();
     parameters.close_ms = 50.0;
     project.set_parameters(parameters).unwrap();
@@ -15,8 +14,6 @@ fn acoustic_analysis_trains_every_track_and_applies_beyond_reference_ranges() {
     let result = worker
         .analyze_acoustic_evidence(&project, &audio, &progress, &cancel)
         .unwrap();
-    assert!(result.runtime.is_none());
-    assert!(result.fixed_evidence.is_none());
     assert_eq!(
         result.ownership.models.as_ref().unwrap().models.len(),
         project.sources.len()
@@ -43,32 +40,26 @@ fn acoustic_analysis_trains_every_track_and_applies_beyond_reference_ranges() {
     assert_eq!(worker.stats(), stats);
     assert_eq!(repeated.ownership.cache_key, result.ownership.cache_key);
     let mut envelopes = rust_app::EffectiveEnvelopeCache::default();
-    let effective = result
-        .install(&mut project, &mut envelopes, None, None)
-        .unwrap();
+    let effective = result.install(&mut project, &mut envelopes, None).unwrap();
     assert_eq!(effective.envelopes[0].gain_at_time(probe), 1.0);
     assert!(effective.envelopes[1].gain_at_time(probe) < 0.5);
     let identity = rust_app::EditorAnalysisIdentity::capture(&project).unwrap();
-    project.set_nemotron_enabled(true).unwrap();
+    project.set_supplied_alignment(false).unwrap();
     assert!(!identity.matches(&project));
-    assert!(
-        result
-            .install(&mut project, &mut envelopes, None, None)
-            .is_err()
-    );
+    assert!(result.install(&mut project, &mut envelopes, None).is_err());
     project.save().unwrap();
     assert!(
         rust_app::Project::open(project.path())
             .unwrap()
-            .nemotron_enabled()
+            .require_alignment()
+            .is_err()
     );
     std::fs::remove_dir_all(root).unwrap();
 }
 
 #[test]
 fn acoustic_analysis_preserves_explicit_quiet_overlap_and_rejects_canceled_install() {
-    let (root, mut project, audio, _) = fixture::session_gain(0.03);
-    project.set_nemotron_enabled(false).unwrap();
+    let (root, mut project, audio) = fixture::session_gain(0.03);
     let range = TimeRange::new(TICKS_PER_SECOND * 33 / 10, TICKS_PER_SECOND * 36 / 10).unwrap();
     project
         .add_reference_label(
@@ -84,9 +75,7 @@ fn acoustic_analysis_preserves_explicit_quiet_overlap_and_rejects_canceled_insta
         .analyze_acoustic_evidence(&project, &audio, &progress, &cancel)
         .unwrap();
     let mut cache = rust_app::EffectiveEnvelopeCache::default();
-    let effective = result
-        .install(&mut project, &mut cache, None, None)
-        .unwrap();
+    let effective = result.install(&mut project, &mut cache, None).unwrap();
     for time in [range.start, TICKS_PER_SECOND * 7 / 2, range.end - 1] {
         assert!(
             effective
@@ -107,7 +96,7 @@ fn acoustic_analysis_preserves_explicit_quiet_overlap_and_rejects_canceled_insta
     ));
     assert!(
         result
-            .install(&mut project, &mut cache, None, Some(&cancel))
+            .install(&mut project, &mut cache, Some(&cancel))
             .is_err()
     );
     std::fs::remove_dir_all(root).unwrap();
@@ -115,14 +104,14 @@ fn acoustic_analysis_preserves_explicit_quiet_overlap_and_rejects_canceled_insta
 
 #[test]
 fn completed_job_wakes_long_cancellation_timer_without_claiming_a_cancel() {
-    let (root, project, audio, evidence) = fixture::session();
+    let (root, project, audio) = fixture::session();
     let mut worker = rust_app::EditorAnalysisWorker::default();
     let progress = std::sync::atomic::AtomicU8::new(95);
     let (result, timing) = rust_app::measure_editor_cancellation(
         &progress,
         55,
         std::time::Duration::from_secs(600),
-        |cancel| worker.analyze_verified_evidence(&project, &audio, &evidence, &progress, cancel),
+        |cancel| worker.analyze_acoustic_evidence(&project, &audio, &progress, cancel),
     )
     .unwrap();
     assert!(result.is_ok());
@@ -135,14 +124,13 @@ fn completed_job_wakes_long_cancellation_timer_without_claiming_a_cancel() {
 
 #[test]
 fn timed_public_job_cancellation_retains_previous_completed_analysis() {
-    let (root, mut project, audio, evidence) = fixture::session_at_rates([96000, 96000]);
+    let (root, mut project, audio) = fixture::session_at_rates([96000, 96000]);
     let mut worker = rust_app::EditorAnalysisWorker::default();
     let progress = std::sync::atomic::AtomicU8::new(0);
     let previous = worker
-        .analyze_verified_evidence(
+        .analyze_acoustic_evidence(
             &project,
             &audio,
-            &evidence,
             &progress,
             &std::sync::atomic::AtomicBool::new(false),
         )
@@ -159,7 +147,7 @@ fn timed_public_job_cancellation_retains_previous_completed_analysis() {
         &progress,
         55,
         std::time::Duration::from_millis(1),
-        |cancel| worker.analyze_verified_evidence(&project, &audio, &evidence, &progress, cancel),
+        |cancel| worker.analyze_acoustic_evidence(&project, &audio, &progress, cancel),
     )
     .unwrap();
     assert!(result.is_err());
@@ -179,14 +167,13 @@ fn timed_public_job_cancellation_retains_previous_completed_analysis() {
 
 #[test]
 fn gain_benchmark_does_not_install_project_edits_or_reanalyze() {
-    let (root, project, audio, evidence) = fixture::session();
+    let (root, project, audio) = fixture::session();
     let mut worker = rust_app::EditorAnalysisWorker::default();
     let cancel = std::sync::atomic::AtomicBool::new(false);
     let result = worker
-        .analyze_verified_evidence(
+        .analyze_acoustic_evidence(
             &project,
             &audio,
-            &evidence,
             &std::sync::atomic::AtomicU8::new(0),
             &cancel,
         )
@@ -211,13 +198,12 @@ fn gain_benchmark_does_not_install_project_edits_or_reanalyze() {
 
 #[test]
 fn analysis_stage_measurements_describe_the_shared_completed_worker() {
-    let (root, project, audio, evidence) = fixture::session();
+    let (root, project, audio) = fixture::session();
     let mut worker = rust_app::EditorAnalysisWorker::default();
     let result = worker
-        .analyze_verified_evidence(
+        .analyze_acoustic_evidence(
             &project,
             &audio,
-            &evidence,
             &std::sync::atomic::AtomicU8::new(0),
             &std::sync::atomic::AtomicBool::new(false),
         )
@@ -229,27 +215,29 @@ fn analysis_stage_measurements_describe_the_shared_completed_worker() {
     assert!(result.timings.ownership_ms > 0.0);
     assert!(result.timings.temporal_ms > 0.0);
     assert!(result.timings.overview_ms > 0.0);
-    assert_eq!(
-        result.timings.native_history_ms, 0.0,
-        "trusted prepared fixture does not perform native inference"
-    );
     std::fs::remove_dir_all(root).unwrap();
 }
 
 #[test]
 fn supervised_review_correction_batch_analysis_and_gain_undo_save_share_one_pipeline() {
-    let (root, mut project, audio, evidence) = fixture::session();
+    let (root, mut project, audio) = fixture::session();
     let progress = std::sync::atomic::AtomicU8::new(0);
     let cancel = std::sync::atomic::AtomicBool::new(false);
     let mut worker = rust_app::EditorAnalysisWorker::default();
     let first = worker
-        .analyze_verified_evidence(&project, &audio, &evidence, &progress, &cancel)
+        .analyze_acoustic_evidence(&project, &audio, &progress, &cancel)
         .unwrap();
     let mut cache = rust_app::EffectiveEnvelopeCache::default();
-    let prior = first
-        .install(&mut project, &mut cache, Some(&evidence.runtime), None)
-        .unwrap();
-    let mut review = rust_app::ReviewWorkspace::from_ownership(&first.temporal);
+    let prior = first.install(&mut project, &mut cache, None).unwrap();
+    assert!(first.temporal.warnings.is_empty());
+    let mut review_temporal = (*first.temporal).clone();
+    review_temporal.warnings.push(rust_app::TemporalWarning {
+        start: TICKS_PER_SECOND * 3,
+        end: TICKS_PER_SECOND * 13 / 4,
+        tracks: vec![project.sources[0].track_id],
+        reason: "Synthetic navigation warning".into(),
+    });
+    let mut review = rust_app::ReviewWorkspace::from_ownership(&review_temporal);
     assert!(!review.warnings.is_empty());
     review.set_comparison(rust_app::Comparison::Processed);
     review.select_warning(0);
@@ -299,15 +287,13 @@ fn supervised_review_correction_batch_analysis_and_gain_undo_save_share_one_pipe
         cache.last_completed().unwrap()
     ));
     let next = worker
-        .analyze_verified_evidence(&project, &audio, &evidence, &progress, &cancel)
+        .analyze_acoustic_evidence(&project, &audio, &progress, &cancel)
         .unwrap();
     assert_eq!(
         worker.stats().fixed_vad_preparations,
         before.fixed_vad_preparations
     );
-    let current = next
-        .install(&mut project, &mut cache, Some(&evidence.runtime), None)
-        .unwrap();
+    let current = next.install(&mut project, &mut cache, None).unwrap();
     let stats = worker.stats();
     let draft = project
         .region_gain_edit(
@@ -354,7 +340,7 @@ fn supervised_review_correction_batch_analysis_and_gain_undo_save_share_one_pipe
     cancel.store(true, std::sync::atomic::Ordering::Relaxed);
     assert!(
         worker
-            .analyze_verified_evidence(&project, &audio, &evidence, &progress, &cancel)
+            .analyze_acoustic_evidence(&project, &audio, &progress, &cancel)
             .is_err()
     );
     assert!(std::sync::Arc::ptr_eq(
@@ -471,33 +457,13 @@ fn two_hour_overview_retains_brief_activity_and_bounds_visible_work() {
 }
 
 #[test]
-fn offline_warm_preflight_reports_missing_runtime_without_inference_or_download() {
-    let missing =
-        std::env::temp_dir().join(format!("cleanslate-missing-runtime-{}", std::process::id()));
-    let result = std::process::Command::new(env!("CARGO_BIN_EXE_model-check"))
-        .arg("--verify-only")
-        .arg("--runtime")
-        .arg(missing)
-        .output()
-        .unwrap();
-    assert!(!result.status.success());
-    let error = String::from_utf8_lossy(&result.stderr);
-    assert!(
-        !error.contains("Usage:"),
-        "Verification-only must be a supported offline operation: {error}"
-    );
-    assert!(error.contains("runtime"));
-    assert!(!String::from_utf8_lossy(&result.stdout).contains("Offline CPU inference passed"));
-}
-
-#[test]
 fn supervised_completion_composes_latest_edits_and_rejects_obsolete_or_failed_installation() {
-    let (root, mut project, audio, evidence) = fixture::session();
+    let (root, mut project, audio) = fixture::session();
     let cancel = std::sync::atomic::AtomicBool::new(false);
     let progress = std::sync::atomic::AtomicU8::new(0);
     let mut worker = rust_app::EditorAnalysisWorker::default();
     let completed = worker
-        .analyze_verified_evidence(&project, &audio, &evidence, &progress, &cancel)
+        .analyze_acoustic_evidence(&project, &audio, &progress, &cancel)
         .unwrap();
     let before = worker.stats();
     let mut cache = rust_app::EffectiveEnvelopeCache::default();
@@ -509,9 +475,7 @@ fn supervised_completion_composes_latest_edits_and_rejects_obsolete_or_failed_in
         )
         .unwrap();
     project.commit_gain_edit(draft).unwrap();
-    let accepted = completed
-        .install(&mut project, &mut cache, Some(&evidence.runtime), None)
-        .unwrap();
+    let accepted = completed.install(&mut project, &mut cache, None).unwrap();
     assert_eq!(
         accepted.envelopes[0].gain_at_time(TICKS_PER_SECOND * 31 / 10),
         0.4
@@ -558,17 +522,6 @@ fn supervised_completion_composes_latest_edits_and_rejects_obsolete_or_failed_in
         "A sub-pixel manual attenuation must remain visible through shared bounds"
     );
     let accepted = narrow_effective;
-    let mut changed_runtime = evidence.runtime.clone();
-    changed_runtime.recipe_sha256 = "2".repeat(64);
-    assert!(
-        completed
-            .install(&mut project, &mut cache, Some(&changed_runtime), None)
-            .is_err()
-    );
-    assert!(std::sync::Arc::ptr_eq(
-        cache.last_completed().unwrap(),
-        &accepted
-    ));
     #[cfg(windows)]
     {
         use std::os::windows::fs::OpenOptionsExt;
@@ -577,11 +530,7 @@ fn supervised_completion_composes_latest_edits_and_rejects_obsolete_or_failed_in
             .share_mode(1)
             .open(project.path())
             .unwrap();
-        assert!(
-            completed
-                .install(&mut project, &mut cache, Some(&evidence.runtime), None)
-                .is_err()
-        );
+        assert!(completed.install(&mut project, &mut cache, None).is_err());
         assert!(std::sync::Arc::ptr_eq(
             cache.last_completed().unwrap(),
             &accepted
@@ -595,11 +544,7 @@ fn supervised_completion_composes_latest_edits_and_rejects_obsolete_or_failed_in
             &[],
         )
         .unwrap();
-    assert!(
-        completed
-            .install(&mut project, &mut cache, Some(&evidence.runtime), None)
-            .is_err()
-    );
+    assert!(completed.install(&mut project, &mut cache, None).is_err());
     assert!(std::sync::Arc::ptr_eq(
         cache.last_completed().unwrap(),
         &accepted
@@ -613,7 +558,7 @@ fn supervised_completion_composes_latest_edits_and_rejects_obsolete_or_failed_in
 
 #[test]
 fn a_gain_point_drag_is_transient_bounded_and_one_undo_command() {
-    let (root, mut project, _, _) = fixture::session();
+    let (root, mut project, _) = fixture::session();
     let track = project.sources[0].track_id;
     let draft = project
         .region_gain_edit(
@@ -667,7 +612,7 @@ fn analysis_commit_identity_ignores_gain_but_rejects_new_truth_and_alignment() {
     assert!(project.require_alignment().is_err());
     let early_original =
         rust_app::editor_audition_envelopes(&project, None, rust_app::AuditionMode::Original)
-            .expect("Original playback needs neither timing confirmation nor references/model");
+            .expect("Original playback needs neither timing confirmation nor references");
     assert_eq!(early_original[0].gain_at(47999), 1.0);
     assert!(
         project.require_alignment().is_err(),
@@ -706,7 +651,7 @@ fn analysis_commit_identity_ignores_gain_but_rejects_new_truth_and_alignment() {
     let progress = std::sync::atomic::AtomicU8::new(0);
     let mut worker = rust_app::EditorAnalysisWorker::default();
     let error = worker
-        .analyze(&project, &directory.join("cache"), None, &progress, &cancel)
+        .analyze(&project, &directory.join("cache"), &progress, &cancel)
         .unwrap_err();
     assert!(error.to_string().contains("reference"));
     assert!(worker.last_completed().is_none());

@@ -3,6 +3,13 @@
 Labels: wayfinder:map
 Status: complete
 
+2026-10-09 owner override: acoustic-only analysis supersedes the required/optional
+Nemotron decisions below. Nemotron is removed, with a research note retained.
+Ticket 25 prepares the explicitly unqualified public Windows portable alpha;
+tickets 14/15 remain the stable quality and long-session qualification gates.
+
+2026-10-09 completion update: build ticket 16 is done after owner workflow acceptance, with implementation integrated in 6991d39. Preparation timing remains unmeasured in this owner pass; no numerical performance qualification is claimed. Historical claimed/pending notes below are superseded by the completion record in ticket 16. Continue ticket 14 quality evaluation before ticket 15 release qualification.
+
 ## Destination
 
 Settle the architecture and produce ordered, implementation-ready tickets to migrate CleanSlate into a standalone offline, human-supervised podcast editor with editable gain envelopes.
@@ -50,6 +57,8 @@ None blocking implementation planning. Numerical tuning, acoustic estimator/down
 - Shared microphones, speaker track switching, more than eight speakers and macOS/Linux release qualification in the first release.
 
 ## Handoff
+
+Owner confirmed and authorized [full GUI frontend polish](../offline-supervised-editor/issues/23-gui-frontend-polish.md) on 2026-10-09 after the grilling interview. Use Refactoring UI principles for a clean dark audio editor, improve text and action hierarchy across all screens, preserve audio behavior and semantic timeline colors, and review the first pass in the development application. Ticket 23 is claimed; documentation screenshots remain deferred until the owner settles the appearance.
 
 Owner confirmed and authorized [multichannel WAV import](../offline-supervised-editor/issues/21-multichannel-wav-import.md) on 2026-10-09 after a grill-me interview. Import selected recorder channels as editable mono tracks referencing the original container, retain recorder names with renaming, allow mixed mono inputs, preserve synchronization and the eight-speaker limit, and write no split WAVs on import. Ticket 21 is done, with 124 scoped checks plus the owner's complete Zoom WAV, strict Clippy and final GUI build passing. Listening and release acceptance remain separate.
 

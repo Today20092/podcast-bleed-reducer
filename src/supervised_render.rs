@@ -1,6 +1,5 @@
 //! Direct native delivery of an accepted sparse envelope, with private completion.
 use crate::audio_io::AtomicOutput;
-use crate::model::RuntimeProvenance;
 use crate::{AnalysisRecipe, EditorAnalysisResult, EffectiveEnvelopes, Project, RenderBlocker};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -34,27 +33,23 @@ pub struct SupervisedRenderSnapshot {
     pub ownership_identity: String,
     pub effective_identity: String,
     pub recipe: AnalysisRecipe,
-    #[serde(default)]
-    pub runtime: Option<RuntimeProvenance>,
 }
 impl SupervisedRenderSnapshot {
-    pub fn capture<'a>(
+    pub fn capture(
         project: &Project,
         analysis: &EditorAnalysisResult,
         effective: &EffectiveEnvelopes,
-        runtime: impl Into<Option<&'a RuntimeProvenance>>,
     ) -> Result<Self, RenderBlocker> {
-        let runtime = runtime.into();
         project.require_alignment()?;
         project.validate_interactive_sources()?;
         if !analysis.snapshot.matches(project)
             || !effective.analysis_current
-            || runtime != analysis.runtime.as_ref()
-            || project.nemotron_enabled() != runtime.is_some()
             || project.analysis_recipe() != Some(&analysis.recipe)
             || !matches!(project.result(), crate::ResultState::Current { identity } if identity == &analysis.temporal.cache_key)
         {
-            return Err(RenderBlocker("Final render requires current supervised analysis, model provenance and effective envelopes.".into()));
+            return Err(RenderBlocker(
+                "Final render requires current supervised analysis and effective envelopes.".into(),
+            ));
         }
         Ok(Self {
             version: 1,
@@ -64,7 +59,6 @@ impl SupervisedRenderSnapshot {
             ownership_identity: analysis.ownership.cache_key.clone(),
             effective_identity: effective.cache_key.clone(),
             recipe: analysis.recipe.clone(),
-            runtime: runtime.cloned(),
         })
     }
     pub fn matches(&self, project: &Project) -> bool {
@@ -127,9 +121,7 @@ pub fn prepare_supervised_render(
     cancelled: Option<&AtomicBool>,
 ) -> Result<PreparedSupervisedRender, RenderBlocker> {
     crate::prepared_analysis::check_cancelled(cancelled)?;
-    if SupervisedRenderSnapshot::capture(project, analysis, effective, snapshot.runtime.as_ref())?
-        != *snapshot
-    {
+    if SupervisedRenderSnapshot::capture(project, analysis, effective)? != *snapshot {
         return Err(RenderBlocker("Final render snapshot changed.".into()));
     }
     project.validate_sources_cancellable(cancelled)?;
@@ -226,15 +218,13 @@ pub fn prepare_supervised_render(
     })
 }
 impl PreparedSupervisedRender {
-    pub fn publish<'a>(
+    pub fn publish(
         self,
         project: &Project,
-        runtime: impl Into<Option<&'a RuntimeProvenance>>,
         generation: &RenderGeneration,
         expected_generation: u64,
         cancelled: Option<&AtomicBool>,
     ) -> Result<PublishedSupervisedRender, RenderBlocker> {
-        let runtime = runtime.into();
         project.validate_sources_cancellable(cancelled)?;
         for file in &self.record.files {
             let path = self.output.path(&file.name);
@@ -256,8 +246,6 @@ impl PreparedSupervisedRender {
         let _guard = generation.0.lock().unwrap_or_else(|e| e.into_inner());
         crate::prepared_analysis::check_cancelled(cancelled)?;
         if *_guard != expected_generation
-            || runtime != self.record.snapshot.runtime.as_ref()
-            || project.nemotron_enabled() != runtime.is_some()
             || !self.record.snapshot.matches(project)
             || Project::saved_sound_identity(project.path())? != self.record.snapshot.sound_identity
         {

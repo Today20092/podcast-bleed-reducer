@@ -1,5 +1,4 @@
 //! Trusted-reference ownership models, separate from fixed extractors and gain edits.
-use crate::model::{DiarizationEvidence, ProbabilityHistory};
 use crate::{
     AcousticEvidenceCache, AnalysisAudioIdentity, OwnershipModel, OwnershipTrainingExample,
     OwnershipTrainingSettings, PreparedAnalysisAudio, Project, RenderBlocker, SpeakerId,
@@ -14,9 +13,8 @@ use std::{
     },
 };
 pub const OWNERSHIP_FEATURE_RECIPE: &str =
-    "optional-neural-raw-silero-acoustic08-uniontruth-centers-fulltime-classcap2048-trackbound-v3";
+    "acoustic-raw-silero-acoustic08-uniontruth-centers-fulltime-classcap2048-trackbound-v3";
 pub const OWNERSHIP_FRAME_TICKS: u64 = TICKS_PER_SECOND * 32 / 1000;
-const NEURAL_STEP: u64 = TICKS_PER_SECOND / 100;
 const BLOCK: usize = 1024;
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize)]
 pub struct OwnershipCacheStats {
@@ -125,7 +123,7 @@ impl SessionOwnership {
     /// Current trusted truth and source bindings, excluding gain or manual edits.
     pub(crate) fn reference_identity(project: &Project) -> String {
         hash(
-            &serde_json::json!({"sources":project.sources.iter().map(|s|(s.track_id,s.speaker_id,&s.fingerprint,s.metadata.grid)).collect::<Vec<_>>(),"references":project.reference_labels(),"nemotron":project.nemotron_enabled()}),
+            &serde_json::json!({"sources":project.sources.iter().map(|s|(s.track_id,s.speaker_id,&s.fingerprint,s.metadata.grid)).collect::<Vec<_>>(),"references":project.reference_labels()}),
         )
     }
     pub fn temporal_evidence(
@@ -258,16 +256,6 @@ impl SessionOwnershipCache {
         self.models = Some(Arc::new(models));
         Ok(())
     }
-    pub fn analyze(
-        &mut self,
-        project: &Project,
-        audio: &[PreparedAnalysisAudio],
-        evidence: &DiarizationEvidence,
-        settings: OwnershipTrainingSettings,
-        cancelled: Option<&AtomicBool>,
-    ) -> Result<Arc<SessionOwnership>, RenderBlocker> {
-        self.analyze_optional(project, audio, Some(evidence), settings, cancelled)
-    }
     pub fn analyze_acoustic(
         &mut self,
         project: &Project,
@@ -275,33 +263,19 @@ impl SessionOwnershipCache {
         settings: OwnershipTrainingSettings,
         cancelled: Option<&AtomicBool>,
     ) -> Result<Arc<SessionOwnership>, RenderBlocker> {
-        self.analyze_optional(project, audio, None, settings, cancelled)
-    }
-    fn analyze_optional(
-        &mut self,
-        project: &Project,
-        audio: &[PreparedAnalysisAudio],
-        evidence: Option<&DiarizationEvidence>,
-        settings: OwnershipTrainingSettings,
-        cancelled: Option<&AtomicBool>,
-    ) -> Result<Arc<SessionOwnership>, RenderBlocker> {
         crate::prepared_analysis::check_cancelled(cancelled)?;
         let acoustics = self.acoustics.analyze(project, audio, cancelled)?;
-        let mapping = if let Some(evidence) = evidence {
-            crate::resolve_speaker_mapping(project, audio, evidence, cancelled)?
-        } else {
-            SpeakerMapping {
-                channels: project
-                    .sources
-                    .iter()
-                    .map(|s| (s.speaker_id, None))
-                    .collect(),
-                issues: vec![],
-                readiness: crate::reference_readiness(project, audio, cancelled)?,
-                cache_key: hash(
-                    &serde_json::json!({"recipe":"human-assigned-acoustic-v1","references":SessionOwnership::reference_identity(project)}),
-                ),
-            }
+        let mapping = SpeakerMapping {
+            channels: project
+                .sources
+                .iter()
+                .map(|s| (s.speaker_id, None))
+                .collect(),
+            issues: vec![],
+            readiness: crate::reference_readiness(project, audio, cancelled)?,
+            cache_key: hash(
+                &serde_json::json!({"recipe":"human-assigned-acoustic-v1","references":SessionOwnership::reference_identity(project)}),
+            ),
         };
         if !mapping.readiness.ready() {
             return Err(RenderBlocker(format!(
@@ -320,25 +294,6 @@ impl SessionOwnershipCache {
         let key = hash(
             &serde_json::json!({"recipe":OWNERSHIP_FEATURE_RECIPE,"model":crate::OWNERSHIP_MODEL_RECIPE,"mapping":mapping.cache_key,"acoustics":acoustics.cache_key,"settings":settings}),
         );
-        if evidence.is_some() && mapping.channels.values().all(Option::is_none) {
-            return Ok(Arc::new(SessionOwnership {
-                cache_key: key,
-                duration,
-                models: None,
-                tracks: project.sources.iter().map(|s| s.track_id).collect(),
-                probabilities: vec![],
-                warnings: vec![],
-                unresolved: Some(
-                    "Assigned speaker identity is missing or ambiguous; preserve for review."
-                        .into(),
-                ),
-                reference_identity: SessionOwnership::reference_identity(project),
-                raw_speech: vec![],
-                assigned_activity: vec![],
-                global_activity: vec![],
-                acoustic_only: false,
-            }));
-        }
         if let Some(accepted) = &self.accepted
             && accepted.cache_key == key
         {
@@ -394,34 +349,21 @@ impl SessionOwnershipCache {
             if !truth.range(start..end).next().is_some() {
                 continue;
             }
-            let neural = evidence
-                .map(|e| neural_rows(&e.history, start, end))
-                .transpose()?;
             for (frame, active) in truth.range(start..end) {
                 let time = *frame as u64 * OWNERSHIP_FRAME_TICKS;
                 let acoustic = acoustics.features_at(time)?;
                 for (track, source) in project.sources.iter().enumerate() {
-                    if (evidence.is_some() && mapping.channels[&source.speaker_id].is_none())
-                        || !selected[track].contains(frame)
-                    {
+                    if !selected[track].contains(frame) {
                         continue;
                     }
                     examples[track].push(OwnershipTrainingExample {
-                        features: features(
-                            track,
-                            &mapping,
-                            neural.as_ref().map(|rows| &rows[*frame - start]),
-                            &vad,
-                            &acoustic[track],
-                            *frame,
-                            source.speaker_id,
-                        )?,
+                        features: features(track, &vad, &acoustic[track], *frame)?,
                         owns_speech: active.contains(&source.speaker_id),
                     });
                 }
             }
         }
-        let names = feature_names(project, evidence.is_some());
+        let names = feature_names(project);
         let cached = self.models.as_ref().filter(|models| {
             models.cache_key == key
                 && models.mapping_key == mapping.cache_key
@@ -439,18 +381,10 @@ impl SessionOwnershipCache {
                         .models
                         .iter()
                         .find(|model| model.track == source.track_id);
-                    match (
-                        evidence.is_some(),
-                        mapping.channels[&source.speaker_id],
-                        model,
-                    ) {
-                        (true, None, None) => true,
-                        (false, _, Some(model)) | (true, Some(_), Some(model)) => {
-                            model.speaker == source.speaker_id
-                                && model.model.matches_recipe(&names[i], settings)
-                        }
-                        _ => false,
-                    }
+                    model.is_some_and(|model| {
+                        model.speaker == source.speaker_id
+                            && model.model.matches_recipe(&names[i], settings)
+                    })
                 })
         });
         let mut new_fits = 0;
@@ -469,9 +403,6 @@ impl SessionOwnershipCache {
         } else {
             let mut models = vec![];
             for (track, source) in project.sources.iter().enumerate() {
-                if evidence.is_some() && mapping.channels[&source.speaker_id].is_none() {
-                    continue;
-                }
                 crate::prepared_analysis::check_cancelled(cancelled)?;
                 let rows = capped_rows(&examples[track]);
                 let model =
@@ -510,46 +441,24 @@ impl SessionOwnershipCache {
             raw_speech: vad.probabilities.clone(),
             assigned_activity: vec![Vec::with_capacity(frames); audio.len()],
             global_activity: Vec::with_capacity(frames),
-            acoustic_only: evidence.is_none(),
+            acoustic_only: true,
         };
         for start in (0..frames).step_by(BLOCK) {
             crate::prepared_analysis::check_cancelled(cancelled)?;
             let end = (start + BLOCK).min(frames);
-            let neural = evidence
-                .map(|e| neural_rows(&e.history, start, end))
-                .transpose()?;
             for frame in start..end {
-                result.global_activity.push(neural.as_ref().map_or_else(
-                    || {
-                        vad.probabilities
-                            .iter()
-                            .filter_map(|rows| rows.get(frame))
-                            .copied()
-                            .fold(0.0, f32::max)
-                    },
-                    |rows| rows[frame - start].iter().copied().fold(0.0, f32::max),
-                ));
+                result.global_activity.push(
+                    vad.probabilities
+                        .iter()
+                        .filter_map(|rows| rows.get(frame))
+                        .copied()
+                        .fold(0.0, f32::max),
+                );
                 let acoustic = acoustics.features_at(frame as u64 * OWNERSHIP_FRAME_TICKS);
                 for (track, source) in project.sources.iter().enumerate() {
-                    let channel = mapping.channels[&source.speaker_id];
-                    result.assigned_activity[track].push(channel.and_then(|channel| {
-                        neural.as_ref().map(|rows| rows[frame - start][channel])
-                    }));
-                    if evidence.is_some() && channel.is_none() {
-                        result.probabilities[track].push(0.0);
-                        result.warnings[track].push(3);
-                        continue;
-                    }
+                    result.assigned_activity[track].push(None);
                     if let Ok(acoustic) = &acoustic {
-                        let x = features(
-                            track,
-                            &mapping,
-                            neural.as_ref().map(|rows| &rows[frame - start]),
-                            &vad,
-                            &acoustic[track],
-                            frame,
-                            source.speaker_id,
-                        )?;
+                        let x = features(track, &vad, &acoustic[track], frame)?;
                         let probability = result
                             .models
                             .as_ref()
@@ -560,25 +469,8 @@ impl SessionOwnershipCache {
                             .unwrap()
                             .model
                             .estimate(&x)? as f32;
-                        let poorly_explained = evidence.is_some()
-                            && acoustic[track].bleed.iter().any(|bleed| {
-                                let speaker = project
-                                    .sources
-                                    .iter()
-                                    .find(|source| source.track_id == bleed.source)
-                                    .unwrap()
-                                    .speaker_id;
-                                let activity = mapping.channels[&speaker].and_then(|channel| {
-                                    neural.as_ref().map(|rows| rows[frame - start][channel])
-                                });
-                                activity.is_none_or(|activity| activity >= 0.5)
-                                    && (bleed.reliability < 0.7
-                                        || bleed
-                                            .excess_residual_db
-                                            .is_some_and(|excess| excess > 6.0))
-                            });
                         result.probabilities[track].push(probability);
-                        result.warnings[track].push(if poorly_explained { 2 } else { 0 });
+                        result.warnings[track].push(0);
                     } else {
                         result.probabilities[track].push(0.0);
                         result.warnings[track].push(1);
@@ -588,9 +480,6 @@ impl SessionOwnershipCache {
         }
         // Validate mutable disk boundaries once more before installing a completed derivation.
         self.acoustics.analyze(project, audio, cancelled)?;
-        if let Some(evidence) = evidence {
-            crate::resolve_speaker_mapping(project, audio, evidence, cancelled)?;
-        }
         crate::prepared_analysis::check_cancelled(cancelled)?;
         self.stats.model_fits += new_fits;
         self.stats.probability_passes += 1;
@@ -694,41 +583,11 @@ fn capped_rows(rows: &[OwnershipTrainingExample]) -> Vec<OwnershipTrainingExampl
     }
     result
 }
-fn neural_rows(
-    history: &ProbabilityHistory,
-    start: usize,
-    end: usize,
-) -> Result<Vec<[f32; 8]>, RenderBlocker> {
-    let first = start as u64 * OWNERSHIP_FRAME_TICKS / NEURAL_STEP;
-    let last = (end as u64 * OWNERSHIP_FRAME_TICKS)
-        .div_ceil(NEURAL_STEP)
-        .min(history.frames);
-    let values = history.read_frames(first..last).map_err(RenderBlocker)?;
-    Ok((start..end)
-        .map(|frame| {
-            let left = frame as u64 * OWNERSHIP_FRAME_TICKS / NEURAL_STEP;
-            let right = ((frame + 1) as u64 * OWNERSHIP_FRAME_TICKS)
-                .div_ceil(NEURAL_STEP)
-                .min(history.frames);
-            let mut row = [0.0; 8];
-            for sample in left..right {
-                for channel in 0..8 {
-                    row[channel] +=
-                        values[((sample - first) * 8) as usize + channel] / (right - left) as f32;
-                }
-            }
-            row
-        })
-        .collect())
-}
 fn features(
     track: usize,
-    mapping: &SpeakerMapping,
-    neural: Option<&[f32; 8]>,
     vad: &FixedVad,
     acoustics: &crate::TrackAcousticFeatures,
     frame: usize,
-    speaker: SpeakerId,
 ) -> Result<Vec<f64>, RenderBlocker> {
     let raw = vad
         .probabilities
@@ -738,12 +597,6 @@ fn features(
             RenderBlocker("Missing fixed speech evidence; preserve for review.".into())
         })?;
     let mut values = vec![];
-    if let Some(neural) = neural {
-        let channel = mapping.channels[&speaker].ok_or_else(|| {
-            RenderBlocker("Unresolved assigned speaker; preserve for review.".into())
-        })?;
-        values.push(f64::from(neural[channel]));
-    }
     values.push(f64::from(*raw));
     values.extend(acoustics.normalized_values().into_iter().map(f64::from));
     if values.iter().any(|v| !v.is_finite()) {
@@ -751,7 +604,7 @@ fn features(
     }
     Ok(values)
 }
-fn feature_names(project: &Project, neural: bool) -> Vec<Vec<String>> {
+fn feature_names(project: &Project) -> Vec<Vec<String>> {
     project
         .sources
         .iter()
@@ -761,9 +614,6 @@ fn feature_names(project: &Project, neural: bool) -> Vec<Vec<String>> {
                 "local_noise_relative_db/60".into(),
                 "relative_dominance_db/60".into(),
             ];
-            if neural {
-                names.insert(0, "mapped_own_activity".into());
-            }
             for other in project
                 .sources
                 .iter()

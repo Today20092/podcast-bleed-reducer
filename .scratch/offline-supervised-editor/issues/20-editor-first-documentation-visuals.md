@@ -1,8 +1,9 @@
 # Add editor-first documentation visuals after the GUI is settled
 
-Status: needs-triage
+Status: claimed
+Assignee: Codex
 Type: task
-Deferred: yes; implementation waits for the finished GUI
+Deferred: wider diagrams remain pending; current development-build screenshots authorized
 Blocked by: 16
 Spec: ../../offline-supervised-migration/spec.md
 
@@ -35,5 +36,13 @@ Ticket 16 must be done and the owner must confirm the GUI is settled enough to d
 - Verify rendering, legibility, links and light/dark presentation in the intended documentation viewer. Record checks and remaining limitations here.
 
 ## Comments
+
+2026-10-09 owner-requested recapture: replaced the README overview with the current zoomed analyzed development window, including New project, visible automatic gain fades/reduction and speaker estimates at the playhead. Added `docs/images/gain-and-speaker-estimates.png` and a workflow caption explaining Active/Inactive percentages as model estimates rather than volume or guaranteed accuracy. Redacted project/source filenames, retained actual plotted data and UI. Visually inspected the new crop; diff whitespace check passed. Captured without modifying playback, labels, gains or project files. Light/dark viewer checks and the wider visual scope remain pending.
+
+2026-10-09 screenshot pass: captured the already-running `CleanSlate - GUI development` window from the gui-dev executable on its separate `.gui-dev` project. Ran Analyze against the existing 36 examples to capture current applied gain. Opened the label popup using a transient range and cancelled it without saving an example. Added four real PNGs under `docs/images/`: analyzed editor overview, selecting speakers, sound controls and listening controls. README and editor-workflow include captions, meaningful alt text and adjacent control explanations. Overview recording filenames are redacted; detail crops exclude them. No recording audio is added. Screenshots describe development behavior, not accepted audio quality.
+
+Checks: visually inspected overview, label and sound crops at native resolution; checked every new image link exists and has alt text; `git diff --check` passed. The overview remains full resolution for zooming, while detail crops keep important controls readable. No app source changes or new dependencies. Remaining: intended Markdown viewer light/dark rendering, gain-point dragging/preservation captures, verified solo/overlap/room examples, bleed explanation, shared-evaluator fade/composition diagrams and interactive-delivery decision. Ticket remains claimed for those acceptance items. Separate ongoing GUI changes may require recapturing screenshots.
+
+2026-10-09: Owner explicitly authorized starting ticket 20 with screenshots from the open development build. Ticket 16 is now done. This supersedes the earlier screenshot deferral for this scoped documentation pass. Capture the real editor and labeling/gain controls, remove private recording filenames, add captions and text equivalents to README/workflow, and preserve the separate GUI development project. Wider behavioral diagrams remain pending; do not mark the whole ticket done from screenshots alone.
 
 2026-10-09: Owner chose podcast editors as the primary audience, deferred the wider visual pass until the GUI is finished, and preferred interactive then animated then static where interaction or motion helps explain an action. No screenshots or wider visual assets are authorized for implementation in this turn.

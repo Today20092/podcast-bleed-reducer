@@ -1,7 +1,15 @@
 # Make playback and reference labeling flow directly from the tracks
 
-Status: claimed
+Status: done
 Assignee: Codex
+
+## Owner workflow verification, 2026-10-09
+
+Completion: after the remaining fresh-project, keyboard/readability and preparation checks were presented, the owner reported "all is fine tbh". This is overall workflow acceptance, without individually timed preparation measurements or a display-FPS benchmark. No numerical startup/performance claim is made. The implementation is integrated on codex/offline-supervised in checkpoint 6991d39. Existing scoped regression, formatting and strict all-target/all-feature Clippy evidence above was reviewed; retained Clippy logs confirm successful completion. The final owner-tested GUI was rebuilt and reopened through scripts/gui-dev.ps1 in 19.11 seconds. No implementation changed during this acceptance pass. Owner approval closes the earlier pending physical-workflow notes; historical observations remain as provenance. Ticket 14 quality/listening and ticket 15 release qualification remain separate.
+
+Owner tested the development candidate opened through scripts/gui-dev.ps1 and reported playback, navigation and speaker editing are fine, with no issues so far. Supplied wide and narrow window screenshots show all three tracks and the bottom transport visible; the inspector moves below the tracks and scrolls at the narrow size. The candidate shows Playback ready and 36 saved examples. Analysis is explicitly out of date after example changes, so processed/removed audition and ownership results are not accepted from these screenshots.
+
+Owner subsequently closed the development window, reopened the same saved development copy through scripts/gui-dev.ps1, and confirmed the examples and edits survived. Save/reopen persistence passes owner verification. Owner then confirmed edge menus remain visible and dismiss with Escape/outside click, Preserve/Attenuate deletion and undo restore the mark on its track, and Processed/Removed playback with combined Solo works after Analyze. Final overall approval is recorded above; detailed preparation timing was not supplied.
 
 ## Flatten the speaker examples inspector, 2026-10-09
 

@@ -90,7 +90,7 @@ Every 32 milliseconds, the tool checks:
 - How much of its sound can the other microphones explain as bleed?
 - Is there additional sound above the expected bleed, and how reliable is that estimate?
 
-Silero VAD supplies the speech-activity measurement. It can detect bleed as speech, so that measurement alone cannot identify the track's own speaker.
+The embedded Silero VAD supplies the speech-activity measurement, with no separate model download or runtime setup. It can detect bleed as speech, so that measurement alone cannot identify the track's own speaker.
 
 ### 4. A small model combines those measurements
 
@@ -113,7 +113,7 @@ An estimate of 0.90 is not a measured 90% accuracy rate. It is also not a gain s
 
 ### 5. Ownership becomes a gain curve
 
-The current acoustic mode starts preserving speech when ownership reaches 0.8. It stops preserving automatically when ownership falls to 0.2. Between those values, it keeps the previous decision.
+CleanSlate starts preserving speech when ownership reaches 0.8. It stops preserving automatically when ownership falls to 0.2. Between those values, it keeps the previous decision.
 
 This is called hysteresis. It reduces repeated changes near a single threshold.
 
@@ -149,8 +149,6 @@ Compare Original, Processed and Removed. Listen for wanted speech in Removed aud
 | Speaker labels or assignments | Yes |
 | Attenuation, gap duration or fades | No |
 | Manual gain edits or protection | No |
-| Experimental Nemotron mode | Yes |
-| Future training settings | Yes |
 
 Final export needs current analysis. Save the project to retain labels, settings and manual edits.
 
@@ -160,11 +158,9 @@ Source files stay unchanged. CleanSlate makes 16 kHz copies for analysis and app
 
 It reduces volume in selected sections. It does not subtract another microphone's voice from a track or reconstruct a separate clean voice.
 
-## Experimental Nemotron mode
+## Prior Nemotron research
 
-Acoustic analysis is the default. Nemotron-assisted analysis is work in progress and off by default.
-
-Nemotron can add evidence about which speaker is active. Its benefit over acoustic mode has not been established. Acoustic mode needs no Nemotron download, transcript or voice-identity embedding.
+The earlier Nemotron experiment has been removed from the application. Its benefit over acoustic analysis was not established. [Research notes](research/nemotron.md) retain the idea for a possible future trial. The application needs no Nemotron download, transcript or voice-identity embedding.
 
 ## Technical details
 
@@ -173,7 +169,7 @@ Nemotron can add evidence about which speaker is active. Its benefit over acoust
 
 Each track receives three general inputs: raw Silero speech activity, level above the calibrated noise floor, and level relative to the strongest other microphone.
 
-For each other microphone, it also receives five bleed inputs: explanation, expected level, excess residual, fit reliability and calibration availability. Three tracks therefore produce 13 inputs per model in acoustic mode. Experimental Nemotron adds mapped activity for the assigned speaker when selected.
+For each other microphone, it also receives five bleed inputs: explanation, expected level, excess residual, fit reliability and calibration availability. Three tracks therefore produce 13 inputs per model.
 
 Training puts measurements on comparable scales using their training means and standard deviations. It drops constant inputs. A weight then acts on the normalized measurement:
 
@@ -185,7 +181,7 @@ ownership = 1 / (1 + exp(-score))
 
 The bias is the starting score. Positive weights push toward ownership as an input increases. Negative weights push toward absence. The last equation converts the combined score to a value between 0 and 1.
 
-Rust's Linfa and linfa-logistic libraries train the model locally. Training does not fine-tune Silero or Nemotron, and predictions do not become new training labels.
+Rust's Linfa and linfa-logistic libraries train the model locally. Training does not fine-tune Silero, and predictions do not become new training labels.
 
 Current training settings are:
 

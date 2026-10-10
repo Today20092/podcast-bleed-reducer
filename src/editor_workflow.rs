@@ -10,28 +10,7 @@ use std::{
 };
 
 pub const EDITOR_ANALYSIS_RECIPE: &str =
-    "offline-supervised-optional-native-acoustic-model09-temporal10-live-gap-v3";
-
-pub fn verify_installed_editor_runtime(
-    runtime: &crate::model::RuntimeProvenance,
-    cancel: &AtomicBool,
-) -> Result<(), RenderBlocker> {
-    let helper = std::env::current_exe()?.with_file_name(if cfg!(windows) {
-        "model-check.exe"
-    } else {
-        "model-check"
-    });
-    let native = crate::model::runtime_directory().map_err(RenderBlocker)?;
-    let mut command = std::process::Command::new(helper);
-    command.arg("--verify-only").arg("--runtime").arg(native);
-    let actual = crate::model::verify_native_runtime(command, cancel).map_err(RenderBlocker)?;
-    if &actual != runtime {
-        return Err(RenderBlocker(
-            "Installed model/runtime changed; verify it before final delivery.".into(),
-        ));
-    }
-    Ok(())
-}
+    "offline-supervised-acoustic-model09-temporal10-live-gap-v4";
 
 pub fn original_envelopes(project: &Project) -> Result<Vec<crate::GainEnvelope>, RenderBlocker> {
     crate::engine::validate_source_metadata(
@@ -173,9 +152,7 @@ pub struct EditorAnalysisResult {
     pub temporal: Arc<crate::TemporalOwnership>,
     pub overview: crate::OwnershipOverview,
     pub recipe: crate::AnalysisRecipe,
-    pub runtime: Option<crate::model::RuntimeProvenance>,
     pub timings: EditorAnalysisTimings,
-    pub fixed_evidence: Option<crate::model::DiarizationEvidence>,
 }
 
 /// Wall-clock observations only; these never participate in sound or cache identity.
@@ -184,8 +161,6 @@ pub struct EditorAnalysisTimings {
     pub source_validation_ms: f64,
     pub audio_preparation_ms: f64,
     pub reference_readiness_ms: f64,
-    pub runtime_verification_ms: f64,
-    pub native_history_ms: f64,
     pub ownership_ms: f64,
     pub temporal_ms: f64,
     pub overview_ms: f64,
@@ -208,7 +183,6 @@ impl EditorAnalysisWorker {
         &mut self,
         project: &Project,
         cache: &Path,
-        runtime: Option<&crate::model::RuntimeProvenance>,
         progress: &AtomicU8,
         cancel: &AtomicBool,
     ) -> Result<Arc<EditorAnalysisResult>, RenderBlocker> {
@@ -241,84 +215,7 @@ impl EditorAnalysisWorker {
                 readiness.issues.join("; ")
             )));
         }
-        if !project.nemotron_enabled() {
-            return self.analyze_evidence(
-                project,
-                &audio,
-                None,
-                (snapshot, timings),
-                progress,
-                cancel,
-            );
-        }
-        let runtime = runtime.ok_or_else(|| RenderBlocker("Nemotron is enabled: verify the installed model, or disable Nemotron for acoustic analysis.".into()))?;
-        progress.store(20, Ordering::Relaxed);
-        let stage = std::time::Instant::now();
-        let helper = std::env::current_exe()?.with_file_name(if cfg!(windows) {
-            "model-check.exe"
-        } else {
-            "model-check"
-        });
-        let native = crate::model::runtime_directory().map_err(RenderBlocker)?;
-        let mut verification = std::process::Command::new(&helper);
-        verification
-            .arg("--verify-only")
-            .arg("--runtime")
-            .arg(&native);
-        let actual =
-            crate::model::verify_native_runtime(verification, cancel).map_err(RenderBlocker)?;
-        if &actual != runtime {
-            return Err(RenderBlocker(
-                "Installed native model/runtime changed; verify it again before Analyze.".into(),
-            ));
-        }
-        timings.runtime_verification_ms = stage.elapsed().as_secs_f64() * 1000.0;
-        let stage = std::time::Instant::now();
-        let evidence = crate::model::prepare_diarization(
-            &audio
-                .iter()
-                .map(crate::model::DiarizationInput::from)
-                .collect::<Vec<_>>(),
-            runtime,
-            &helper,
-            &native,
-            &cache.join("nemotron"),
-            cancel,
-        )
-        .map_err(RenderBlocker)?;
-        timings.native_history_ms = stage.elapsed().as_secs_f64() * 1000.0;
-        self.analyze_evidence(
-            project,
-            &audio,
-            Some(&evidence),
-            (snapshot, timings),
-            progress,
-            cancel,
-        )
-    }
-    /// Verified fixed evidence is also the headless evaluation boundary; never guessed labels.
-    pub fn analyze_verified_evidence(
-        &mut self,
-        project: &Project,
-        audio: &[crate::PreparedAnalysisAudio],
-        evidence: &crate::model::DiarizationEvidence,
-        progress: &AtomicU8,
-        cancel: &AtomicBool,
-    ) -> Result<Arc<EditorAnalysisResult>, RenderBlocker> {
-        if !project.nemotron_enabled() {
-            return Err(RenderBlocker(
-                "Enable Nemotron before supplying native evidence.".into(),
-            ));
-        }
-        let snapshot = EditorAnalysisIdentity::capture(project)?;
-        self.analyze_evidence(
-            project,
-            audio,
-            Some(evidence),
-            (snapshot, EditorAnalysisTimings::default()),
-            progress,
-            cancel,
-        )
+        self.analyze_evidence(project, &audio, (snapshot, timings), progress, cancel)
     }
     pub fn analyze_acoustic_evidence(
         &mut self,
@@ -327,16 +224,10 @@ impl EditorAnalysisWorker {
         progress: &AtomicU8,
         cancel: &AtomicBool,
     ) -> Result<Arc<EditorAnalysisResult>, RenderBlocker> {
-        if project.nemotron_enabled() {
-            return Err(RenderBlocker(
-                "Disable Nemotron before acoustic-only analysis.".into(),
-            ));
-        }
         let snapshot = EditorAnalysisIdentity::capture(project)?;
         self.analyze_evidence(
             project,
             audio,
-            None,
             (snapshot, EditorAnalysisTimings::default()),
             progress,
             cancel,
@@ -346,7 +237,6 @@ impl EditorAnalysisWorker {
         &mut self,
         project: &Project,
         audio: &[crate::PreparedAnalysisAudio],
-        evidence: Option<&crate::model::DiarizationEvidence>,
         observed: (EditorAnalysisIdentity, EditorAnalysisTimings),
         progress: &AtomicU8,
         cancel: &AtomicBool,
@@ -354,33 +244,18 @@ impl EditorAnalysisWorker {
         let (snapshot, mut timings) = observed;
         progress.store(55, Ordering::Relaxed);
         let stage = std::time::Instant::now();
-        let ownership = if let Some(evidence) = evidence {
-            self.ownership.analyze(
-                project,
-                audio,
-                evidence,
-                crate::OwnershipTrainingSettings::default(),
-                Some(cancel),
-            )?
-        } else {
-            self.ownership.analyze_acoustic(
-                project,
-                audio,
-                crate::OwnershipTrainingSettings::default(),
-                Some(cancel),
-            )?
-        };
+        let ownership = self.ownership.analyze_acoustic(
+            project,
+            audio,
+            crate::OwnershipTrainingSettings::default(),
+            Some(cancel),
+        )?;
         timings.ownership_ms = stage.elapsed().as_secs_f64() * 1000.0;
         progress.store(80, Ordering::Relaxed);
         let stage = std::time::Instant::now();
-        let settings = if evidence.is_some() {
-            crate::TemporalSettings::default()
-        } else {
-            // Gap holding is adjustable in the shared gain layer without retraining.
-            crate::TemporalSettings {
-                preserved_gap_frames: 0,
-                ..crate::TemporalSettings::default()
-            }
+        let settings = crate::TemporalSettings {
+            preserved_gap_frames: 0,
+            ..crate::TemporalSettings::default()
         };
         let temporal = self
             .temporal
@@ -393,12 +268,9 @@ impl EditorAnalysisWorker {
                 "{EDITOR_ANALYSIS_RECIPE}/{}",
                 crate::OWNERSHIP_FEATURE_RECIPE
             ),
-            model_sha256: evidence.map(|e| e.model_sha256.clone()),
-            runtime_sha256: evidence.map(|e| e.runtime.recipe_sha256.clone()),
-            mix_recipe: evidence.map_or_else(
-                || "individual-native-tracks-acoustic-v1".into(),
-                |e| e.mix_recipe.clone(),
-            ),
+            model_sha256: None,
+            runtime_sha256: None,
+            mix_recipe: "individual-native-tracks-acoustic-v1".into(),
         };
         crate::prepared_analysis::check_cancelled(Some(cancel))?;
         if !snapshot.matches(project) {
@@ -420,9 +292,7 @@ impl EditorAnalysisWorker {
             temporal,
             overview,
             recipe,
-            runtime: evidence.map(|e| e.runtime.clone()),
             timings,
-            fixed_evidence: evidence.cloned(),
         });
         self.accepted = Some(result.clone());
         progress.store(95, Ordering::Relaxed);
@@ -454,18 +324,8 @@ impl EditorAnalysisResult {
         &self,
         project: &mut Project,
         envelopes: &mut crate::EffectiveEnvelopeCache,
-        runtime: Option<&crate::model::RuntimeProvenance>,
         cancel: Option<&AtomicBool>,
     ) -> Result<Arc<crate::EffectiveEnvelopes>, RenderBlocker> {
-        if runtime != self.runtime.as_ref()
-            || project.nemotron_enabled() != self.runtime.is_some()
-            || (self.runtime.is_some()
-                && self.recipe.model_sha256.as_deref() != Some(crate::model::NEMOTRON.sha256))
-        {
-            return Err(RenderBlocker(
-                "Required model or runtime changed; verify and Analyze again.".into(),
-            ));
-        }
         if !self.snapshot.matches(project) {
             return Err(RenderBlocker(
                 "Analysis is obsolete; current sources and references require Analyze.".into(),
@@ -524,7 +384,6 @@ impl EditorAnalysisIdentity {
                         EDITOR_ANALYSIS_RECIPE,
                         SessionOwnership::reference_identity(project),
                         project.supplied_alignment(),
-                        project.nemotron_enabled(),
                     ))
                     .map_err(|e| RenderBlocker(e.to_string()))?
                 )

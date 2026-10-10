@@ -782,9 +782,12 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
                     let sample = self.viewport.sample_at(x, bounds.width);
                     frame.fill_text(canvas::Text {
                         content: format!("{:.1}s", sample as f64 / TICKS_PER_SECOND as f64),
-                        position: Point::new(x + 3.0, center + 4.0),
+                        position: Point::new(
+                            (x + 3.0).min((bounds.width - 64.0).max(0.0)),
+                            center - 6.0,
+                        ),
                         color: Color::from_rgb8(180, 185, 195),
-                        size: 11.0.into(),
+                        size: 13.0.into(),
                         ..canvas::Text::default()
                     });
                 }
@@ -832,7 +835,7 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
                     &original,
                     canvas::Stroke::default()
                         .with_width(1.0)
-                        .with_color(Color::from_rgba8(93, 211, 198, 0.35)),
+                        .with_color(Color::from_rgba8(111, 190, 183, 0.65)),
                 );
                 if let Some((preview, track)) = self.preview
                     && let Some(envelope) = preview.envelopes.get(track)
@@ -862,7 +865,7 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
                         &processed,
                         canvas::Stroke::default()
                             .with_width(1.4)
-                            .with_color(Color::from_rgb8(93, 211, 198)),
+                            .with_color(Color::from_rgb8(111, 190, 183)),
                     );
                     let gain_path = canvas::Path::new(|builder| {
                         for x in 0..bounds.width as usize {
@@ -947,7 +950,7 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
                     content,
                     position: Point::new(left.max(0.0) + 7.0, 3.0),
                     color: Color::BLACK,
-                    size: 12.0.into(),
+                    size: 14.0.into(),
                     ..Default::default()
                 });
             }

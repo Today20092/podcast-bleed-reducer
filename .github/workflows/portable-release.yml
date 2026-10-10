@@ -1,0 +1,62 @@
+name: Portable Windows draft release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: portable-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    runs-on: windows-2025
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Install pinned Rust
+        run: |
+          rustup toolchain install 1.99.0 --profile minimal --component rustfmt --component clippy
+          if ($LASTEXITCODE -ne 0) { throw 'Compiler installation failed' }
+          rustup override set 1.99.0
+          if ($LASTEXITCODE -ne 0) { throw 'Compiler selection failed' }
+      - name: Check and test
+        run: |
+          cargo fmt --all -- --check
+          if ($LASTEXITCODE -ne 0) { throw 'Formatting failed' }
+          cargo clippy --all-targets --locked -- -D warnings
+          if ($LASTEXITCODE -ne 0) { throw 'Clippy failed' }
+          cargo test --all-targets --locked
+          if ($LASTEXITCODE -ne 0) { throw 'Tests failed' }
+      - name: Build and verify portable ZIP
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          $version = $env:RELEASE_TAG.TrimStart('v')
+          ./scripts/package.ps1 -Version $version
+      - name: Prepare draft prerelease
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          $tag = $env:RELEASE_TAG
+          $version = $tag.TrimStart('v')
+          $assets = @("dist/CleanSlate-$version-windows-x64.zip", "dist/CleanSlate-$version-windows-x64.zip.sha256")
+          $existing = gh release view $tag --json isDraft,isPrerelease 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            $release = $existing | ConvertFrom-Json
+            if (-not $release.isDraft) { throw 'Refusing to replace a published release' }
+            gh release upload $tag @assets --clobber
+          } else {
+            gh release create $tag @assets --verify-tag --draft --prerelease --title "CleanSlate $tag" --notes-file docs/alpha-release-notes.md
+          }
+          if ($LASTEXITCODE -ne 0) { throw 'Draft release upload failed' }

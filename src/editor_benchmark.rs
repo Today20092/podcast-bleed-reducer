@@ -150,34 +150,15 @@ pub fn benchmark_editor_project_command(
     }
     let start = Instant::now();
     let project = Project::open(std::path::PathBuf::from(&args[2]))?;
-    if !project.nemotron_enabled() {
-        return Err(
-            "This native-runtime benchmark requires a project with Nemotron enabled.".into(),
-        );
-    }
     let project_load_ms = start.elapsed().as_secs_f64() * 1000.0;
     let saved_project = std::fs::read(project.path())?;
     let cache = std::path::Path::new(&args[4]);
     let cache_before_bytes = cache_bytes(cache)?;
     let cancel = AtomicBool::new(false);
-    let helper = std::env::current_exe()?.with_file_name(if cfg!(windows) {
-        "model-check.exe"
-    } else {
-        "model-check"
-    });
-    let mut verification = std::process::Command::new(helper);
-    verification
-        .arg("--verify-only")
-        .arg("--runtime")
-        .arg(crate::model::runtime_directory().map_err(RenderBlocker)?);
-    let start = Instant::now();
-    let runtime =
-        crate::model::verify_native_runtime(verification, &cancel).map_err(RenderBlocker)?;
-    let initial_runtime_verification_ms = start.elapsed().as_secs_f64() * 1000.0;
     let mut worker = crate::EditorAnalysisWorker::default();
     let progress = std::sync::atomic::AtomicU8::new(0);
     let start = Instant::now();
-    let cold = worker.analyze(&project, cache, Some(&runtime), &progress, &cancel)?;
+    let cold = worker.analyze(&project, cache, &progress, &cancel)?;
     let cold_analysis_ms = start.elapsed().as_secs_f64() * 1000.0;
     let cold_stats = worker.stats();
     let gain = benchmark_editor_gain_edits(&project, &cold, iterations, &cancel)?;
@@ -185,19 +166,8 @@ pub fn benchmark_editor_project_command(
     if gain_stats != cold_stats {
         return Err("Gain benchmark unexpectedly reanalyzed.".into());
     }
-    let fixed = cold
-        .fixed_evidence
-        .as_ref()
-        .ok_or("Native benchmark did not produce native evidence")?;
-    let history = &fixed.history;
-    let first = history
-        .read_frames(0..history.frames.min(1))
-        .map_err(RenderBlocker)?;
-    let tail = history
-        .read_frames(history.frames.saturating_sub(1)..history.frames)
-        .map_err(RenderBlocker)?;
     let start = Instant::now();
-    let warm = worker.analyze(&project, cache, Some(&runtime), &progress, &cancel)?;
+    let warm = worker.analyze(&project, cache, &progress, &cancel)?;
     let warm_analysis_ms = start.elapsed().as_secs_f64() * 1000.0;
     let warm_stats = worker.stats();
     if warm_stats != cold_stats {
@@ -214,24 +184,12 @@ pub fn benchmark_editor_project_command(
     std::fs::create_dir(&cancellation_cache)?;
     link_prepared_audio_cache(&cache.join("audio"), &cancellation_cache.join("audio"))?;
     let (cancel_result, inflight_cancellation) =
-        measure_editor_cancellation(&progress, 20, std::time::Duration::from_secs(20), |flag| {
-            worker.analyze(
-                &project,
-                &cancellation_cache,
-                Some(&runtime),
-                &progress,
-                flag,
-            )
+        measure_editor_cancellation(&progress, 55, std::time::Duration::from_secs(20), |flag| {
+            worker.analyze(&project, &cancellation_cache, &progress, flag)
         })?;
     let inflight_retained = worker
         .last_completed()
         .is_some_and(|last| std::sync::Arc::ptr_eq(last, &warm));
-    warm.fixed_evidence
-        .as_ref()
-        .ok_or("Warm native benchmark did not produce native evidence")?
-        .history
-        .verify()
-        .map_err(RenderBlocker)?;
     let probe_completed = cancel_result.is_ok();
     let completed_before_request = probe_completed && !inflight_cancellation.job_active_at_request;
     let cancellation_measured = inflight_cancellation.cancelled && inflight_retained;
@@ -243,9 +201,7 @@ pub fn benchmark_editor_project_command(
         .ok_or("Cancellation probe lost accepted analysis.")?;
     cancel.store(true, std::sync::atomic::Ordering::Relaxed);
     let start = Instant::now();
-    let canceled = worker
-        .analyze(&project, cache, Some(&runtime), &progress, &cancel)
-        .is_err();
+    let canceled = worker.analyze(&project, cache, &progress, &cancel).is_err();
     let cancellation_ms = start.elapsed().as_secs_f64() * 1000.0;
     let retained = worker
         .last_completed()
@@ -255,11 +211,10 @@ pub fn benchmark_editor_project_command(
     }
     cancel.store(false, std::sync::atomic::Ordering::Relaxed);
     project.validate_sources_cancellable(Some(&cancel))?;
-    crate::verify_installed_editor_runtime(&runtime, &cancel)?;
     if std::fs::read(project.path())? != saved_project {
         return Err("Project changed during benchmark.".into());
     }
-    let report = serde_json::json!({"version":1,"measurement_kind":"actual-required-native-editor-pipeline","quality_claim":"performance only; no independent quality or listening approval","project_load_ms":project_load_ms,"initial_runtime_verification_ms":initial_runtime_verification_ms,"cold_analysis_ms":cold_analysis_ms,"cold_stages_ms":cold.timings,"warm_analysis_ms":warm_analysis_ms,"warm_stages_ms":warm.timings,"gain_edits":gain,"cold_stats":cold_stats,"warm_stats":warm_stats,"fitted_models":cold.ownership.models.as_ref().map_or(0,|m|m.models.len()),"native_history":{"frames":history.frames,"first_probabilities":first,"last_probabilities":tail,"sha256":history.sha256,"compactions":fixed.compactions,"maximum_retained_frames":fixed.maximum_retained_frames,"sample_count":fixed.sample_count},"cache_before_bytes":cache_before_bytes,"cache_after_bytes":cache_bytes(cache)?,"pre_canceled_job_ms":cancellation_ms,"pre_canceled_job_retained_accepted":retained,"sources":project.sources.iter().map(|s|serde_json::json!({"track":s.track_id,"fingerprint":s.fingerprint,"grid":s.metadata.grid})).collect::<Vec<_>>(),"runtime":runtime,"recipe":cold.recipe,"saved_project_unchanged":true,"inflight_cancellation_measured":false,"peak_process_memory_measured":false});
+    let report = serde_json::json!({"version":1,"measurement_kind":"actual-acoustic-editor-pipeline","quality_claim":"performance only; no independent quality or listening approval","project_load_ms":project_load_ms,"cold_analysis_ms":cold_analysis_ms,"cold_stages_ms":cold.timings,"warm_analysis_ms":warm_analysis_ms,"warm_stages_ms":warm.timings,"gain_edits":gain,"cold_stats":cold_stats,"warm_stats":warm_stats,"fitted_models":cold.ownership.models.as_ref().map_or(0,|m|m.models.len()),"cache_before_bytes":cache_before_bytes,"cache_after_bytes":cache_bytes(cache)?,"pre_canceled_job_ms":cancellation_ms,"pre_canceled_job_retained_accepted":retained,"sources":project.sources.iter().map(|s|serde_json::json!({"track":s.track_id,"fingerprint":s.fingerprint,"grid":s.metadata.grid})).collect::<Vec<_>>(),"recipe":cold.recipe,"saved_project_unchanged":true,"inflight_cancellation_measured":false,"peak_process_memory_measured":false});
     let mut report = report;
     report["cold_application_cache"] = serde_json::json!(cache_before_bytes == 0);
     report["first_run_cache_state"] = serde_json::json!(if cache_before_bytes == 0 {
@@ -281,9 +236,9 @@ pub fn benchmark_editor_project_command(
     report["inflight_cancellation_measured"] = serde_json::json!(cancellation_measured);
     report["cancellation_cache"] = serde_json::json!(cancellation_cache);
     report["cancellation_cache_state"] =
-        serde_json::json!("reused immutable prepared audio; fresh native history namespace");
+        serde_json::json!("reused immutable prepared audio; fresh prepared-audio namespace");
     report["cancellation_target_phase"] = serde_json::json!(
-        "progress 20: audio preparation and reference readiness complete; before runtime verification/native history"
+        "progress 55: audio preparation and reference readiness complete; acoustic ownership starts"
     );
     report["inflight_cancellation_outcome"] = serde_json::json!(if cancellation_measured {
         "cancelled while active; previous accepted analysis retained"
@@ -296,7 +251,6 @@ pub fn benchmark_editor_project_command(
     });
     report["inflight_probe_error"] = serde_json::json!(inflight_error);
     report["inflight_cancellation_retained_accepted"] = serde_json::json!(inflight_retained);
-    report["accepted_native_history_verified_after_cancel"] = serde_json::json!(true);
     report["cache_size_measurement"] = serde_json::json!(
         "regular-file logical bytes; immutable PCM hard links counted per path; physical disk usage recorded separately"
     );
