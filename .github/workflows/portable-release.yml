@@ -35,6 +35,15 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Compiler installation failed' }
           rustup override set 1.99.0
           if ($LASTEXITCODE -ne 0) { throw 'Compiler selection failed' }
+      - uses: actions/cache/restore@v5
+        id: rust-cache
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: windows-2025-rust-1.99.0-${{ hashFiles('Cargo.lock') }}-${{ github.run_id }}
+          restore-keys: windows-2025-rust-1.99.0-${{ hashFiles('Cargo.lock') }}-
       - name: Check and test
         run: |
           cargo fmt --all -- --check
@@ -43,6 +52,10 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Clippy failed' }
           cargo test --all-targets --locked -- --test-threads=1 --nocapture
           if ($LASTEXITCODE -ne 0) { throw 'Tests failed' }
+      - name: Report Windows application faults
+        if: failure()
+        run: |
+          Get-WinEvent -FilterHashtable @{ LogName = 'Application'; Id = 1000, 1001; StartTime = (Get-Date).AddHours(-1) } -ErrorAction SilentlyContinue | Select-Object -First 10 | ForEach-Object { $_.Message }
       - name: Build and verify portable ZIP
         env:
           RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
@@ -66,3 +79,11 @@ jobs:
             gh release create $tag @assets --verify-tag --draft --prerelease --title "CleanSlate $tag" --notes-file docs/alpha-release-notes.md
           }
           if ($LASTEXITCODE -ne 0) { throw 'Draft release upload failed' }
+      - uses: actions/cache/save@v5
+        if: always() && steps.rust-cache.outputs.cache-hit != 'true'
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ steps.rust-cache.outputs.cache-primary-key }}
