@@ -27,9 +27,9 @@ Automated checks do not establish independent recording quality or owner listeni
 
 ## Packaging
 
-We are preparing an unsigned Windows 11 x64 portable ZIP for the public `v0.1.0-alpha.1` prerelease. The package will include the application, required runtime files, MIT application license, dependency notices, quick-start instructions and build checksums. It must exclude local recordings, projects, caches and research assets.
+Future version tags build a Windows 11 x64 portable ZIP, separate macOS Apple Silicon and Intel DMGs, and a Linux x64 AppImage. Each package includes the application, required runtime files, MIT application license, dependency notices, quick-start instructions and build checksums. Packages exclude local recordings, projects, caches and research assets.
 
-See [the release guide](releasing.md) for local package commands, clean offline Windows testing and future version tags that prepare GitHub draft prereleases for manual publication. Package checks do not establish listening approval or long-session qualification; those remain pending in the release evaluation tracker.
+See [the release guide](releasing.md) for native package commands, platform checks and future version tags that prepare GitHub draft prereleases for manual publication. Package checks do not establish listening approval or long-session qualification; those remain pending in the release evaluation tracker.
 
 The removed Nemotron implementation remains a [research idea](research/nemotron.md) and is recoverable through Git history.
 

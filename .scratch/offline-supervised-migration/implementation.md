@@ -2,6 +2,10 @@
 
 Status: accepted implementation plan, 2026-10-08
 
+2026-10-10 owner extension: [ticket 26](../offline-supervised-editor/issues/26-cross-platform-release-packages.md)
+is claimed for future Windows/macOS/Linux packages and a README download table.
+Draft/manual publication and the existing stable qualification gates remain active.
+
 2026-10-09 owner override: Nemotron is removed from the application and shipping
 package. Tickets 05/06 and native mapping portions of 07 are historical retired
 implementation; acoustic ownership and source/output safeguards remain active.

@@ -2,24 +2,37 @@
 
 CleanSlate is an offline microphone bleed-reduction tool for multitrack podcasts. It uses a supervised algorithm to learn from a few examples of who is speaking, then attenuate each microphone when its assigned person is silent. Listen to the result and adjust the gain where needed.
 
-![CleanSlate development editor with three microphone tracks, gain-reduction regions and fades, per-track speaker estimates, sound controls and Original, Processed and Removed listening buttons.](docs/images/editor-overview.png)
-
-The development editor after Analyze. Each lane is a microphone track. The gain curve and shaded regions show volume reduction; the percentages estimate whether each track's speaker is active at the playhead. Use **Speaker examples** to teach who is talking, **Sound** to adjust attenuation and fades, and **Original / Processed / Removed** to compare by listening. Recording filenames are redacted. This screenshot illustrates the controls, not an accepted quality result.
-
 <p align="center">
   <a href=".scratch/offline-supervised-migration/implementation.md"><img alt="Status: in development" src="https://img.shields.io/badge/Status-In%20development-C4A7E7?style=for-the-badge&amp;logo=github&amp;labelColor=493267"></a>
-  <a href="docs/development.md"><img alt="First release target: Windows" src="https://img.shields.io/badge/Target-Windows-B5DFE8?style=for-the-badge&amp;labelColor=29626B"></a>
+  <a href="#download"><img alt="Release targets: Windows, macOS and Linux" src="https://img.shields.io/badge/Targets-Windows%20%7C%20macOS%20%7C%20Linux-B5DFE8?style=for-the-badge&amp;labelColor=29626B"></a>
   <a href="docs/ownership-explained.md"><img alt="Analysis runs offline" src="https://img.shields.io/badge/Analysis-Offline-A2FFB0?style=for-the-badge&amp;labelColor=246732"></a>
   <br>
   <a href="Cargo.toml"><img alt="Built with Rust" src="https://img.shields.io/badge/Built%20with-Rust-F4C98B?style=for-the-badge&amp;logo=rust&amp;logoColor=F4C98B&amp;labelColor=75512B"></a>
   <a href="Cargo.toml"><img alt="Desktop GUI: Iced 0.14" src="https://img.shields.io/badge/GUI-Iced%200.14-B5DFE8?style=for-the-badge&amp;labelColor=29626B"></a>
 </p>
 
-[Usage guide](docs/editor-workflow.md) · [How ownership and bleed work](docs/ownership-explained.md) · [Build from source](docs/development.md) · [Release guide](docs/releasing.md) · [Development status](.scratch/offline-supervised-migration/implementation.md)
+[Download](#download) · [Usage guide](docs/editor-workflow.md) · [How ownership and bleed work](docs/ownership-explained.md) · [Build from source](docs/development.md) · [Release guide](docs/releasing.md)
+
+## Download
+
+Choose your platform below. CleanSlate runs locally without Python, a model download or an internet connection. Links appear here when packages are published, including alpha prereleases. Draft releases are not public downloads.
+
+<!-- downloads:start -->
+| Platform | Download | How to run |
+| --- | --- | --- |
+| Windows 11, 64-bit | Not published yet | Extract the entire ZIP, then open `CleanSlate.exe`. Keep the support files together. |
+| Mac, Apple Silicon, macOS 13+ | Not published yet | Open the DMG and drag `CleanSlate.app` to Applications. |
+| Mac, Intel, macOS 13+ | Not published yet | Open the DMG and drag `CleanSlate.app` to Applications. |
+| Linux, 64-bit x86, glibc 2.35+ | Not published yet | Allow the AppImage to run as a program in its file properties, then open it. |
+<!-- downloads:end -->
+
+On a Mac, **Apple menu → About This Mac** shows either an Apple chip or an Intel processor. Linux packages target Ubuntu 22.04 or newer and require a working desktop and audio system. If your system cannot mount an AppImage, run it with `--appimage-extract-and-run`.
+
+These are experimental alpha packages. Windows builds are unsigned. Mac builds use ad-hoc signing and are not notarized, so the operating system may require approval to open them. Listening quality and long-session qualification remain pending. See the [release guide](docs/releasing.md) for checksums and package checks.
 
 ## Try it
 
-CleanSlate is in development. We are preparing `v0.1.0-alpha.1` as an unsigned portable ZIP for Windows 11 x64. Package checks and a clean offline Windows smoke test must finish before publication. Until then, use the [build guide](docs/development.md) to build and open the editor from this checkout.
+CleanSlate is in development. While downloads remain unpublished, use the [build guide](docs/development.md) to build and open the editor from this checkout.
 
 ```mermaid
 flowchart LR
@@ -41,6 +54,10 @@ The steps below describe the same workflow. Tracks must already be synchronized;
 5. Save your editable project and create individual processed WAVs when the result sounds right.
 
 See the [usage guide](docs/editor-workflow.md) for editing, reanalysis and export details.
+
+![CleanSlate development editor with three microphone tracks, gain-reduction regions and fades, per-track speaker estimates, sound controls and Original, Processed and Removed listening buttons.](docs/images/editor-overview.png)
+
+The development editor after Analyze. Each lane is a microphone track. The gain curve and shaded regions show volume reduction; the percentages estimate whether each track's speaker is active at the playhead. Use **Speaker examples** to teach who is talking, **Sound** to adjust attenuation and fades, and **Original / Processed / Removed** to compare by listening. Recording filenames are redacted. This screenshot illustrates the controls, not an accepted quality result.
 
 ## What it does
 
@@ -83,7 +100,7 @@ All coding for this project is done with AI agents using GPT Astra and GPT 6.1 S
 
 - [Ownership architecture](docs/ownership-explained.md): labels, acoustic inputs, bleed calibration, weights, logistic regression and gain decisions, with a Mermaid diagram.
 - [Developer guide](docs/development.md): builds and checks.
-- [Release guide](docs/releasing.md): portable packages, clean Windows checks and future GitHub draft releases.
+- [Release guide](docs/releasing.md): Windows ZIPs, Mac application bundles, Linux AppImages, package checks and draft releases.
 - [GUI development](docs/gui-development.md): repeatable build-and-launch workflow using a separate project copy.
 - [Technical model recipe](docs/supervised-ownership-models.md) and [acoustic evidence](docs/acoustic-evidence.md).
 - [Domain glossary](CONTEXT.md), [architecture decision](docs/adr/0006-offline-supervised-editable-envelopes.md) and [active roadmap](.scratch/offline-supervised-migration/map.md).

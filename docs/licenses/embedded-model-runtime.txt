@@ -1,6 +1,6 @@
 CleanSlate embedded model and runtime notices
 
-The acoustic-first Windows package embeds Silero VAD v5 and uses
+The acoustic-first desktop packages embed Silero VAD v5 and use
 ONNX Runtime 1.22.0. ort-sys 2.0.0-rc.10 build.rs pins ONNXRUNTIME_VERSION
 1.22.0; this file includes the matching upstream runtime notices in full.
 ONNX Runtime's notice inventory may include components not enabled in this build.
