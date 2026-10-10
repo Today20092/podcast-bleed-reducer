@@ -2,6 +2,10 @@
 
 CleanSlate is an offline microphone bleed-reduction tool for multitrack podcasts. It uses a supervised algorithm to learn from a few examples of who is speaking, then attenuate each microphone when its assigned person is silent. Listen to the result and adjust the gain where needed.
 
+![CleanSlate development editor with three microphone tracks, gain-reduction regions and fades, per-track speaker estimates, sound controls and Original, Processed and Removed listening buttons.](docs/images/editor-overview.png)
+
+The development editor after Analyze. Each lane is a microphone track. The gain curve and shaded regions show volume reduction; the percentages estimate whether each track's speaker is active at the playhead. Use **Speaker examples** to teach who is talking, **Sound** to adjust attenuation and fades, and **Original / Processed / Removed** to compare by listening. Recording filenames are redacted. This screenshot illustrates the controls, not an accepted quality result.
+
 <p align="center">
   <a href=".scratch/offline-supervised-migration/implementation.md"><img alt="Status: in development" src="https://img.shields.io/badge/Status-In%20development-C4A7E7?style=for-the-badge&amp;logo=github&amp;labelColor=493267"></a>
   <a href="docs/development.md"><img alt="First release target: Windows" src="https://img.shields.io/badge/Target-Windows-B5DFE8?style=for-the-badge&amp;labelColor=29626B"></a>
