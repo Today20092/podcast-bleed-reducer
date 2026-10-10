@@ -67,6 +67,13 @@ compiler, runs checks/tests, builds the same portable package and prepares a **d
 prerelease** with ZIP and checksum. It never publishes automatically. A rerun uploads
 replacement assets to the existing draft; a published release is never overwritten.
 
+Manual rebuilds accept an existing draft tag as `release_tag`. Select that tag's
+ref when dispatching; branch dispatch is for diagnosing an unpublished candidate.
+CI caches Rust dependencies and build outputs, including after a failed check,
+and reports Windows application fault events if a test process crashes.
+Playback preparation unit tests use a fixed output rate without sound hardware;
+real device enumeration and listening still require a Windows GUI check.
+
 Download and clean-test the actual GitHub ZIP before publication: its binary can
 differ from the local build. In GitHub's Releases page, review the draft's version,
 assets, checksum and limitations, keep **Set as a pre-release** selected, then publish.

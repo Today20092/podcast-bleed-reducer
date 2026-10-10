@@ -41,16 +41,25 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
+            ~/AppData/Local/ort.pyke.io
             target
           key: windows-2025-rust-1.99.0-${{ hashFiles('Cargo.lock') }}-${{ github.run_id }}
           restore-keys: windows-2025-rust-1.99.0-${{ hashFiles('Cargo.lock') }}-
+      - name: Restore native build inputs
+        if: steps.rust-cache.outputs.cache-matched-key != ''
+        run: |
+          # Re-run ort's build script when adopting a cache without its native files.
+          if (-not (Test-Path (Join-Path $env:LOCALAPPDATA 'ort.pyke.io'))) {
+            cargo clean --package ort-sys
+            if ($LASTEXITCODE -ne 0) { throw 'Native build cache reset failed' }
+          }
       - name: Check and test
         run: |
           cargo fmt --all -- --check
           if ($LASTEXITCODE -ne 0) { throw 'Formatting failed' }
           cargo clippy --all-targets --locked -- -D warnings
           if ($LASTEXITCODE -ne 0) { throw 'Clippy failed' }
-          cargo test --all-targets --locked -- --test-threads=1 --nocapture
+          cargo test --all-targets --locked -- --nocapture
           if ($LASTEXITCODE -ne 0) { throw 'Tests failed' }
       - name: Report Windows application faults
         if: failure()
@@ -85,5 +94,6 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
+            ~/AppData/Local/ort.pyke.io
             target
           key: ${{ steps.rust-cache.outputs.cache-primary-key }}

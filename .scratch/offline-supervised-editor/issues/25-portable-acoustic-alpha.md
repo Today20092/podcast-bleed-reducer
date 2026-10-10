@@ -70,3 +70,15 @@ The same library tests pass locally with serial and parallel execution. A manual
 workflow entry and serial, uncaptured test execution are being added to identify
 the failing test on the hosted runner before considering the candidate verified.
 Repository discovery topics were added; the alpha version tag already exists.
+
+The serial hosted run 38014730596 reproduced the access violation in
+`audition_stop_relink_and_error_do_not_start_output`. Local library stress with
+64 test threads passed 20 attempts. Playback preparation was probing CPAL's
+cached Windows device enumerator on short-lived workers, matching upstream
+RustAudio/cpal issue 1302. Device-rate discovery now stays on the GUI thread;
+unit tests use a fixed 48 kHz grid without hardware while exercising real
+source preparation, caching and cancellation. Full local tests, strict Clippy,
+formatting and the development GUI build passed after the change.
+Temporary test probes are removed and CI parallel test execution is restored.
+Hosted verification of the corrected code and real-device listening remain
+pending. Release workflow diagnostics and build/native-runtime caching are added.

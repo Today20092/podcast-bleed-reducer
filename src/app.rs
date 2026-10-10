@@ -1259,13 +1259,11 @@ mod tests {
 
     #[test]
     fn audition_stop_relink_and_error_do_not_start_output() {
-        eprintln!("[DEBUG-CI] audition cancellation: begin");
         let directory =
             std::env::temp_dir().join(format!("audition-editor-{}", std::process::id()));
         std::fs::create_dir_all(&directory).unwrap();
         let path = directory.join("voice.wav");
         write_wav(&path, &[0.0; 1537]);
-        eprintln!("[DEBUG-CI] audition cancellation: WAV written");
         let mut app = super::CleanSlateApp {
             project: Some(
                 synchronized_project(directory.join("episode.cleanslate"), vec![path.clone()])
@@ -1274,7 +1272,6 @@ mod tests {
             ..Default::default()
         };
         let preview = crate::AnalysisPreview {
-            // Temporary probe is removed after hosted crash isolation.
             stems: vec![path.clone()],
             regions: vec![],
             envelopes: vec![crate::GainEnvelope::constant(1537, 1.0)],
@@ -1282,7 +1279,6 @@ mod tests {
             parameters: Default::default(),
         };
         app.preview = Some(preview.clone());
-        eprintln!("[DEBUG-CI] audition cancellation: project ready");
         app.timeline
             .set_total_samples(crate::timebase::detector_time(1537));
         app.timeline.set_selection(Some((17, 600)));
@@ -1296,28 +1292,22 @@ mod tests {
             assert!(app.audition.is_none());
         };
         app.audition(true);
-        eprintln!("[DEBUG-CI] audition cancellation: preparation requested");
         assert_eq!(app.audition_range, Some((17, 600)));
         let _ = app.update(super::Message::Timeline(
             crate::timeline::TimelineEvent::Seek(40),
         ));
         assert_eq!(app.audition_range, Some((40, 600)));
         let _ = app.update(super::Message::Stop);
-        eprintln!("[DEBUG-CI] audition cancellation: stop requested");
         drain(&mut app);
-        eprintln!("[DEBUG-CI] audition cancellation: stop drained");
         assert!(app.audition_range.is_none());
         app.audition(false);
         app.install_waveforms(vec![]);
-        eprintln!("[DEBUG-CI] audition cancellation: relink requested");
         drain(&mut app);
-        eprintln!("[DEBUG-CI] audition cancellation: relink drained");
         assert!(app.audition_range.is_none());
         app.preview = Some(preview);
         std::fs::remove_file(&path).unwrap();
         app.audition(false);
         drain(&mut app);
-        eprintln!("[DEBUG-CI] audition cancellation: error drained");
         assert!(!app.messages.is_empty());
         assert!(app.audition_range.is_none());
         std::fs::remove_dir_all(directory).unwrap();

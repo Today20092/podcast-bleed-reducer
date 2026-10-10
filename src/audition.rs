@@ -272,6 +272,25 @@ impl AuditionPreparation {
         let Some(paths) = self.pending.take() else {
             return;
         };
+        // Keep CPAL's cached Windows device enumerator on the long-lived GUI thread.
+        #[cfg(not(test))]
+        let output_rate = (|| {
+            use rodio::cpal::traits::{DeviceTrait, HostTrait};
+            let device = rodio::cpal::default_host()
+                .default_output_device()
+                .ok_or_else(|| {
+                    RenderBlocker("audio output unavailable: no default device".into())
+                })?;
+            device
+                .default_output_config()
+                .map(|config| config.sample_rate().0)
+                .map_err(|error| {
+                    RenderBlocker(format!("audio output configuration unavailable: {error}"))
+                })
+        })();
+        // Unit tests exercise real preparation/cancellation without sound hardware.
+        #[cfg(test)]
+        let output_rate = Ok::<_, RenderBlocker>(48_000);
         let cached = self.cache.take();
         let cancelled = Arc::new(AtomicBool::new(false));
         let worker_cancelled = Arc::clone(&cancelled);
@@ -280,19 +299,7 @@ impl AuditionPreparation {
             // A cancelled warm request may still return its validated PCM to the cache.
             // Generation checks prevent that result from starting playback.
             let prepared = (|| {
-                use rodio::cpal::traits::{DeviceTrait, HostTrait};
-                let device = rodio::cpal::default_host()
-                    .default_output_device()
-                    .ok_or_else(|| {
-                        RenderBlocker("audio output unavailable: no default device".into())
-                    })?;
-                let rate = device
-                    .default_output_config()
-                    .map_err(|error| {
-                        RenderBlocker(format!("audio output configuration unavailable: {error}"))
-                    })?
-                    .sample_rate()
-                    .0;
+                let rate = output_rate?;
                 match cached {
                     Some(cached)
                         if cached.is_current_sources(&paths) && cached.sample_rate == rate =>
