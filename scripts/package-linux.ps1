@@ -29,13 +29,19 @@ foreach ($link in @(@('cleanslate.desktop', 'usr/share/applications/cleanslate.d
         if ($LASTEXITCODE -ne 0) { throw 'Cannot create AppImage desktop metadata' }
     }
 }
+$appRun = Join-Path $AppDir 'AppRun'
+$binary = Join-Path $AppDir 'usr/bin/CleanSlate'
+$binaryHash = (Get-FileHash -LiteralPath $binary -Algorithm SHA256).Hash
+# linuxdeploy creates AppRun as a symlink; remove it before writing the launcher.
+Remove-Item -LiteralPath $appRun -Force
 @'
 #!/bin/sh
 set -eu
 appdir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 export LD_LIBRARY_PATH="$appdir/usr/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 exec "$appdir/usr/bin/CleanSlate" "$@"
-'@ | Set-Content -LiteralPath (Join-Path $AppDir 'AppRun') -Encoding utf8
+'@ | Set-Content -LiteralPath $appRun -Encoding utf8
+if ((Get-FileHash -LiteralPath $binary -Algorithm SHA256).Hash -ne $binaryHash) { throw 'AppRun creation modified the application executable' }
 & chmod +x (Join-Path $AppDir 'AppRun')
 if ($LASTEXITCODE -ne 0) { throw 'Cannot set AppRun permissions' }
 
