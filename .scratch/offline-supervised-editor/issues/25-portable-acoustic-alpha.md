@@ -82,3 +82,16 @@ formatting and the development GUI build passed after the change.
 Temporary test probes are removed and CI parallel test execution is restored.
 Hosted verification of the corrected code and real-device listening remain
 pending. Release workflow diagnostics and build/native-runtime caching are added.
+
+Hosted runs 38016775156 and 38017010305 passed all 82 ordinary library tests,
+confirming the audio-device crash is resolved. Parallel integration tests exposed
+timestamp-only fixture directory collisions: one run failed in the WAV parser
+with unsigned subtraction overflow, another while saving a project with access
+denied. Freezing the local fixture clock reproduced the parser failure; adding
+a per-process counter made the same frozen-clock workload pass. Shared fixture
+helpers now use counters and exclusive directory creation, matching the existing
+reference-label fixture pattern. A regression creates parallel projects under a
+frozen clock and verifies deleting one cannot invalidate the other source.
+Full local validation with 64 test threads: 216 passed, 15 ignored. CI omits PDBs
+from its build cache after observed cache uploads delayed diagnostics by nine
+minutes. Corrected hosted integration/package verification remains pending.

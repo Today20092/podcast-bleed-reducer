@@ -10,15 +10,17 @@ fn fixture_profile(
     scale: f32,
     profile: &str,
 ) -> (PathBuf, Project, Vec<rust_app::PreparedAnalysisAudio>) {
+    static NEXT_SESSION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let root = std::env::temp_dir().join(format!(
-        "cleanslate-acoustics-{}-{}",
+        "cleanslate-acoustics-{}-{}-{}",
         std::process::id(),
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
-            .as_nanos()
+            .as_nanos(),
+        NEXT_SESSION.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     ));
-    std::fs::create_dir_all(&root).unwrap();
+    std::fs::create_dir(&root).unwrap();
     let mut state = 1234567_u32;
     let signals: Vec<f32> = (0..64_000)
         .map(|_| {

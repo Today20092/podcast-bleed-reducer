@@ -143,15 +143,23 @@ fn long_requested_fades_do_not_erase_known_absence() {
 }
 
 fn project() -> (std::path::PathBuf, rust_app::Project) {
-    let root = std::env::temp_dir().join(format!(
-        "envelopes-{}-{}",
-        std::process::id(),
+    project_at_stamp(
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
-            .as_nanos()
+            .as_nanos(),
+    )
+}
+
+fn project_at_stamp(stamp: u128) -> (std::path::PathBuf, rust_app::Project) {
+    static NEXT_PROJECT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let root = std::env::temp_dir().join(format!(
+        "envelopes-{}-{}-{}",
+        std::process::id(),
+        stamp,
+        NEXT_PROJECT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     ));
-    std::fs::create_dir_all(&root).unwrap();
+    std::fs::create_dir(&root).unwrap();
     let path = root.join("mono.wav");
     let mut writer =
         bwavfile::WaveWriter::create(&path, bwavfile::WaveFmt::new_pcm_mono(48000, 16))
@@ -164,6 +172,19 @@ fn project() -> (std::path::PathBuf, rust_app::Project) {
         rust_app::Project::create(root.join("project.cleanslate"), vec![path]).unwrap();
     project.set_supplied_alignment(true).unwrap();
     (root, project)
+}
+
+#[test]
+fn parallel_fixtures_keep_sources_independent_when_the_clock_repeats() {
+    let (first, second) = std::thread::scope(|scope| {
+        let first = scope.spawn(|| project_at_stamp(0));
+        let second = scope.spawn(|| project_at_stamp(0));
+        (first.join().unwrap(), second.join().unwrap())
+    });
+    assert_ne!(first.0, second.0);
+    std::fs::remove_dir_all(first.0).unwrap();
+    rust_app::SourceMetadata::read(&second.1.sources[0].path).unwrap();
+    std::fs::remove_dir_all(second.0).unwrap();
 }
 
 #[test]

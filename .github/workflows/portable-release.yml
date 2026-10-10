@@ -65,6 +65,10 @@ jobs:
         if: failure()
         run: |
           Get-WinEvent -FilterHashtable @{ LogName = 'Application'; Id = 1000, 1001; StartTime = (Get-Date).AddHours(-1) } -ErrorAction SilentlyContinue | Select-Object -First 10 | ForEach-Object { $_.Message }
+      - name: Trim build cache
+        if: always()
+        run: |
+          Get-ChildItem -LiteralPath target -Recurse -File -Filter '*.pdb' -ErrorAction SilentlyContinue | Remove-Item -Force
       - name: Build and verify portable ZIP
         env:
           RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}

@@ -8,15 +8,17 @@ use std::{
 };
 
 fn temp_dir() -> PathBuf {
+    static NEXT_EXPORT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let path = std::env::temp_dir().join(format!(
-        "cleanslate-export-{}-{}",
+        "cleanslate-export-{}-{}-{}",
         std::process::id(),
         SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
-            .as_nanos()
+            .as_nanos(),
+        NEXT_EXPORT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     ));
-    fs::create_dir_all(&path).unwrap();
+    fs::create_dir(&path).unwrap();
     path
 }
 

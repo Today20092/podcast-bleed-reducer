@@ -15,15 +15,17 @@ fn session_rates_gain(
     rates: [u32; 2],
     quiet_gain: f32,
 ) -> (PathBuf, Project, Vec<PreparedAnalysisAudio>) {
+    static NEXT_SESSION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let root = std::env::temp_dir().join(format!(
-        "cleanslate-ownership-{}-{}",
+        "cleanslate-ownership-{}-{}-{}",
         std::process::id(),
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
-            .as_nanos()
+            .as_nanos(),
+        NEXT_SESSION.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     ));
-    std::fs::create_dir_all(&root).unwrap();
+    std::fs::create_dir(&root).unwrap();
     let mut state = 7654321_u32;
     let noise: Vec<f32> = (0..64_000)
         .map(|_| {
