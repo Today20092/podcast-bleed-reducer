@@ -17,12 +17,14 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Release build failed; existing package retained' }
     Copy-Item -LiteralPath (Join-Path $TargetDir 'x86_64-pc-windows-msvc/release/rust-app.exe') -Destination (Join-Path $stage 'CleanSlate.exe')
     $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
-    $installation = & $vswhere -latest -version '[17.0,18.0)' -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+    $installation = & $vswhere -latest -version '[17.0,19.0)' -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
     if ($LASTEXITCODE -ne 0 -or -not $installation) { throw 'Cannot locate licensed MSVC redistributable files' }
     $redistRoot = Join-Path $installation 'VC/Redist/MSVC'
     $redist = Get-ChildItem -LiteralPath $redistRoot -Directory | Where-Object { $_.Name -match '^\d+\.\d+\.\d+$' } | Sort-Object { [version]$_.Name } -Descending | Select-Object -First 1
     if (-not $redist) { throw 'MSVC redistributable version missing' }
-    $crt = Join-Path $redist.FullName 'x64/Microsoft.VC143.CRT'
+    $crtFolders = @(Get-ChildItem -LiteralPath (Join-Path $redist.FullName 'x64') -Directory | Where-Object { $_.Name -match '^Microsoft\.VC14\d\.CRT$' })
+    if ($crtFolders.Count -ne 1) { throw 'Expected one app-local MSVC CRT directory' }
+    $crt = $crtFolders[0].FullName
     foreach ($dll in @('concrt140.dll', 'msvcp140.dll', 'msvcp140_1.dll', 'msvcp140_2.dll', 'msvcp140_atomic_wait.dll', 'msvcp140_codecvt_ids.dll', 'vcruntime140.dll', 'vcruntime140_1.dll')) {
         Copy-Item -LiteralPath (Join-Path $crt $dll) -Destination $stage
     }
