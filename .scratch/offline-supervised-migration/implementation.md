@@ -9,7 +9,8 @@ replaces all seven Mermaid documentation diagrams with GUI-matched SVGs and
 accessible HTML sources. Static checks pass; browser review remains pending.
 
 2026-10-10 owner extension: [ticket 26](../offline-supervised-editor/issues/26-cross-platform-release-packages.md)
-is claimed for future Windows/macOS/Linux packages and a README download table.
+is done: Windows, both Mac variants and Linux alpha 2 packages are public, with
+verified direct README downloads (2026-10-11).
 Draft/manual publication and the existing stable qualification gates remain active.
 
 2026-10-09 owner override: Nemotron is removed from the application and shipping
