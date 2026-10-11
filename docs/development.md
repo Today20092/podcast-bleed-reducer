@@ -4,7 +4,7 @@ This guide covers source builds and development checks. For the editor workflow,
 
 ## Build from source
 
-Use the `codex/offline-supervised` branch. Read [repository instructions](../AGENTS.md) and the [active implementation tracker](../.scratch/offline-supervised-migration/implementation.md) before choosing work.
+Start from `main`. Read [repository instructions](../AGENTS.md) and the [active implementation tracker](../.scratch/offline-supervised-migration/implementation.md) before choosing work.
 
 The Rust package uses edition 2024. Install a compatible Rust toolchain and the Windows MSVC build prerequisites, then run these commands from the repository root:
 

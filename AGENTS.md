@@ -20,4 +20,4 @@ When discovering tools, retrieve only the metadata needed for the task. Before s
 
 ## Repository
 
-Work on `codex/offline-supervised`. `main` is the clean shared starting point. Superseded branches, worktrees, roadmap folders and packaged builds have been removed from the active workspace; their recovery snapshot is outside the project. Use commit `6a60cc2` as the frozen detector comparison baseline when the acceptance tickets require it.
+Use `main` as the shared starting point. The offline supervised development history was merged into `main` on 2026-10-11. Create scoped `codex/` branches when needed. Use commit `6a60cc2` as the frozen detector comparison baseline when the acceptance tickets require it.

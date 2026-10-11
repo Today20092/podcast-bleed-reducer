@@ -92,7 +92,7 @@ verifies packaging mechanics; it does not establish real-recording audio quality
 After local checks and review, push the candidate branch and the version tag:
 
 ```powershell
-git push origin codex/offline-supervised
+git push origin main
 git tag -a v0.1.0-alpha.1 -m "CleanSlate 0.1.0-alpha.1"
 git push origin v0.1.0-alpha.1
 ```
