@@ -18,6 +18,8 @@ Channels in one WAV are internally synchronized. Separate mono files may be incl
 
 Drag a range to open **Who is talking?** Select everyone you hear: one person for solo speech, several for overlap, or nobody for room tone. The selected microphone does not decide the label. This capture shows an unsaved selection; the checked speaker is an example of the control, not a verified annotation. Enter saves; Escape closes without saving.
 
+Compare the [solo, overlap and room-tone examples](ownership-explained.md#1-you-supply-examples) before labeling a range.
+
 Analyze is explicit. Several label changes can be collected before one job. Progress identifies the current stage and elapsed time. Preparation, acoustic ownership fitting and temporal decisions use your examples to estimate ownership throughout the timeline. Cancellation, source changes or obsolete label generations prevent installation. Completed fixed evidence can be reused. A failed project save cannot advance the accepted effective-envelope cache.
 
 The previous preview remains visible when stale. Gain-only changes compose immediately and do not run the neural extractor or ownership classifier. A gain edit made during Analyze is composed from the latest project when the result installs. The displayed estimates are inspectable model probabilities; they do not promise calibrated certainty.
@@ -33,6 +35,8 @@ The curve shows when volume falls and returns to full level. At the white playhe
 ![Sound panel with attenuation at minus 8 decibels, fades to full and reduced volume, Ignore gaps shorter than, and Edit gain points.](images/sound-controls.png)
 
 **Attenuation** sets the reduced level. The two fade sliders set the maximum transition durations. **Ignore gaps shorter than** keeps brief automatic gaps open. These are the captured session's settings, not recommended defaults. Enable **Edit gain points** for manual corrections, or select a range and use **Preserve** to keep it at full volume.
+
+See the [fade-and-gap plots](effective-envelopes.md) for the difference between shortening fades to fit a gap and keeping a short automatic gap at full volume.
 
 Switch the envelope tool on to drag manual points horizontally for fade duration or vertically for gain. A drag uses a transient draft; release commits one undo command and cancellation restores the saved curve and markers. Arrow keys move a selected point, Delete removes its whole override, and Ctrl+Z/Ctrl+Y undo/redo. Text inputs retain their captured keys. Preserve and Attenuate create region edits. Conflicts require the explicit **Replace entire overlapping overrides and protections** option; it removes the conflicting records as whole records, including the other bindings of a global protection.
 
