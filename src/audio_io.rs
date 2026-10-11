@@ -318,6 +318,22 @@ pub(crate) fn render_source_native(
     envelope: &crate::GainEnvelope,
     cancelled: Option<&std::sync::atomic::AtomicBool>,
 ) -> Result<SourceMetadata, RenderBlocker> {
+    render_source_encoded(
+        source,
+        destination,
+        envelope,
+        crate::ExportEncoding::PreserveSource,
+        cancelled,
+    )
+}
+
+pub(crate) fn render_source_encoded(
+    source: &AudioSource,
+    destination: &Path,
+    envelope: &crate::GainEnvelope,
+    encoding: crate::ExportEncoding,
+    cancelled: Option<&std::sync::atomic::AtomicBool>,
+) -> Result<SourceMetadata, RenderBlocker> {
     // Validation is bounded; it never retains a native PCM session.
     let decoded = decode_source_chunks(source, cancelled, |_, _| Ok(()))?;
     let mut format = decoded.format;
@@ -325,25 +341,15 @@ pub(crate) fn render_source_native(
         format = WaveFmt::new_pcm_mono(format.sample_rate, 32);
         format.tag = 3;
     }
-    let metadata_bytes = decoded
-        .bext
-        .as_ref()
-        .map_or(0, |bext| 610_u64 + bext.coding_history.len() as u64);
-    let data_bytes = decoded
-        .metadata
-        .grid
-        .frame_count
-        .checked_mul(u64::from(format.block_alignment))
-        .ok_or_else(|| RenderBlocker("WAV output size overflow".into()))?;
-    if data_bytes
-        .checked_add(metadata_bytes)
-        .and_then(|bytes| bytes.checked_add(128))
-        .is_none_or(|bytes| bytes > u64::from(u32::MAX))
-    {
-        return Err(RenderBlocker(
-            "native WAV output exceeds the supported 32-bit RIFF size; choose a shorter source"
-                .into(),
-        ));
+    format = encoding.format(format);
+    // Private float intermediates may use the writer's automatic RF64 promotion;
+    // the selected final delivery, not its larger intermediate, must fit RIFF.
+    if encoding != crate::ExportEncoding::Float32 {
+        crate::export_settings::check_riff_size(
+            decoded.metadata.grid.frame_count,
+            format,
+            decoded.bext.as_ref(),
+        )?;
     }
     let mut writer = WaveWriter::create(destination, format)?;
     if let Some(bext) = &decoded.bext {

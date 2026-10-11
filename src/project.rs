@@ -169,6 +169,8 @@ pub struct Project {
     #[serde(default)]
     render_record: Option<crate::supervised_render::RenderRecord>,
     step: WorkflowStep,
+    #[serde(default)]
+    export_encoding: crate::ExportEncoding,
 }
 
 fn invalid(message: impl Into<String>) -> io::Error {
@@ -206,6 +208,7 @@ impl Project {
             path: path.into(),
             sources,
             supplied_alignment: false,
+            export_encoding: crate::ExportEncoding::default(),
             legacy_native_analysis: false,
             references: vec![],
             next_reference_id: 1,
@@ -663,6 +666,17 @@ impl Project {
         &self.path
     }
 
+    pub fn export_encoding(&self) -> crate::ExportEncoding {
+        self.export_encoding
+    }
+
+    pub fn set_export_encoding(&mut self, encoding: crate::ExportEncoding) -> io::Result<()> {
+        self.transaction(|next| {
+            next.export_encoding = encoding;
+            Ok(())
+        })
+    }
+
     pub(crate) fn sound_identity(&self) -> io::Result<String> {
         let data = serde_json::to_vec(&(
             crate::effective_envelope::EFFECTIVE_ENVELOPE_RECIPE,
@@ -686,8 +700,13 @@ impl Project {
         Ok(format!(
             "{:x}",
             Sha256::digest(
-                serde_json::to_vec(&(self.sound_identity()?, &self.render, &self.render_record))
-                    .map_err(invalid_json)?
+                serde_json::to_vec(&(
+                    self.sound_identity()?,
+                    &self.render,
+                    &self.render_record,
+                    self.export_encoding
+                ))
+                .map_err(invalid_json)?
             )
         ))
     }
