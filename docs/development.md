@@ -2,6 +2,8 @@
 
 This guide covers source builds and development checks. For the editor workflow, see [the usage guide](editor-workflow.md). For detection, see [ownership and bleed](ownership-explained.md).
 
+New contributors should start with [contributing](../CONTRIBUTING.md) for proposing work, claiming tickets and opening a pull request. The [public roadmap](../ROADMAP.md) explains current priorities and future possibilities.
+
 ## Build from source
 
 Start from `main`. Read [repository instructions](../AGENTS.md) and the [active implementation tracker](../.scratch/offline-supervised-migration/implementation.md) before choosing work.

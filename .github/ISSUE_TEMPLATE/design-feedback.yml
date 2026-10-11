@@ -1,0 +1,37 @@
+name: Design and user-flow feedback
+description: Explain confusing controls, editing friction or listening feedback.
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Describe your experience even if you do not know the solution. Issues are public; redact recording names, paths and personal information from screenshots. Only share recordings with permission from everyone recorded.
+  - type: textarea
+    id: goal
+    attributes:
+      label: What were you trying to do?
+    validations:
+      required: true
+  - type: textarea
+    id: friction
+    attributes:
+      label: Where did the workflow or result fall short?
+      description: Describe the controls or steps involved. For listening feedback, include approximate timestamps, listening mode and relevant settings.
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: What would make this clearer or more useful?
+      description: A desired outcome is enough; a proposed design is optional.
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: App version and platform
+      description: Include the release tag or commit and operating system if known.
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Optional screenshots or examples
+      description: Remove private information before attaching anything.

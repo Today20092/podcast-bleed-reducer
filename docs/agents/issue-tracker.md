@@ -2,6 +2,8 @@
 
 Issues and specs for this repo live as markdown files in `.scratch/`.
 
+Public bug reports, design feedback and feature proposals enter through [GitHub Issues](https://github.com/Today20092/podcast-bleed-reducer/issues/new/choose). GitHub is the public intake and discussion channel; accepted specifications and implementation tickets remain in this local Markdown tracker. Link the public issue from the accepted ticket and the resulting PR. See [contributing](../../CONTRIBUTING.md) for the newcomer workflow.
+
 The sole active roadmap is `.scratch/offline-supervised-migration/map.md`. Its resolved architecture decisions lead to implementation issues in `.scratch/offline-supervised-editor/issues/`.
 
 ## Conventions
