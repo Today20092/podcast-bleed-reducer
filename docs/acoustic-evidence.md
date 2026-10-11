@@ -14,6 +14,10 @@ Suppose you label a section "Speaker 3 only."
 
 You do not need a separate "bleed" label. Your solo label identifies where the other microphones can provide bleed examples.
 
+[![Speaker 3 reaches microphone 3 directly and microphone 1 as bleed. Both aligned illustrative recordings contain the voice, but only track 3 belongs to the active speaker.](diagrams/microphone-bleed.svg)](diagrams/microphone-bleed.svg)
+
+This simplified example shows two of the microphones on one time and amplitude scale. The signal sizes are illustrative, not measured leakage ratios or decision thresholds. The desired action is to preserve Speaker 3's track and attenuate the track whose assigned person is silent. Attenuation lowers the whole track during selected intervals; it does not subtract or separate a voice. [Text equivalent](diagrams/microphone-bleed.html).
+
 A room-tone label identifies a section where nobody speaks. It supplies the background-noise level for each microphone.
 
 ## What the tool learns

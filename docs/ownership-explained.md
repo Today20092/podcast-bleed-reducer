@@ -18,6 +18,8 @@ Suppose only Speaker 3 is talking. Their voice reaches all three microphones:
 
 All three tracks can contain speech. Only Track 3 owns the speech in this example. If two people talk at once, both of their tracks can own speech.
 
+See the [two-microphone illustration](acoustic-evidence.md#a-simple-example) for how direct speech and bleed can appear at the same time.
+
 ## The process
 
 [![How examples become an editable gain curve.](diagrams/ownership.svg)](diagrams/ownership.svg)
@@ -31,6 +33,10 @@ Drag across a clear section and select everyone speaking.
 - One selected person means solo speech.
 - Several selected people mean overlap.
 - Nobody selected means room tone, with no person speaking.
+
+[![Illustrative microphone waveforms show solo Speaker 3, overlapping Speakers 1 and 3, and room tone, with the matching speaker selections.](diagrams/speaker-label-examples.svg)](diagrams/speaker-label-examples.svg)
+
+These are separate illustrative examples, not recordings or model results. Select the people you hear in the range, regardless of which microphone you dragged on. Bleed can put one voice on several tracks; room tone still contains noise. Waveform height alone does not identify a speaker. [Text equivalent](diagrams/speaker-label-examples.html).
 
 Supply a solo example for each speaker and a room-tone example. A few clear sections across the podcast can be enough to start. Add more if the result needs correction.
 
@@ -97,6 +103,8 @@ Consecutive decisions form sections to preserve or attenuate. The gain controls 
 The gap control ranges from 10 to 5000 ms, with a default of 768 ms. A gap exactly as long as the selected value can still be attenuated. The control does not erase an explicit room-tone label.
 
 Automatic fades start gently, change fastest in the middle, then settle gently at the exact target gain. Both their slope and curvature are zero at the endpoints. Requested durations are maxima: when a non-speaking gap is shorter, closing and opening fit proportionally inside it. Fades never shorten preserved speech, and opening reaches full volume before that speech starts.
+
+The [fade-and-gap plots](effective-envelopes.md) compare a long gap, compressed fades in a short gap, and a short automatic gap ignored by the gap control.
 
 Processing multiplies the source samples by the gain curve. A constant gain reduces volume without reshaping the waveform; transitions change that gain over time. The goal is transparent attenuation without audible clicks, pumping or obvious ducking. The S-curve softens transitions, but listening is still needed to judge whether removing background sound or bleed is noticeable.
 
