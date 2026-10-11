@@ -2,6 +2,8 @@
 
 Status: accepted implementation plan, 2026-10-08
 
+2026-10-11 owner extension: [ticket 29](../offline-supervised-editor/issues/29-contributor-documentation-intake.md) covers the README origin story, contributor guide, public roadmap and GitHub issue forms. The [public roadmap](../../ROADMAP.md) summarizes current priorities without replacing this tracker. Automatic synchronization and in-app support reporting are exploratory possibilities, not implementation commitments or release requirements.
+
 2026-10-11 owner extension: [ticket 27](../offline-supervised-editor/issues/27-documentation-diagrams.md)
 replaces all seven Mermaid documentation diagrams with GUI-matched SVGs and
 accessible HTML sources. Static checks pass; browser review remains pending.

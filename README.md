@@ -11,7 +11,7 @@ CleanSlate is an offline microphone bleed-reduction tool for multitrack podcasts
   <a href="Cargo.toml"><img alt="Desktop GUI: Iced 0.14" src="https://img.shields.io/badge/GUI-Iced%200.14-B5DFE8?style=for-the-badge&amp;labelColor=29626B"></a>
 </p>
 
-[Download](#download) · [Usage guide](docs/editor-workflow.md) · [How ownership and bleed work](docs/ownership-explained.md) · [Build from source](docs/development.md) · [Release guide](docs/releasing.md)
+[Download](#download) · [Usage guide](docs/editor-workflow.md) · [Roadmap](ROADMAP.md) · [Contribute](CONTRIBUTING.md) · [Report an issue](https://github.com/Today20092/podcast-bleed-reducer/issues/new/choose)
 
 ## Download
 
@@ -75,9 +75,21 @@ The planned alpha remains experimental while independent quality, listening and 
 
 ## Documentation and development
 
+### Why I made CleanSlate
+
+I make many podcasts and wanted a local tool I could use without paying a recurring automixing fee. After recording, I wanted to import my synchronized microphone tracks, check them by listening, and reduce room bleed when each person wasn't speaking.
+
+I used FabFilter Pro-G, but on my recordings the level difference between a person's voice and bleed from other speakers was sometimes too small to set a reliable gate threshold. I needed something smarter about who was speaking, so it could attenuate inactive microphones while preserving wanted speech. CleanSlate is my attempt to make that first pass useful, with listening and manual gain edits before export.
+
+The focus is podcast bleed reduction. Finish other production work in your usual audio editor. See the [roadmap](ROADMAP.md) for current priorities and future possibilities.
+
 ### How this project is built
 
-All coding for this project is done with AI agents using GPT Astra and GPT 6.1 Sol. Development follows Matt Pocock's workflow, with specifications, scoped tickets, implementation and review. Human feedback guides the GUI and checks whether the attenuation sounds right.
+All coding for this project so far has been done with AI agents using GPT Astra and GPT 6.1 Sol. Development follows Matt Pocock's workflow, with specifications, scoped tickets, implementation and review. Human feedback guides the GUI and checks whether the attenuation sounds right. The [contributing guide](CONTRIBUTING.md) explains our workflow and links to [Matt's agent skills](https://github.com/mattpocock/skills). The skills are recommended for agent-assisted work; human-written contributions are welcome.
+
+### Help shape the project
+
+Report bugs, confusing controls, user-flow problems, listening results or feature ideas through [GitHub Issues](https://github.com/Today20092/podcast-bleed-reducer/issues/new/choose). The forms help describe the problem consistently. You do not need to write code to contribute. Review screenshots and logs for private information before posting; share recordings only with permission from everyone recorded.
 
 ### Technology
 
@@ -90,6 +102,9 @@ All coding for this project is done with AI agents using GPT Astra and GPT 6.1 S
 | Playback | Rodio |
 
 ### Guides
+
+- [Contributing](CONTRIBUTING.md): feedback, development workflow, optional AI skills and pull requests.
+- [Roadmap](ROADMAP.md): current priorities and ideas that need investigation.
 
 - [Ownership architecture](docs/ownership-explained.md): labels, acoustic inputs, bleed calibration, weights, logistic regression and gain decisions, with an illustrated workflow.
 - [Developer guide](docs/development.md): builds and checks.
