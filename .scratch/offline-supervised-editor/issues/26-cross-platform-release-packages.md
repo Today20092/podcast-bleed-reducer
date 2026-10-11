@@ -7,6 +7,12 @@ Blocked by: none
 
 ## Scope
 
+2026-10-11 owner extension: publish the latest committed application as
+`v0.1.0-alpha.2` with all four desktop packages and direct README downloads.
+Release source starts at main commit `6c97145`; unrelated local edits are excluded.
+The earlier four-platform build run 38028963031 succeeded after the Linux launcher
+fix and an Intel DMG runner retry. This ticket remains claimed for publication.
+
 Owner authorized macOS and Linux packages for future releases and a README download
 table on 2026-10-10. Extend the existing acoustic-only portable packaging to Windows
 x64, macOS Apple Silicon and Intel, and Linux x64. Keep draft/manual publication,
