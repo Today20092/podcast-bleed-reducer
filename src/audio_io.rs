@@ -342,25 +342,14 @@ pub(crate) fn render_source_encoded(
         format.tag = 3;
     }
     format = encoding.format(format);
-    let metadata_bytes = decoded
-        .bext
-        .as_ref()
-        .map_or(0, |bext| 610_u64 + bext.coding_history.len() as u64);
-    let data_bytes = decoded
-        .metadata
-        .grid
-        .frame_count
-        .checked_mul(u64::from(format.block_alignment))
-        .ok_or_else(|| RenderBlocker("WAV output size overflow".into()))?;
-    if data_bytes
-        .checked_add(metadata_bytes)
-        .and_then(|bytes| bytes.checked_add(128))
-        .is_none_or(|bytes| bytes > u64::from(u32::MAX))
-    {
-        return Err(RenderBlocker(
-            "native WAV output exceeds the supported 32-bit RIFF size; choose a shorter source"
-                .into(),
-        ));
+    // Private float intermediates may use the writer's automatic RF64 promotion;
+    // the selected final delivery, not its larger intermediate, must fit RIFF.
+    if encoding != crate::ExportEncoding::Float32 {
+        crate::export_settings::check_riff_size(
+            decoded.metadata.grid.frame_count,
+            format,
+            decoded.bext.as_ref(),
+        )?;
     }
     let mut writer = WaveWriter::create(destination, format)?;
     if let Some(bext) = &decoded.bext {

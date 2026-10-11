@@ -283,7 +283,11 @@ mod tests {
             .read_frames(&mut samples)
             .unwrap();
         assert!(
-            samples.chunks_exact(2).any(|frame| frame[1] != 0.0),
+            samples
+                .as_chunks::<2>()
+                .0
+                .iter()
+                .any(|frame| frame[1] != 0.0),
             "Solo must not remove other delivered channels"
         );
         let _ = app.update(super::Message::Export);

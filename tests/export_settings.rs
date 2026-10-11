@@ -79,7 +79,7 @@ fn multichannel_matches_separate_float_render_in_editor_order() {
             .unwrap();
         assert!(
             mono.iter()
-                .zip(joined.chunks_exact(2))
+                .zip(joined.as_chunks::<2>().0.iter())
                 .all(|(sample, frame)| *sample == frame[channel])
         );
     }
@@ -160,6 +160,34 @@ fn layout_blocks_mixed_rates_grids_encodings_and_oversized_riff() {
             .unwrap_err()
             .to_string()
             .contains("RIFF")
+    );
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn a_pcm24_delivery_can_fit_when_its_private_float_intermediate_exceeds_riff() {
+    let (root, mut project, _) = profile_session(["pcm24", "pcm24"], false);
+    for source in &mut project.sources {
+        source.metadata.grid.frame_count = 1_100_000_000;
+    }
+    let settings = ExportSettings {
+        layout: ExportLayout::SeparateMono,
+        encoding: ExportEncoding::Pcm24,
+    };
+    settings.validate_layout(&project).unwrap();
+    assert_eq!(
+        settings.estimated_audio_bytes(&project).unwrap(),
+        6_600_000_000
+    );
+    assert!(
+        ExportSettings {
+            encoding: ExportEncoding::Float32,
+            ..settings
+        }
+        .validate_layout(&project)
+        .unwrap_err()
+        .to_string()
+        .contains("RIFF")
     );
     std::fs::remove_dir_all(root).unwrap();
 }
@@ -457,7 +485,7 @@ fn both_layouts_reject_obsolete_tampered_cancelled_or_colliding_deliveries() {
                     };
                     std::fs::write(staging.join(name), b"tampered").unwrap();
                 }
-                4 | 5 | 6 => {
+                4..=6 => {
                     let path = match kind {
                         4 => root.join("render/01-speaker-0.wav"),
                         5 => project.sources[0].path.clone(),
@@ -537,7 +565,7 @@ fn shared_integer_encodings_and_explicit_overrides_match_channel_for_channel() {
                 assert!(
                     separate
                         .iter()
-                        .zip(joined.chunks_exact(2))
+                        .zip(joined.as_chunks::<2>().0.iter())
                         .all(|(sample, frame)| *sample == frame[channel])
                 );
             }
@@ -640,7 +668,7 @@ fn selected_wav_channels_export_in_editor_order_with_compatible_broadcast_timing
         assert!(
             separate
                 .iter()
-                .zip(joined.chunks_exact(2))
+                .zip(joined.as_chunks::<2>().0.iter())
                 .all(|(s, f)| *s == f[i])
         );
     }

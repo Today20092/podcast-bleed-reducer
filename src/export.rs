@@ -36,6 +36,13 @@ pub fn prepare_export(
     let mut inputs = Vec::new();
     for (name, rendered) in plan {
         crate::prepared_analysis::check_cancelled(cancelled)?;
+        if fs::metadata(&rendered)?
+            .len()
+            .checked_sub(8)
+            .is_none_or(|bytes| bytes >= u64::from(u32::MAX))
+        {
+            return Err(RenderBlocker("The private float intermediate exceeds RIFF. Export with 24-bit PCM settings or use a shorter recording.".into()));
+        }
         let hash = crate::project::fingerprint_cancellable(&rendered, cancelled)?;
         let metadata = crate::SourceMetadata::read_cancellable(&rendered, cancelled)?;
         {

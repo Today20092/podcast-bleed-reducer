@@ -1,5 +1,5 @@
 use crate::{Project, RenderBlocker};
-use bwavfile::{Bext, CommonFormat, WaveFmt, WaveReader};
+use bwavfile::{Bext, CommonFormat, WaveFmt, WaveReader, WaveWriter};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -160,12 +160,20 @@ pub(crate) fn check_riff_size(
     format: WaveFmt,
     bext: Option<&Bext>,
 ) -> Result<(), RenderBlocker> {
-    let metadata = bext.map_or(0, |b| 610 + b.coding_history.len() as u64);
+    // Count the writer's JUNK reservation, format and BEXT chunks, including padding.
+    let mut header = std::io::Cursor::new(Vec::new());
+    {
+        let mut writer = WaveWriter::new(&mut header, format)?;
+        if let Some(bext) = bext {
+            writer.write_broadcast_metadata(bext)?;
+        }
+        writer.audio_frame_writer()?.end()?;
+    }
     if frames
         .checked_mul(u64::from(format.block_alignment))
-        .and_then(|v| v.checked_add(metadata))
-        .and_then(|v| v.checked_add(128))
-        .is_none_or(|v| v > u64::from(u32::MAX))
+        .and_then(|v| v.checked_add(v % 2))
+        .and_then(|v| v.checked_add(header.get_ref().len() as u64 - 8))
+        .is_none_or(|v| v >= u64::from(u32::MAX))
     {
         return Err(RenderBlocker(
             "WAV exceeds the supported 32-bit RIFF size. Use separate WAVs or a shorter recording."
