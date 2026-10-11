@@ -11,7 +11,7 @@ CleanSlate is an offline microphone bleed-reduction tool for multitrack podcasts
   <a href="Cargo.toml"><img alt="Desktop GUI: Iced 0.14" src="https://img.shields.io/badge/GUI-Iced%200.14-B5DFE8?style=for-the-badge&amp;labelColor=29626B"></a>
 </p>
 
-[Download](#download) · [Usage guide](docs/editor-workflow.md) · [Roadmap](ROADMAP.md) · [Contribute](CONTRIBUTING.md) · [Report an issue](https://github.com/Today20092/podcast-bleed-reducer/issues/new/choose)
+[Download](#download) · [Usage guide](docs/editor-workflow.md) · [How it works](docs/ownership-explained.md) · [Roadmap](ROADMAP.md) · [Contribute](CONTRIBUTING.md) · [Report an issue](https://github.com/Today20092/podcast-bleed-reducer/issues/new/choose)
 
 ## Download
 
@@ -40,11 +40,11 @@ Download the experimental application for your platform [above](#download), then
 
 The steps below describe the same workflow. Tracks must already be synchronized; CleanSlate does not align them for you.
 
-1. Import synchronized mono tracks, one dedicated microphone per speaker.
+1. Import synchronized mono tracks or selected channels from a multichannel WAV, one dedicated microphone per speaker.
 2. Listen in Original mode. Drag across a waveform and select everyone speaking; select nobody for room tone. Supply a solo example for each speaker and a room-tone example.
 3. Run Analyze. The learned models evaluate the whole recording, including sections you have not labeled.
 4. Compare Original, Processed and Removed. Adjust attenuation, gap duration and fades. Add labels or manual gain edits where needed.
-5. Save your editable project and create individual processed WAVs when the result sounds right.
+5. Save your editable project and export processed WAVs when the result sounds right. Choose separate mono files or one WAV with separate channels when the source rates and timing are compatible.
 
 See the [usage guide](docs/editor-workflow.md) for editing, reanalysis and export details.
 
@@ -65,13 +65,21 @@ Automatic attenuation uses S-shaped fades: gain starts changing gently, moves fa
 
 Manual gain points use straight lines between points and remain authoritative after reanalysis. See the [gain-envelope contract](docs/effective-envelopes.md) for how these layers combine. The aim is transparent attenuation without audible clicks, pumping or obvious ducking; confirm the result by listening. Existing renders made with the previous exponential fades need to be regenerated.
 
+## How it works
+
+Speech detection asks whether a microphone contains speech. Ownership asks whether its assigned person is speaking, rather than another person's voice entering that microphone as bleed.
+
+CleanSlate prepares 16 kHz analysis audio, measures speech and microphone relationships in 32 ms frames, and trains one logistic regression model per track from your reference labels. Each model combines those measurements with learned weights to estimate local ownership. Thresholds turn estimates into decisions over time; your labels specify the speaker set inside their exact ranges. Gain settings and manual edits then produce the curve used for audition and export.
+
+Read [How CleanSlate reduces microphone bleed](docs/ownership-explained.md) for the operation order, model inputs, how weights are learned, overlap and practical limits.
+
 ## Defaults and limits
 
 Analysis uses acoustic measurements and your speaker examples. It runs locally; there is no Nemotron runtime, download or analysis option.
 
 Supply aligned tracks; CleanSlate does not automatically synchronize them. Ownership scores are model estimates, not guaranteed accuracy. Review the result by listening, especially to Removed audio. Independent quality, listening and eight-speaker/two-hour Windows release qualification remain pending.
 
-The planned alpha remains experimental while independent quality, listening and long-session checks are pending. See the [evaluation tracker](.scratch/offline-supervised-editor/issues/14-independent-release-evaluation.md). The earlier Nemotron experiment is retained as a [research idea](docs/research/nemotron.md).
+The alpha remains experimental while independent quality, listening and long-session checks are pending. See the [evaluation tracker](.scratch/offline-supervised-editor/issues/14-independent-release-evaluation.md). The earlier Nemotron experiment is retained as a [research idea](docs/research/nemotron.md).
 
 ## Documentation and development
 
@@ -106,7 +114,7 @@ Report bugs, confusing controls, user-flow problems, listening results or featur
 - [Contributing](CONTRIBUTING.md): feedback, development workflow, optional AI skills and pull requests.
 - [Roadmap](ROADMAP.md): current priorities and ideas that need investigation.
 
-- [Ownership architecture](docs/ownership-explained.md): labels, acoustic inputs, bleed calibration, weights, logistic regression and gain decisions, with an illustrated workflow.
+- [How it works](docs/ownership-explained.md): speech detection, operation order, model inputs, learned weights and gain decisions, with an illustrated workflow.
 - [Developer guide](docs/development.md): builds and checks.
 - [Release guide](docs/releasing.md): Windows ZIPs, Mac application bundles, Linux AppImages, package checks and draft releases.
 - [GUI development](docs/gui-development.md): repeatable build-and-launch workflow using a separate project copy.

@@ -16,6 +16,8 @@ This collection contains seven Mermaid replacements and three audio-behavior tea
 
 All 63 source nodes and 65 directed connections are retained. Nothing was merged, collapsed or dropped. The ownership figure retains its three source groups. The two larger figures add labeled sections for readability. The historical records retain their Nemotron paths; they do not describe the current shipping architecture.
 
+The ownership figure groups learning, whole-recording use and gain. Measurement of labeled frames necessarily precedes model training, even though the full-recording measurement node appears in the second group. Follow the [ownership guide's calculation order](../ownership-explained.md#the-process) for the execution sequence. The historical attenuation and analysis figures preserve retired optional/required Nemotron proposals; the [current temporal policy](../temporal-ownership.md) defines today's thresholds and protection behavior.
+
 Node wording is unchanged apart from line wrapping. The attenuation diagram abbreviates the branch labels to “OWN SPEECH” and “ABSENT”; the complete original conditions remain in its text equivalent and accessible description. The relabel loops and dashed optional-evidence connection are retained.
 
 ## Audio-behavior teaching figures

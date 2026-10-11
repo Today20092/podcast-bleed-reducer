@@ -11,7 +11,7 @@ with explicit incomplete quality qualification. Tickets 14/15 still gate stable
 qualification; ticket 25 owns packaging and clean-machine checks. Historical native
 experiments remain only in Git history and `docs/research/nemotron.md`.
 
-This is the target architecture, not a description of completed code. Decision detail lives in the [map's child tickets](map.md); documentation findings live in [feasibility notes](feasibility-notes.md). Implementation begins after planning is settled.
+This specification records the original target and later owner amendments. The acoustic editor is implemented; earlier required/optional Nemotron, review-queue and fixed-gap passages below are superseded by those amendments. For a coherent description of current code, read the [ownership guide](../../docs/ownership-explained.md), [model recipe](../../docs/supervised-ownership-models.md), [temporal policy](../../docs/temporal-ownership.md) and [ADR-0006](../../docs/adr/0006-offline-supervised-editable-envelopes.md). Decision detail lives in the [map's child tickets](map.md); documentation findings live in [feasibility notes](feasibility-notes.md). Independent release qualification remains pending.
 
 ## Product and release scope
 
