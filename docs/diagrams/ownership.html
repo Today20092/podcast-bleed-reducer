@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How examples become an editable gain curve · CleanSlate</title>
+<style>
+* { box-sizing: border-box; }
+body { margin: 0; padding: 24px; background: #202226; color: #E4E7EB; font-family: 'Segoe UI', Arial, sans-serif; }
+.frame { max-width: 960px; margin: auto; }
+.diagram-container { width: 100%; overflow-x: auto; }
+svg { width: 100%; min-width: 960px; display: block; font-family: 'Segoe UI', Arial, sans-serif; }
+details { margin-top: 24px; line-height: 1.6; }
+summary { cursor: pointer; color: #779BC7; }
+@media print { body { padding: 0; } .diagram-container { overflow-x: visible; } svg { min-width: 0; } }
+</style>
+</head>
+<body>
+<main class="frame">
+<div class="diagram-container">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 720" role="img" aria-labelledby="ownership-title ownership-desc">
+<title id="ownership-title">How examples become an editable gain curve</title>
+<desc id="ownership-desc">Label who is speaking and room tone leads to Learn noise and bleed relationships; Learn noise and bleed relationships leads to Train one ownership model per track; Measure audio every 32 ms leads to Estimate ownership for each track; Estimate ownership for each track leads to Decide what to preserve or attenuate; Apply attenuation, gap handling and fades leads to Apply your manual edits and protection; Apply your manual edits and protection leads to Listen · Save · Export; Train one ownership model per track leads to Estimate ownership for each track; Decide what to preserve or attenuate leads to Apply attenuation, gap handling and fades.</desc>
+<defs><marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><path d="M 0 0 L 8 3 L 0 6 Z" fill="#ABB4C0"/></marker></defs>
+<rect width="960" height="720" fill="#202226"/>
+<text x="40" y="44" fill="#E4E7EB" font-size="24" font-weight="600">How examples become an editable gain curve</text>
+<text x="40" y="68" fill="#ABB4C0" font-size="11" letter-spacing="1">CLEANSLATE · ARCHITECTURE</text>
+<rect x="40" y="80" width="880" height="156" rx="8" fill="#26292E" stroke="#4A505A" stroke-dasharray="4 4"/><text x="56" y="100" fill="#ABB4C0" font-size="11" letter-spacing="1">01 / LEARN FROM YOUR EXAMPLES</text>
+<rect x="40" y="280" width="880" height="156" rx="8" fill="#26292E" stroke="#4A505A" stroke-dasharray="4 4"/><text x="56" y="300" fill="#ABB4C0" font-size="11" letter-spacing="1">02 / CHECK THE WHOLE RECORDING</text>
+<rect x="40" y="480" width="880" height="156" rx="8" fill="#26292E" stroke="#4A505A" stroke-dasharray="4 4"/><text x="336" y="500" fill="#ABB4C0" font-size="11" letter-spacing="1">03 / APPLY GAIN AND LISTEN</text>
+<path data-source="L" data-target="C" d="M 288 164 L 368 164" fill="none" stroke="#ABB4C0" stroke-width="1.5" marker-end="url(#arrow)"/>
+<path data-source="C" data-target="M" d="M 592 164 L 672 164" fill="none" stroke="#ABB4C0" stroke-width="1.5" marker-end="url(#arrow)"/>
+<path data-source="A" data-target="P" d="M 288 364 L 368 364" fill="none" stroke="#ABB4C0" stroke-width="1.5" marker-end="url(#arrow)"/>
+<path data-source="P" data-target="D" d="M 592 364 L 672 364" fill="none" stroke="#ABB4C0" stroke-width="1.5" marker-end="url(#arrow)"/>
+<path data-source="G" data-target="E" d="M 288 564 L 368 564" fill="none" stroke="#ABB4C0" stroke-width="1.5" marker-end="url(#arrow)"/>
+<path data-source="E" data-target="O" d="M 592 564 L 672 564" fill="none" stroke="#ABB4C0" stroke-width="1.5" marker-end="url(#arrow)"/>
+<path data-source="M" data-target="P" d="M 784 208 L 784 252 Q 784 260 776 260 L 488 260 Q 480 260 480 268 L 480 320" fill="none" stroke="#ABB4C0" stroke-width="1.5" marker-end="url(#arrow)"/>
+<path data-source="D" data-target="G" d="M 784 408 L 784 452 Q 784 460 776 460 L 184 460 Q 176 460 176 468 L 176 520" fill="none" stroke="#ABB4C0" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+<g data-node="L"><rect x="64" y="120" width="224" height="88" rx="6" fill="#202226" stroke="#7E8998" stroke-width="1"/><text x="176" text-anchor="middle" fill="#E4E7EB" font-size="16" font-weight="600"><tspan x="176" y="159">Label who is speaking</tspan><tspan x="176" y="179">and room tone</tspan></text></g>
+<g data-node="C"><rect x="368" y="120" width="224" height="88" rx="6" fill="#202226" stroke="#7E8998" stroke-width="1"/><text x="480" text-anchor="middle" fill="#E4E7EB" font-size="16" font-weight="600"><tspan x="480" y="159">Learn noise</tspan><tspan x="480" y="179">and bleed relationships</tspan></text></g>
+<g data-node="M"><rect x="672" y="120" width="224" height="88" rx="6" fill="#202226" stroke="#7E8998" stroke-width="1"/><text x="784" text-anchor="middle" fill="#E4E7EB" font-size="16" font-weight="600"><tspan x="784" y="159">Train one ownership</tspan><tspan x="784" y="179">model per track</tspan></text></g>
+<g data-node="A"><rect x="64" y="320" width="224" height="88" rx="6" fill="#202226" stroke="#7E8998" stroke-width="1"/><text x="176" text-anchor="middle" fill="#E4E7EB" font-size="16" font-weight="600"><tspan x="176" y="359">Measure audio</tspan><tspan x="176" y="379">every 32 ms</tspan></text></g>
+<g data-node="P"><rect x="368" y="320" width="224" height="88" rx="6" fill="#2B3A4D" stroke="#779BC7" stroke-width="2"/><text x="480" text-anchor="middle" fill="#E4E7EB" font-size="16" font-weight="600"><tspan x="480" y="359">Estimate ownership</tspan><tspan x="480" y="379">for each track</tspan></text></g>
+<g data-node="D"><rect x="672" y="320" width="224" height="88" rx="6" fill="#202226" stroke="#7E8998" stroke-width="1"/><text x="784" text-anchor="middle" fill="#E4E7EB" font-size="16" font-weight="600"><tspan x="784" y="359">Decide what to</tspan><tspan x="784" y="379">preserve or attenuate</tspan></text></g>
+<g data-node="G"><rect x="64" y="520" width="224" height="88" rx="6" fill="#202226" stroke="#7E8998" stroke-width="1"/><text x="176" text-anchor="middle" fill="#E4E7EB" font-size="16" font-weight="600"><tspan x="176" y="559">Apply attenuation,</tspan><tspan x="176" y="579">gap handling and fades</tspan></text></g>
+<g data-node="E"><rect x="368" y="520" width="224" height="88" rx="6" fill="#2B3A4D" stroke="#779BC7" stroke-width="2"/><text x="480" text-anchor="middle" fill="#E4E7EB" font-size="16" font-weight="600"><tspan x="480" y="559">Apply your manual</tspan><tspan x="480" y="579">edits and protection</tspan></text></g>
+<g data-node="O"><rect x="672" y="520" width="224" height="88" rx="20" fill="#202226" stroke="#7E8998" stroke-width="1"/><text x="784" text-anchor="middle" fill="#E4E7EB" font-size="16" font-weight="600"><tspan x="784" y="569">Listen · Save · Export</tspan></text></g>
+<line x1="40" y1="672" x2="920" y2="672" stroke="#4A505A"/><text x="40" y="696" font-size="11" fill="#ABB4C0">Arrows show sequence or evidence flow · Blue: key processing step</text>
+</svg>
+</div>
+<details><summary>Text equivalent</summary><ul><li>Label who is speaking and room tone → Learn noise and bleed relationships</li><li>Learn noise and bleed relationships → Train one ownership model per track</li><li>Measure audio every 32 ms → Estimate ownership for each track</li><li>Estimate ownership for each track → Decide what to preserve or attenuate</li><li>Apply attenuation, gap handling and fades → Apply your manual edits and protection</li><li>Apply your manual edits and protection → Listen · Save · Export</li><li>Train one ownership model per track → Estimate ownership for each track</li><li>Decide what to preserve or attenuate → Apply attenuation, gap handling and fades</li></ul></details>
+</main>
+</body>
+</html>

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 720" role="img" aria-labelledby="acoustic-evidence-title acoustic-evidence-desc" id="acoustic-evidence-root">
+<title id="acoustic-evidence-title">Separate expected bleed from unexplained sound</title>
+<desc id="acoustic-evidence-desc">Your solo and room-tone examples leads to Learn noise levels and microphone bleed relationships; Audio from the synchronized tracks leads to Measure levels and how the signals match; Learn noise levels and microphone bleed relationships leads to Estimate expected bleed and sound it does not explain; Measure levels and how the signals match leads to Estimate expected bleed and sound it does not explain; Estimate expected bleed and sound it does not explain leads to Give these measurements to the ownership model.</desc>
+<defs>
+      <style>#acoustic-evidence-root { color: #E4E7EB; font-family: 'Segoe UI', Arial, sans-serif; }
+      #acoustic-evidence-root .diagram-container { width: 100%; overflow-x: auto; }
+      #acoustic-evidence-root details { margin-top: 24px; line-height: 1.6; }
+      #acoustic-evidence-root summary { cursor: pointer; color: #779BC7; }
+      #acoustic-evidence-root .diagram-container { overflow-x: visible; }</style><marker id="acoustic-evidence-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><path d="M 0 0 L 8 3 L 0 6 Z" fill="#ABB4C0"/></marker></defs>
+<rect width="960" height="720" fill="#202226"/>
+<text x="40" y="44" fill="#E4E7EB" font-size="24" font-weight="600">Separate expected bleed from unexplained sound</text>
+<text x="40" y="68" fill="#ABB4C0" font-size="11" letter-spacing="1">CLEANSLATE · ARCHITECTURE</text>
+
+<path data-source="L" data-target="C" d="M 232 200 L 232 280" fill="none" stroke="#ABB4C0" stroke-width="1.5" marker-end="url(#acoustic-evidence-arrow)"/>
+<path data-source="A" data-target="M" d="M 728 200 L 728 280" fill="none" stroke="#ABB4C0" stroke-width="1.5" marker-end="url(#acoustic-evidence-arrow)"/>
+<path data-source="C" data-target="E" d="M 232 368 L 232 400 Q 232 408 240 408 L 416 408 Q 424 408 424 416 L 424 448" fill="none" stroke="#ABB4C0" stroke-width="1.5" marker-end="url(#acoustic-evidence-arrow)"/>
+<path data-source="M" data-target="E" d="M 728 368 L 728 400 Q 728 408 720 408 L 544 408 Q 536 408 536 416 L 536 448" fill="none" stroke="#ABB4C0" stroke-width="1.5" marker-end="url(#acoustic-evidence-arrow)"/>
+<path data-source="E" data-target="O" d="M 480 536 L 480 584" fill="none" stroke="#ABB4C0" stroke-width="1.5" marker-end="url(#acoustic-evidence-arrow)"/>
+
+<g data-node="L"><rect x="64" y="112" width="336" height="88" rx="6" fill="#202226" stroke="#7E8998" stroke-width="1"/><text x="232" text-anchor="middle" fill="#E4E7EB" font-size="16" font-weight="600"><tspan x="232" y="161">Your solo and room-tone examples</tspan></text></g>
+<g data-node="C"><rect x="64" y="280" width="336" height="88" rx="6" fill="#202226" stroke="#7E8998" stroke-width="1"/><text x="232" text-anchor="middle" fill="#E4E7EB" font-size="16" font-weight="600"><tspan x="232" y="319">Learn noise levels</tspan><tspan x="232" y="339">and microphone bleed relationships</tspan></text></g>
+<g data-node="A"><rect x="560" y="112" width="336" height="88" rx="6" fill="#202226" stroke="#7E8998" stroke-width="1"/><text x="728" text-anchor="middle" fill="#E4E7EB" font-size="16" font-weight="600"><tspan x="728" y="161">Audio from the synchronized tracks</tspan></text></g>
+<g data-node="M"><rect x="560" y="280" width="336" height="88" rx="6" fill="#202226" stroke="#7E8998" stroke-width="1"/><text x="728" text-anchor="middle" fill="#E4E7EB" font-size="16" font-weight="600"><tspan x="728" y="319">Measure levels</tspan><tspan x="728" y="339">and how the signals match</tspan></text></g>
+<g data-node="E"><rect x="312" y="448" width="336" height="88" rx="6" fill="#2B3A4D" stroke="#779BC7" stroke-width="2"/><text x="480" text-anchor="middle" fill="#E4E7EB" font-size="16" font-weight="600"><tspan x="480" y="487">Estimate expected bleed</tspan><tspan x="480" y="507">and sound it does not explain</tspan></text></g>
+<g data-node="O"><rect x="312" y="584" width="336" height="72" rx="6" fill="#202226" stroke="#7E8998" stroke-width="1"/><text x="480" text-anchor="middle" fill="#E4E7EB" font-size="16" font-weight="600"><tspan x="480" y="615">Give these measurements</tspan><tspan x="480" y="635">to the ownership model</tspan></text></g>
+<line x1="40" y1="672" x2="920" y2="672" stroke="#4A505A"/><text x="40" y="696" font-size="11" fill="#ABB4C0">Arrows show sequence or evidence flow · Blue: key processing step</text>
+</svg>

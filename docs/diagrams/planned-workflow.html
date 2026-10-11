@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The confirmed editing workflow · CleanSlate</title>
+<style>
+* { box-sizing: border-box; }
+body { margin: 0; padding: 24px; background: #202226; color: #E4E7EB; font-family: 'Segoe UI', Arial, sans-serif; }
+.frame { max-width: 1200px; margin: auto; }
+.diagram-container { width: 100%; overflow-x: auto; }
+svg { width: 100%; min-width: 1200px; display: block; font-family: 'Segoe UI', Arial, sans-serif; }
+details { margin-top: 24px; line-height: 1.6; }
+summary { cursor: pointer; color: #779BC7; }
+@media print { body { padding: 0; } .diagram-container { overflow-x: visible; } svg { min-width: 0; } }
+</style>
+</head>
+<body>
+<main class="frame">
+<div class="diagram-container">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 520" role="img" aria-labelledby="planned-workflow-title planned-workflow-desc">
+<title id="planned-workflow-title">The confirmed editing workflow</title>
+<desc id="planned-workflow-desc">Historical proposal: Open tracks leads to Listen in Original; Listen in Original leads to Drag and label a few clear examples; Drag and label a few clear examples leads to Click Analyze; Click Analyze leads to Listen in Processed and Removed; Listen in Processed and Removed leads to Adjust attenuation and fades; Adjust attenuation and fades leads to Export processed tracks.</desc>
+<defs><marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><path d="M 0 0 L 8 3 L 0 6 Z" fill="#ABB4C0"/></marker></defs>
+<rect width="1200" height="520" fill="#202226"/>
+<text x="40" y="44" fill="#E4E7EB" font-size="24" font-weight="600">The confirmed editing workflow</text>
+<text x="40" y="68" fill="#ABB4C0" font-size="11" letter-spacing="1">HISTORICAL DESIGN RECORD · WORKFLOW</text>
+
+<path data-source="A" data-target="B" d="M 264 160 L 336 160" fill="none" stroke="#ABB4C0" stroke-width="1.5" marker-end="url(#arrow)"/>
+<path data-source="B" data-target="C" d="M 560 160 L 632 160" fill="none" stroke="#ABB4C0" stroke-width="1.5" marker-end="url(#arrow)"/>
+<path data-source="C" data-target="D" d="M 856 160 L 928 160" fill="none" stroke="#ABB4C0" stroke-width="1.5" marker-end="url(#arrow)"/>
+<path data-source="D" data-target="E" d="M 1040 208 L 1040 328" fill="none" stroke="#ABB4C0" stroke-width="1.5" marker-end="url(#arrow)"/>
+<path data-source="E" data-target="F" d="M 928 376 L 856 376" fill="none" stroke="#ABB4C0" stroke-width="1.5" marker-end="url(#arrow)"/>
+<path data-source="F" data-target="G" d="M 632 376 L 560 376" fill="none" stroke="#ABB4C0" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+<g data-node="A"><rect x="40" y="112" width="224" height="96" rx="6" fill="#202226" stroke="#7E8998" stroke-width="1"/><text x="152" text-anchor="middle" fill="#E4E7EB" font-size="16" font-weight="600"><tspan x="152" y="165">Open tracks</tspan></text></g>
+<g data-node="B"><rect x="336" y="112" width="224" height="96" rx="6" fill="#202226" stroke="#7E8998" stroke-width="1"/><text x="448" text-anchor="middle" fill="#E4E7EB" font-size="16" font-weight="600"><tspan x="448" y="165">Listen in Original</tspan></text></g>
+<g data-node="C"><rect x="632" y="112" width="224" height="96" rx="6" fill="#202226" stroke="#7E8998" stroke-width="1"/><text x="744" text-anchor="middle" fill="#E4E7EB" font-size="16" font-weight="600"><tspan x="744" y="155">Drag and label a few</tspan><tspan x="744" y="175">clear examples</tspan></text></g>
+<g data-node="D"><rect x="928" y="112" width="224" height="96" rx="6" fill="#2B3A4D" stroke="#779BC7" stroke-width="2"/><text x="1040" text-anchor="middle" fill="#E4E7EB" font-size="16" font-weight="600"><tspan x="1040" y="165">Click Analyze</tspan></text></g>
+<g data-node="E"><rect x="928" y="328" width="224" height="96" rx="6" fill="#202226" stroke="#7E8998" stroke-width="1"/><text x="1040" text-anchor="middle" fill="#E4E7EB" font-size="16" font-weight="600"><tspan x="1040" y="371">Listen in Processed and</tspan><tspan x="1040" y="391">Removed</tspan></text></g>
+<g data-node="F"><rect x="632" y="328" width="224" height="96" rx="6" fill="#202226" stroke="#7E8998" stroke-width="1"/><text x="744" text-anchor="middle" fill="#E4E7EB" font-size="16" font-weight="600"><tspan x="744" y="371">Adjust attenuation and</tspan><tspan x="744" y="391">fades</tspan></text></g>
+<g data-node="G"><rect x="336" y="328" width="224" height="96" rx="6" fill="#202226" stroke="#7E8998" stroke-width="1"/><text x="448" text-anchor="middle" fill="#E4E7EB" font-size="16" font-weight="600"><tspan x="448" y="381">Export processed tracks</tspan></text></g>
+<line x1="40" y1="472" x2="1160" y2="472" stroke="#4A505A"/><text x="40" y="496" font-size="11" fill="#ABB4C0">Arrows show sequence or evidence flow · Blue: key processing step · Historical proposal</text>
+</svg>
+</div>
+<details><summary>Text equivalent</summary><ul><li>Open tracks → Listen in Original</li><li>Listen in Original → Drag and label a few clear examples</li><li>Drag and label a few clear examples → Click Analyze</li><li>Click Analyze → Listen in Processed and Removed</li><li>Listen in Processed and Removed → Adjust attenuation and fades</li><li>Adjust attenuation and fades → Export processed tracks</li></ul></details>
+</main>
+</body>
+</html>

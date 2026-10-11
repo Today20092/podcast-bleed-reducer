@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>From aligned tracks to processed WAVs · CleanSlate</title>
+<style>
+* { box-sizing: border-box; }
+body { margin: 0; padding: 24px; background: #202226; color: #E4E7EB; font-family: 'Segoe UI', Arial, sans-serif; }
+.frame { max-width: 1136px; margin: auto; }
+.diagram-container { width: 100%; overflow-x: auto; }
+svg { width: 100%; min-width: 1136px; display: block; font-family: 'Segoe UI', Arial, sans-serif; }
+details { margin-top: 24px; line-height: 1.6; }
+summary { cursor: pointer; color: #779BC7; }
+@media print { body { padding: 0; } .diagram-container { overflow-x: visible; } svg { min-width: 0; } }
+</style>
+</head>
+<body>
+<main class="frame">
+<div class="diagram-container">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1136 368" role="img" aria-labelledby="workflow-title workflow-desc">
+<title id="workflow-title">From aligned tracks to processed WAVs</title>
+<desc id="workflow-desc">Import Aligned tracks leads to Label Solo speech + room tone; Label Solo speech + room tone leads to Analyze; Analyze leads to Listen Adjust gain; Listen Adjust gain leads to Save project Render WAVs; Listen Adjust gain leads to Analyze (Relabel).</desc>
+<defs><marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><path d="M 0 0 L 8 3 L 0 6 Z" fill="#ABB4C0"/></marker></defs>
+<rect width="1136" height="368" fill="#202226"/>
+<text x="40" y="44" fill="#E4E7EB" font-size="24" font-weight="600">From aligned tracks to processed WAVs</text>
+<text x="40" y="68" fill="#ABB4C0" font-size="11" letter-spacing="1">CLEANSLATE · WORKFLOW</text>
+
+<path data-source="tracks" data-target="examples" d="M 224 160 L 256 160" fill="none" stroke="#ABB4C0" stroke-width="1.5" marker-end="url(#arrow)"/>
+<path data-source="examples" data-target="analyze" d="M 440 160 L 472 160" fill="none" stroke="#ABB4C0" stroke-width="1.5" marker-end="url(#arrow)"/>
+<path data-source="analyze" data-target="listen" d="M 656 160 L 688 160" fill="none" stroke="#ABB4C0" stroke-width="1.5" marker-end="url(#arrow)"/>
+<path data-source="listen" data-target="save" d="M 872 160 L 904 160" fill="none" stroke="#ABB4C0" stroke-width="1.5" marker-end="url(#arrow)"/>
+<path data-source="listen" data-target="analyze" d="M 780 208 L 780 264 Q 780 272 772 272 L 572 272 Q 564 272 564 264 L 564 208" fill="none" stroke="#ABB4C0" stroke-width="1.5" marker-end="url(#arrow)"/>
+<rect x="638.1" y="242" width="67.80000000000001" height="20" rx="2" fill="#202226"/><text x="672" y="256" text-anchor="middle" font-size="11" fill="#E4E7EB" letter-spacing=".5">RELABEL</text>
+<g data-node="tracks"><rect x="40" y="112" width="184" height="96" rx="6" fill="#202226" stroke="#7E8998" stroke-width="1"/><text x="132" text-anchor="middle" fill="#E4E7EB" font-size="16" font-weight="600"><tspan x="132" y="155">Import</tspan><tspan x="132" y="175">Aligned tracks</tspan></text></g>
+<g data-node="examples"><rect x="256" y="112" width="184" height="96" rx="6" fill="#202226" stroke="#7E8998" stroke-width="1"/><text x="348" text-anchor="middle" fill="#E4E7EB" font-size="16" font-weight="600"><tspan x="348" y="145">Label</tspan><tspan x="348" y="165">Solo speech + room</tspan><tspan x="348" y="185">tone</tspan></text></g>
+<g data-node="analyze"><rect x="472" y="112" width="184" height="96" rx="6" fill="#2B3A4D" stroke="#779BC7" stroke-width="2"/><text x="564" text-anchor="middle" fill="#E4E7EB" font-size="16" font-weight="600"><tspan x="564" y="165">Analyze</tspan></text></g>
+<g data-node="listen"><rect x="688" y="112" width="184" height="96" rx="6" fill="#202226" stroke="#7E8998" stroke-width="1"/><text x="780" text-anchor="middle" fill="#E4E7EB" font-size="16" font-weight="600"><tspan x="780" y="155">Listen</tspan><tspan x="780" y="175">Adjust gain</tspan></text></g>
+<g data-node="save"><rect x="904" y="112" width="184" height="96" rx="6" fill="#202226" stroke="#7E8998" stroke-width="1"/><text x="996" text-anchor="middle" fill="#E4E7EB" font-size="16" font-weight="600"><tspan x="996" y="155">Save project</tspan><tspan x="996" y="175">Render WAVs</tspan></text></g>
+<line x1="40" y1="320" x2="1096" y2="320" stroke="#4A505A"/><text x="40" y="344" font-size="11" fill="#ABB4C0">Arrows show sequence or evidence flow · Blue: key processing step</text>
+</svg>
+</div>
+<details><summary>Text equivalent</summary><ul><li>Import Aligned tracks → Label Solo speech + room tone</li><li>Label Solo speech + room tone → Analyze</li><li>Analyze → Listen Adjust gain</li><li>Listen Adjust gain → Save project Render WAVs</li><li>Listen Adjust gain → Analyze (Relabel)</li></ul></details>
+</main>
+</body>
+</html>

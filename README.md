@@ -34,16 +34,9 @@ These are experimental alpha packages. Windows builds are unsigned. Mac builds u
 
 CleanSlate is in development. While downloads remain unpublished, use the [build guide](docs/development.md) to build and open the editor from this checkout.
 
-```mermaid
-flowchart LR
-    tracks["Import<br/>Aligned tracks"]
-    examples["Label<br/>Solo speech + room tone"]
-    analyze["Analyze"]
-    listen["Listen<br/>Adjust gain"]
-    save["Save project<br/>Render WAVs"]
-    tracks --> examples --> analyze --> listen --> save
-    listen -->|"Relabel"| analyze
-```
+[![From aligned tracks to processed WAVs.](docs/diagrams/workflow.svg)](docs/diagrams/workflow.svg)
+
+[Accessible diagram and text equivalent](docs/diagrams/workflow.html).
 
 The steps below describe the same workflow. Tracks must already be synchronized; CleanSlate does not align them for you.
 
@@ -98,7 +91,7 @@ All coding for this project is done with AI agents using GPT Astra and GPT 6.1 S
 
 ### Guides
 
-- [Ownership architecture](docs/ownership-explained.md): labels, acoustic inputs, bleed calibration, weights, logistic regression and gain decisions, with a Mermaid diagram.
+- [Ownership architecture](docs/ownership-explained.md): labels, acoustic inputs, bleed calibration, weights, logistic regression and gain decisions, with an illustrated workflow.
 - [Developer guide](docs/development.md): builds and checks.
 - [Release guide](docs/releasing.md): Windows ZIPs, Mac application bundles, Linux AppImages, package checks and draft releases.
 - [GUI development](docs/gui-development.md): repeatable build-and-launch workflow using a separate project copy.

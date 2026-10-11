@@ -2,6 +2,10 @@
 
 Status: accepted implementation plan, 2026-10-08
 
+2026-10-11 owner extension: [ticket 27](../offline-supervised-editor/issues/27-documentation-diagrams.md)
+replaces all seven Mermaid documentation diagrams with GUI-matched SVGs and
+accessible HTML sources. Static checks pass; browser review remains pending.
+
 2026-10-10 owner extension: [ticket 26](../offline-supervised-editor/issues/26-cross-platform-release-packages.md)
 is claimed for future Windows/macOS/Linux packages and a README download table.
 Draft/manual publication and the existing stable qualification gates remain active.

@@ -16,33 +16,9 @@ The requested interaction is ordinary waveform click to seek, drag to select, th
 
 This diagram describes the accepted pipeline in [spec.md](spec.md), not a quality guarantee. References teach a small per-recording classifier; they do not fine-tune Nemotron.
 
-```mermaid
-flowchart TD
-    A[Original synchronized mono tracks] --> B[Validate sources and shared timing]
-    B --> C[Cached 16 kHz analysis audio]
-    B --> W[Cached display waveforms]
-    C --> D[Nemotron speaker activity]
-    C --> E[Per-track speech and acoustic measurements]
-    H[Human solo, overlap and room-tone labels] --> M[Map anonymous voices to assigned speakers]
-    D --> M
-    H --> F[Learn noise floors and directed bleed relationships]
-    E --> F
-    M --> L[Train an independent ownership classifier per track]
-    F --> L
-    H --> L
-    L --> P[Estimate whether each track's own speaker is talking]
-    P --> T[Choose continuous regions with human-label constraints]
-    T --> O[Own speech or overlap: preserve]
-    T --> N[Supported bleed or no speech: attenuate]
-    T --> U[Missing or conflicting evidence: preserve and flag for review]
-    O --> G[Automatic gain envelopes with padding and finite fades]
-    N --> G
-    U --> G
-    G --> V[Compose protected manual gain edits]
-    V --> R[One effective envelope for display, audition and export]
-    B --> S[Original native-rate samples]
-    S --> R
-```
+[![The original supervised editor proposal.](../../docs/diagrams/historical-analysis.svg)](../../docs/diagrams/historical-analysis.svg)
+
+[Accessible diagram and text equivalent](../../docs/diagrams/historical-analysis.html).
 
 A Speaker 1 solo label tells the system that Speaker 1 is active and the other assigned speakers are not active in that interval. Comparing all microphones there teaches how Speaker 1 sounds directly and how that voice leaks into the others. Room tone teaches background levels. Overlap allows multiple owners simultaneously. These relationships help classify the rest of the recording, but microphone movement, quiet speech, similar voices and ambiguous speaker mapping can make a new interval differ from the examples.
 
@@ -64,16 +40,9 @@ Source pointers: `src/waveform.rs` cache loading, `src/audition.rs` preparation,
 
 This is a recommendation for the interview, not an accepted UI specification. Keep one workspace, with a short status and the next useful action instead of a staged wizard.
 
-```mermaid
-flowchart LR
-    A[Open or import tracks] --> B[See timing status and listen in Original]
-    B --> C[Drag and label solo examples and room tone]
-    C --> D[Analyze]
-    D --> E[Compare Original, Processed and Removed]
-    E --> F[Correct labels or edit gain]
-    F --> G[Save project and export]
-    F -->|Labels changed| D
-```
+[![The proposed review and correction loop.](../../docs/diagrams/historical-workflow.svg)](../../docs/diagrams/historical-workflow.svg)
+
+[Accessible diagram and text equivalent](../../docs/diagrams/historical-workflow.html).
 
 Equal durations are compatible with synchronization, but equal-length files can have different start offsets. Timing metadata can provide additional evidence; missing metadata leaves alignment unverified under the current contract. Automatic alignment is outside the accepted release scope. Whether unverified timing should block Original audition separately from analysis/export is an open decision.
 

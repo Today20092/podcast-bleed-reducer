@@ -20,41 +20,9 @@ All three tracks can contain speech. Only Track 3 owns the speech in this exampl
 
 ## The process
 
-```mermaid
-flowchart TD
-    subgraph LEARN["1 · Learn from your examples"]
-        direction LR
-        L["Label who is speaking<br/>and room tone"] --> C["Learn noise<br/>and bleed relationships"]
-        C --> M["Train one ownership<br/>model per track"]
-    end
+[![How examples become an editable gain curve.](diagrams/ownership.svg)](diagrams/ownership.svg)
 
-    subgraph ANALYZE["2 · Check the whole recording"]
-        direction LR
-        A["Measure audio<br/>every 32 ms"] --> P["Estimate ownership<br/>for each track"]
-        P --> D["Decide what to<br/>preserve or attenuate"]
-    end
-
-    subgraph SOUND["3 · Apply gain and listen"]
-        direction LR
-        G["Apply attenuation,<br/>gap handling and fades"] --> E["Apply your manual<br/>edits and protection"]
-        E --> O(["Listen · Save · Export"])
-    end
-
-    M --> P
-    D --> G
-
-    classDef learn fill:#493267,stroke:#C4A7E7,color:#FFFFFF,stroke-width:2px
-    classDef analyze fill:#245968,stroke:#B5DFE8,color:#FFFFFF,stroke-width:2px
-    classDef gain fill:#75512B,stroke:#F4C98B,color:#FFFFFF,stroke-width:2px
-    classDef output fill:#246732,stroke:#A2FFB0,color:#FFFFFF,stroke-width:2px
-    class L,C,M learn
-    class A,P,D analyze
-    class G,E gain
-    class O output
-    style LEARN fill:#20262E,stroke:#6B7280,color:#E5E7EB
-    style ANALYZE fill:#20262E,stroke:#6B7280,color:#E5E7EB
-    style SOUND fill:#20262E,stroke:#6B7280,color:#E5E7EB
-```
+[Accessible diagram and text equivalent](diagrams/ownership.html).
 
 ### 1. You supply examples
 

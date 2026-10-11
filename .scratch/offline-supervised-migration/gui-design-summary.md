@@ -38,15 +38,9 @@ An evaluation must distinguish probability/classifier failures from a later temp
 
 Opening tracks loads reusable waveforms and starts playback preparation automatically. You can listen in Original before labeling or analysis. Saving the project is available throughout; exporting requires current analysis.
 
-```mermaid
-flowchart LR
-    A[Open tracks] --> B[Listen in Original]
-    B --> C[Drag and label a few clear examples]
-    C --> D[Click Analyze]
-    D --> E[Listen in Processed and Removed]
-    E --> F[Adjust attenuation and fades]
-    F --> G[Export processed tracks]
-```
+[![The confirmed editing workflow.](../../docs/diagrams/planned-workflow.svg)](../../docs/diagrams/planned-workflow.svg)
+
+[Accessible diagram and text equivalent](../../docs/diagrams/planned-workflow.html).
 
 If detection is wrong, correct or add a reference and Analyze again. If detection is right but the reduction sounds too strong or weak, adjust gain/fades and listen again without retraining.
 
@@ -54,19 +48,9 @@ If detection is wrong, correct or add a reference and Analyze again. If detectio
 
 The proposed acoustic-first experiment learns from your examples, then estimates each speaker's activity throughout the recording. It does not require you to label every speaking interval.
 
-```mermaid
-flowchart TD
-    A[Your solo, overlap and room-tone examples] --> C[Learn each speaker's direct sound, bleed and background]
-    B[Measure sound on every microphone] --> C
-    C --> D[Estimate whether each track's own speaker is talking]
-    N[Optional Nemotron speaker-activity evidence] -.-> D
-    D --> E{For each track and time interval}
-    E -->|Own speaker talking| F[Keep original level]
-    E -->|Own speaker absent| G[Reduce by your attenuation setting]
-    F --> H[Add smooth fades and apply manual gain edits]
-    G --> H
-    H --> I[Play or export original audio through these gain curves]
-```
+[![The proposed supervised attenuation policy.](../../docs/diagrams/planned-attenuation.svg)](../../docs/diagrams/planned-attenuation.svg)
+
+[Accessible diagram and text equivalent](../../docs/diagrams/planned-attenuation.html).
 
 For example, a Speaker 1 solo reference teaches what Speaker 1 sounds like on their own microphone and how much of that voice appears on microphones 2 and 3. Later, hearing that same leakage pattern on microphone 2 should support reducing track 2 when Speaker 2 is absent. Overlap permits multiple tracks to remain at their original level.
 

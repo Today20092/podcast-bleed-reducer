@@ -26,21 +26,9 @@ A more detailed filter can account for a small change in the sound as it travels
 
 Only solo references fit the bleed relationships. During overlap, the receiving microphone can contain its own speaker too. That makes it unsuitable as a pure bleed example. Overlap labels still teach the ownership model.
 
-```mermaid
-flowchart TD
-    L["Your solo and room-tone examples"] --> C["Learn noise levels<br/>and microphone bleed relationships"]
-    A["Audio from the synchronized tracks"] --> M["Measure levels<br/>and how the signals match"]
-    C --> E["Estimate expected bleed<br/>and sound it does not explain"]
-    M --> E
-    E --> O["Give these measurements<br/>to the ownership model"]
+[![Separate expected bleed from unexplained sound.](diagrams/acoustic-evidence.svg)](diagrams/acoustic-evidence.svg)
 
-    classDef examples fill:#493267,stroke:#C4A7E7,color:#FFFFFF,stroke-width:2px
-    classDef measurements fill:#245968,stroke:#B5DFE8,color:#FFFFFF,stroke-width:2px
-    classDef output fill:#246732,stroke:#A2FFB0,color:#FFFFFF,stroke-width:2px
-    class L,C examples
-    class A,M,E measurements
-    class O output
-```
+[Accessible diagram and text equivalent](diagrams/acoustic-evidence.html).
 
 ## What it measures in the rest of the recording
 
