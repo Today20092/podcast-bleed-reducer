@@ -1,6 +1,6 @@
 # Package future desktop releases and add direct downloads
 
-Status: claimed
+Status: done
 Type: task
 Assignee: Codex
 Blocked by: none
@@ -58,5 +58,16 @@ Native Mac/Linux hosted builds, extracted package checks and real desktop/audio
 checks remain pending. Owner authorized commit, push and the hosted native checks
 on 2026-10-10 after reviewing the local change. No version tag or release was
 published or overwritten.
-Ticket remains claimed until native packaging acceptance checks pass; real-device
-listening and long-session qualification remain separate release gates.
+The pending note above is superseded by the following completion record.
+
+2026-10-11: `v0.1.0-alpha.2` was built from tagged commit
+`20f3b4d366df00be87f92ec1c485ec962b64ad82` and published with Windows x64 ZIP,
+Apple Silicon and Intel Mac DMGs, Linux x64 AppImage, and four SHA-256 files.
+[Native release run 38154565499](https://github.com/Today20092/podcast-bleed-reducer/actions/runs/38154565499)
+passed all four platform formatting, strict Clippy, test suites, staged and extracted
+offline package self-checks, Mac signatures and the single draft assembly job.
+All four uploaded apps were downloaded and independently matched to their checksums.
+The owner explicitly authorized current-version public downloads in this session.
+README release discovery is refreshed after publication. No older published release
+was replaced. Real-device GUI/audio, listening and long-session qualification remain
+separate gates; this is an explicitly experimental prerelease.
