@@ -32,7 +32,7 @@ These are experimental alpha packages. Windows builds are unsigned. Mac builds u
 
 ## Try it
 
-CleanSlate is in development. While downloads remain unpublished, use the [build guide](docs/development.md) to build and open the editor from this checkout.
+Download the experimental application for your platform [above](#download), then open it using the steps in the table. To build from source, follow the [build guide](docs/development.md).
 
 [![From aligned tracks to processed WAVs.](docs/diagrams/workflow.svg)](docs/diagrams/workflow.svg)
 
