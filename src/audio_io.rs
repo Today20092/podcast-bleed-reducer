@@ -318,6 +318,22 @@ pub(crate) fn render_source_native(
     envelope: &crate::GainEnvelope,
     cancelled: Option<&std::sync::atomic::AtomicBool>,
 ) -> Result<SourceMetadata, RenderBlocker> {
+    render_source_encoded(
+        source,
+        destination,
+        envelope,
+        crate::ExportEncoding::PreserveSource,
+        cancelled,
+    )
+}
+
+pub(crate) fn render_source_encoded(
+    source: &AudioSource,
+    destination: &Path,
+    envelope: &crate::GainEnvelope,
+    encoding: crate::ExportEncoding,
+    cancelled: Option<&std::sync::atomic::AtomicBool>,
+) -> Result<SourceMetadata, RenderBlocker> {
     // Validation is bounded; it never retains a native PCM session.
     let decoded = decode_source_chunks(source, cancelled, |_, _| Ok(()))?;
     let mut format = decoded.format;
@@ -325,6 +341,7 @@ pub(crate) fn render_source_native(
         format = WaveFmt::new_pcm_mono(format.sample_rate, 32);
         format.tag = 3;
     }
+    format = encoding.format(format);
     let metadata_bytes = decoded
         .bext
         .as_ref()

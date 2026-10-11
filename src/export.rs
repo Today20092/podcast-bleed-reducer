@@ -16,7 +16,9 @@ pub struct PreparedExport {
     output: AtomicOutput,
     project: std::path::PathBuf,
     identity: String,
-    files: Vec<(String, std::path::PathBuf, String, crate::SourceMetadata)>,
+    files: Vec<(String, String, crate::SourceMetadata)>,
+    inputs: Vec<(std::path::PathBuf, String)>,
+    layout: crate::ExportLayout,
 }
 
 pub fn prepare_export(
@@ -25,12 +27,13 @@ pub fn prepare_export(
     cancelled: Option<&AtomicBool>,
 ) -> Result<PreparedExport, RenderBlocker> {
     project.validate_sources_cancellable(cancelled)?;
-    let plan = delivery_plan(project, cancelled)?;
+    let plan = delivery_plan(project, cancelled, crate::ExportLayout::SeparateMono)?;
     if destination.exists() && fs::read_dir(destination)?.next().is_some() {
         return Err(RenderBlocker("export destination is not empty".into()));
     }
     let output = AtomicOutput::new(destination)?;
     let mut files = Vec::new();
+    let mut inputs = Vec::new();
     for (name, rendered) in plan {
         crate::prepared_analysis::check_cancelled(cancelled)?;
         let hash = crate::project::fingerprint_cancellable(&rendered, cancelled)?;
@@ -60,7 +63,8 @@ pub fn prepare_export(
                 "Rendered audio changed during the delivery copy.".into(),
             ));
         }
-        files.push((name, rendered, hash, metadata));
+        inputs.push((rendered, hash.clone()));
+        files.push((name, hash, metadata));
     }
     crate::prepared_analysis::check_cancelled(cancelled)?;
     Ok(PreparedExport {
@@ -68,6 +72,8 @@ pub fn prepare_export(
         project: project.path().into(),
         identity: project.delivery_identity()?,
         files,
+        inputs,
+        layout: crate::ExportLayout::SeparateMono,
     })
 }
 
@@ -80,11 +86,16 @@ impl PreparedExport {
         cancelled: Option<&AtomicBool>,
     ) -> Result<(), RenderBlocker> {
         project.validate_sources_cancellable(cancelled)?;
-        delivery_plan(project, cancelled)?;
-        for (name, rendered, hash, metadata) in &self.files {
-            if crate::project::fingerprint_cancellable(rendered, cancelled)? != *hash
-                || crate::project::fingerprint_cancellable(&self.output.path(name), cancelled)?
-                    != *hash
+        delivery_plan(project, cancelled, self.layout)?;
+        for (rendered, hash) in &self.inputs {
+            if crate::project::fingerprint_cancellable(rendered, cancelled)? != *hash {
+                return Err(RenderBlocker(
+                    "Accepted rendered audio changed during delivery.".into(),
+                ));
+            }
+        }
+        for (name, hash, metadata) in &self.files {
+            if crate::project::fingerprint_cancellable(&self.output.path(name), cancelled)? != *hash
                 || crate::SourceMetadata::read_cancellable(&self.output.path(name), cancelled)?
                     != *metadata
             {
@@ -112,6 +123,79 @@ impl PreparedExport {
     }
 }
 
+pub fn prepare_export_with_settings(
+    project: &Project,
+    destination: &Path,
+    settings: crate::ExportSettings,
+    cancelled: Option<&AtomicBool>,
+) -> Result<PreparedExport, RenderBlocker> {
+    project.validate_sources_cancellable(cancelled)?;
+    settings.validate_layout(project)?;
+    let plan = delivery_plan(project, cancelled, settings.layout)?;
+    if destination.exists() && fs::read_dir(destination)?.next().is_some() {
+        return Err(RenderBlocker("export destination is not empty".into()));
+    }
+    let output = AtomicOutput::new(destination)?;
+    let inputs = plan
+        .iter()
+        .map(|(_, path)| {
+            Ok((
+                path.clone(),
+                crate::project::fingerprint_cancellable(path, cancelled)?,
+            ))
+        })
+        .collect::<Result<Vec<_>, RenderBlocker>>()?;
+    let mut files = Vec::new();
+    let groups: Vec<_> = if settings.layout == crate::ExportLayout::Multichannel {
+        vec![(
+            "session-clean.wav".to_owned(),
+            plan.iter().map(|(_, p)| p.clone()).collect::<Vec<_>>(),
+            0,
+        )]
+    } else {
+        plan.iter()
+            .enumerate()
+            .map(|(i, (name, path))| (name.clone(), vec![path.clone()], i))
+            .collect()
+    };
+    for (name, paths, index) in groups {
+        crate::prepared_analysis::check_cancelled(cancelled)?;
+        let source = &project.sources[index];
+        let (format, bext) = crate::export_settings::source_format(source)?;
+        let path = output.path(&name);
+        crate::wav_delivery::encode_delivery(
+            &paths,
+            &path,
+            settings.encoding.format(format),
+            bext.as_ref(),
+            source.metadata.grid.frame_count,
+            cancelled,
+        )?;
+        let metadata = crate::SourceMetadata::read_cancellable(&path, cancelled)?;
+        if metadata.grid != source.metadata.grid
+            || metadata.timing_origin != source.metadata.timing_origin
+            || usize::from(metadata.channels) != paths.len()
+        {
+            return Err(RenderBlocker("Delivery grid or timing changed.".into()));
+        }
+        fs::OpenOptions::new().write(true).open(&path)?.sync_all()?;
+        files.push((
+            name,
+            crate::project::fingerprint_cancellable(&path, cancelled)?,
+            metadata,
+        ));
+    }
+    crate::prepared_analysis::check_cancelled(cancelled)?;
+    Ok(PreparedExport {
+        output,
+        project: project.path().into(),
+        identity: project.delivery_identity()?,
+        files,
+        inputs,
+        layout: settings.layout,
+    })
+}
+
 pub fn export(
     project: &Project,
     destination: &Path,
@@ -127,12 +211,13 @@ pub fn export(
 }
 pub fn validate_export(project: &Project) -> Result<(), RenderBlocker> {
     project.validate_sources()?;
-    delivery_plan(project, None).map(|_| ())
+    delivery_plan(project, None, crate::ExportLayout::SeparateMono).map(|_| ())
 }
 
 fn delivery_plan(
     project: &Project,
     cancelled: Option<&AtomicBool>,
+    layout: crate::ExportLayout,
 ) -> Result<Vec<(String, std::path::PathBuf)>, RenderBlocker> {
     project.require_alignment()?;
     let RenderState::Current { identity } = project.render() else {
@@ -182,16 +267,22 @@ fn delivery_plan(
                 .path
                 .file_stem()
                 .and_then(|name| name.to_str())
-                .map(|stem| format!("{stem}-clean.wav"))
+                .map(|stem| {
+                    source.channel.map_or_else(
+                        || format!("{stem}-clean.wav"),
+                        |channel| format!("{stem}-ch{}-clean.wav", channel + 1),
+                    )
+                })
                 .ok_or_else(|| RenderBlocker("source has no usable file name".into()))
         })
         .collect::<Result<Vec<_>, _>>()?;
-    if names
-        .iter()
-        .map(|name| name.to_lowercase())
-        .collect::<HashSet<_>>()
-        .len()
-        != names.len()
+    if layout == crate::ExportLayout::SeparateMono
+        && names
+            .iter()
+            .map(|name| name.to_lowercase())
+            .collect::<HashSet<_>>()
+            .len()
+            != names.len()
     {
         return Err(RenderBlocker("source names collide at export".into()));
     }

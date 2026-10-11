@@ -120,6 +120,51 @@ pub fn prepare_supervised_render(
     progress: &AtomicU8,
     cancelled: Option<&AtomicBool>,
 ) -> Result<PreparedSupervisedRender, RenderBlocker> {
+    prepare_render(
+        project,
+        analysis,
+        effective,
+        snapshot,
+        destination,
+        progress,
+        cancelled,
+        crate::ExportEncoding::PreserveSource,
+    )
+}
+
+/// Lossless f32 intermediate for final export encoding, before any integer dither.
+pub fn prepare_supervised_float_render(
+    project: &Project,
+    analysis: &EditorAnalysisResult,
+    effective: &EffectiveEnvelopes,
+    snapshot: &SupervisedRenderSnapshot,
+    destination: &Path,
+    progress: &AtomicU8,
+    cancelled: Option<&AtomicBool>,
+) -> Result<PreparedSupervisedRender, RenderBlocker> {
+    prepare_render(
+        project,
+        analysis,
+        effective,
+        snapshot,
+        destination,
+        progress,
+        cancelled,
+        crate::ExportEncoding::Float32,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn prepare_render(
+    project: &Project,
+    analysis: &EditorAnalysisResult,
+    effective: &EffectiveEnvelopes,
+    snapshot: &SupervisedRenderSnapshot,
+    destination: &Path,
+    progress: &AtomicU8,
+    cancelled: Option<&AtomicBool>,
+    encoding: crate::ExportEncoding,
+) -> Result<PreparedSupervisedRender, RenderBlocker> {
     crate::prepared_analysis::check_cancelled(cancelled)?;
     if SupervisedRenderSnapshot::capture(project, analysis, effective)? != *snapshot {
         return Err(RenderBlocker("Final render snapshot changed.".into()));
@@ -159,10 +204,11 @@ pub fn prepare_supervised_render(
                 .collect::<String>()
         );
         let path = output.path(&name);
-        let metadata = crate::audio_io::render_source_native(
+        let metadata = crate::audio_io::render_source_encoded(
             &source.audio_source(),
             &path,
             &effective.envelopes[i],
+            encoding,
             cancelled,
         )?;
         if metadata != source.metadata {

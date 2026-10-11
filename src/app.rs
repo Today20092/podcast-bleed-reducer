@@ -203,6 +203,103 @@ fn example_speakers(label: &crate::ReferenceLabel) -> String {
 
 #[cfg(test)]
 mod tests {
+    mod export_fixture {
+        use crate as rust_app;
+        include!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/common/supervised_fixture.rs"
+        ));
+    }
+
+    #[test]
+    fn export_dialog_cancel_and_submit_keep_destination_transient_and_solo_out_of_delivery() {
+        let (root, mut project, audio) = export_fixture::session();
+        project
+            .set_export_encoding(crate::ExportEncoding::Pcm24)
+            .unwrap();
+        let progress = std::sync::atomic::AtomicU8::new(0);
+        let cancel = std::sync::atomic::AtomicBool::new(false);
+        let analysis = crate::EditorAnalysisWorker::default()
+            .analyze_acoustic_evidence(&project, &audio, &progress, &cancel)
+            .unwrap();
+        let effective = analysis
+            .install(
+                &mut project,
+                &mut crate::EffectiveEnvelopeCache::default(),
+                None,
+            )
+            .unwrap();
+        let mut app = super::CleanSlateApp {
+            preview_parameters: project.parameters(),
+            supervised_result: Some(analysis),
+            effective_result: Some(effective),
+            project: Some(project),
+            solo_tracks: 1,
+            ..Default::default()
+        };
+        let _ = app.update(super::Message::Export);
+        assert_eq!(
+            app.export_dialog.as_ref().unwrap().settings.encoding,
+            crate::ExportEncoding::Pcm24
+        );
+        assert!(app.export_dialog.as_ref().unwrap().destination.is_none());
+        let _ = app.update(super::Message::Attenuation(-12.0));
+        assert_eq!(
+            app.preview_parameters.attenuation_db,
+            app.project.as_ref().unwrap().parameters().attenuation_db
+        );
+        let _ = app.view();
+        let _ = app.update(super::Message::CancelExportDialog);
+        assert!(app.processing.is_none() && app.exporting.is_none());
+        let _ = app.update(super::Message::Export);
+        let _ = app.update(super::Message::ExportLayout(
+            crate::ExportLayout::Multichannel,
+        ));
+        let _ = app.update(super::Message::ExportEncoding(
+            crate::ExportEncoding::Float32,
+        ));
+        app.export_dialog.as_mut().unwrap().destination = Some(root.join("delivery"));
+        let _ = app.update(super::Message::SubmitExport);
+        assert!(app.export_dialog.is_none());
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+        while app.processing.is_some() || app.exporting.is_some() {
+            app.poll_processing();
+            app.poll_exporting();
+            assert!(std::time::Instant::now() < deadline);
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        }
+        assert!(
+            app.messages[0].starts_with("WAV files saved"),
+            "{:?}",
+            app.messages
+        );
+        let mut reader =
+            bwavfile::WaveReader::open(root.join("delivery/session-clean.wav")).unwrap();
+        assert_eq!(reader.format().unwrap().channel_count, 2);
+        let mut samples = vec![0.0_f32; 128_000];
+        reader
+            .audio_frame_reader()
+            .unwrap()
+            .read_frames(&mut samples)
+            .unwrap();
+        assert!(
+            samples.chunks_exact(2).any(|frame| frame[1] != 0.0),
+            "Solo must not remove other delivered channels"
+        );
+        let _ = app.update(super::Message::Export);
+        assert!(app.export_dialog.as_ref().unwrap().destination.is_none());
+        assert_eq!(
+            app.export_dialog.as_ref().unwrap().settings.encoding,
+            crate::ExportEncoding::Float32
+        );
+        let _ = app.update(super::Message::KeyPressed(
+            iced::keyboard::Key::Named(iced::keyboard::key::Named::Escape),
+            iced::keyboard::Modifiers::default(),
+        ));
+        assert!(app.export_dialog.is_none());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
     #[test]
     fn new_project_cancels_preview_clears_workspace_and_preserves_saved_files() {
         let root =
@@ -1959,6 +2056,8 @@ pub struct CleanSlateApp {
     messages: Vec<String>,
     processing: Option<Processing>,
     exporting: Option<ExportProcessing>,
+    export_dialog: Option<ExportDialog>,
+    pending_export: Option<(PathBuf, crate::ExportSettings)>,
     render_generation: Arc<crate::RenderGeneration>,
     review: Option<ReviewWorkspace>,
     audition: Option<LiveAudition>,
@@ -2021,6 +2120,8 @@ impl Default for CleanSlateApp {
             processing: None,
             exporting: None,
             render_generation: Arc::new(crate::RenderGeneration::default()),
+            export_dialog: None,
+            pending_export: None,
             review: None,
             audition: None,
             audition_preparation: AuditionPreparation::default(),
@@ -2272,6 +2373,11 @@ struct ExportProcessing {
     cancelled: Arc<AtomicBool>,
     result: Receiver<Result<PathBuf, String>>,
 }
+
+struct ExportDialog {
+    settings: crate::ExportSettings,
+    destination: Option<PathBuf>,
+}
 impl Drop for ExportProcessing {
     fn drop(&mut self) {
         self.cancelled.store(true, Ordering::Relaxed);
@@ -2326,6 +2432,7 @@ enum Message {
     FileDropped(PathBuf),
     Relink(usize),
     Validate,
+    #[cfg(test)]
     Process,
     Cancel,
     Tick,
@@ -2383,6 +2490,11 @@ enum Message {
     SaveProject,
     ProtectSelection,
     Export,
+    ExportLayout(crate::ExportLayout),
+    ExportEncoding(crate::ExportEncoding),
+    ExportDestination,
+    CancelExportDialog,
+    SubmitExport,
     Timeline(TimelineEvent),
 }
 
@@ -2769,18 +2881,64 @@ impl CleanSlateApp {
     }
 
     fn export_current(&mut self) {
-        let Some(destination) = rfd::FileDialog::new()
-            .set_directory(
-                self.project
-                    .as_ref()
-                    .and_then(|project| project.path().parent())
-                    .unwrap_or_else(|| std::path::Path::new(".")),
-            )
-            .pick_folder()
-        else {
+        if !self.can_prepare_export() {
+            return;
+        }
+        self.export_dialog = Some(ExportDialog {
+            settings: crate::ExportSettings {
+                layout: crate::ExportLayout::SeparateMono,
+                encoding: self.project.as_ref().unwrap().export_encoding(),
+            },
+            destination: None,
+        });
+    }
+
+    fn can_prepare_export(&self) -> bool {
+        !self.sources_busy()
+            && self.processing.is_none()
+            && self.exporting.is_none()
+            && !self.reference_stale
+            && self.gain_drag.is_none()
+            && self.preview_pending.is_none()
+            && self.preview_processing.is_none()
+            && self
+                .project
+                .as_ref()
+                .zip(self.supervised_result.as_ref())
+                .zip(self.effective_result.as_ref())
+                .is_some_and(|((project, analysis), effective)| {
+                    project.parameters() == self.preview_parameters
+                        && crate::SupervisedRenderSnapshot::capture(project, analysis, effective)
+                            .is_ok()
+                })
+    }
+
+    fn submit_export(&mut self) {
+        if !self.can_prepare_export() {
+            return;
+        }
+        let Some(dialog) = &self.export_dialog else {
             return;
         };
-        self.export_to(destination);
+        let Some(destination) = dialog.destination.clone() else {
+            return;
+        };
+        let settings = dialog.settings;
+        let project = self.project.as_mut().unwrap();
+        if let Err(error) = settings.validate_layout(project) {
+            self.messages = vec![error.to_string()];
+            return;
+        }
+        if let Err(error) = project.set_export_encoding(settings.encoding) {
+            self.messages = vec![error.to_string()];
+            return;
+        }
+        self.export_dialog = None;
+        self.pending_export = Some((destination, settings));
+        self.start_processing();
+        if self.processing.is_none() {
+            self.pending_export = None;
+        }
     }
 
     fn start_processing(&mut self) {
@@ -2833,7 +2991,7 @@ impl CleanSlateApp {
         let worker_snapshot = snapshot.clone();
         std::thread::spawn(move || {
             let completed = (|| {
-                let private = crate::prepare_supervised_render(
+                let private = crate::prepare_supervised_float_render(
                     &project,
                     &analysis,
                     &effective,
@@ -2857,7 +3015,12 @@ impl CleanSlateApp {
         self.messages = vec!["Preparing processed WAV files at the original sample rates.".into()];
     }
 
+    #[cfg(test)]
     fn export_to(&mut self, destination: PathBuf) {
+        self.export_to_settings(destination, crate::ExportSettings::default());
+    }
+
+    fn export_to_settings(&mut self, destination: PathBuf, settings: crate::ExportSettings) {
         if !self.export_ready() {
             self.messages =
                 vec!["Prepare WAV files with the current settings before saving.".into()];
@@ -2872,7 +3035,12 @@ impl CleanSlateApp {
         let (sender, result) = mpsc::channel();
         std::thread::spawn(move || {
             let completed = (|| {
-                let private = crate::prepare_export(&project, &destination, Some(&worker_cancel))?;
+                let private = crate::prepare_export_with_settings(
+                    &project,
+                    &destination,
+                    settings,
+                    Some(&worker_cancel),
+                )?;
                 private.publish(&project, &gate, generation, Some(&worker_cancel))?;
                 Ok(destination)
             })()
@@ -3408,11 +3576,13 @@ impl CleanSlateApp {
                 .project
                 .as_ref()
                 .is_some_and(|project| processing.snapshot.matches(project));
+        let mut accepted = false;
         match completed {
             Ok(artifact) if current => {
                 let project = self.project.as_mut().unwrap();
                 match artifact.accept(project) {
                     Ok(()) => {
+                        accepted = true;
                         self.messages = vec!["WAV files prepared · ready to save".into()];
                         self.refresh_export_readiness();
                     }
@@ -3428,6 +3598,11 @@ impl CleanSlateApp {
                 ]
             }
             Err(error) => self.messages = vec![format!("WAV files could not be prepared: {error}")],
+        }
+        if let Some((destination, settings)) = self.pending_export.take()
+            && accepted
+        {
+            self.export_to_settings(destination, settings);
         }
     }
     fn poll_audition(&mut self) {
@@ -3680,6 +3855,27 @@ impl CleanSlateApp {
 
 impl CleanSlateApp {
     fn update(&mut self, message: Message) -> Task<Message> {
+        if self.export_dialog.is_some() {
+            if matches!(
+                &message,
+                Message::KeyPressed(keyboard::Key::Named(keyboard::key::Named::Escape), _)
+            ) {
+                self.export_dialog = None;
+                return Task::none();
+            }
+            if !matches!(
+                &message,
+                Message::ExportLayout(_)
+                    | Message::ExportEncoding(_)
+                    | Message::ExportDestination
+                    | Message::CancelExportDialog
+                    | Message::SubmitExport
+                    | Message::Tick
+                    | Message::PlaybackFrame
+            ) {
+                return Task::none();
+            }
+        }
         if matches!(message, Message::PlaybackFrame) {
             self.update_playback_position();
             return Task::none();
@@ -4105,8 +4301,10 @@ impl CleanSlateApp {
                     }
                 }
             }
+            #[cfg(test)]
             Message::Process => self.start_processing(),
             Message::Cancel => {
+                self.pending_export = None;
                 if let Some(processing) = &self.processing {
                     processing.cancelled.store(true, Ordering::Relaxed);
                 }
@@ -4395,6 +4593,31 @@ impl CleanSlateApp {
                 self.start_preview();
             }
             Message::Export => self.export_current(),
+            Message::ExportLayout(layout) => {
+                if let Some(dialog) = &mut self.export_dialog {
+                    dialog.settings.layout = layout;
+                }
+            }
+            Message::ExportEncoding(encoding) => {
+                if let Some(dialog) = &mut self.export_dialog {
+                    dialog.settings.encoding = encoding;
+                }
+            }
+            Message::ExportDestination => {
+                let destination = rfd::FileDialog::new()
+                    .set_directory(
+                        self.project
+                            .as_ref()
+                            .and_then(|p| p.path().parent())
+                            .unwrap_or_else(|| std::path::Path::new(".")),
+                    )
+                    .pick_folder();
+                if let Some(dialog) = &mut self.export_dialog {
+                    dialog.destination = destination;
+                }
+            }
+            Message::CancelExportDialog => self.export_dialog = None,
+            Message::SubmitExport => self.submit_export(),
             Message::Timeline(event) => match event {
                 TimelineEvent::Seek(sample)
                 | TimelineEvent::Drag(sample)
@@ -4503,6 +4726,30 @@ impl CleanSlateApp {
     }
 
     fn view(&self) -> Element<'_, Message> {
+        if let Some(dialog) = &self.export_dialog {
+            return stack![
+                responsive(|size| self.workspace(
+                    compact_workspace(size.width),
+                    size.height,
+                    size.width
+                )),
+                opaque(
+                    container(
+                        container(scrollable(self.export_settings_view(dialog)))
+                            .padding(24)
+                            .max_width(680)
+                            .style(container::rounded_box)
+                    )
+                    .center_x(Fill)
+                    .center_y(Fill)
+                    .style(|_| container::Style {
+                        background: Some(iced::Color::from_rgba(0.0, 0.0, 0.0, 0.7).into()),
+                        ..Default::default()
+                    })
+                ),
+            ]
+            .into();
+        }
         if !self.import_choices.is_empty() {
             let mut choices = column![
                 text("Choose speaker channels").size(24),
@@ -4864,16 +5111,9 @@ impl CleanSlateApp {
                 );
         } else {
             controls = controls.push(
-                button("Prepare WAV export")
+                button("Export")
                     .style(primary_button)
-                    .on_press_maybe(self.supervised_result.as_ref().map(|_| Message::Process)),
-            );
-        }
-        if self.export_ready() {
-            controls = controls.push(
-                button("Save WAV files")
-                    .style(primary_button)
-                    .on_press(Message::Export),
+                    .on_press_maybe(self.can_prepare_export().then_some(Message::Export)),
             );
         }
         if let Some(error) = &self.export_error {
@@ -4890,6 +5130,115 @@ impl CleanSlateApp {
             controls = controls.push(text(message));
         }
         controls.into()
+    }
+
+    fn export_settings_view<'a>(&'a self, dialog: &'a ExportDialog) -> Element<'a, Message> {
+        let project = self.project.as_ref().unwrap();
+        let mut content = column![
+            text("Export WAV files").size(24),
+            text(format!(
+                "{} tracks / channels · original sample rates",
+                project.sources.len()
+            ))
+        ]
+        .spacing(12);
+        for (i, source) in project.sources.iter().enumerate() {
+            content = content.push(
+                text(format!(
+                    "{}. {} · {} Hz · {} frames",
+                    i + 1,
+                    source.display_name(),
+                    source.metadata.grid.sample_rate,
+                    source.metadata.grid.frame_count
+                ))
+                .size(14),
+            );
+        }
+        let compatible_grid = project.sources.first().is_some_and(|first| {
+            project.sources.iter().all(|s| {
+                s.metadata.grid == first.metadata.grid
+                    && s.metadata.timing_origin == first.metadata.timing_origin
+            })
+        });
+        content = content
+            .push(text("Output layout").size(18))
+            .push(iced::widget::radio(
+                "Separate mono WAV files",
+                crate::ExportLayout::SeparateMono,
+                Some(dialog.settings.layout),
+                Message::ExportLayout,
+            ));
+        if compatible_grid {
+            content = content.push(iced::widget::radio(
+                "One WAV with separate channels in the order above",
+                crate::ExportLayout::Multichannel,
+                Some(dialog.settings.layout),
+                Message::ExportLayout,
+            ));
+        } else {
+            content = content.push(text("Multichannel unavailable: sample rates, frame counts and timing must match. Separate WAVs keep native grids."));
+        }
+        content = content.push(text("Encoding").size(18));
+        for encoding in [
+            crate::ExportEncoding::PreserveSource,
+            crate::ExportEncoding::Pcm24,
+            crate::ExportEncoding::Float32,
+        ] {
+            let estimate = crate::ExportSettings {
+                encoding,
+                ..dialog.settings
+            }
+            .estimated_audio_bytes(project)
+            .map(|bytes| {
+                format!(
+                    "{:.2} MB estimated audio payload",
+                    bytes as f64 / 1_000_000.0
+                )
+            })
+            .unwrap_or_else(|e| e.to_string());
+            content = content.push(iced::widget::radio(
+                format!("{encoding} · {estimate}"),
+                encoding,
+                Some(dialog.settings.encoding),
+                Message::ExportEncoding,
+            ));
+        }
+        content = content.push(text("Non-WAV and float64 sources use float32 with Preserve source encoding. PCM24 payload is 25% smaller than float32. Integer output uses final dither; exact silence stays silent.").size(14));
+        let blocker = dialog.settings.validate_layout(project).err();
+        if let Some(error) = &blocker {
+            content = content.push(text(error.to_string()));
+        }
+        content = content.push(
+            button("Choose destination folder")
+                .style(secondary_button)
+                .on_press(Message::ExportDestination),
+        );
+        content = content.push(
+            text(dialog.destination.as_ref().map_or_else(
+                || "Choose a new or empty folder for this export.".into(),
+                |p| p.display().to_string(),
+            ))
+            .size(14),
+        );
+        for message in &self.messages {
+            content = content.push(text(message).size(14));
+        }
+        content
+            .push(
+                row![
+                    button("Cancel")
+                        .style(secondary_button)
+                        .on_press(Message::CancelExportDialog),
+                    button("Export files").style(primary_button).on_press_maybe(
+                        (blocker.is_none()
+                            && dialog.destination.is_some()
+                            && self.can_prepare_export())
+                        .then_some(Message::SubmitExport)
+                    )
+                ]
+                .spacing(12),
+            )
+            .into()
     }
 
     fn workspace(&self, compact: bool, height: f32, width: f32) -> Element<'_, Message> {
