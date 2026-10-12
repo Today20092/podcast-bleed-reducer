@@ -326,6 +326,7 @@ fn coarse_preview(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Write;
 
     fn run(sources: Vec<AudioSource>) -> (Vec<Event>, Result<(), String>) {
         let (sender, receiver) = mpsc::sync_channel(2);
@@ -414,6 +415,33 @@ mod tests {
             drop(receiver);
             assert!(worker.join().unwrap().is_err());
         }
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn source_changed_after_preview_cannot_be_accepted() {
+        let root = crate::audio_io::multichannel_tests::root();
+        let path = root.join("changed.wav");
+        crate::audio_io::multichannel_tests::write_poly(&path, 3, 32, 30_001);
+        let sources = crate::wav_channel_sources(&path).unwrap();
+        let (sender, receiver) = mpsc::sync_channel(0);
+        let worker =
+            std::thread::spawn(move || prepare(&sources, &AtomicBool::new(false), &sender));
+        assert!(matches!(receiver.recv().unwrap(), Event::Metadata(_)));
+        // The rendezvous preview keeps the worker before hashing/validation.
+        std::fs::OpenOptions::new()
+            .append(true)
+            .open(&path)
+            .unwrap()
+            .write_all(b"changed")
+            .unwrap();
+        assert!(matches!(receiver.recv().unwrap(), Event::Preview(_)));
+        assert!(
+            !receiver
+                .iter()
+                .any(|event| matches!(event, Event::Ready(_, _)))
+        );
+        assert!(worker.join().unwrap().is_err());
         std::fs::remove_dir_all(root).unwrap();
     }
 }

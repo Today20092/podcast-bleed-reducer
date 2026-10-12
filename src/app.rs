@@ -2226,7 +2226,7 @@ mod tests {
         assert_eq!(app.reserved_track_count(), 8);
         let flag = app.import_jobs[0].cancelled.clone();
         app.reserve_import(vec![inputs[0].clone()]);
-        assert_eq!(app.import_jobs.len(), 1);
+        assert_eq!(app.import_jobs.len(), 8);
         assert!(app.messages[0].contains("eight-track"));
         let _ = app.update(super::Message::CancelPendingImports);
         assert!(flag.load(super::Ordering::Relaxed));
@@ -2239,6 +2239,24 @@ mod tests {
         app.poll_sources();
         assert!(app.project.is_none());
         assert!(app.import_jobs.is_empty());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn overall_import_status_names_active_work_and_queued_recordings() {
+        let root = crate::audio_io::multichannel_tests::root();
+        let inputs = ["first.wav", "second.wav"].map(|name| {
+            let path = root.join(name);
+            write_wav(&path, &[0.1; 4800]);
+            crate::AudioSource::mono(path)
+        });
+        let mut app = super::CleanSlateApp::default();
+        app.reserve_import(inputs.to_vec());
+        let status = app.workspace_status();
+        assert!(status.contains("2 pending"));
+        assert!(status.contains("1 queued"));
+        assert!(status.contains("Sampling whole-recording preview"));
+        app.cancel_pending_imports();
         std::fs::remove_dir_all(root).unwrap();
     }
 
@@ -2305,6 +2323,11 @@ mod tests {
                             ready_ms = Some(started.elapsed().as_secs_f64() * 1000.0);
                         }
                         crate::import::Event::Finished(result) => result.unwrap(),
+                        crate::import::Event::Progress(stage, _, _) => {
+                            if stages.last().is_none_or(|(previous, _)| *previous != stage) {
+                                stages.push((stage, ms));
+                            }
+                        }
                         _ => {}
                     }
                 }
@@ -2315,6 +2338,46 @@ mod tests {
             );
         }
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    #[ignore = "measures cancellation on the local owner recording"]
+    fn progressive_import_cancellation_benchmark() {
+        let path = std::path::PathBuf::from(
+            std::env::var_os("CLEANSLATE_IMPORT_BENCHMARK").expect("set recording path"),
+        );
+        for phase in ["preview", "identity", "validation"] {
+            let inputs = crate::wav_channel_sources(&path).unwrap();
+            let metadata = inputs.iter().map(|s| s.metadata(None).unwrap()).collect();
+            let mut job = crate::import::Job::from_metadata(1, inputs, metadata);
+            job.start();
+            let receiver = job.events.take().unwrap();
+            let mut cancelled_at = None;
+            for event in receiver {
+                let cancel_now = match &event {
+                    crate::import::Event::Preview(_) => phase == "preview",
+                    crate::import::Event::Progress(stage, _, _) => match phase {
+                        "identity" => stage.starts_with("Checking source identity"),
+                        "validation" => stage.starts_with("Validating audio"),
+                        _ => false,
+                    },
+                    _ => false,
+                };
+                if cancel_now && cancelled_at.is_none() {
+                    cancelled_at = Some(std::time::Instant::now());
+                    job.cancelled.store(true, super::Ordering::Relaxed);
+                }
+                assert!(!matches!(event, crate::import::Event::Ready(_, _)));
+                if let crate::import::Event::Finished(result) = event {
+                    assert!(result.is_err());
+                    let elapsed = cancelled_at.expect("requested phase was reached").elapsed();
+                    println!(
+                        "IMPORT_CANCEL phase={phase} latency_ms={:.3}",
+                        elapsed.as_secs_f64() * 1000.0
+                    );
+                }
+            }
+        }
     }
 
     fn finish_import(app: &mut super::CleanSlateApp) {
@@ -7274,8 +7337,18 @@ impl CleanSlateApp {
 
     fn workspace_status(&self) -> String {
         if self.sources_busy() {
+            let queued = self
+                .import_jobs
+                .iter()
+                .filter(|job| !job.accepted && job.error.is_none() && job.events.is_none())
+                .count();
+            let stage = self
+                .import_jobs
+                .iter()
+                .find(|job| job.events.is_some())
+                .map_or("Inspecting source metadata", |job| job.status.as_str());
             return format!(
-                "{} accepted · {} pending · background import",
+                "{} accepted · {} pending · {queued} queued · {stage}",
                 self.project.as_ref().map_or(0, |p| p.sources.len()),
                 self.import_jobs
                     .iter()

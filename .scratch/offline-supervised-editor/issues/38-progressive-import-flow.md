@@ -2,7 +2,7 @@
 
 Status: claimed
 Type: task
-Assignee: Codex
+Assignee: Codex implement_38
 Blocked by: 03, 21, 24, 33
 Target branch: codex/editor-workflow-31-37
 Spec: #accepted-design
