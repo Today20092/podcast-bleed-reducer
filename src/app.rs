@@ -3,6 +3,7 @@ use crate::CalibrationKind;
 use crate::{
     AnalysisPreview, AutomixParameters, Comparison, Project, RenderState, ReviewWorkspace,
     SpeakerId, TimeRange,
+    appearance::{self, Appearance, colors},
     audition::{AuditionMode, AuditionPreparation, LiveAudition},
     timebase::{TICKS_PER_SECOND, TimePosition},
     timeline::{PlaybackScroll, TimelineEvent, TimelineViewport},
@@ -27,34 +28,26 @@ use std::{
     time::{Duration, Instant},
 };
 
+#[cfg(test)]
 fn editor_theme() -> Theme {
-    Theme::custom(
-        "CleanSlate",
-        iced::theme::Palette {
-            background: iced::color!(0x202226),
-            text: iced::color!(0xE4E7EB),
-            primary: iced::color!(0x779BC7),
-            success: iced::color!(0x76B99A),
-            warning: iced::color!(0xD8B579),
-            danger: iced::color!(0xDB8B8B),
-        },
-    )
+    Appearance::Dark.theme()
 }
 
 fn secondary_button(theme: &Theme, status: button::Status) -> button::Style {
+    let c = colors(theme);
     let mut style = button::secondary(theme, status);
     style.background = Some(iced::Background::Color(match status {
-        button::Status::Hovered => iced::color!(0x414750),
-        button::Status::Pressed => iced::color!(0x272B31),
-        _ => iced::color!(0x343940),
+        button::Status::Hovered => c.hover,
+        button::Status::Pressed => c.pressed,
+        _ => c.control,
     }));
     style.text_color = if status == button::Status::Disabled {
-        iced::color!(0x8C949F)
+        c.disabled
     } else {
         theme.palette().text
     };
     style.border = iced::Border {
-        color: iced::color!(0x4A515B),
+        color: c.border,
         width: 1.0,
         radius: 4.0.into(),
     };
@@ -62,16 +55,17 @@ fn secondary_button(theme: &Theme, status: button::Status) -> button::Style {
 }
 
 fn primary_button(theme: &Theme, status: button::Status) -> button::Style {
+    let c = colors(theme);
     if status == button::Status::Disabled {
         return secondary_button(theme, status);
     }
     button::Style {
         background: Some(iced::Background::Color(match status {
-            button::Status::Hovered => iced::color!(0x8FB0D8),
-            button::Status::Pressed => iced::color!(0x6B8DB8),
+            button::Status::Hovered => c.action_hover,
+            button::Status::Pressed => c.action_pressed,
             _ => theme.palette().primary,
         })),
-        text_color: iced::color!(0x152233),
+        text_color: c.action_text,
         border: iced::Border {
             radius: 4.0.into(),
             ..iced::Border::default()
@@ -81,11 +75,12 @@ fn primary_button(theme: &Theme, status: button::Status) -> button::Style {
 }
 
 fn editor_panel(theme: &Theme) -> container::Style {
+    let c = colors(theme);
     container::Style {
-        background: Some(iced::color!(0x292D33).into()),
+        background: Some(c.panel.into()),
         text_color: Some(theme.palette().text),
         border: iced::Border {
-            color: iced::color!(0x3D434C),
+            color: c.panel_border,
             width: 1.0,
             radius: 5.0.into(),
         },
@@ -203,6 +198,54 @@ fn example_speakers(label: &crate::ReferenceLabel) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn appearance_changes_only_drawing_and_survives_new_project_after_save_failure() {
+        let mut app = super::CleanSlateApp {
+            timeline: super::TimelineViewport::new(100),
+            ..super::CleanSlateApp::default()
+        };
+        let root = std::env::temp_dir().join(format!(
+            "cleanslate-appearance-state-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let source_path = root.join("speaker.wav");
+        write_wav(&source_path, &vec![0.0; 1920]);
+        app.project =
+            Some(synchronized_project(root.join("session.cleanslate"), vec![source_path]).unwrap());
+        let project = serde_json::to_value(&app.project).unwrap();
+        app.timeline.set_selection(Some((10, 20)));
+        app.timeline.seek(15);
+        app.solo_tracks = 3;
+        app.gain_tool = true;
+        app.audition_mode = super::AuditionMode::Processed;
+        let selection = app.timeline.selection();
+        let render = app.render_generation.current();
+        let preview = app.preview_generation;
+        let source = app.source_generation;
+        let parameters = app.preview_parameters;
+        let drawing = app.drawing_revision;
+        let _ = app.update(super::Message::Appearance(
+            crate::appearance::Appearance::Light,
+        ));
+        assert_eq!(app.appearance, crate::appearance::Appearance::Light);
+        assert!(app.appearance_error.is_some());
+        assert_eq!(app.timeline.selection(), selection);
+        assert_eq!(serde_json::to_value(&app.project).unwrap(), project);
+        assert_eq!(app.timeline.playhead(), 15);
+        assert_eq!(app.solo_tracks, 3);
+        assert!(app.gain_tool);
+        assert_eq!(app.audition_mode, super::AuditionMode::Processed);
+        assert_eq!(app.render_generation.current(), render);
+        assert_eq!(app.preview_generation, preview);
+        assert_eq!(app.source_generation, source);
+        assert_eq!(app.preview_parameters, parameters);
+        assert_ne!(app.drawing_revision, drawing);
+        app.reset_project(true);
+        assert_eq!(app.appearance, crate::appearance::Appearance::Light);
+        assert!(app.appearance_error.is_some());
+        std::fs::remove_dir_all(root).unwrap();
+    }
     mod export_fixture {
         use crate as rust_app;
         include!(concat!(
@@ -2874,6 +2917,10 @@ struct ReferenceAudition {
 }
 
 pub struct CleanSlateApp {
+    appearance: Appearance,
+    preferences_path: Option<PathBuf>,
+    appearance_error: Option<String>,
+    settings_selected: usize,
     menu_open: bool,
     menu_selected: usize,
     app_dialog: Option<AppDialog>,
@@ -3000,6 +3047,10 @@ impl SoundParameter {
 impl Default for CleanSlateApp {
     fn default() -> Self {
         Self {
+            appearance: Appearance::Dark,
+            preferences_path: None,
+            appearance_error: None,
+            settings_selected: 0,
             reference_audition: None,
             project: None,
             pending_imports: vec![],
@@ -3319,6 +3370,7 @@ impl Drop for PreviewProcessing {
 
 #[derive(Debug, Clone)]
 enum Message {
+    Appearance(Appearance),
     Menu,
     Settings,
     About,
@@ -3463,6 +3515,13 @@ pub fn run() -> iced::Result {
 
 fn startup(project: Option<PathBuf>) -> CleanSlateApp {
     let mut app = CleanSlateApp::default();
+    match appearance::preference_path() {
+        Ok(path) => {
+            (app.appearance, app.appearance_error) = appearance::load(&path);
+            app.preferences_path = Some(path);
+        }
+        Err(error) => app.appearance_error = Some(error),
+    }
     if let Some(path) = project {
         app.begin_source_loading(SourceRequest::Open(path));
     }
@@ -3914,7 +3973,7 @@ impl CleanSlateApp {
     }
 
     fn theme(&self) -> Theme {
-        editor_theme()
+        self.appearance.theme()
     }
 
     fn export_current(&mut self) {
@@ -4147,6 +4206,9 @@ impl CleanSlateApp {
         self.stop_audition();
         self.render_generation.invalidate();
         *self = Self {
+            appearance: self.appearance,
+            preferences_path: self.preferences_path.clone(),
+            appearance_error: self.appearance_error.clone(),
             drawing_revision: self.drawing_revision.wrapping_add(1),
             messages: vec!["New project. Import tracks to begin.".into()],
             ..Self::default()
@@ -4975,6 +5037,20 @@ impl CleanSlateApp {
     }
 
     fn update(&mut self, message: Message) -> Task<Message> {
+        if let Message::Appearance(appearance) = message {
+            if self.appearance != appearance {
+                self.appearance = appearance;
+                self.drawing_revision = self.drawing_revision.wrapping_add(1);
+            }
+            self.appearance_error = self
+                .preferences_path
+                .as_ref()
+                .ok_or_else(|| "No valid user configuration directory.".to_string())
+                .and_then(|path| appearance::save(path, appearance))
+                .err()
+                .map(|error| format!("Appearance changed, but could not be saved. {error}"));
+            return Task::none();
+        }
         if let Message::VersionCopied(copied) = &message {
             self.copy_pending = false;
             if self.app_dialog == Some(AppDialog::About) {
@@ -5009,6 +5085,29 @@ impl CleanSlateApp {
                         }
                         Named::Tab if self.app_dialog == Some(AppDialog::About) => {
                             self.about_copy_selected = !self.about_copy_selected
+                        }
+                        Named::Tab | Named::ArrowDown | Named::ArrowUp
+                            if self.app_dialog == Some(AppDialog::Settings) =>
+                        {
+                            self.settings_selected = if *key == Named::ArrowUp
+                                || (*key == Named::Tab && modifiers.shift())
+                            {
+                                (self.settings_selected + 2) % 3
+                            } else {
+                                (self.settings_selected + 1) % 3
+                            };
+                        }
+                        Named::Enter
+                            if self.app_dialog == Some(AppDialog::Settings)
+                                && self.settings_selected < 2 =>
+                        {
+                            return self.update(Message::Appearance(
+                                if self.settings_selected == 0 {
+                                    Appearance::Dark
+                                } else {
+                                    Appearance::Light
+                                },
+                            ));
                         }
                         Named::Enter if self.menu_open => {
                             return self.update(menu_action(self.menu_selected));
@@ -5045,6 +5144,7 @@ impl CleanSlateApp {
                     return Task::none();
                 }
                 Message::Settings
+                | Message::Appearance(_)
                 | Message::About
                 | Message::KeyboardShortcuts
                 | Message::OpenLink(_)
@@ -5589,7 +5689,7 @@ impl CleanSlateApp {
                 self.poll_audition();
                 self.poll_exporting();
             }
-            Message::PlaybackFrame => unreachable!(),
+            Message::PlaybackFrame | Message::Appearance(_) => unreachable!(),
             #[cfg(test)]
             Message::SpeechSensitivity(value) => {
                 self.preview_parameters.speech_sensitivity = 1.0 - value
@@ -6032,6 +6132,11 @@ impl CleanSlateApp {
                 self.app_feedback = None;
             }
             Message::Settings | Message::About => {
+                self.settings_selected = if self.appearance == Appearance::Dark {
+                    0
+                } else {
+                    1
+                };
                 self.menu_open = false;
                 self.app_dialog = Some(if matches!(message, Message::Settings) {
                     AppDialog::Settings
@@ -6270,6 +6375,10 @@ impl CleanSlateApp {
                     ),
                     ("Ctrl+/", "Open this reference"),
                     (
+                        "Tab / Up / Down (Settings)",
+                        "Select Dark, Light or Close; Enter applies appearance immediately",
+                    ),
+                    (
                         "Alt+M",
                         "Open Menu; Tab or Up/Down selects an entry, Enter activates",
                     ),
@@ -6416,15 +6525,22 @@ impl CleanSlateApp {
                             .push(text("Speech detection: embedded Silero VAD, used through ONNX Runtime (ort). Silero VAD and ONNX Runtime carry MIT licenses. Bundled runtime notices and each component's licenses remain authoritative; CleanSlate's MIT license does not relicense dependencies."))
                             .push(text("See the distribution's THIRD-PARTY-NOTICES.txt and licenses directory. Model references and runtime notices are recorded in docs/licenses/embedded-model-runtime.txt in the repository."))
                             .push(text(include_str!("../LICENSE")).size(12));
-                    } else { body = body.push(text("Appearance controls are not available yet. Dark/Light appearance is planned for the next editor update.")); }
+                    } else {
+                        body = body.push(text("Appearance").size(18));
+                        for (index, appearance, label) in [(0, Appearance::Dark, "Dark"), (1, Appearance::Light, "Light")] {
+                            let label = format!("{}{}{}", if self.settings_selected == index { "› " } else { "" }, label, if self.appearance == appearance { " · Selected" } else { "" });
+                            body = body.push(button(text(label)).style(if self.appearance == appearance { primary_button } else { secondary_button }).on_press(Message::Appearance(appearance)));
+                        }
+                        if let Some(error) = &self.appearance_error { body = body.push(text(error).color(self.appearance.colors().error)); }
+                    }
                     let mut actions = row![].spacing(12);
                     if about { actions = actions.push(button(if self.about_copy_selected { "› Copy version info" } else { "Copy version info" }).on_press_maybe((!self.copy_pending).then_some(Message::CopyVersion))); }
-                    actions = actions.push(button(if about && !self.about_copy_selected { "› Close    Esc" } else { "Close    Esc" }).on_press(Message::CloseHelp));
+                    actions = actions.push(button(if (about && !self.about_copy_selected) || (!about && self.settings_selected == 2) { "› Close    Esc" } else { "Close    Esc" }).on_press(Message::CloseHelp));
                     let mut panel = column![scrollable(body).id("app-dialog").width(Fill).height((size.height - 220.0).clamp(140.0, 560.0)), actions].spacing(16).width(Fill);
                     if let Some(feedback) = &self.app_feedback { panel = panel.push(text(feedback).size(14)); }
                     panel.into()
                 };
-                stack![self.workspace(compact_workspace(size.width), size.height, size.width), opaque(container(container(content).padding(24).width(Fill).max_width(if self.menu_open { 520 } else { 720 }).style(container::rounded_box)).center_x(Fill).center_y(Fill).style(|_| container::Style { background: Some(iced::Color::from_rgba(0.0, 0.0, 0.0, 0.7).into()), ..Default::default() }))].into()
+                stack![self.workspace(compact_workspace(size.width), size.height, size.width), opaque(container(container(content).padding(24).width(Fill).max_width(if self.menu_open { 520 } else { 720 }).style(container::rounded_box)).center_x(Fill).center_y(Fill).style(|theme| container::Style { background: Some(colors(theme).scrim.into()), ..Default::default() }))].into()
             }).into();
         }
         if self.help_open || self.shortcuts_open {
@@ -6474,8 +6590,8 @@ impl CleanSlateApp {
                         )
                         .center_x(Fill)
                         .center_y(Fill)
-                        .style(|_| container::Style {
-                            background: Some(iced::Color::from_rgba(0.0, 0.0, 0.0, 0.7).into()),
+                        .style(|theme| container::Style {
+                            background: Some(colors(theme).scrim.into()),
                             ..Default::default()
                         })
                     )
@@ -6500,8 +6616,8 @@ impl CleanSlateApp {
                     )
                     .center_x(Fill)
                     .center_y(Fill)
-                    .style(|_| container::Style {
-                        background: Some(iced::Color::from_rgba(0.0, 0.0, 0.0, 0.7).into()),
+                    .style(|theme| container::Style {
+                        background: Some(colors(theme).scrim.into()),
                         ..Default::default()
                     })
                 ),
@@ -6519,8 +6635,8 @@ impl CleanSlateApp {
                         .padding(24)
                         .center_x(Fill)
                         .center_y(Fill)
-                        .style(|_| container::Style {
-                            background: Some(iced::Color::from_rgba(0.0, 0.0, 0.0, 0.7).into()),
+                        .style(|theme| container::Style {
+                            background: Some(colors(theme).scrim.into()),
                             ..Default::default()
                         })
                     )
@@ -7111,7 +7227,7 @@ impl CleanSlateApp {
             Space::new().width(Fill),
             text(self.workspace_status())
                 .size(14)
-                .color(iced::color!(0xADB5C0)),
+                .color(self.appearance.colors().muted),
             button("Import tracks")
                 .style(primary_button)
                 .on_press(Message::ImportStems),
@@ -7138,6 +7254,10 @@ impl CleanSlateApp {
         .align_y(iced::Center);
 
         let mut timeline_content = column![].spacing(6).height(Fill);
+        if let Some(error) = &self.appearance_error {
+            timeline_content =
+                timeline_content.push(text(error).size(14).color(self.appearance.colors().error));
+        }
         if self.project.is_none() {
             timeline_content = timeline_content.push(
                 container(
@@ -7206,7 +7326,7 @@ impl CleanSlateApp {
                         editor = editor.push(
                             text(self.messages.join("\n"))
                                 .size(13)
-                                .color(iced::color!(0xDB8B8B)),
+                                .color(self.appearance.colors().error),
                         );
                     }
                     editor.into()
@@ -7215,7 +7335,7 @@ impl CleanSlateApp {
                         button(
                             text(format!("Speaker {} · {short_name}", source.speaker_id.0))
                                 .size(14)
-                                .color(iced::color!(0xE4E7EB)),
+                                .color(self.appearance.colors().text),
                         )
                         .style(button::text)
                         .padding([3, 6])
@@ -7281,12 +7401,12 @@ impl CleanSlateApp {
                     });
                     let (label, color) = match state {
                         Some(crate::TemporalTrackState::Owned) => {
-                            ("Active", iced::Color::from_rgb(0.2, 0.75, 0.4))
+                            ("Active", self.appearance.colors().success)
                         }
                         Some(crate::TemporalTrackState::Absent) => {
-                            ("Inactive", iced::Color::from_rgb(0.5, 0.55, 0.6))
+                            ("Inactive", self.appearance.colors().muted)
                         }
-                        _ => ("Uncertain", iced::Color::from_rgb(0.9, 0.65, 0.2)),
+                        _ => ("Uncertain", self.appearance.colors().warning),
                     };
                     let meter_label = format!(
                         "{}{label} · {}",
@@ -7428,7 +7548,7 @@ impl CleanSlateApp {
             ].spacing(8).align_y(iced::Center),
             iced::widget::tooltip(
                 text("Drag to mark a speaker example · red shading shows reduced volume")
-                    .size(14).color(iced::color!(0xADB5C0)),
+                    .size(14).color(self.appearance.colors().muted),
                 container(text("Click to seek. Drag to label speech or room tone.\nWheel to zoom. Ctrl-wheel or middle-drag to pan.").size(14))
                     .padding(12).style(editor_panel),
                 iced::widget::tooltip::Position::Bottom,
@@ -7467,7 +7587,7 @@ impl CleanSlateApp {
             text(format!("Preview failed: {error}")).into()
         } else if self.reference_stale {
             text("Analysis needs updating")
-                .color(iced::color!(0xD8B579))
+                .color(self.appearance.colors().warning)
                 .font(iced::Font {
                     weight: iced::font::Weight::Semibold,
                     ..iced::Font::with_name("Segoe UI")

@@ -4,7 +4,7 @@ use crate::{
     timeline::{TimelineEvent, TimelineViewport},
 };
 use iced::{
-    Color, Point, Rectangle, Renderer, Size, Theme, keyboard, mouse,
+    Point, Rectangle, Renderer, Size, Theme, keyboard, mouse,
     widget::{Action, canvas},
 };
 use serde::{Deserialize, Serialize};
@@ -498,6 +498,7 @@ impl<'a, Message> TimelineCanvas<'a, Message> {
 
 #[derive(Default)]
 pub(crate) struct TimelineCanvasState {
+    appearance: Cell<Option<crate::appearance::Appearance>>,
     geometry: canvas::Cache,
     revision: Cell<Option<u64>>,
     dragging: bool,
@@ -571,11 +572,16 @@ impl ZoomDrag {
         }
     }
 
-    pub fn draw(&self, frame: &mut canvas::Frame, height: f32) {
-        frame.fill_rectangle(
-            Point::new(self.anchor_x.min(self.end_x), 0.0),
-            Size::new((self.end_x - self.anchor_x).abs(), height),
-            Color::from_rgba8(95, 180, 255, 0.25),
+    pub fn draw(&self, frame: &mut canvas::Frame, height: f32, theme: &Theme) {
+        let colors = crate::appearance::colors(theme);
+        let position = Point::new(self.anchor_x.min(self.end_x), 0.0);
+        let size = Size::new((self.end_x - self.anchor_x).abs(), height);
+        frame.fill_rectangle(position, size, colors.zoom);
+        frame.stroke(
+            &canvas::Path::rectangle(position, size),
+            canvas::Stroke::default()
+                .with_width(1.0)
+                .with_color(colors.focus),
         );
     }
 }
@@ -819,11 +825,15 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
         &self,
         state: &Self::State,
         renderer: &Renderer,
-        _theme: &Theme,
+        theme: &Theme,
         bounds: Rectangle,
         _cursor: mouse::Cursor,
     ) -> Vec<canvas::Geometry> {
-        if state.revision.replace(Some(self.revision)) != Some(self.revision) {
+        let appearance = crate::appearance::Appearance::from_theme(theme);
+        let colors = appearance.colors();
+        let revision_changed = state.revision.replace(Some(self.revision)) != Some(self.revision);
+        let appearance_changed = state.appearance.replace(Some(appearance)) != Some(appearance);
+        if revision_changed || appearance_changed {
             state.geometry.clear();
         }
         let geometry = state.geometry.draw(renderer, bounds.size(), |frame| {
@@ -842,7 +852,7 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
                     frame.fill_rectangle(
                         Point::new(left, 0.0),
                         Size::new((right - left).max(0.0), bounds.height),
-                        Color::from_rgba8(220, 65, 65, 0.24),
+                        colors.attenuation,
                     );
                 }
             }
@@ -858,7 +868,7 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
                             Point::new(left, 0.0),
                             Size::new(right - left, bounds.height),
                         ),
-                        Color::from_rgba8(70, 120, 220, 0.18),
+                        colors.selection,
                     );
                 }
             }
@@ -872,7 +882,7 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
                             (x + 3.0).min((bounds.width - 64.0).max(0.0)),
                             center - 6.0,
                         ),
-                        color: Color::from_rgb8(180, 185, 195),
+                        color: colors.muted,
                         size: 13.0.into(),
                         ..canvas::Text::default()
                     });
@@ -901,7 +911,7 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
                                     ),
                                     canvas::Stroke::default()
                                         .with_width(2.0)
-                                        .with_color(Color::from_rgb8(90, 150, 245)),
+                                        .with_color(colors.protection),
                                 );
                             }
                         }
@@ -921,7 +931,7 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
                     &original,
                     canvas::Stroke::default()
                         .with_width(1.0)
-                        .with_color(Color::from_rgba8(111, 190, 183, 0.65)),
+                        .with_color(colors.original_waveform),
                 );
                 if let Some((preview, track)) = self.preview
                     && let Some(envelope) = preview.envelopes.get(track)
@@ -951,7 +961,7 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
                         &processed,
                         canvas::Stroke::default()
                             .with_width(1.4)
-                            .with_color(Color::from_rgb8(111, 190, 183)),
+                            .with_color(colors.waveform),
                     );
                     let gain_path = canvas::Path::new(|builder| {
                         for x in 0..bounds.width as usize {
@@ -968,7 +978,7 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
                         &gain_path,
                         canvas::Stroke::default()
                             .with_width(1.5)
-                            .with_color(Color::from_rgb8(210, 130, 245)),
+                            .with_color(colors.gain),
                     );
                 }
             }
@@ -996,9 +1006,9 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
                 continue;
             }
             let color = if selected {
-                Color::from_rgb8(160, 185, 255)
+                colors.selected_label
             } else {
-                Color::from_rgb8(110, 135, 190)
+                colors.label
             };
             frame.fill_rectangle(
                 Point::new(left.max(0.0), 0.0),
@@ -1035,7 +1045,7 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
                 frame.fill_text(canvas::Text {
                     content,
                     position: Point::new(left.max(0.0) + 7.0, 3.0),
-                    color: Color::BLACK,
+                    color: colors.label_text,
                     size: 14.0.into(),
                     ..Default::default()
                 });
@@ -1063,11 +1073,11 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
                 ),
                 canvas::Stroke::default()
                     .with_width(2.0)
-                    .with_color(Color::WHITE),
+                    .with_color(colors.playhead),
             );
         }
         if let Some(drag) = &state.zoom_drag {
-            drag.draw(&mut frame, bounds.height);
+            drag.draw(&mut frame, bounds.height, theme);
         }
         vec![geometry, frame.into_geometry()]
     }

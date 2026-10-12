@@ -2,6 +2,7 @@ mod acoustic_transfer;
 mod acoustics;
 mod analysis_audio;
 pub mod app;
+mod appearance;
 mod audio_io;
 mod audition;
 mod calibration;
