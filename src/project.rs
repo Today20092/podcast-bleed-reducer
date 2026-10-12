@@ -131,6 +131,8 @@ pub struct Project {
     ticks_per_second: u64,
     #[serde(skip)]
     path: PathBuf,
+    #[serde(skip)]
+    deferred_save: bool,
     pub sources: Vec<SourceIdentity>,
     #[serde(default)]
     supplied_alignment: bool,
@@ -195,6 +197,21 @@ impl Project {
         path: impl Into<PathBuf>,
         inputs: Vec<crate::AudioSource>,
     ) -> io::Result<Self> {
+        Self::create_sources(path.into(), inputs, false)
+    }
+
+    pub(crate) fn prepare_from_sources(
+        path: PathBuf,
+        inputs: Vec<crate::AudioSource>,
+    ) -> io::Result<Self> {
+        Self::create_sources(path, inputs, true)
+    }
+
+    fn create_sources(
+        path: PathBuf,
+        inputs: Vec<crate::AudioSource>,
+        deferred_save: bool,
+    ) -> io::Result<Self> {
         let sources = inputs
             .into_iter()
             .enumerate()
@@ -205,7 +222,8 @@ impl Project {
         let mut project = Self {
             schema_version: PROJECT_SCHEMA_VERSION,
             ticks_per_second: TICKS_PER_SECOND,
-            path: path.into(),
+            path,
+            deferred_save,
             sources,
             supplied_alignment: false,
             export_encoding: crate::ExportEncoding::default(),
@@ -287,8 +305,23 @@ impl Project {
                 "Use reorder_tracks to change track order without transferring decisions.",
             ));
         }
+        if self.deferred_save {
+            return Ok(());
+        }
         let bytes = serde_json::to_vec_pretty(self).map_err(invalid_json)?;
         atomic_save(&self.path, &bytes)
+    }
+
+    pub(crate) fn defer_save(&mut self) {
+        self.deferred_save = true;
+    }
+
+    pub(crate) fn publish_prepared(&mut self) -> io::Result<()> {
+        if self.deferred_save {
+            self.deferred_save = false;
+            self.save()?;
+        }
+        Ok(())
     }
 
     fn transaction(&mut self, change: impl FnOnce(&mut Self) -> io::Result<()>) -> io::Result<()> {
