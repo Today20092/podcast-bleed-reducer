@@ -6177,6 +6177,9 @@ impl CleanSlateApp {
                             self.reference_speakers.clone(),
                             false
                         )),
+                        button("Stop")
+                            .style(secondary_button)
+                            .on_press(Message::Stop),
                         button("Cancel")
                             .style(secondary_button)
                             .on_press(Message::DismissReferenceMenu)
