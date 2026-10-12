@@ -2324,10 +2324,10 @@ mod tests {
                             ready_ms = Some(started.elapsed().as_secs_f64() * 1000.0);
                         }
                         crate::import::Event::Finished(result) => result.unwrap(),
-                        crate::import::Event::Progress(stage, _, _) => {
-                            if stages.last().is_none_or(|(previous, _)| *previous != stage) {
-                                stages.push((stage, ms));
-                            }
+                        crate::import::Event::Progress(stage, _, _)
+                            if stages.last().is_none_or(|(previous, _)| *previous != stage) =>
+                        {
+                            stages.push((stage, ms));
                         }
                         _ => {}
                     }
@@ -3390,9 +3390,12 @@ struct ImportChoice {
     selected: bool,
 }
 
+type InspectedSource = (crate::AudioSource, Option<crate::SourceMetadata>);
+type ImportDisplayRow = (Option<usize>, Option<(usize, usize)>);
+
 struct SourceInspection {
     paths: Vec<PathBuf>,
-    result: Receiver<Result<Vec<(crate::AudioSource, Option<crate::SourceMetadata>)>, String>>,
+    result: Receiver<Result<Vec<InspectedSource>, String>>,
     cancelled: Arc<AtomicBool>,
 }
 
@@ -7425,7 +7428,7 @@ impl CleanSlateApp {
         (missing, room)
     }
 
-    fn import_display_rows(&self) -> Vec<(Option<usize>, Option<(usize, usize)>)> {
+    fn import_display_rows(&self) -> Vec<ImportDisplayRow> {
         let mut rows = vec![];
         if let Some(project) = &self.project {
             for (index, source) in project.sources.iter().enumerate() {

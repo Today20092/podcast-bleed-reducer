@@ -532,8 +532,8 @@ pub(crate) fn decode_recording_chunks(
                     path.display()
                 ))
             })?;
-            for (sample, bytes) in buffer.iter_mut().zip(bytes.chunks_exact(4)) {
-                *sample = f32::from_le_bytes(bytes.try_into().unwrap());
+            for (sample, bytes) in buffer.iter_mut().zip(bytes.as_chunks::<4>().0) {
+                *sample = f32::from_le_bytes(*bytes);
             }
             requested
         } else {

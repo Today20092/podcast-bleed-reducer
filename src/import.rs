@@ -322,8 +322,8 @@ fn coarse_preview(
                 reader.inner.seek(SeekFrom::Start(offset))?;
                 let bytes = &mut raw[..length * channels * 8];
                 reader.inner.read_exact(bytes)?;
-                for (sample, bytes) in buffer.iter_mut().zip(bytes.chunks_exact(8)) {
-                    *sample = f64::from_le_bytes(bytes.try_into().unwrap()) as f32;
+                for (sample, bytes) in buffer.iter_mut().zip(bytes.as_chunks::<8>().0) {
+                    *sample = f64::from_le_bytes(*bytes) as f32;
                 }
                 Ok(length)
             },
