@@ -6253,7 +6253,7 @@ impl CleanSlateApp {
         let mut content = column![
             row![text("Keyboard shortcuts").size(24), Space::new().width(Fill), button("Close    Enter / Esc").on_press(Message::CloseHelp)].spacing(16),
             text("Workspace shortcuts apply when text fields, dialogs and speaker popups are closed. Ctrl means Command on macOS for undo/redo; help uses Ctrl+/.").size(14),
-        ].spacing(12);
+        ].spacing(12).width(Fill).padding([0, 12]);
         for (heading, entries) in [
             (
                 "Playback & timeline",
@@ -6457,12 +6457,18 @@ impl CleanSlateApp {
                     opaque(
                         container(
                             container(
-                                scrollable(content).id("shortcut-reference").height(
-                                    (size.height - 120.0)
-                                        .clamp(160.0, if self.help_open { 180.0 } else { 620.0 })
-                                )
+                                scrollable(content)
+                                    .id("shortcut-reference")
+                                    .width(Fill)
+                                    .height(
+                                        (size.height - 120.0).clamp(
+                                            160.0,
+                                            if self.help_open { 180.0 } else { 620.0 }
+                                        )
+                                    )
                             )
                             .padding(24)
+                            .width(Fill)
                             .max_width(if self.help_open { 460 } else { 760 })
                             .style(container::rounded_box)
                         )
