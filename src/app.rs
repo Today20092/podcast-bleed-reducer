@@ -6814,76 +6814,96 @@ impl CleanSlateApp {
 
     fn shortcut_reference(&self) -> Element<'_, Message> {
         let mut content = column![
-            row![text("Keyboard shortcuts").size(24), Space::new().width(Fill), button("Close    Enter / Esc").on_press(Message::CloseHelp)].spacing(16),
+            row![text("Keyboard shortcuts").size(24), Space::new().width(Fill),
+                button("Close    Enter / Esc").on_press(Message::CloseHelp)].spacing(16),
             text("Workspace shortcuts apply when text fields, dialogs and speaker popups are closed. Ctrl means Command on macOS for undo/redo; help uses Ctrl+/.").size(14),
         ].spacing(12).width(Fill).padding([0, 12]);
         for (heading, entries) in [
             (
                 "Playback & timeline",
                 vec![
-                    ("Space", "Play / stop; selection plays once"),
-                    ("Home", "Seek to selection start, or recording start"),
+                    ("Play or stop", "Space", "A selection plays once."),
                     (
-                        "1 / 2 / 3",
-                        "Original / Processed / Removed; 2 and 3 need a prepared preview",
+                        "Seek to start",
+                        "Home",
+                        "Selection start, or recording start.",
                     ),
+                    ("Monitor Original", "1", ""),
+                    ("Monitor Processed", "2", "Requires a prepared preview."),
+                    ("Monitor Removed", "3", "Requires a prepared preview."),
+                    ("Fit recording", "F", ""),
+                    ("Fit selection", "Shift+F", "Requires a selection."),
+                    ("Open keyboard shortcuts", "Ctrl+/", ""),
                     (
-                        "F / Shift+F",
-                        "Fit recording / fit selection; no selection does nothing",
-                    ),
-                    ("Ctrl+/", "Open this reference"),
-                    (
-                        "Tab / Up / Down (Settings)",
-                        "Select Dark, Light or Close; Enter applies appearance immediately",
-                    ),
-                    (
+                        "Open Menu",
                         "Alt+M",
-                        "Open Menu; Tab or Up/Down selects an entry, Enter activates",
+                        "Tab, Up or Down selects; Enter activates.",
                     ),
                     (
+                        "Open Help",
                         "Alt+H",
-                        "Open Help; Tab or Up/Down selects an entry, Enter opens it",
+                        "Tab, Up or Down selects; Enter opens the entry.",
                     ),
                     (
+                        "Cancel interaction or clear selection",
                         "Escape",
-                        "Cancel active interaction first; otherwise clear range selection",
+                        "Cancel an active interaction first; otherwise clear the range.",
                     ),
+                    ("Seek", "Click waveform", ""),
+                    ("Select range and label speakers", "Drag waveform", ""),
                     (
-                        "Click / drag waveform",
-                        "Seek / select a range and open speaker labeling",
-                    ),
-                    (
+                        "Fit temporary range",
                         "Alt+drag",
-                        "Fit a temporary range; existing selection, labels and gain stay intact",
+                        "Keeps the existing selection, labels and gain.",
                     ),
                     (
-                        "Wheel / Ctrl+wheel",
-                        "Zoom around pointer; stop following without stopping playback",
+                        "Zoom around pointer",
+                        "Wheel | Ctrl+wheel",
+                        "Stops following without stopping playback.",
                     ),
-                    ("Middle-button drag", "Pan and stop following"),
+                    ("Pan", "Middle-button drag", "Stops following."),
                 ],
             ),
             (
                 "Speaker labels",
                 vec![
                     (
-                        "Space (popup)",
-                        "Pause / resume Original loop audition across all tracks",
+                        "Pause or resume loop audition",
+                        "Space",
+                        "In the popup: Original audio across all tracks.",
                     ),
-                    ("1–8 (popup)", "Toggle available speakers"),
                     (
-                        "R / Enter / Escape (popup)",
-                        "Clear speakers (room tone) / save / cancel; selection stays",
+                        "Toggle speakers",
+                        "1–8",
+                        "In the popup: available speakers only.",
                     ),
-                    ("Click label strip", "Select a saved example"),
+                    ("Clear speakers (room tone)", "R", "In the popup."),
                     (
+                        "Save speaker label",
+                        "Enter",
+                        "In the popup; selection stays.",
+                    ),
+                    (
+                        "Cancel speaker label",
+                        "Escape",
+                        "In the popup; selection stays.",
+                    ),
+                    ("Select saved example", "Click label strip", ""),
+                    (
+                        "Resize example",
                         "Drag selected label handles",
-                        "Resize example; Escape or leaving waveform cancels",
+                        "Escape or leaving the waveform cancels.",
                     ),
-                    ("Right-click waveform / label", "Open reference actions"),
                     (
-                        "Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y",
-                        "Undo / redo labels when gain editing is off",
+                        "Open reference actions",
+                        "Right-click waveform | Right-click label",
+                        "",
+                    ),
+                    ("Undo labels", "Ctrl+Z", "When gain editing is off."),
+                    (
+                        "Redo labels",
+                        "Ctrl+Shift+Z | Ctrl+Y",
+                        "When gain editing is off.",
                     ),
                 ],
             ),
@@ -6891,70 +6911,168 @@ impl CleanSlateApp {
                 "Gain editing",
                 vec![
                     (
+                        "Move manual point",
                         "Drag gain point",
-                        "Move a manual point while Edit gain points is on",
+                        "While Edit gain points is on.",
                     ),
-                    ("Delete", "Delete the selected manual gain edit"),
-                    ("Left / Right arrows", "Move selected point by 0.01 seconds"),
-                    ("Up / Down arrows", "Change selected point gain by 0.01"),
+                    ("Delete selected manual gain edit", "Delete", ""),
+                    ("Move selected point earlier", "Left", "By 0.01 seconds."),
+                    ("Move selected point later", "Right", "By 0.01 seconds."),
+                    ("Increase selected point gain", "Up", "By 0.01."),
+                    ("Decrease selected point gain", "Down", "By 0.01."),
+                    ("Undo gain", "Ctrl+Z", "While Edit gain points is on."),
                     (
-                        "Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y",
-                        "Undo / redo gain while Edit gain points is on",
+                        "Redo gain",
+                        "Ctrl+Shift+Z | Ctrl+Y",
+                        "While Edit gain points is on.",
                     ),
                     (
+                        "Cancel gain drag or clear selection",
                         "Escape",
-                        "Cancel gain drag first; idle gain editing permits deselection",
+                        "Cancels a drag first; idle gain editing permits deselection.",
                     ),
-                    ("Right-click", "Open gain actions where offered"),
+                    ("Open gain actions", "Right-click", "Where offered."),
                 ],
             ),
             (
-                "Values, text & dialogs",
+                "Values & text",
                 vec![
                     (
+                        "Type sound value",
                         "Click sound value",
-                        "Type a value; attenuation also accepts Mute",
+                        "Attenuation also accepts Mute.",
+                    ),
+                    ("Commit sound value", "Enter", ""),
+                    (
+                        "Commit and focus next value",
+                        "Tab",
+                        "While editing a sound value.",
                     ),
                     (
-                        "Enter / Tab / Shift+Tab",
-                        "Commit sound value / commit and focus next / previous value",
+                        "Commit and focus previous value",
+                        "Shift+Tab",
+                        "While editing a sound value.",
+                    ),
+                    ("Reset sound parameter", "Ctrl+click sound control", ""),
+                    ("Open Reset to default", "Right-click sound control", ""),
+                    (
+                        "Cancel value draft",
+                        "Escape",
+                        "While editing a sound value; keeps the last valid value.",
+                    ),
+                    ("Save track name", "Enter", "While renaming."),
+                    ("Cancel track rename", "Escape", "While renaming."),
+                    (
+                        "Focus next input or slider",
+                        "Tab",
+                        "Arrows operate focused sliders.",
                     ),
                     (
-                        "Ctrl+click / right-click sound control",
-                        "Reset parameter / open Reset to default",
+                        "Focus previous input or slider",
+                        "Shift+Tab",
+                        "Arrows operate focused sliders.",
                     ),
                     (
-                        "Escape (sound value)",
-                        "Cancel value draft; keep last valid value",
-                    ),
-                    ("Enter / Escape (track name)", "Save / cancel rename"),
-                    (
-                        "Tab / Shift+Tab",
-                        "Navigate text inputs and sliders; arrows operate focused sliders",
-                    ),
-                    (
-                        "Escape (import, export, Help)",
-                        "Close active dialog; Enter also closes this reference",
-                    ),
-                    (
-                        "Page Up / Down, Up / Down (Help)",
-                        "Scroll reference; Home / End jumps to top / bottom",
-                    ),
-                    (
-                        "Text fields",
-                        "Typing owns keys; workspace shortcuts stay suppressed",
+                        "Type in text fields",
+                        "Typing",
+                        "Text owns keys; workspace shortcuts stay suppressed.",
                     ),
                 ],
             ),
+            (
+                "Dialogs & reference",
+                vec![
+                    (
+                        "Select appearance or Close",
+                        "Tab | Up | Down",
+                        "In Settings: Enter applies the appearance immediately.",
+                    ),
+                    ("Close active dialog", "Escape", "Import, export or Help."),
+                    ("Close keyboard shortcuts", "Enter", ""),
+                    ("Scroll reference up", "Page Up | Up", ""),
+                    ("Scroll reference down", "Page Down | Down", ""),
+                    ("Jump to reference top", "Home", ""),
+                    ("Jump to reference bottom", "End", ""),
+                ],
+            ),
         ] {
-            content = content.push(text(heading).size(18));
-            for (binding, description) in entries {
+            content = content
+                .push(Space::new().height(16))
+                .push(text(heading).size(18));
+            for (action, binding, condition) in entries {
                 content = content.push(
-                    row![
-                        text(binding).width(240).size(14),
-                        text(description).size(14)
-                    ]
-                    .spacing(16),
+                    responsive(move |size| {
+                        let mut description = column![text(action).size(14)].spacing(4).width(Fill);
+                        if !condition.is_empty() {
+                            description = description.push(text(condition).size(13).style(
+                                |theme: &Theme| text::Style {
+                                    color: Some(colors(theme).muted),
+                                },
+                            ));
+                        }
+                        let mut bindings = column![].spacing(5);
+                        for (alternative_index, alternative) in binding.split(" | ").enumerate() {
+                            if alternative_index > 0 {
+                                bindings =
+                                    bindings.push(text("or").size(12).style(|theme: &Theme| {
+                                        text::Style {
+                                            color: Some(colors(theme).muted),
+                                        }
+                                    }));
+                            }
+                            let visual: Element<'_, Message> =
+                                if alternative.to_lowercase().contains("click")
+                                    || alternative.to_lowercase().contains("drag")
+                                    || alternative.to_lowercase().contains("wheel")
+                                    || alternative == "Typing"
+                                {
+                                    text(alternative).size(13).into()
+                                } else {
+                                    let mut chord = row![].spacing(4).align_y(iced::Center);
+                                    for (index, key) in alternative.split('+').enumerate() {
+                                        if index > 0 {
+                                            chord = chord.push(text("+").size(12));
+                                        }
+                                        chord = chord.push(
+                                            container(text(key).size(13)).padding([3, 6]).style(
+                                                |theme: &Theme| {
+                                                    let c = colors(theme);
+                                                    container::Style {
+                                                        text_color: Some(c.text),
+                                                        background: Some(c.control.into()),
+                                                        border: iced::Border {
+                                                            color: c.border,
+                                                            width: 1.0,
+                                                            radius: 3.0.into(),
+                                                        },
+                                                        ..Default::default()
+                                                    }
+                                                },
+                                            ),
+                                        );
+                                    }
+                                    chord.wrap().into()
+                                };
+                            bindings = bindings.push(visual);
+                        }
+                        let body: Element<'_, Message> = if size.width < 560.0 {
+                            column![description, bindings].spacing(8).into()
+                        } else {
+                            row![description, bindings.width(220)].spacing(20).into()
+                        };
+                        column![
+                            container(body).padding([10, 0]).width(Fill),
+                            container(Space::new().height(1))
+                                .width(Fill)
+                                .style(|theme: &Theme| container::Style {
+                                    background: Some(colors(theme).panel_border.into()),
+                                    ..Default::default()
+                                }),
+                        ]
+                        .width(Fill)
+                        .into()
+                    })
+                    .height(Length::Shrink),
                 );
             }
         }

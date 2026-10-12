@@ -1,8 +1,8 @@
 # Remove sound-value hover help and improve shortcut readability
 
-Status: ready-for-agent
+Status: claimed
 Type: task
-Assignee: unassigned
+Assignee: Codex implement_39
 Blocked by: 32, 34, 37
 Target branch: codex/editor-workflow-31-37
 Spec: #accepted-design
@@ -39,7 +39,9 @@ Playback preparation/cache changes, new shortcut bindings, global tooltip stylin
 
 ## Results
 
-Pending. Sound-value tooltip removal is already present as a small working-tree edit in src/app.rs, and cargo fmt --check passed for that edit. It has not been rebuilt or visually verified. The shortcut redesign is specified but not implemented. Claim before further implementation.
+Implemented on scoped branch `codex/shortcut-readability-39`, based on integration checkpoint `df3ad23`. The checkpoint already contains the accepted sound-value tooltip removal. The reference now uses one action per row, a consistent binding column, themed text keycaps with wrapping chords, explicit alternative bindings, muted condition lines, section spacing and separators. Under 560px of available content width, bindings move below the action. Responsive rows explicitly shrink vertically so scrolling remains bounded. No shortcut dispatch, sound-value validation, theme tokens or dependencies changed.
+
+Formatting and diff checks pass. Existing app behavioral tests, strict all-target/all-feature Clippy and the GUI development build remain pending compilation. Owner verification remains pending for tooltip absence, value gestures, narrow/wide readability in both themes, reference scrolling and Close/Enter/Escape. The ticket's instruction prohibits Computer Use unless subsequently requested; no GUI was controlled or closed. Keep claimed until these acceptance checks pass.
 
 ## Comments
 
