@@ -48,6 +48,78 @@ fn bindings(project: &Project) -> Vec<SourceBinding> {
         })
         .collect()
 }
+
+#[test]
+fn sound_values_validate_persist_and_legacy_settings_keep_finite_attenuation() {
+    let dir = temp_dir();
+    let mut project = session(&dir);
+    for db in [-120.0, 0.0, -12.125] {
+        for duration in [0.0, 60000.0, 12.125] {
+            project
+                .set_parameters(AutomixParameters {
+                    attenuation_db: db,
+                    open_ms: duration,
+                    close_ms: duration,
+                    minimum_gap_ms: duration,
+                    ..project.parameters()
+                })
+                .unwrap();
+            assert_eq!(
+                Project::open(project.path()).unwrap().parameters(),
+                project.parameters()
+            );
+        }
+    }
+    for invalid in [f32::NAN, f32::INFINITY, -120.01, 0.01] {
+        assert!(
+            project
+                .set_parameters(AutomixParameters {
+                    attenuation_db: invalid,
+                    ..project.parameters()
+                })
+                .is_err()
+        );
+    }
+    for invalid in [f32::NAN, f32::INFINITY, -0.01, 60000.1] {
+        for field in 0..3 {
+            let mut p = project.parameters();
+            match field {
+                0 => p.open_ms = invalid,
+                1 => p.close_ms = invalid,
+                _ => p.minimum_gap_ms = invalid,
+            }
+            assert!(project.set_parameters(p).is_err());
+        }
+    }
+    let finite = project.parameters();
+    assert!(finite.attenuation_gain() > 0.0);
+    project
+        .set_parameters(AutomixParameters {
+            mute: true,
+            ..finite
+        })
+        .unwrap();
+    assert_eq!(
+        Project::open(project.path())
+            .unwrap()
+            .parameters()
+            .attenuation_gain(),
+        0.0
+    );
+    let mut saved: serde_json::Value =
+        serde_json::from_slice(&fs::read(project.path()).unwrap()).unwrap();
+    saved["parameters"].as_object_mut().unwrap().remove("mute");
+    fs::write(project.path(), serde_json::to_vec(&saved).unwrap()).unwrap();
+    assert_eq!(Project::open(project.path()).unwrap().parameters(), finite);
+    saved["parameters"]["mute"] = serde_json::json!("yes");
+    fs::write(project.path(), serde_json::to_vec(&saved).unwrap()).unwrap();
+    assert!(Project::open(project.path()).is_err());
+    saved["parameters"]["mute"] = serde_json::json!(false);
+    saved["parameters"]["open_ms"] = serde_json::json!(60001);
+    fs::write(project.path(), serde_json::to_vec(&saved).unwrap()).unwrap();
+    assert!(Project::open(project.path()).is_err());
+    fs::remove_dir_all(dir).unwrap();
+}
 fn label(project: &Project) -> ReferenceLabel {
     ReferenceLabel {
         id: 1,

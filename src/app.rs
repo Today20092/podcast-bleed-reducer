@@ -2020,6 +2020,77 @@ mod tests {
     }
 
     #[test]
+    fn typed_sound_drafts_commit_cancel_validate_and_reset_individually() {
+        use super::{Message, SoundParameter};
+        let directory =
+            std::env::temp_dir().join(format!("cleanslate-sound-ui-{}", std::process::id()));
+        std::fs::create_dir_all(&directory).unwrap();
+        let source = directory.join("voice.wav");
+        write_wav(&source, &[0.0; 100]);
+        let project =
+            synchronized_project(directory.join("episode.cleanslate"), vec![source]).unwrap();
+        let mut app = super::CleanSlateApp {
+            project: Some(project),
+            ..Default::default()
+        };
+        for (parameter, value) in [
+            (SoundParameter::Attenuation, "-120"),
+            (SoundParameter::Open, "0"),
+            (SoundParameter::Close, "60000"),
+            (SoundParameter::Gap, "12.125"),
+        ] {
+            let _ = app.update(Message::EditSound(parameter));
+            let _ = app.update(Message::SoundText(value.into()));
+            assert_ne!(
+                parameter
+                    .value(app.project.as_ref().unwrap().parameters())
+                    .to_string(),
+                value
+            );
+            let _ = app.update(Message::CommitSound);
+            assert_eq!(
+                parameter.value(app.project.as_ref().unwrap().parameters()),
+                value.parse::<f32>().unwrap()
+            );
+            assert!(app.sound_draft.is_none());
+        }
+        let accepted = app.preview_parameters;
+        let _ = app.update(Message::EditSound(SoundParameter::Open));
+        let _ = app.update(Message::SoundText("42".into()));
+        let _ = app.update(Message::CancelSound);
+        assert_eq!(app.preview_parameters, accepted);
+        for invalid in ["NaN", "inf", "abc", "-1", "60001"] {
+            let _ = app.update(Message::EditSound(SoundParameter::Open));
+            let _ = app.update(Message::SoundText(invalid.into()));
+            let _ = app.update(Message::SoundTab(false));
+            assert!(app.sound_error.is_some() && app.sound_draft.is_some());
+            assert!(!app.sound_typing);
+            assert_eq!(app.preview_parameters, accepted);
+        }
+        let _ = app.update(Message::SoundText("123.25".into()));
+        let _ = app.update(Message::KeyPressed(
+            iced::keyboard::Key::Character("3".into()),
+            iced::keyboard::Modifiers::default(),
+        ));
+        assert_eq!(app.audition_mode, super::AuditionMode::Original);
+        let _ = app.update(Message::SoundTab(false));
+        assert_eq!(app.preview_parameters.open_ms, 123.25);
+        let _ = app.update(Message::Mute);
+        assert!(app.project.as_ref().unwrap().parameters().mute);
+        let _ = app.workspace(false, 900.0, 1400.0);
+        assert_eq!(app.preview_parameters.attenuation_db, -120.0);
+        let _ = app.update(Message::ResetSound(SoundParameter::Attenuation));
+        assert_eq!(app.preview_parameters.attenuation_db, -18.0);
+        assert!(!app.preview_parameters.mute);
+        assert_eq!(app.preview_parameters.open_ms, 123.25);
+        let _ = app.update(Message::SoundModifiers(iced::keyboard::Modifiers::CTRL));
+        let _ = app.update(Message::EditSound(SoundParameter::Open));
+        assert_eq!(app.preview_parameters.open_ms, 50.0);
+        assert!(!app.reference_analyze_requested && app.preview_processing.is_none());
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
     fn inspector_stacks_only_in_compact_windows() {
         assert!(!super::compact_workspace(1280.0));
         assert!(super::compact_workspace(1000.0));
@@ -2153,6 +2224,11 @@ struct ReferenceAudition {
 }
 
 pub struct CleanSlateApp {
+    sound_draft: Option<(SoundParameter, String)>,
+    sound_error: Option<String>,
+    sound_typing: bool,
+    sound_menu: Option<SoundParameter>,
+    sound_modifiers: keyboard::Modifiers,
     reference_audition: Option<ReferenceAudition>,
     project: Option<Project>,
     pending_imports: Vec<PathBuf>,
@@ -2214,6 +2290,53 @@ pub struct CleanSlateApp {
     export_error: Option<String>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SoundParameter {
+    Attenuation,
+    Open,
+    Close,
+    Gap,
+}
+
+impl SoundParameter {
+    fn value(self, p: AutomixParameters) -> f32 {
+        match self {
+            Self::Attenuation => p.attenuation_db,
+            Self::Open => p.open_ms,
+            Self::Close => p.close_ms,
+            Self::Gap => p.minimum_gap_ms,
+        }
+    }
+    fn set(self, p: &mut AutomixParameters, value: f32) {
+        match self {
+            Self::Attenuation => {
+                p.attenuation_db = value;
+                p.mute = false;
+            }
+            Self::Open => p.open_ms = value,
+            Self::Close => p.close_ms = value,
+            Self::Gap => p.minimum_gap_ms = value,
+        }
+    }
+    fn parse(self, value: &str) -> Result<f32, &'static str> {
+        let bounds = if self == Self::Attenuation {
+            -120.0..=0.0
+        } else {
+            0.0..=60000.0
+        };
+        value
+            .trim()
+            .parse::<f32>()
+            .ok()
+            .filter(|v| v.is_finite() && bounds.contains(v))
+            .ok_or(if self == Self::Attenuation {
+                "Enter a finite value from −120 to 0 dB."
+            } else {
+                "Enter a finite value from 0 to 60000 ms."
+            })
+    }
+}
+
 impl Default for CleanSlateApp {
     fn default() -> Self {
         Self {
@@ -2223,6 +2346,11 @@ impl Default for CleanSlateApp {
             source_inspection: None,
             import_choices: vec![],
             track_name_draft: None,
+            sound_draft: None,
+            sound_error: None,
+            sound_typing: false,
+            sound_menu: None,
+            sound_modifiers: keyboard::Modifiers::default(),
             import_due: None,
             source_loading: None,
             messages: vec![],
@@ -2554,6 +2682,17 @@ enum Message {
     #[cfg(test)]
     SpeechSensitivity(f32),
     Attenuation(f32),
+    EditSound(SoundParameter),
+    SoundText(String),
+    CommitSound,
+    CancelSound,
+    CheckSoundFocus,
+    SoundFocused(bool),
+    SoundTab(bool),
+    SoundModifiers(keyboard::Modifiers),
+    SoundMenu(SoundParameter),
+    ResetSound(SoundParameter),
+    Mute,
     #[cfg(test)]
     SpeechPadding(f32),
     OpenTime(f32),
@@ -2568,7 +2707,6 @@ enum Message {
     Previous,
     MonitorGain(f32),
     KeyPressed(keyboard::Key, keyboard::Modifiers),
-    RangeModifier(bool),
     #[cfg(test)]
     OwnershipMode(bool),
     #[cfg(test)]
@@ -2663,6 +2801,79 @@ fn waveform_height(workspace_height: f32, stem_count: usize, compact: bool) -> f
 }
 
 impl CleanSlateApp {
+    fn commit_sound(&mut self) {
+        let Some((parameter, draft)) = &self.sound_draft else {
+            return;
+        };
+        match parameter.parse(draft) {
+            Ok(value) => {
+                parameter.set(&mut self.preview_parameters, value);
+                self.sound_draft = None;
+                self.sound_error = None;
+                self.sound_typing = false;
+            }
+            Err(error) => self.sound_error = Some(error.into()),
+        }
+    }
+
+    fn sound_value(&self, parameter: SoundParameter, label: &'static str) -> Element<'_, Message> {
+        let unit = if parameter == SoundParameter::Attenuation {
+            "dB"
+        } else {
+            "ms"
+        };
+        let value = if parameter == SoundParameter::Attenuation && self.preview_parameters.mute {
+            "Mute".into()
+        } else {
+            format!("{} {unit}", parameter.value(self.preview_parameters))
+        };
+        let control: Element<'_, Message> = if let Some((active, draft)) = &self.sound_draft
+            && *active == parameter
+        {
+            row![
+                text_input("Value", draft)
+                    .id("sound-value")
+                    .on_input(Message::SoundText)
+                    .on_submit(Message::CommitSound)
+                    .width(110),
+                text(unit)
+            ]
+            .spacing(6)
+            .into()
+        } else {
+            mouse_area(
+                button(text(value))
+                    .style(secondary_button)
+                    .on_press(Message::EditSound(parameter)),
+            )
+            .on_right_press(Message::SoundMenu(parameter))
+            .into()
+        };
+        let mut content =
+            column![row![text(label), Space::new().width(Fill), control].align_y(iced::Center)]
+                .spacing(4);
+        if self
+            .sound_draft
+            .as_ref()
+            .is_some_and(|(active, _)| *active == parameter)
+            && let Some(error) = &self.sound_error
+        {
+            content = content.push(text(error).size(12));
+        }
+        if self.sound_menu == Some(parameter) {
+            content = content.push(
+                button("Reset to default")
+                    .style(secondary_button)
+                    .on_press(Message::ResetSound(parameter)),
+            );
+        }
+        iced::widget::tooltip(
+            content,
+            text("Click to type. Ctrl+click resets. Right-click: Reset to default."),
+            iced::widget::tooltip::Position::Top,
+        )
+        .into()
+    }
     fn install_waveforms(&mut self, waveforms: Vec<WaveformCache>) {
         self.close_reference_menu();
         self.selected_example = None;
@@ -2805,6 +3016,10 @@ impl CleanSlateApp {
         self.close_reference_menu();
         self.stop_audition();
         self.track_name_draft = None;
+        self.sound_draft = None;
+        self.sound_error = None;
+        self.sound_typing = false;
+        self.sound_menu = None;
         self.preview_pending = None;
         self.preview_generation += 1;
         self.preview_processing = None;
@@ -4103,7 +4318,7 @@ impl CleanSlateApp {
                     | Message::Tick
                     | Message::Stop
                     | Message::Timeline(_)
-                    | Message::RangeModifier(_)
+                    | Message::SoundModifiers(_)
             )
         {
             return Task::none();
@@ -4509,7 +4724,79 @@ impl CleanSlateApp {
             Message::SpeechSensitivity(value) => {
                 self.preview_parameters.speech_sensitivity = 1.0 - value
             }
-            Message::Attenuation(value) => self.preview_parameters.attenuation_db = value,
+            Message::EditSound(parameter) => {
+                if self.sound_modifiers.control() {
+                    return self.update(Message::ResetSound(parameter));
+                }
+                let _ = self.update(Message::CommitSound);
+                self.sound_draft = Some((
+                    parameter,
+                    parameter.value(self.preview_parameters).to_string(),
+                ));
+                self.sound_error = None;
+                self.sound_typing = true;
+                self.sound_menu = None;
+                return iced::widget::operation::focus("sound-value")
+                    .chain(iced::widget::operation::select_all("sound-value"));
+            }
+            Message::SoundText(value) => {
+                if let Some((_, draft)) = &mut self.sound_draft {
+                    *draft = value;
+                }
+                self.sound_typing = true;
+                self.sound_error = None;
+            }
+            Message::CommitSound => self.commit_sound(),
+            Message::CancelSound => {
+                self.sound_draft = None;
+                self.sound_error = None;
+                self.sound_typing = false;
+            }
+            Message::CheckSoundFocus => {
+                if self.sound_draft.is_some() {
+                    return iced::widget::operation::is_focused("sound-value")
+                        .map(Message::SoundFocused);
+                }
+            }
+            Message::SoundFocused(focused) => {
+                self.sound_typing = focused;
+                if !focused {
+                    self.commit_sound();
+                }
+            }
+            Message::SoundTab(reverse) => {
+                let _ = self.update(Message::CommitSound);
+                self.sound_typing = false;
+                return if reverse {
+                    iced::widget::operation::focus_previous()
+                } else {
+                    iced::widget::operation::focus_next()
+                };
+            }
+            Message::SoundModifiers(modifiers) => {
+                self.sound_modifiers = modifiers;
+                self.selecting_range = modifiers.shift();
+            }
+            Message::SoundMenu(parameter) => self.sound_menu = Some(parameter),
+            Message::ResetSound(parameter) => {
+                self.sound_draft = None;
+                self.sound_error = None;
+                self.sound_typing = false;
+                self.sound_menu = None;
+                parameter.set(
+                    &mut self.preview_parameters,
+                    parameter.value(AutomixParameters::default()),
+                );
+            }
+            Message::Mute => {
+                self.sound_draft = None;
+                self.sound_error = None;
+                self.sound_typing = false;
+                self.preview_parameters.mute = !self.preview_parameters.mute;
+            }
+            Message::Attenuation(value) => {
+                SoundParameter::Attenuation.set(&mut self.preview_parameters, value)
+            }
             #[cfg(test)]
             Message::SpeechPadding(value) => {
                 self.preview_parameters.speech_padding_ms = effective_padding_ms(value)
@@ -4560,6 +4847,9 @@ impl CleanSlateApp {
                 }
             }
             Message::KeyPressed(key, modifiers) => {
+                if self.sound_typing {
+                    return Task::none();
+                }
                 if self.track_name_draft.is_some() {
                     if key == keyboard::Key::Named(keyboard::key::Named::Escape) {
                         return self.update(Message::CancelTrackName);
@@ -4588,7 +4878,6 @@ impl CleanSlateApp {
                     _ => {}
                 }
             }
-            Message::RangeModifier(selecting) => self.selecting_range = selecting,
             #[cfg(test)]
             Message::OwnershipMode(enabled) => {
                 if !enabled {
@@ -4873,7 +5162,7 @@ impl CleanSlateApp {
                 keyboard_message(key, modifiers, status)
             }
             iced::Event::Keyboard(keyboard::Event::ModifiersChanged(modifiers)) => {
-                Some(Message::RangeModifier(modifiers.shift()))
+                Some(Message::SoundModifiers(modifiers))
             }
             _ => None,
         });
@@ -4913,7 +5202,28 @@ impl CleanSlateApp {
         } else {
             Subscription::none()
         };
-        Subscription::batch([drops, processing, playback, rename_keys])
+        let sound_keys = if self.sound_draft.is_some() {
+            iced::event::listen_with(|event, _, _| match event {
+                iced::Event::Keyboard(keyboard::Event::KeyPressed {
+                    key: keyboard::Key::Named(keyboard::key::Named::Escape),
+                    ..
+                }) => Some(Message::CancelSound),
+                iced::Event::Keyboard(keyboard::Event::KeyPressed {
+                    key: keyboard::Key::Named(keyboard::key::Named::Tab),
+                    modifiers,
+                    ..
+                }) => Some(Message::SoundTab(modifiers.shift())),
+                iced::Event::Mouse(iced::mouse::Event::ButtonPressed(_))
+                | iced::Event::Keyboard(keyboard::Event::KeyReleased { .. }) => {
+                    Some(Message::CheckSoundFocus)
+                }
+                iced::Event::Window(window::Event::Unfocused) => Some(Message::SoundFocused(false)),
+                _ => None,
+            })
+        } else {
+            Subscription::none()
+        };
+        Subscription::batch([drops, processing, playback, rename_keys, sound_keys])
     }
 
     fn view(&self) -> Element<'_, Message> {
@@ -5925,7 +6235,10 @@ impl CleanSlateApp {
                             weight: iced::font::Weight::Semibold,
                             ..iced::Font::with_name("Segoe UI")
                         }),
-                        text(format!("Attenuation: {:.1} dB", parameters.attenuation_db)),
+                        self.sound_value(SoundParameter::Attenuation, "Attenuation"),
+                        button(if parameters.mute { "Mute: on" } else { "Mute" })
+                            .style(secondary_button)
+                            .on_press(Message::Mute),
                         slider(
                             -30.0..=-3.0,
                             parameters.attenuation_db,
@@ -5933,21 +6246,15 @@ impl CleanSlateApp {
                         )
                         .step(1.0_f32)
                         .on_release(Message::RefreshPreview),
-                        text(format!("Fade to full volume: {:.0} ms", parameters.open_ms)),
+                        self.sound_value(SoundParameter::Open, "Fade to full volume"),
                         slider(1.0..=1000.0, parameters.open_ms, Message::OpenTime)
                             .step(1.0_f32)
                             .on_release(Message::RefreshPreview),
-                        text(format!(
-                            "Fade to reduced volume: {:.0} ms",
-                            parameters.close_ms
-                        )),
+                        self.sound_value(SoundParameter::Close, "Fade to reduced volume"),
                         slider(1.0..=2000.0, parameters.close_ms, Message::CloseTime)
                             .step(1.0_f32)
                             .on_release(Message::RefreshPreview),
-                        text(format!(
-                            "Ignore gaps shorter than: {:.0} ms",
-                            parameters.minimum_gap_ms
-                        )),
+                        self.sound_value(SoundParameter::Gap, "Ignore gaps shorter than"),
                         slider(
                             10.0..=5000.0,
                             parameters.minimum_gap_ms,

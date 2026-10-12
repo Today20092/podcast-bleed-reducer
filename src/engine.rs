@@ -18,10 +18,21 @@ pub struct AutomixParameters {
     pub speech_sensitivity: f32,
     pub bleed_discrimination_db: f32,
     pub attenuation_db: f32,
+    pub mute: bool,
     pub speech_padding_ms: f32,
     pub open_ms: f32,
     pub close_ms: f32,
     pub minimum_gap_ms: f32,
+}
+
+impl AutomixParameters {
+    pub fn attenuation_gain(self) -> f32 {
+        if self.mute {
+            0.0
+        } else {
+            10.0_f32.powf(self.attenuation_db / 20.0)
+        }
+    }
 }
 
 impl<'de> Deserialize<'de> for AutomixParameters {
@@ -34,6 +45,8 @@ impl<'de> Deserialize<'de> for AutomixParameters {
             bleed_discrimination_db: f32,
             #[serde(default = "default_attenuation")]
             attenuation_db: f32,
+            #[serde(default)]
+            mute: bool,
             #[serde(default = "default_speech_padding")]
             speech_padding_ms: f32,
             open_ms: Option<f32>,
@@ -47,6 +60,7 @@ impl<'de> Deserialize<'de> for AutomixParameters {
             speech_sensitivity: stored.speech_sensitivity,
             bleed_discrimination_db: stored.bleed_discrimination_db,
             attenuation_db: stored.attenuation_db,
+            mute: stored.mute,
             speech_padding_ms: stored.speech_padding_ms,
             open_ms: stored.open_ms.or(stored.transition_ms).unwrap_or(50.0),
             close_ms: stored.close_ms.or(stored.transition_ms).unwrap_or(500.0),
@@ -474,6 +488,7 @@ impl Default for AutomixParameters {
             speech_sensitivity: SPEECH_PROBABILITY,
             bleed_discrimination_db: ENERGY_MARGIN_DB,
             attenuation_db: -18.0,
+            mute: false,
             speech_padding_ms: 512.0,
             open_ms: 50.0,
             close_ms: 500.0,
@@ -932,7 +947,7 @@ pub fn run_with_ownership(
                 sample_count,
                 &regions,
                 &request.protections,
-                10.0_f32.powf(parameters.attenuation_db / 20.0),
+                parameters.attenuation_gain(),
                 (parameters.open_ms * crate::timebase::DETECTOR_SAMPLE_RATE as f32 / 1000.0)
                     .max(1.0),
                 (parameters.close_ms * crate::timebase::DETECTOR_SAMPLE_RATE as f32 / 1000.0)

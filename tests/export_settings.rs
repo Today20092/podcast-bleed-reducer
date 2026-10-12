@@ -310,6 +310,76 @@ fn read_samples(path: &std::path::Path) -> (bwavfile::WaveFmt, Vec<f32>) {
 }
 
 #[test]
+fn explicit_mute_remains_exact_silence_in_integer_float_and_multichannel_delivery() {
+    let (root, mut project, audio) = fixture::session();
+    project
+        .set_parameters(rust_app::AutomixParameters {
+            mute: true,
+            open_ms: 0.0,
+            close_ms: 0.0,
+            minimum_gap_ms: 0.0,
+            ..project.parameters()
+        })
+        .unwrap();
+    prepare_current(&root, &mut project, &audio);
+    let gate = rust_app::RenderGeneration::default();
+    for layout in [ExportLayout::SeparateMono, ExportLayout::Multichannel] {
+        for encoding in [ExportEncoding::Pcm24, ExportEncoding::Float32] {
+            let destination = root.join(format!("mute-{layout:?}-{encoding:?}"));
+            rust_app::prepare_export_with_settings(
+                &project,
+                &destination,
+                ExportSettings { layout, encoding },
+                None,
+            )
+            .unwrap()
+            .publish(&project, &gate, gate.current(), None)
+            .unwrap();
+            let paths = if layout == ExportLayout::Multichannel {
+                vec![destination.join("session-clean.wav")]
+            } else {
+                vec![
+                    destination.join("speaker-0-clean.wav"),
+                    destination.join("speaker-1-clean.wav"),
+                ]
+            };
+            for path in paths {
+                let (format, samples) = read_samples(&path);
+                let count = 4000 * usize::from(format.channel_count);
+                assert!(
+                    samples[..count].iter().all(|s| *s == 0.0),
+                    "mute room-tone plateau: {path:?}"
+                );
+                assert!(
+                    samples[count..].iter().any(|s| *s != 0.0),
+                    "known speech stays audible"
+                );
+            }
+        }
+    }
+    project
+        .set_parameters(rust_app::AutomixParameters {
+            mute: false,
+            attenuation_db: -120.0,
+            ..project.parameters()
+        })
+        .unwrap();
+    assert!(
+        rust_app::prepare_export_with_settings(
+            &project,
+            &root.join("stale"),
+            ExportSettings {
+                layout: ExportLayout::SeparateMono,
+                encoding: ExportEncoding::Float32
+            },
+            None
+        )
+        .is_err()
+    );
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn separate_encodings_preserve_profiles_and_overrides_with_one_bounded_dither() {
     for (profiles, expected) in [
         (["pcm16", "pcm24"], [(1, 16), (1, 24)]),

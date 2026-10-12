@@ -221,7 +221,7 @@ impl PreviewCache {
                 sample_count,
                 regions,
                 protections,
-                10.0_f32.powf(parameters.attenuation_db / 20.0),
+                parameters.attenuation_gain(),
                 (parameters.open_ms * crate::timebase::DETECTOR_SAMPLE_RATE as f32 / 1000.0)
                     .max(1.0),
                 (parameters.close_ms * crate::timebase::DETECTOR_SAMPLE_RATE as f32 / 1000.0)
@@ -278,11 +278,11 @@ pub(crate) fn validate_parameters(p: AutomixParameters) -> Result<(), RenderBloc
     .all(|v| v.is_finite())
         || !(0.0..=1.0).contains(&p.speech_sensitivity)
         || p.bleed_discrimination_db < 0.0
-        || p.attenuation_db > 0.0
+        || !(-120.0..=0.0).contains(&p.attenuation_db)
         || p.speech_padding_ms < 0.0
-        || p.open_ms < 0.0
-        || p.close_ms < 0.0
-        || !(10.0..=5000.0).contains(&p.minimum_gap_ms)
+        || !(0.0..=60000.0).contains(&p.open_ms)
+        || !(0.0..=60000.0).contains(&p.close_ms)
+        || !(0.0..=60000.0).contains(&p.minimum_gap_ms)
     {
         return Err(RenderBlocker(
             "automix parameters must be finite, attenuation-only, and within valid ranges".into(),
