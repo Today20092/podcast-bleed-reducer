@@ -2660,6 +2660,211 @@ mod tests {
     }
 }
 
+#[cfg(test)]
+mod app_menu_tests {
+    use super::*;
+
+    #[test]
+    fn version_copy_is_allowlisted_and_failures_stay_actionable() {
+        assert_eq!(
+            version_info("1.2.3", None, "windows", "x86_64"),
+            "CleanSlate 1.2.3\nPlatform: windows (x86_64)"
+        );
+        assert_eq!(
+            version_info("1.2.3", Some("abc123"), "linux", "aarch64"),
+            "CleanSlate 1.2.3\nBuild: abc123\nPlatform: linux (aarch64)"
+        );
+        let mut app = CleanSlateApp::default();
+        let _ = app.update(Message::About);
+        let _ = app.update(Message::VersionCopied(false));
+        assert!(app.app_feedback.as_ref().unwrap().contains("manually"));
+        assert!(!app.copy_pending);
+        let _ = app.update(Message::VersionCopied(true));
+        assert_eq!(
+            app.app_feedback.as_deref(),
+            Some("Version information copied.")
+        );
+        let _ = app.update(Message::CloseHelp);
+        let _ = app.update(Message::Menu);
+        let _ = app.update(Message::LinkOpened(
+            AppLink::ReportBug,
+            Err("No browser".into()),
+        ));
+        assert!(
+            app.app_feedback
+                .as_ref()
+                .unwrap()
+                .contains("https://github.com/Today20092/podcast-bleed-reducer/issues/new/choose")
+        );
+    }
+
+    #[test]
+    fn closing_about_before_copy_finishes_does_not_disable_future_copy() {
+        let mut app = CleanSlateApp::default();
+        let _ = app.update(Message::About);
+        let _ = app.update(Message::CopyVersion);
+        assert!(app.copy_pending);
+        let _ = app.update(Message::CloseHelp);
+        let _ = app.update(Message::KeyboardShortcuts);
+        let _ = app.update(Message::VersionCopied(false));
+        assert!(!app.copy_pending);
+        assert!(app.shortcuts_open);
+    }
+
+    #[test]
+    fn menu_reuses_reference_and_about_keyboard_owns_navigation() {
+        let mut app = CleanSlateApp::default();
+        let _ = app.update(Message::KeyPressed(
+            keyboard::Key::Character("m".into()),
+            keyboard::Modifiers::ALT,
+        ));
+        assert!(app.menu_open);
+        let _ = app.update(Message::KeyPressed(
+            keyboard::Key::Named(keyboard::key::Named::ArrowDown),
+            keyboard::Modifiers::empty(),
+        ));
+        let _ = app.update(Message::KeyPressed(
+            keyboard::Key::Named(keyboard::key::Named::Enter),
+            keyboard::Modifiers::empty(),
+        ));
+        assert!(app.shortcuts_open && !app.menu_open);
+        let _ = app.update(Message::CloseHelp);
+        let _ = app.update(Message::About);
+        app.timeline.set_selection(Some((1, 2)));
+        let _ = app.update(Message::KeyPressed(
+            keyboard::Key::Character("f".into()),
+            keyboard::Modifiers::empty(),
+        ));
+        assert_eq!(app.timeline.selection(), Some((1, 2)));
+        let _ = app.update(Message::KeyPressed(
+            keyboard::Key::Named(keyboard::key::Named::Tab),
+            keyboard::Modifiers::empty(),
+        ));
+        let _ = app.update(Message::KeyPressed(
+            keyboard::Key::Named(keyboard::key::Named::Enter),
+            keyboard::Modifiers::empty(),
+        ));
+        assert!(app.app_dialog.is_none());
+        assert_eq!(
+            AppLink::Help.url(),
+            "https://github.com/Today20092/podcast-bleed-reducer/blob/main/docs/editor-workflow.md"
+        );
+        assert_eq!(
+            AppLink::GitHub.url(),
+            "https://github.com/Today20092/podcast-bleed-reducer"
+        );
+    }
+
+    #[test]
+    fn menu_routes_settings_and_restores_workspace_without_edits() {
+        let mut app = CleanSlateApp::default();
+        app.timeline.set_selection(Some((1, 2)));
+        let _ = app.update(Message::Menu);
+        let _ = app.update(Message::KeyPressed(
+            keyboard::Key::Named(keyboard::key::Named::Enter),
+            keyboard::Modifiers::empty(),
+        ));
+        assert_eq!(app.app_dialog, Some(AppDialog::Settings));
+        let _ = app.update(Message::Timeline(TimelineEvent::Select(3, 4)));
+        assert_eq!(app.timeline.selection(), Some((1, 2)));
+        let _ = app.update(Message::CloseHelp);
+        assert!(app.app_dialog.is_none());
+        assert_eq!(app.timeline.selection(), Some((1, 2)));
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AppDialog {
+    Settings,
+    About,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum AppLink {
+    Help,
+    GitHub,
+    ReportBug,
+}
+
+impl AppLink {
+    fn url(self) -> &'static str {
+        match self {
+            Self::Help => {
+                "https://github.com/Today20092/podcast-bleed-reducer/blob/main/docs/editor-workflow.md"
+            }
+            Self::GitHub => "https://github.com/Today20092/podcast-bleed-reducer",
+            Self::ReportBug => {
+                "https://github.com/Today20092/podcast-bleed-reducer/issues/new/choose"
+            }
+        }
+    }
+}
+
+fn menu_action(index: usize) -> Message {
+    match index {
+        0 => Message::Settings,
+        1 => Message::KeyboardShortcuts,
+        2 => Message::OpenLink(AppLink::Help),
+        3 => Message::OpenLink(AppLink::GitHub),
+        4 => Message::OpenLink(AppLink::ReportBug),
+        5 => Message::About,
+        _ => Message::CloseHelp,
+    }
+}
+
+fn version_info(version: &str, build: Option<&str>, os: &str, arch: &str) -> String {
+    let mut info = format!("CleanSlate {version}");
+    if let Some(build) = build {
+        info.push_str(&format!("\nBuild: {build}"));
+    }
+    info.push_str(&format!("\nPlatform: {os} ({arch})"));
+    info
+}
+
+fn open_app_link(link: AppLink) -> Result<(), String> {
+    use std::process::{Command, Stdio};
+    #[cfg(target_os = "windows")]
+    let mut command = {
+        use std::os::windows::process::CommandExt;
+        let mut command = Command::new("powershell.exe");
+        // Only the fixed HTTPS allowlist enters this script; no project text.
+        command.args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            &format!(
+                "try {{ Start-Process -FilePath '{}' -ErrorAction Stop }} catch {{ exit 1 }}",
+                link.url()
+            ),
+        ]);
+        command.creation_flags(0x08000000);
+        command
+    };
+    #[cfg(target_os = "macos")]
+    let mut command = {
+        let mut command = Command::new("/usr/bin/open");
+        command.arg(link.url());
+        command
+    };
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    let mut command = {
+        let mut command = Command::new("xdg-open");
+        command.arg(link.url());
+        command
+    };
+    let status = command
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map_err(|error| error.to_string())?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err("The default browser launcher failed. Check your browser association.".into())
+    }
+}
+
 struct ReferenceAudition {
     mode: AuditionMode,
     solo: u64,
@@ -2669,6 +2874,12 @@ struct ReferenceAudition {
 }
 
 pub struct CleanSlateApp {
+    menu_open: bool,
+    menu_selected: usize,
+    app_dialog: Option<AppDialog>,
+    about_copy_selected: bool,
+    copy_pending: bool,
+    app_feedback: Option<String>,
     help_open: bool,
     shortcuts_open: bool,
     help_close_selected: bool,
@@ -2796,6 +3007,12 @@ impl Default for CleanSlateApp {
             import_choices: vec![],
             import_dialog: false,
             help_open: false,
+            menu_open: false,
+            menu_selected: 0,
+            app_dialog: None,
+            about_copy_selected: true,
+            copy_pending: false,
+            app_feedback: None,
             shortcuts_open: false,
             help_close_selected: false,
             track_name_draft: None,
@@ -3102,6 +3319,13 @@ impl Drop for PreviewProcessing {
 
 #[derive(Debug, Clone)]
 enum Message {
+    Menu,
+    Settings,
+    About,
+    OpenLink(AppLink),
+    LinkOpened(AppLink, Result<(), String>),
+    CopyVersion,
+    VersionCopied(bool),
     Help,
     KeyboardShortcuts,
     CloseHelp,
@@ -4746,7 +4970,92 @@ impl CleanSlateApp {
 }
 
 impl CleanSlateApp {
+    fn app_support_open(&self) -> bool {
+        self.help_open || self.shortcuts_open || self.menu_open || self.app_dialog.is_some()
+    }
+
     fn update(&mut self, message: Message) -> Task<Message> {
+        if let Message::VersionCopied(copied) = &message {
+            self.copy_pending = false;
+            if self.app_dialog == Some(AppDialog::About) {
+                self.app_feedback = Some(if *copied { "Version information copied." } else { "Could not confirm the copy. Try again or copy the displayed version information manually." }.into());
+            }
+            return Task::none();
+        }
+        if self.menu_open || self.app_dialog.is_some() {
+            match &message {
+                Message::CloseHelp
+                | Message::KeyPressed(keyboard::Key::Named(keyboard::key::Named::Escape), _) => {
+                    self.menu_open = false;
+                    self.app_dialog = None;
+                    return Task::none();
+                }
+                Message::KeyPressed(key, modifiers)
+                    if modifiers.control() && key.as_ref() == keyboard::Key::Character("/") =>
+                {
+                    return self.update(Message::KeyboardShortcuts);
+                }
+                Message::KeyPressed(keyboard::Key::Named(key), modifiers) => {
+                    use keyboard::key::Named;
+                    match key {
+                        Named::Tab | Named::ArrowDown | Named::ArrowUp if self.menu_open => {
+                            self.menu_selected = if *key == Named::ArrowUp
+                                || (*key == Named::Tab && modifiers.shift())
+                            {
+                                (self.menu_selected + 6) % 7
+                            } else {
+                                (self.menu_selected + 1) % 7
+                            };
+                        }
+                        Named::Tab if self.app_dialog == Some(AppDialog::About) => {
+                            self.about_copy_selected = !self.about_copy_selected
+                        }
+                        Named::Enter if self.menu_open => {
+                            return self.update(menu_action(self.menu_selected));
+                        }
+                        Named::Enter
+                            if self.app_dialog == Some(AppDialog::About)
+                                && self.about_copy_selected =>
+                        {
+                            return self.update(Message::CopyVersion);
+                        }
+                        Named::Enter => return self.update(Message::CloseHelp),
+                        Named::PageDown | Named::ArrowDown | Named::PageUp | Named::ArrowUp => {
+                            return iced::widget::operation::scroll_by(
+                                "app-dialog",
+                                iced::widget::operation::AbsoluteOffset {
+                                    x: 0.0,
+                                    y: if matches!(key, Named::PageUp | Named::ArrowUp) {
+                                        -400.0
+                                    } else {
+                                        400.0
+                                    },
+                                },
+                            );
+                        }
+                        Named::Home => {
+                            return iced::widget::operation::snap_to(
+                                "app-dialog",
+                                iced::widget::operation::RelativeOffset::START,
+                            );
+                        }
+                        Named::End => return iced::widget::operation::snap_to_end("app-dialog"),
+                        _ => {}
+                    }
+                    return Task::none();
+                }
+                Message::Settings
+                | Message::About
+                | Message::KeyboardShortcuts
+                | Message::OpenLink(_)
+                | Message::LinkOpened(_, _)
+                | Message::CopyVersion
+                | Message::VersionCopied(_)
+                | Message::Tick
+                | Message::PlaybackFrame => {}
+                _ => return Task::none(),
+            }
+        }
         if self.help_open || self.shortcuts_open {
             match &message {
                 Message::KeyPressed(key, modifiers)
@@ -5426,6 +5735,9 @@ impl CleanSlateApp {
                 if modifiers.alt() && matches!(key.as_ref(), keyboard::Key::Character("h" | "H")) {
                     return self.update(Message::Help);
                 }
+                if modifiers.alt() && matches!(key.as_ref(), keyboard::Key::Character("m" | "M")) {
+                    return self.update(Message::Menu);
+                }
                 if !modifiers.command()
                     && !modifiers.alt()
                     && matches!(key.as_ref(), keyboard::Key::Character("f" | "F"))
@@ -5703,13 +6015,74 @@ impl CleanSlateApp {
                 self.help_close_selected = false;
             }
             Message::KeyboardShortcuts => {
+                self.menu_open = false;
+                self.app_dialog = None;
                 self.help_open = false;
                 self.shortcuts_open = true;
             }
             Message::CloseHelp => {
+                self.menu_open = false;
+                self.app_dialog = None;
                 self.help_open = false;
                 self.shortcuts_open = false;
             }
+            Message::Menu => {
+                self.menu_open = true;
+                self.menu_selected = 0;
+                self.app_feedback = None;
+            }
+            Message::Settings | Message::About => {
+                self.menu_open = false;
+                self.app_dialog = Some(if matches!(message, Message::Settings) {
+                    AppDialog::Settings
+                } else {
+                    AppDialog::About
+                });
+                self.about_copy_selected = true;
+                self.app_feedback = None;
+            }
+            Message::OpenLink(link) => {
+                self.app_feedback = Some("Opening in your browser…".into());
+                let (sender, receiver) = iced::futures::channel::oneshot::channel();
+                std::thread::spawn(move || {
+                    let _ = sender.send(open_app_link(link));
+                });
+                return Task::perform(
+                    async move {
+                        receiver
+                            .await
+                            .unwrap_or_else(|_| Err("The link launcher stopped.".into()))
+                    },
+                    move |result| Message::LinkOpened(link, result),
+                );
+            }
+            Message::LinkOpened(link, result) => {
+                self.app_feedback = Some(match result {
+                    Ok(()) => "Opened in your browser.".into(),
+                    Err(error) => format!(
+                        "Could not open the link: {error}\nOpen {} manually.",
+                        link.url()
+                    ),
+                })
+            }
+            Message::CopyVersion => {
+                if self.app_dialog == Some(AppDialog::About) && !self.copy_pending {
+                    self.copy_pending = true;
+                    self.app_feedback = Some("Copying version information…".into());
+                    let expected = version_info(
+                        env!("CARGO_PKG_VERSION"),
+                        None,
+                        std::env::consts::OS,
+                        std::env::consts::ARCH,
+                    );
+                    return iced::clipboard::write::<Message>(expected.clone()).chain(
+                        iced::clipboard::read().map(move |actual| {
+                            Message::VersionCopied(actual.as_deref() == Some(expected.as_str()))
+                        }),
+                    );
+                }
+            }
+            Message::VersionCopied(_) => {}
             Message::SubmitExport => self.submit_export(),
             Message::Timeline(event) => match event {
                 TimelineEvent::FitRange(start, end) => {
@@ -5809,20 +6182,19 @@ impl CleanSlateApp {
         } else {
             Subscription::none()
         };
-        let rename_keys =
-            if self.track_name_draft.is_some() && !self.help_open && !self.shortcuts_open {
-                // Text inputs capture Escape, so cancellation must also see captured events.
-                iced::event::listen_with(|event, _, _| match event {
-                    iced::Event::Keyboard(keyboard::Event::KeyPressed {
-                        key: keyboard::Key::Named(keyboard::key::Named::Escape),
-                        ..
-                    }) => Some(Message::CancelTrackName),
-                    _ => None,
-                })
-            } else {
-                Subscription::none()
-            };
-        let sound_keys = if self.sound_draft.is_some() && !self.help_open && !self.shortcuts_open {
+        let rename_keys = if self.track_name_draft.is_some() && !self.app_support_open() {
+            // Text inputs capture Escape, so cancellation must also see captured events.
+            iced::event::listen_with(|event, _, _| match event {
+                iced::Event::Keyboard(keyboard::Event::KeyPressed {
+                    key: keyboard::Key::Named(keyboard::key::Named::Escape),
+                    ..
+                }) => Some(Message::CancelTrackName),
+                _ => None,
+            })
+        } else {
+            Subscription::none()
+        };
+        let sound_keys = if self.sound_draft.is_some() && !self.app_support_open() {
             iced::event::listen_with(|event, _, _| match event {
                 iced::Event::Keyboard(keyboard::Event::KeyPressed {
                     key: keyboard::Key::Named(keyboard::key::Named::Escape),
@@ -5854,7 +6226,7 @@ impl CleanSlateApp {
         } else {
             Subscription::none()
         };
-        let help_keys = if self.help_open || self.shortcuts_open {
+        let help_keys = if self.app_support_open() {
             iced::event::listen_with(|event, status, _| match event {
                 iced::Event::Keyboard(keyboard::Event::KeyPressed { key, modifiers, .. })
                     if status == iced::event::Status::Captured =>
@@ -5897,6 +6269,10 @@ impl CleanSlateApp {
                         "Fit recording / fit selection; no selection does nothing",
                     ),
                     ("Ctrl+/", "Open this reference"),
+                    (
+                        "Alt+M",
+                        "Open Menu; Tab or Up/Down selects an entry, Enter activates",
+                    ),
                     (
                         "Alt+H",
                         "Open Help; Tab or Up/Down selects an entry, Enter opens it",
@@ -6019,6 +6395,38 @@ impl CleanSlateApp {
     }
 
     fn view(&self) -> Element<'_, Message> {
+        if self.menu_open || self.app_dialog.is_some() {
+            return responsive(|size| {
+                let content: Element<'_, Message> = if self.menu_open {
+                    let mut items = column![text("Menu").size(24), text("Tab / Up / Down · Enter to activate · Esc to close").size(14)].spacing(12);
+                    for (index, label) in ["Settings", "Keyboard shortcuts    Ctrl+/", "Help · Usage documentation", "GitHub", "Report a bug", "About", "Close"].iter().enumerate() {
+                        items = items.push(button(text(format!("{}{}", if index == self.menu_selected { "› " } else { "" }, label))).on_press(menu_action(index)));
+                    }
+                    if let Some(feedback) = &self.app_feedback { items = items.push(text(feedback).size(14)); }
+                    scrollable(items).id("app-dialog").height((size.height - 120.0).clamp(180.0, 580.0)).into()
+                } else {
+                    let about = self.app_dialog == Some(AppDialog::About);
+                    let mut body = column![text(if about { "About CleanSlate" } else { "Settings" }).size(24)].spacing(14);
+                    if about {
+                        body = body.push(text(version_info(env!("CARGO_PKG_VERSION"), None, std::env::consts::OS, std::env::consts::ARCH)))
+                            .push(text("License: MIT · Copyright © 2026 CleanSlate contributors"))
+                            .push(text("CleanSlate is a local, non-destructive podcast automixer."))
+                            .push(text("Credits & references").size(18))
+                            .push(text("Interface: Iced. Audio playback: Rodio. Decoding: Symphonia and bwavfile. Resampling: Rubato. Ownership models: Linfa, nalgebra and ndarray. Serialization: Serde. Integrity: SHA-2."))
+                            .push(text("Speech detection: embedded Silero VAD, used through ONNX Runtime (ort). Silero VAD and ONNX Runtime carry MIT licenses. Bundled runtime notices and each component's licenses remain authoritative; CleanSlate's MIT license does not relicense dependencies."))
+                            .push(text("See the distribution's THIRD-PARTY-NOTICES.txt and licenses directory. Model references and runtime notices are recorded in docs/licenses/embedded-model-runtime.txt in the repository."))
+                            .push(text(include_str!("../LICENSE")).size(12));
+                    } else { body = body.push(text("Appearance controls are not available yet. Dark/Light appearance is planned for the next editor update.")); }
+                    let mut actions = row![].spacing(12);
+                    if about { actions = actions.push(button(if self.about_copy_selected { "› Copy version info" } else { "Copy version info" }).on_press_maybe((!self.copy_pending).then_some(Message::CopyVersion))); }
+                    actions = actions.push(button(if about && !self.about_copy_selected { "› Close    Esc" } else { "Close    Esc" }).on_press(Message::CloseHelp));
+                    let mut panel = column![scrollable(body).id("app-dialog").height((size.height - 220.0).clamp(140.0, 560.0)), actions].spacing(16);
+                    if let Some(feedback) = &self.app_feedback { panel = panel.push(text(feedback).size(14)); }
+                    panel.into()
+                };
+                stack![self.workspace(compact_workspace(size.width), size.height, size.width), opaque(container(container(content).padding(24).max_width(if self.menu_open { 520 } else { 720 }).style(container::rounded_box)).center_x(Fill).center_y(Fill).style(|_| container::Style { background: Some(iced::Color::from_rgba(0.0, 0.0, 0.0, 0.7).into()), ..Default::default() }))].into()
+            }).into();
+        }
         if self.help_open || self.shortcuts_open {
             return responsive(|size| {
                 let content = if self.shortcuts_open {
@@ -6701,9 +7109,9 @@ impl CleanSlateApp {
             button("Import tracks")
                 .style(primary_button)
                 .on_press(Message::ImportStems),
-            button("Help")
+            button("Menu")
                 .style(secondary_button)
-                .on_press(Message::Help),
+                .on_press(Message::Menu),
             button("New project")
                 .style(secondary_button)
                 .on_press_maybe(self.can_start_new_project().then_some(Message::NewProject)),

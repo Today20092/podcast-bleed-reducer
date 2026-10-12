@@ -49,6 +49,10 @@ These are observed build times on this machine, not a controlled clean-build spe
 
 Validation: 23 applicable app tests passed, one opt-in ignored; strict all-target/all-feature Clippy, formatting, diff and PowerShell parser checks passed. Launch produced a responding native development window. The saved owner project remained byte-identical, the separate development project initially matched it, and rebuilding while that window was open was correctly rejected. Physical playback/opening latency and listening were not measured.
 
+## App menu
+
+The top-bar Menu offers Settings, Keyboard shortcuts, Help, GitHub, Report a bug and About. `Alt+M` opens it; Tab or Up/Down selects an entry, Enter activates it, and Escape closes it. `Ctrl+/` still opens the reference, and `Alt+H` retains Help → Keyboard shortcuts. About shows the compiled version and application license; its Copy version info action includes only app/build/platform information. Tab switches between Copy and Close, while Page Up/Down and Home/End scroll the credits. Settings and About retain the workspace behind centered dialogs. Browser links open only after an explicit menu action; Report a bug opens the issue chooser for the user to complete.
+
 ## Hot reload assessment
 
 Iced 0.14 supports experimental hot reload through `iced/hot` and `cargo-hot`. Its documented limitation is patching the root crate. Our executable delegates to `rust_app::app::run()` and the GUI lives in the library target. The current cargo-hot source selects the binary/example target and reruns its rustc invocation for patches. That makes ordinary library GUI edits a poor fit for the documented path. No runtime hot-reload trial or new dependency was added; a separate executable UI boundary would need investigation before adoption.
