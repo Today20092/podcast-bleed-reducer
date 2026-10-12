@@ -946,8 +946,13 @@ mod tests {
             "Another track's selection cannot label this track"
         );
         app.calibration_timing = true;
+        app.audition_mode = crate::AuditionMode::Processed;
+        app.solo_tracks = 5;
         let _ = app.update(Message::CompleteTrackSelection(0, start, end, point));
         assert_eq!(app.reference_menu, Some((0, point)));
+        assert_eq!(app.audition_range, Some((start, end)));
+        assert_eq!(app.audition_mode, crate::AuditionMode::Original);
+        assert_eq!(app.solo_tracks, 0);
         assert!(
             app.calibration_timing,
             "Popup keeps the saved-example list visible"
@@ -991,6 +996,10 @@ mod tests {
         assert_eq!(app.selection_track, Some(0));
         let _ = app.update(Message::ContextReference(vec![speakers[1]], false));
         assert!(app.reference_menu.is_none());
+        assert!(app.audition_range.is_none() && app.audition.is_none());
+        assert_eq!(app.audition_mode, crate::AuditionMode::Processed);
+        assert_eq!(app.solo_tracks, 5);
+        assert_eq!(app.timeline.selection(), Some((start, end)));
         assert!(app.reference_stale && app.preview_pending.is_none());
         assert_eq!(
             app.project.as_ref().unwrap().reference_labels()[0].active_speakers,
@@ -999,6 +1008,7 @@ mod tests {
         let _ = app.update(Message::OpenReferenceMenu(0, point));
         let _ = app.update(Message::ContextReference(vec![], false));
         assert!(app.calibration_error.is_some() && app.reference_menu.is_some());
+        assert_eq!(app.audition_range, Some((start, end)));
         assert_eq!(app.project.as_ref().unwrap().reference_labels().len(), 1);
         let _ = app.update(Message::ContextReference(vec![], true));
         assert!(
@@ -1056,6 +1066,89 @@ mod tests {
         assert!(
             app.reference_menu.is_none(),
             "Review navigation cannot reuse an old track binding"
+        );
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn popup_audition_restores_monitoring_and_rejects_obsolete_preparation() {
+        use super::Message;
+        let root =
+            std::env::temp_dir().join(format!("cleanslate-popup-loop-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let source = root.join("voice.wav");
+        write_wav(&source, &vec![0.1; 48_000]);
+        let mut app = super::CleanSlateApp {
+            project: Some(
+                synchronized_project(root.join("session.cleanslate"), vec![source.clone()])
+                    .unwrap(),
+            ),
+            audition_mode: crate::AuditionMode::Removed,
+            solo_tracks: 1,
+            monitor_db: -12.0,
+            ..Default::default()
+        };
+        app.timeline.set_total_samples(crate::TICKS_PER_SECOND);
+        let range = (crate::TICKS_PER_SECOND / 4, crate::TICKS_PER_SECOND / 2);
+        let point = iced::Point::ORIGIN;
+        let space = || {
+            Message::KeyPressed(
+                iced::keyboard::Key::Named(iced::keyboard::key::Named::Space),
+                iced::keyboard::Modifiers::empty(),
+            )
+        };
+        let open = |app: &mut super::CleanSlateApp| {
+            let _ = app.update(Message::CompleteTrackSelection(0, range.0, range.1, point));
+        };
+        let drain = |app: &mut super::CleanSlateApp| {
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+            while app.audition_preparation.is_busy() {
+                app.poll_audition();
+                assert!(std::time::Instant::now() < deadline);
+                std::thread::yield_now();
+            }
+            assert!(app.audition.is_none());
+        };
+        open(&mut app);
+        assert_eq!(app.audition_range, Some(range));
+        assert_eq!(app.monitor_db, -12.0);
+        let _ = app.update(Message::Removed);
+        let _ = app.update(Message::SoloTrack(0));
+        assert_eq!(app.audition_mode, crate::AuditionMode::Original);
+        assert_eq!(app.solo_tracks, 0);
+        let _ = app.update(space());
+        assert!(app.audition_range.is_none() && app.reference_menu.is_some());
+        drain(&mut app);
+        let _ = app.update(space());
+        assert_eq!(app.audition_range, Some(range));
+        let _ = app.update(Message::Stop);
+        drain(&mut app);
+        let _ = app.update(space());
+        let _ = app.update(Message::OpenReferenceMenu(0, point));
+        assert_eq!(app.audition_range, Some(range));
+        let _ = app.update(Message::DismissReferenceMenu);
+        drain(&mut app);
+        assert_eq!(app.audition_mode, crate::AuditionMode::Removed);
+        assert_eq!(app.solo_tracks, 1);
+        assert_eq!(app.timeline.selection(), Some(range));
+        open(&mut app);
+        app.source_generation += 1;
+        app.poll_audition();
+        drain(&mut app);
+        assert!(app.reference_menu.is_none());
+        open(&mut app);
+        app.timeline.set_selection(Some((range.0, range.1 + 1)));
+        app.poll_audition();
+        drain(&mut app);
+        assert!(app.reference_menu.is_none());
+        open(&mut app);
+        app.install_waveforms(vec![]);
+        drain(&mut app);
+        assert!(app.reference_menu.is_none());
+        assert_eq!(app.audition_mode, crate::AuditionMode::Removed);
+        assert_eq!(
+            app.solo_tracks, 1,
+            "Invalidation restores the popup snapshot"
         );
         std::fs::remove_dir_all(root).unwrap();
     }
@@ -2049,7 +2142,16 @@ mod tests {
     }
 }
 
+struct ReferenceAudition {
+    mode: AuditionMode,
+    solo: u64,
+    range: TimeRange,
+    source_generation: u64,
+    paused: bool,
+}
+
 pub struct CleanSlateApp {
+    reference_audition: Option<ReferenceAudition>,
     project: Option<Project>,
     pending_imports: Vec<PathBuf>,
     source_inspection: Option<SourceInspection>,
@@ -2113,6 +2215,7 @@ pub struct CleanSlateApp {
 impl Default for CleanSlateApp {
     fn default() -> Self {
         Self {
+            reference_audition: None,
             project: None,
             pending_imports: vec![],
             source_inspection: None,
@@ -2559,6 +2662,7 @@ fn waveform_height(workspace_height: f32, stem_count: usize, compact: bool) -> f
 
 impl CleanSlateApp {
     fn install_waveforms(&mut self, waveforms: Vec<WaveformCache>) {
+        self.close_reference_menu();
         self.selected_example = None;
         self.example_draft = None;
         self.gain_menu = None;
@@ -2696,6 +2800,7 @@ impl CleanSlateApp {
         if self.source_loading.is_some() || self.processing.is_some() {
             return;
         }
+        self.close_reference_menu();
         self.stop_audition();
         self.track_name_draft = None;
         self.preview_pending = None;
@@ -3295,6 +3400,51 @@ impl CleanSlateApp {
         }
     }
 
+    fn begin_reference_audition(&mut self) {
+        let Some((start, end)) = self.calibration_selection else {
+            return;
+        };
+        let Ok(range) = TimeRange::new(start, end) else {
+            return;
+        };
+        if end > self.timeline.total_samples() {
+            return;
+        }
+        self.reference_audition = Some(ReferenceAudition {
+            mode: self.audition_mode,
+            solo: self.solo_tracks,
+            range,
+            source_generation: self.source_generation,
+            paused: false,
+        });
+        self.audition_mode = AuditionMode::Original;
+        self.solo_tracks = 0;
+        self.audition(true);
+    }
+
+    fn close_reference_menu(&mut self) {
+        self.reference_menu = None;
+        if let Some(snapshot) = self.reference_audition.take() {
+            self.stop_audition();
+            self.audition_mode = snapshot.mode;
+            self.solo_tracks = snapshot.solo;
+        }
+    }
+
+    fn toggle_reference_audition(&mut self) {
+        if let Some(audition) = &self.audition {
+            audition.toggle_pause();
+            if let Some(snapshot) = &mut self.reference_audition {
+                snapshot.paused = !snapshot.paused;
+            }
+        } else if self.audition_range.is_some() {
+            self.stop_audition();
+        } else if let Some(snapshot) = &mut self.reference_audition {
+            snapshot.paused = false;
+            self.audition(true);
+        }
+    }
+
     fn gain_event(&mut self, track: usize, event: crate::GainEditorEvent) {
         self.render_generation.invalidate();
         match event {
@@ -3426,6 +3576,10 @@ impl CleanSlateApp {
         }
         if self.reference_menu.is_some() {
             let message = match key.as_ref() {
+                keyboard::Key::Named(keyboard::key::Named::Space) => {
+                    self.toggle_reference_audition();
+                    None
+                }
                 keyboard::Key::Named(keyboard::key::Named::Escape) => {
                     Some(Message::DismissReferenceMenu)
                 }
@@ -3610,6 +3764,14 @@ impl CleanSlateApp {
         }
     }
     fn poll_audition(&mut self) {
+        if self.reference_audition.as_ref().is_some_and(|snapshot| {
+            self.reference_menu.is_none()
+                || snapshot.source_generation != self.source_generation
+                || self.timeline.selection() != Some((snapshot.range.start, snapshot.range.end))
+                || self.calibration_selection != Some((snapshot.range.start, snapshot.range.end))
+        }) {
+            self.close_reference_menu();
+        }
         if let Some(result) = self.audition_preparation.poll() {
             self.audition_ready = result.is_ok();
             if let Err(error) = &result {
@@ -3636,11 +3798,13 @@ impl CleanSlateApp {
                                         envelopes,
                                         self.audition_mode,
                                         10.0_f32.powf(self.monitor_db / 20.0),
-                                        start,
-                                        end,
+                                        TimeRange { start, end },
                                         self.solo_tracks,
+                                        self.reference_audition.is_some(),
                                     ) {
-                                        Ok(audition) => self.audition = Some(audition),
+                                        Ok(audition) => {
+                                            self.audition = Some(audition);
+                                        }
                                         Err(error) => self.messages = vec![error.to_string()],
                                     }
                                 }
@@ -3679,6 +3843,9 @@ impl CleanSlateApp {
         }
     }
     fn set_audition_mode(&mut self, mode: AuditionMode) {
+        if self.reference_audition.is_some() {
+            return;
+        }
         if mode != AuditionMode::Original && self.preview.is_none() {
             return;
         }
@@ -3689,6 +3856,9 @@ impl CleanSlateApp {
     }
 
     fn stop_audition(&mut self) {
+        if let Some(snapshot) = &mut self.reference_audition {
+            snapshot.paused = true;
+        }
         self.audition_range = None;
         self.audition_preparation.cancel();
         if let Some(audition) = self.audition.take() {
@@ -3748,6 +3918,7 @@ impl CleanSlateApp {
         // Completed fixed evidence can be reused; this generation cannot install.
     }
     fn select_example(&mut self, id: u64) {
+        self.close_reference_menu();
         self.example_draft = None;
         let Some(project) = &self.project else {
             return;
@@ -4117,6 +4288,7 @@ impl CleanSlateApp {
                 return self.update(Message::OpenReferenceMenu(track, point));
             }
             Message::TrackTimeline(track, event) => {
+                self.close_reference_menu();
                 self.selected_example = None;
                 self.example_draft = None;
                 self.gain_menu = None;
@@ -4134,6 +4306,7 @@ impl CleanSlateApp {
                 return task;
             }
             Message::OpenReferenceMenu(track, point) => {
+                self.close_reference_menu();
                 self.selected_example = None;
                 self.example_draft = None;
                 self.gain_menu = None;
@@ -4151,10 +4324,11 @@ impl CleanSlateApp {
                         vec![self.project.as_ref().unwrap().sources[track].speaker_id];
                     self.calibration_error = None;
                     self.reference_menu = Some((track, point));
+                    self.begin_reference_audition();
                 }
             }
             Message::OpenTimelineMenu(track, time, point) => {
-                self.reference_menu = None;
+                self.close_reference_menu();
                 if let Some(id) = self.project.as_ref().and_then(|project| {
                     project
                         .reference_labels()
@@ -4167,12 +4341,13 @@ impl CleanSlateApp {
                     self.selection_track = Some(track);
                     self.gain_menu = None;
                     self.reference_menu = Some((track, point));
+                    self.begin_reference_audition();
                     return Task::none();
                 }
                 return self.update(Message::OpenGainMenu(track, time, point));
             }
             Message::OpenGainMenu(track, time, point) => {
-                self.reference_menu = None;
+                self.close_reference_menu();
                 self.gain_menu = self.project.as_ref().and_then(|project| {
                     let track_id = project.sources.get(track)?.track_id;
                     region_marked(&project.gain_constraints(), track_id, time)
@@ -4206,7 +4381,7 @@ impl CleanSlateApp {
                 }
             }
             Message::DismissReferenceMenu => {
-                self.reference_menu = None;
+                self.close_reference_menu();
                 self.gain_menu = None;
             }
             Message::SetupDetails(show) => self.setup_details = show,
@@ -4222,6 +4397,9 @@ impl CleanSlateApp {
             Message::CenterPlayhead => self.timeline.center_playhead(),
             Message::ToggleMeterPlacement => self.meters_at_playhead = !self.meters_at_playhead,
             Message::SoloTrack(track) => {
+                if self.reference_audition.is_some() {
+                    return Task::none();
+                }
                 if self
                     .project
                     .as_ref()
@@ -4240,7 +4418,7 @@ impl CleanSlateApp {
                     self.reference_speakers = speakers;
                     let _ = self.update(Message::SaveReference(replace));
                     if self.calibration_error.is_none() {
-                        self.reference_menu = None;
+                        self.close_reference_menu();
                         self.calibrating = false;
                     }
                 }
@@ -4362,7 +4540,13 @@ impl CleanSlateApp {
                     });
                 }
             }
-            Message::Audition => self.audition(false),
+            Message::Audition => {
+                if self.reference_audition.is_some() {
+                    self.toggle_reference_audition();
+                } else {
+                    self.audition(false);
+                }
+            }
             Message::Stop => {
                 self.stop_audition();
             }
@@ -4436,7 +4620,7 @@ impl CleanSlateApp {
                                 self.example_draft = None;
                                 self.timeline.set_selection(None);
                             }
-                            self.reference_menu = None;
+                            self.close_reference_menu();
                             self.mark_reference_edit();
                         }
                         Err(error) => self.calibration_error = Some(error.to_string()),
@@ -4552,6 +4736,7 @@ impl CleanSlateApp {
             }
             #[cfg(test)]
             Message::SelectSupervisedWarning(index) => {
+                self.close_reference_menu();
                 if let Some(review) = &mut self.review {
                     self.selection_track = None;
                     self.reference_menu = None;
@@ -5949,17 +6134,27 @@ impl CleanSlateApp {
             }
             let mut menu = column![
                 text("Who is talking?").size(16),
-                text("Select everyone speaking, or leave all unchecked for room tone.").size(14),
-                text("1–8: toggle · R: clear · Enter: save · Esc: close").size(13)
+                text("None selected = room tone").size(14),
+                text("1–8 Toggle speakers · R Clear · Enter Save · Esc Cancel").size(13),
+                text("Space Pause / resume · Stop ends audition").size(13)
             ]
             .spacing(6);
             if let Some(project) = &self.project {
-                for source in &project.sources {
+                for (index, source) in project.sources.iter().enumerate() {
                     let speaker = source.speaker_id;
                     menu = menu.push(
-                        iced::widget::checkbox(self.reference_speakers.contains(&speaker))
-                            .label(format!("Speaker {}", speaker.0))
-                            .on_toggle(move |active| Message::ReferenceSpeaker(speaker, active)),
+                        row![
+                            container(text(format!("{}", index + 1)).size(13))
+                                .padding(4)
+                                .style(editor_panel),
+                            iced::widget::checkbox(self.reference_speakers.contains(&speaker))
+                                .label(format!("Speaker {}", speaker.0))
+                                .on_toggle(move |active| Message::ReferenceSpeaker(
+                                    speaker, active
+                                ))
+                        ]
+                        .spacing(8)
+                        .align_y(iced::Center),
                     );
                 }
                 menu = menu.push(
@@ -5994,12 +6189,17 @@ impl CleanSlateApp {
                     );
                 }
             }
+            if self.audition_range.is_some() {
+                menu = menu.push(text("Preparing audio…").size(14));
+            } else if self.reference_audition.as_ref().is_some_and(|s| s.paused) {
+                menu = menu.push(text("Audition paused · Space resumes").size(14));
+            } else if self.audition.is_none()
+                && let Some(error) = self.messages.first()
+            {
+                menu = menu.push(text(error).size(14));
+            }
             if let Some(error) = &self.calibration_error {
-                menu = menu.push(iced::widget::tooltip(
-                    text("Example not saved · hover for details").size(14),
-                    text(error).size(14),
-                    iced::widget::tooltip::Position::Top,
-                ));
+                menu = menu.push(text(format!("Example not saved: {error}")).size(14));
                 if !self.reference_conflicts().is_empty() {
                     menu = menu.push(
                         button("Replace conflicting examples")
