@@ -4,6 +4,7 @@ use crate::{
     waveform::WaveformCache,
 };
 use std::{
+    io::{Read, Seek, SeekFrom},
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
@@ -277,12 +278,6 @@ fn coarse_preview(
         return Ok(None);
     };
     let format = reader.format()?;
-    // bwavfile cannot read float64; its safe media decoder supplies full detail below.
-    if format.bits_per_sample == 64 {
-        return Ok(None);
-    }
-    let count = metadata[0].grid.frame_count as usize;
-    let bucket = count.div_ceil(2048).max(1);
     let channels = usize::from(format.channel_count);
     if channels == 0
         || sources
@@ -291,14 +286,79 @@ fn coarse_preview(
     {
         return Err(RenderBlocker("Selected channel is out of range".into()));
     }
+    if format.bits_per_sample == 64 {
+        // bwavfile's float64 frame reader panics; preview raw IEEE windows only.
+        if usize::from(format.block_alignment) != channels * 8 {
+            return Err(RenderBlocker("Invalid float64 frame alignment".into()));
+        }
+        let file_length = reader.inner.seek(SeekFrom::End(0))?;
+        reader.inner.seek(SeekFrom::Start(12))?;
+        let data_start = loop {
+            crate::prepared_analysis::check_cancelled(Some(cancelled))?;
+            let mut chunk = [0_u8; 8];
+            reader.inner.read_exact(&mut chunk)?;
+            let start = reader.inner.stream_position()?;
+            if &chunk[..4] == b"data" {
+                break start;
+            }
+            let length = u64::from(u32::from_le_bytes(chunk[4..].try_into().unwrap()));
+            let next = start
+                .checked_add(length + length % 2)
+                .filter(|next| *next <= file_length)
+                .ok_or_else(|| RenderBlocker("Truncated WAV preview metadata".into()))?;
+            reader.inner.seek(SeekFrom::Start(next))?;
+        };
+        let mut raw = vec![0_u8; 128 * channels * 8];
+        return sampled_preview(
+            sources,
+            metadata,
+            channels,
+            cancelled,
+            |start, length, buffer| {
+                let offset = (start as u64)
+                    .checked_mul(u64::from(format.block_alignment))
+                    .and_then(|offset| data_start.checked_add(offset))
+                    .ok_or_else(|| RenderBlocker("WAV preview offset overflow".into()))?;
+                reader.inner.seek(SeekFrom::Start(offset))?;
+                let bytes = &mut raw[..length * channels * 8];
+                reader.inner.read_exact(bytes)?;
+                for (sample, bytes) in buffer.iter_mut().zip(bytes.chunks_exact(8)) {
+                    *sample = f64::from_le_bytes(bytes.try_into().unwrap()) as f32;
+                }
+                Ok(length)
+            },
+        )
+        .map(Some);
+    }
     let mut frames = reader.audio_frame_reader()?;
+    sampled_preview(
+        sources,
+        metadata,
+        channels,
+        cancelled,
+        |start, _, buffer| {
+            frames.locate(start as u64)?;
+            Ok(frames.read_frames(buffer)? as usize)
+        },
+    )
+    .map(Some)
+}
+
+fn sampled_preview(
+    sources: &[AudioSource],
+    metadata: &[SourceMetadata],
+    channels: usize,
+    cancelled: &AtomicBool,
+    mut read: impl FnMut(usize, usize, &mut [f32]) -> Result<usize, RenderBlocker>,
+) -> Result<Vec<WaveformCache>, RenderBlocker> {
+    let count = metadata[0].grid.frame_count as usize;
+    let bucket = count.div_ceil(2048).max(1);
     let mut buffer = vec![0.0_f32; 128 * channels];
     let mut peaks = vec![Vec::new(); sources.len()];
     for start in (0..count).step_by(bucket) {
         crate::prepared_analysis::check_cancelled(Some(cancelled))?;
-        frames.locate(start as u64)?;
         let length = 128.min(count - start);
-        let read = frames.read_frames(&mut buffer[..length * channels])? as usize;
+        let read = read(start, length, &mut buffer[..length * channels])?;
         if read != length {
             return Err(RenderBlocker("Truncated audio in preview".into()));
         }
@@ -314,13 +374,11 @@ fn coarse_preview(
             peaks[index].push(peak);
         }
     }
-    Ok(Some(
-        peaks
-            .into_iter()
-            .zip(metadata)
-            .map(|(p, m)| WaveformCache::coarse(p, *m, bucket))
-            .collect(),
-    ))
+    Ok(peaks
+        .into_iter()
+        .zip(metadata)
+        .map(|(p, m)| WaveformCache::coarse(p, *m, bucket))
+        .collect())
 }
 
 #[cfg(test)]
@@ -442,6 +500,66 @@ mod tests {
                 .any(|event| matches!(event, Event::Ready(_, _)))
         );
         assert!(worker.join().unwrap().is_err());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn float64_recording_publishes_preview_before_validation() {
+        let root = crate::audio_io::multichannel_tests::root();
+        let path = root.join("float64.wav");
+        crate::audio_io::multichannel_tests::write_poly(&path, 3, 64, 30_001);
+        let (events, result) = run(crate::wav_channel_sources(&path).unwrap());
+        result.unwrap();
+        let preview = events
+            .iter()
+            .position(|e| matches!(e, Event::Preview(_)))
+            .unwrap();
+        let ready = events
+            .iter()
+            .position(|e| matches!(e, Event::Ready(_, _)))
+            .unwrap();
+        assert!(preview < ready);
+        if let Event::Preview(waveforms) = &events[preview] {
+            assert!(
+                waveforms
+                    .iter()
+                    .all(|waveform| waveform.sample_count == 30_001)
+            );
+        }
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn selected_float32_chunks_match_native_frame_decoder_across_partial_blocks() {
+        let root = crate::audio_io::multichannel_tests::root();
+        let path = root.join("float32-oracle.wav");
+        crate::audio_io::multichannel_tests::write_poly(&path, 3, 32, 30_001);
+        let sources = crate::wav_channel_sources(&path).unwrap();
+        let sources = vec![sources[2].clone(), sources[0].clone()];
+        let reader = bwavfile::WaveReader::open(&path).unwrap();
+        let mut expected = vec![0.0_f32; 30_001 * 3];
+        reader
+            .audio_frame_reader()
+            .unwrap()
+            .read_frames(&mut expected)
+            .unwrap();
+        let mut offset = 0;
+        let decoded = crate::audio_io::decode_recording_chunks(&sources, None, |rate, channels| {
+            assert_eq!(rate, 48_000);
+            for (samples, channel) in channels.iter().zip([2, 0]) {
+                assert!(
+                    samples
+                        .iter()
+                        .enumerate()
+                        .all(|(index, sample)| *sample == expected[(offset + index) * 3 + channel])
+                );
+            }
+            offset += channels[0].len();
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!(offset, 30_001);
+        assert_eq!(decoded.metadata, sources[0].metadata(None).unwrap());
         std::fs::remove_dir_all(root).unwrap();
     }
 }

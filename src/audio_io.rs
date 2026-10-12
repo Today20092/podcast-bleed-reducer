@@ -500,15 +500,48 @@ pub(crate) fn decode_recording_chunks(
             bext,
         });
     }
-    let mut frames = reader.audio_frame_reader()?;
+    let mut frames = Some(reader.audio_frame_reader()?);
     let block_frames = (65_536 / channels).max(1);
+    // Float32 already matches engine samples; avoid a virtual read/conversion per sample.
+    let mut raw = if native_format.common_format() == CommonFormat::IeeeFloatPCM
+        && native_format.bits_per_sample == 32
+    {
+        let mut frames = frames.take().unwrap();
+        frames.locate(0)?;
+        Some(frames.into_inner())
+    } else {
+        None
+    };
+    let mut raw_bytes = if raw.is_some() {
+        vec![0_u8; block_frames * channels * 4]
+    } else {
+        vec![]
+    };
     let mut buffer = vec![0.0_f32; block_frames * channels];
     let mut selected = vec![Vec::with_capacity(block_frames); sources.len()];
     let mut count = 0_u64;
     while count < frame_count {
         crate::prepared_analysis::check_cancelled(cancelled)?;
         let requested = usize::try_from((frame_count - count).min(block_frames as u64)).unwrap();
-        let read = frames.read_frames(&mut buffer[..requested * channels])? as usize;
+        let read = if let Some(input) = &mut raw {
+            use std::io::Read;
+            let bytes = &mut raw_bytes[..requested * channels * 4];
+            input.read_exact(bytes).map_err(|error| {
+                RenderBlocker(format!(
+                    "{}: truncated or unreadable audio: {error}",
+                    path.display()
+                ))
+            })?;
+            for (sample, bytes) in buffer.iter_mut().zip(bytes.chunks_exact(4)) {
+                *sample = f32::from_le_bytes(bytes.try_into().unwrap());
+            }
+            requested
+        } else {
+            frames
+                .as_mut()
+                .unwrap()
+                .read_frames(&mut buffer[..requested * channels])? as usize
+        };
         if read == 0 {
             return Err(RenderBlocker(format!(
                 "{}: truncated audio",

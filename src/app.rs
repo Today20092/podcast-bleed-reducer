@@ -2206,6 +2206,7 @@ mod tests {
             rows.iter().map(|r| r.0.unwrap()).collect::<Vec<_>>(),
             [0, 2, 1]
         );
+        assert_eq!(app.export_source_order(), [0, 2, 1]);
         assert_ne!(std::fs::read(&project_path).unwrap(), saved);
         app.stop_audition();
         std::fs::remove_dir_all(root).unwrap();
@@ -4626,6 +4627,7 @@ impl CleanSlateApp {
             return;
         }
         let Some(project) = &self.project else { return };
+        let source_order = self.export_source_order();
         let project = project.clone();
         let gate = self.render_generation.clone();
         let generation = gate.current();
@@ -4634,10 +4636,11 @@ impl CleanSlateApp {
         let (sender, result) = mpsc::channel();
         std::thread::spawn(move || {
             let completed = (|| {
-                let private = crate::prepare_export_with_settings(
+                let private = crate::prepare_export_in_order(
                     &project,
                     &destination,
                     settings,
+                    &source_order,
                     Some(&worker_cancel),
                 )?;
                 private.publish(&project, &gate, generation, Some(&worker_cancel))?;
@@ -7453,6 +7456,13 @@ impl CleanSlateApp {
         rows
     }
 
+    fn export_source_order(&self) -> Vec<usize> {
+        self.import_display_rows()
+            .into_iter()
+            .filter_map(|(accepted, _)| accepted)
+            .collect()
+    }
+
     fn workspace_status(&self) -> String {
         if self.sources_busy() {
             let queued = self
@@ -7766,7 +7776,8 @@ impl CleanSlateApp {
             ))
         ]
         .spacing(12);
-        for (i, source) in project.sources.iter().enumerate() {
+        for (i, index) in self.export_source_order().into_iter().enumerate() {
+            let source = &project.sources[index];
             content = content.push(
                 text(format!(
                     "{}. {} · {} Hz · {} frames",

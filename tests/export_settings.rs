@@ -123,6 +123,60 @@ fn prepare_current(
 }
 
 #[test]
+fn explicit_editor_order_preserves_rendered_channels_and_rejects_partial_orders() {
+    let (root, mut project, audio) = fixture::session();
+    prepare_current(&root, &mut project, &audio);
+    let settings = ExportSettings {
+        layout: ExportLayout::Multichannel,
+        encoding: ExportEncoding::Float32,
+    };
+    assert!(
+        rust_app::prepare_export_in_order(&project, &root.join("invalid"), settings, &[1, 1], None)
+            .is_err()
+    );
+    assert!(
+        rust_app::prepare_export_in_order(&project, &root.join("invalid"), settings, &[1], None)
+            .is_err()
+    );
+    let gate = rust_app::RenderGeneration::default();
+    for (name, order) in [("normal", [0, 1]), ("reversed", [1, 0])] {
+        rust_app::prepare_export_in_order(&project, &root.join(name), settings, &order, None)
+            .unwrap()
+            .publish(&project, &gate, gate.current(), None)
+            .unwrap();
+    }
+    let read = |name: &str| {
+        let mut reader =
+            bwavfile::WaveReader::open(root.join(name).join("session-clean.wav")).unwrap();
+        let mut samples = vec![0.0_f32; reader.frame_length().unwrap() as usize * 2];
+        reader
+            .audio_frame_reader()
+            .unwrap()
+            .read_frames(&mut samples)
+            .unwrap();
+        samples
+    };
+    let normal = read("normal");
+    let reversed = read("reversed");
+    assert!(
+        normal
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .any(|frame| frame[0] != frame[1])
+    );
+    assert!(
+        normal
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .zip(reversed.as_chunks::<2>().0)
+            .all(|(normal, reversed)| normal[0] == reversed[1] && normal[1] == reversed[0])
+    );
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn layout_blocks_mixed_rates_grids_encodings_and_oversized_riff() {
     let (root, mut project, _) = fixture::session_at_rates([16_000, 48_000]);
     let settings = ExportSettings {
