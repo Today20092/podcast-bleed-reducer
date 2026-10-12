@@ -6406,7 +6406,7 @@ impl CleanSlateApp {
                     scrollable(items).id("app-dialog").height((size.height - 120.0).clamp(180.0, 580.0)).into()
                 } else {
                     let about = self.app_dialog == Some(AppDialog::About);
-                    let mut body = column![text(if about { "About CleanSlate" } else { "Settings" }).size(24)].spacing(14);
+                    let mut body = column![text(if about { "About CleanSlate" } else { "Settings" }).size(24)].spacing(14).width(Fill).padding([0, 12]);
                     if about {
                         body = body.push(text(version_info(env!("CARGO_PKG_VERSION"), None, std::env::consts::OS, std::env::consts::ARCH)))
                             .push(text("License: MIT · Copyright © 2026 CleanSlate contributors"))
@@ -6420,11 +6420,11 @@ impl CleanSlateApp {
                     let mut actions = row![].spacing(12);
                     if about { actions = actions.push(button(if self.about_copy_selected { "› Copy version info" } else { "Copy version info" }).on_press_maybe((!self.copy_pending).then_some(Message::CopyVersion))); }
                     actions = actions.push(button(if about && !self.about_copy_selected { "› Close    Esc" } else { "Close    Esc" }).on_press(Message::CloseHelp));
-                    let mut panel = column![scrollable(body).id("app-dialog").height((size.height - 220.0).clamp(140.0, 560.0)), actions].spacing(16);
+                    let mut panel = column![scrollable(body).id("app-dialog").width(Fill).height((size.height - 220.0).clamp(140.0, 560.0)), actions].spacing(16).width(Fill);
                     if let Some(feedback) = &self.app_feedback { panel = panel.push(text(feedback).size(14)); }
                     panel.into()
                 };
-                stack![self.workspace(compact_workspace(size.width), size.height, size.width), opaque(container(container(content).padding(24).max_width(if self.menu_open { 520 } else { 720 }).style(container::rounded_box)).center_x(Fill).center_y(Fill).style(|_| container::Style { background: Some(iced::Color::from_rgba(0.0, 0.0, 0.0, 0.7).into()), ..Default::default() }))].into()
+                stack![self.workspace(compact_workspace(size.width), size.height, size.width), opaque(container(container(content).padding(24).width(Fill).max_width(if self.menu_open { 520 } else { 720 }).style(container::rounded_box)).center_x(Fill).center_y(Fill).style(|_| container::Style { background: Some(iced::Color::from_rgba(0.0, 0.0, 0.0, 0.7).into()), ..Default::default() }))].into()
             }).into();
         }
         if self.help_open || self.shortcuts_open {
