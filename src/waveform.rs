@@ -506,6 +506,78 @@ pub(crate) struct TimelineCanvasState {
     pan_x: Option<f32>,
     modifiers: keyboard::Modifiers,
     example_drag: Option<(u64, crate::TimeRange, bool)>,
+    zoom_drag: Option<ZoomDrag>,
+}
+
+pub(crate) struct ZoomDrag {
+    anchor: TimePosition,
+    anchor_x: f32,
+    end_x: f32,
+}
+
+impl ZoomDrag {
+    pub fn begin(viewport: &TimelineViewport, x: f32, width: f32) -> Self {
+        Self {
+            anchor: crate::editor_drawing::visible_boundary(viewport, x, width),
+            anchor_x: x,
+            end_x: x,
+        }
+    }
+
+    pub fn update<Message>(
+        drag: &mut Option<Self>,
+        event: &canvas::Event,
+        viewport: &TimelineViewport,
+        bounds: Rectangle,
+        cursor: mouse::Cursor,
+        on_fit: impl Fn(TimePosition, TimePosition) -> Message,
+    ) -> Option<Action<Message>> {
+        let current = drag.as_mut()?;
+        match event {
+            canvas::Event::Mouse(mouse::Event::CursorMoved { .. }) => {
+                if let Some(point) = cursor.position_from(bounds.position()) {
+                    current.end_x = point.x.clamp(0.0, bounds.width);
+                }
+                Some(Action::request_redraw().and_capture())
+            }
+            canvas::Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)) => {
+                let current = drag.take()?;
+                if let Some(point) = cursor.position_from(bounds.position())
+                    && (point.x - current.anchor_x).abs() >= 3.0
+                {
+                    let end =
+                        crate::editor_drawing::visible_boundary(viewport, point.x, bounds.width);
+                    if current.anchor != end {
+                        return Some(
+                            Action::publish(on_fit(
+                                current.anchor.min(end),
+                                current.anchor.max(end),
+                            ))
+                            .and_capture(),
+                        );
+                    }
+                }
+                Some(Action::request_redraw().and_capture())
+            }
+            canvas::Event::Keyboard(keyboard::Event::KeyPressed {
+                key: keyboard::Key::Named(keyboard::key::Named::Escape),
+                ..
+            })
+            | canvas::Event::Mouse(mouse::Event::CursorLeft) => {
+                *drag = None;
+                Some(Action::request_redraw().and_capture())
+            }
+            _ => Some(Action::capture()),
+        }
+    }
+
+    pub fn draw(&self, frame: &mut canvas::Frame, height: f32) {
+        frame.fill_rectangle(
+            Point::new(self.anchor_x.min(self.end_x), 0.0),
+            Size::new((self.end_x - self.anchor_x).abs(), height),
+            Color::from_rgba8(95, 180, 255, 0.25),
+        );
+    }
 }
 
 impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> {
@@ -519,6 +591,20 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
         cursor: mouse::Cursor,
     ) -> Option<Action<Message>> {
         let position = cursor.position_in(bounds);
+        if let canvas::Event::Keyboard(keyboard::Event::ModifiersChanged(modifiers)) = event {
+            state.modifiers = *modifiers;
+            return None;
+        }
+        if state.zoom_drag.is_some() {
+            return ZoomDrag::update(
+                &mut state.zoom_drag,
+                event,
+                self.viewport,
+                bounds,
+                cursor,
+                |start, end| (self.on_event)(TimelineEvent::FitRange(start, end)),
+            );
+        }
         if let Some((id, mut range, left)) = state.example_drag {
             match event {
                 canvas::Event::Mouse(mouse::Event::CursorMoved { .. })
@@ -561,6 +647,15 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
             }
         }
         match event {
+            canvas::Event::Keyboard(keyboard::Event::KeyPressed {
+                key: keyboard::Key::Named(keyboard::key::Named::Escape),
+                ..
+            }) if state.dragging || state.pan_x.is_some() => {
+                state.dragging = false;
+                state.selection_anchor = None;
+                state.pan_x = None;
+                Some(Action::request_redraw().and_capture())
+            }
             canvas::Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Right)) => {
                 let time = crate::editor_drawing::visible_boundary(
                     self.viewport,
@@ -572,16 +667,17 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
                         .and_capture(),
                 )
             }
-            canvas::Event::Keyboard(keyboard::Event::ModifiersChanged(modifiers)) => {
-                state.modifiers = *modifiers;
-                None
-            }
             canvas::Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Middle)) => {
                 state.pan_x = Some(position?.x);
                 Some(Action::capture())
             }
             canvas::Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) => {
                 let position = position?;
+                if state.modifiers.alt() {
+                    state.zoom_drag =
+                        Some(ZoomDrag::begin(self.viewport, position.x, bounds.width));
+                    return Some(Action::request_redraw().and_capture());
+                }
                 if let Some(handle) = self.example_handle(position, bounds.width) {
                     state.example_drag = Some(handle);
                     return Some(
@@ -708,20 +804,10 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
                         *y
                     }
                 };
-                let event = if state.modifiers.control() {
-                    TimelineEvent::Pan {
-                        delta_x: match delta {
-                            mouse::ScrollDelta::Lines { .. } => direction * 40.0,
-                            mouse::ScrollDelta::Pixels { .. } => direction,
-                        },
-                        width: bounds.width,
-                    }
-                } else {
-                    TimelineEvent::Zoom {
-                        cursor_x: position.x,
-                        width: bounds.width,
-                        direction,
-                    }
+                let event = TimelineEvent::Zoom {
+                    cursor_x: position.x,
+                    width: bounds.width,
+                    direction,
                 };
                 Some(Action::publish((self.on_event)(event)).and_capture())
             }
@@ -980,6 +1066,9 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
                     .with_color(Color::WHITE),
             );
         }
+        if let Some(drag) = &state.zoom_drag {
+            drag.draw(&mut frame, bounds.height);
+        }
         vec![geometry, frame.into_geometry()]
     }
 
@@ -989,7 +1078,9 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
         bounds: Rectangle,
         cursor: mouse::Cursor,
     ) -> mouse::Interaction {
-        if state.example_drag.is_some()
+        if state.zoom_drag.is_some() || (state.modifiers.alt() && cursor.is_over(bounds)) {
+            mouse::Interaction::Crosshair
+        } else if state.example_drag.is_some()
             || cursor
                 .position_in(bounds)
                 .is_some_and(|point| self.example_handle(point, bounds.width).is_some())
@@ -1009,6 +1100,166 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
 mod tests {
     use super::*;
     use bwavfile::{WaveFmt, WaveWriter};
+
+    #[test]
+    fn alt_drag_fits_without_seek_or_label_and_control_wheel_zooms() {
+        use canvas::Program;
+        let cache = WaveformCache::from_samples(&[0.0; 48000], 48000);
+        let mut viewport = TimelineViewport::new(10 * TICKS_PER_SECOND);
+        viewport.set_selection(Some((1, 2)));
+        let labels = [crate::ReferenceLabel {
+            id: 7,
+            range: crate::TimeRange::new(2 * TICKS_PER_SECOND, 4 * TICKS_PER_SECOND).unwrap(),
+            active_speakers: vec![],
+            sources: vec![],
+            reference_track: None,
+        }];
+        let waveform = TimelineCanvas::waveform(&cache, &viewport, |event| event, None, false)
+            .with_examples(&labels, Some(7), None, |_| {
+                panic!("Alt must precede reference handles")
+            })
+            .with_selection(|_, _, _| panic!("Alt must not label"));
+        let bounds = Rectangle::new(Point::ORIGIN, Size::new(100.0, 80.0));
+        let mut state = TimelineCanvasState::default();
+        waveform.update(
+            &mut state,
+            &canvas::Event::Keyboard(keyboard::Event::ModifiersChanged(keyboard::Modifiers::ALT)),
+            bounds,
+            mouse::Cursor::Unavailable,
+        );
+        let start = waveform
+            .update(
+                &mut state,
+                &canvas::Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)),
+                bounds,
+                mouse::Cursor::Available(Point::new(20.0, 10.0)),
+            )
+            .unwrap()
+            .into_inner();
+        assert!(start.0.is_none());
+        let end = waveform
+            .update(
+                &mut state,
+                &canvas::Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)),
+                bounds,
+                mouse::Cursor::Available(Point::new(40.0, 10.0)),
+            )
+            .unwrap()
+            .into_inner();
+        assert!(
+            matches!(end.0, Some(TimelineEvent::FitRange(a, b)) if a.abs_diff(2 * TICKS_PER_SECOND) < 10 && b.abs_diff(4 * TICKS_PER_SECOND) < 10),
+            "{end:?}"
+        );
+        assert_eq!(viewport.selection(), Some((1, 2)));
+        let escape = canvas::Event::Keyboard(keyboard::Event::KeyPressed {
+            key: keyboard::Key::Named(keyboard::key::Named::Escape),
+            modified_key: keyboard::Key::Named(keyboard::key::Named::Escape),
+            physical_key: keyboard::key::Physical::Code(keyboard::key::Code::Escape),
+            location: keyboard::Location::Standard,
+            modifiers: keyboard::Modifiers::ALT,
+            text: None,
+            repeat: false,
+        });
+        for cancellation in [escape, canvas::Event::Mouse(mouse::Event::CursorLeft)] {
+            waveform.update(
+                &mut state,
+                &canvas::Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)),
+                bounds,
+                mouse::Cursor::Available(Point::new(20.0, 10.0)),
+            );
+            let cancel = waveform
+                .update(
+                    &mut state,
+                    &cancellation,
+                    bounds,
+                    mouse::Cursor::Available(Point::new(40.0, 10.0)),
+                )
+                .unwrap()
+                .into_inner();
+            assert!(cancel.0.is_none());
+            assert_eq!(cancel.2, iced::event::Status::Captured);
+            assert!(
+                waveform
+                    .update(
+                        &mut state,
+                        &canvas::Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)),
+                        bounds,
+                        mouse::Cursor::Available(Point::new(40.0, 10.0))
+                    )
+                    .is_none()
+            );
+        }
+        waveform.update(
+            &mut state,
+            &canvas::Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)),
+            bounds,
+            mouse::Cursor::Available(Point::new(20.0, 10.0)),
+        );
+        let tiny = waveform
+            .update(
+                &mut state,
+                &canvas::Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)),
+                bounds,
+                mouse::Cursor::Available(Point::new(21.0, 10.0)),
+            )
+            .unwrap()
+            .into_inner();
+        assert!(tiny.0.is_none());
+        waveform.update(
+            &mut state,
+            &canvas::Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)),
+            bounds,
+            mouse::Cursor::Available(Point::new(20.0, 60.0)),
+        );
+        waveform.update(
+            &mut state,
+            &canvas::Event::Keyboard(keyboard::Event::ModifiersChanged(
+                keyboard::Modifiers::empty(),
+            )),
+            bounds,
+            mouse::Cursor::Unavailable,
+        );
+        waveform.update(
+            &mut state,
+            &canvas::Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)),
+            bounds,
+            mouse::Cursor::Available(Point::new(21.0, 60.0)),
+        );
+        let normal = waveform
+            .update(
+                &mut state,
+                &canvas::Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)),
+                bounds,
+                mouse::Cursor::Available(Point::new(60.0, 60.0)),
+            )
+            .unwrap()
+            .into_inner();
+        assert!(matches!(normal.0, Some(TimelineEvent::Seek(_))));
+        waveform.update(
+            &mut state,
+            &canvas::Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)),
+            bounds,
+            mouse::Cursor::Available(Point::new(60.0, 60.0)),
+        );
+        waveform.update(
+            &mut state,
+            &canvas::Event::Keyboard(keyboard::Event::ModifiersChanged(keyboard::Modifiers::CTRL)),
+            bounds,
+            mouse::Cursor::Unavailable,
+        );
+        let wheel = waveform
+            .update(
+                &mut state,
+                &canvas::Event::Mouse(mouse::Event::WheelScrolled {
+                    delta: mouse::ScrollDelta::Lines { x: 0.0, y: 1.0 },
+                }),
+                bounds,
+                mouse::Cursor::Available(Point::new(20.0, 10.0)),
+            )
+            .unwrap()
+            .into_inner();
+        assert!(matches!(wheel.0, Some(TimelineEvent::Zoom { .. })));
+    }
 
     #[test]
     fn example_handles_preview_commit_clamp_and_cancel_without_creating_labels() {

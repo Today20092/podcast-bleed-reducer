@@ -788,6 +788,266 @@ mod tests {
     }
 
     #[test]
+    fn shortcut_help_and_escape_respect_edit_owners_and_idle_gain_mode() {
+        use super::Message;
+        use iced::keyboard::{Key, Modifiers, key::Named};
+        let mut app = super::CleanSlateApp::default();
+        let before = (app.timeline.start(), app.timeline.visible_samples());
+        let _ = app.update(Message::KeyPressed(
+            Key::Character("f".into()),
+            Modifiers::empty(),
+        ));
+        assert_eq!(
+            (app.timeline.start(), app.timeline.visible_samples()),
+            before
+        );
+        assert!(
+            super::keyboard_message(
+                Key::Character("/".into()),
+                Modifiers::CTRL,
+                iced::event::Status::Captured
+            )
+            .is_none()
+        );
+        app.timeline.set_selection(Some((1, 2)));
+        app.gain_tool = true;
+        let _ = app.update(Message::KeyPressed(
+            Key::Named(Named::Escape),
+            Modifiers::empty(),
+        ));
+        assert_eq!(app.timeline.selection(), None);
+        app.sound_typing = true;
+        let _ = app.update(Message::KeyPressed(
+            Key::Character("/".into()),
+            Modifiers::CTRL,
+        ));
+        assert!(!app.shortcuts_open);
+        app.sound_typing = false;
+        app.track_name_draft = Some((0, "Typing".into()));
+        let _ = app.update(Message::KeyPressed(
+            Key::Character("/".into()),
+            Modifiers::CTRL,
+        ));
+        assert!(!app.shortcuts_open);
+        app.track_name_draft = None;
+        app.import_dialog = true;
+        let _ = app.update(Message::KeyPressed(
+            Key::Character("/".into()),
+            Modifiers::CTRL,
+        ));
+        assert!(!app.shortcuts_open);
+        app.import_dialog = false;
+        app.export_dialog = Some(super::ExportDialog {
+            settings: crate::ExportSettings::default(),
+            destination: None,
+        });
+        let _ = app.update(Message::KeyPressed(
+            Key::Character("/".into()),
+            Modifiers::CTRL,
+        ));
+        assert!(!app.shortcuts_open);
+        app.export_dialog = None;
+        app.reference_menu = Some((0, iced::Point::ORIGIN));
+        app.timeline.set_selection(Some((1, 2)));
+        let _ = app.update(Message::KeyPressed(
+            Key::Named(Named::Escape),
+            Modifiers::empty(),
+        ));
+        assert!(app.reference_menu.is_none());
+        assert_eq!(app.timeline.selection(), Some((1, 2)));
+        let _ = app.update(Message::KeyPressed(
+            Key::Named(Named::Escape),
+            Modifiers::empty(),
+        ));
+        assert_eq!(app.timeline.selection(), None);
+        let _ = app.update(Message::KeyPressed(
+            Key::Character("/".into()),
+            Modifiers::CTRL,
+        ));
+        assert!(app.shortcuts_open);
+        app.timeline.set_selection(Some((1, 2)));
+        let _ = app.update(Message::KeyPressed(
+            Key::Named(Named::Escape),
+            Modifiers::empty(),
+        ));
+        assert!(!app.shortcuts_open);
+        assert_eq!(app.timeline.selection(), Some((1, 2)));
+    }
+
+    #[test]
+    fn help_menu_is_keyboard_reachable_and_blocks_workspace_navigation() {
+        use super::Message;
+        use iced::keyboard::{Key, Modifiers, key::Named};
+        let mut app = super::CleanSlateApp::default();
+        let _ = app.update(Message::KeyPressed(
+            Key::Character("h".into()),
+            Modifiers::ALT,
+        ));
+        assert!(app.help_open);
+        let _ = app.update(Message::KeyPressed(
+            Key::Named(Named::Tab),
+            Modifiers::empty(),
+        ));
+        assert!(app.help_close_selected);
+        let _ = app.update(Message::KeyPressed(
+            Key::Named(Named::ArrowUp),
+            Modifiers::empty(),
+        ));
+        assert!(!app.help_close_selected);
+        let _ = app.update(Message::KeyPressed(
+            Key::Named(Named::Enter),
+            Modifiers::empty(),
+        ));
+        assert!(app.shortcuts_open && !app.help_open);
+        app.timeline.set_selection(Some((1, 2)));
+        let _ = app.update(Message::Timeline(crate::timeline::TimelineEvent::Select(
+            3, 4,
+        )));
+        let _ = app.update(Message::KeyPressed(
+            Key::Character("f".into()),
+            Modifiers::empty(),
+        ));
+        assert_eq!(app.timeline.selection(), Some((1, 2)));
+        let _ = app.update(Message::KeyPressed(
+            Key::Named(Named::Enter),
+            Modifiers::empty(),
+        ));
+        assert!(!app.shortcuts_open);
+    }
+
+    #[test]
+    fn fit_keys_and_gain_alt_drag_preserve_session_decisions_and_playback() {
+        use super::Message;
+        use iced::{
+            Point, Rectangle, Size,
+            keyboard::{Key, Modifiers},
+            mouse,
+            widget::canvas::{self, Program},
+        };
+        let root = std::env::temp_dir().join(format!("cleanslate-fit-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let source = root.join("source.wav");
+        write_wav(&source, &vec![0.0; 48000 * 100]);
+        let mut app = super::CleanSlateApp {
+            gain_tool: true,
+            project: Some(
+                synchronized_project(root.join("session.cleanslate"), vec![source]).unwrap(),
+            ),
+            ..Default::default()
+        };
+        app.timeline
+            .set_total_samples(100 * crate::TICKS_PER_SECOND);
+        app.timeline.seek(8 * crate::TICKS_PER_SECOND);
+        app.timeline.set_selection(Some((
+            40 * crate::TICKS_PER_SECOND,
+            50 * crate::TICKS_PER_SECOND,
+        )));
+        let _ = app.update(Message::GainAction(0, false));
+        assert!(!app.project.as_ref().unwrap().manual_gain_edits().is_empty());
+        app.selection_track = Some(0);
+        app.selected_example = Some(77);
+        app.audition_range = Some((2, 3));
+        app.playback_scroll = crate::timeline::PlaybackScroll::Locked;
+        let saved = std::fs::read(app.project.as_ref().unwrap().path()).unwrap();
+        let _ = app.update(Message::KeyPressed(
+            Key::Character("f".into()),
+            Modifiers::SHIFT,
+        ));
+        assert_eq!(
+            app.timeline.visible_samples(),
+            12.0 * crate::TICKS_PER_SECOND as f64
+        );
+        assert_eq!(app.timeline.start(), 39.0 * crate::TICKS_PER_SECOND as f64);
+        assert_eq!(app.playback_scroll, crate::timeline::PlaybackScroll::Off);
+        let _ = app.update(Message::KeyPressed(
+            Key::Character("f".into()),
+            Modifiers::empty(),
+        ));
+        assert_eq!(
+            app.timeline.visible_samples(),
+            100.0 * crate::TICKS_PER_SECOND as f64
+        );
+        let project = app.project.as_ref().unwrap();
+        let constraints = project.gain_constraints();
+        assert!(
+            crate::hit_gain_point(
+                &constraints,
+                project.sources[0].track_id,
+                &app.timeline,
+                crate::GainPointer {
+                    x: 40.0,
+                    y: 11.0,
+                    width: 100.0,
+                    height: 20.0
+                }
+            )
+            .is_some()
+        );
+        let gain = crate::gain_editor::GainCanvas {
+            revision: 0,
+            project,
+            constraints: &constraints,
+            track: project.sources[0].track_id,
+            viewport: &app.timeline,
+            automatic: None,
+            effective: None,
+            editing: true,
+            on_event: Box::new(|event| event),
+        };
+        let bounds = Rectangle::new(Point::ORIGIN, Size::new(100.0, 20.0));
+        let mut state = crate::gain_editor::GainCanvasState::default();
+        gain.update(
+            &mut state,
+            &canvas::Event::Keyboard(iced::keyboard::Event::ModifiersChanged(Modifiers::ALT)),
+            bounds,
+            mouse::Cursor::Unavailable,
+        );
+        let start = gain
+            .update(
+                &mut state,
+                &canvas::Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)),
+                bounds,
+                mouse::Cursor::Available(Point::new(40.0, 11.0)),
+            )
+            .unwrap()
+            .into_inner();
+        assert!(start.0.is_none());
+        let end = gain
+            .update(
+                &mut state,
+                &canvas::Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)),
+                bounds,
+                mouse::Cursor::Available(Point::new(50.0, 8.0)),
+            )
+            .unwrap()
+            .into_inner();
+        let Some(crate::GainEditorEvent::FitRange(start, end)) = end.0 else {
+            panic!("Alt must fit instead of editing gain");
+        };
+        drop(gain);
+        let selection = app.timeline.selection();
+        let _ = app.update(Message::GainEvent(
+            0,
+            crate::GainEditorEvent::FitRange(start, end),
+        ));
+        let _ = app.update(Message::TrackTimeline(
+            0,
+            crate::timeline::TimelineEvent::FitRange(start, end),
+        ));
+        assert_eq!(app.timeline.selection(), selection);
+        assert_eq!(app.selected_example, Some(77));
+        assert_eq!(app.selection_track, Some(0));
+        assert_eq!(app.timeline.playhead(), 8 * crate::TICKS_PER_SECOND);
+        assert_eq!(app.audition_range, Some((2, 3)));
+        assert_eq!(
+            std::fs::read(app.project.as_ref().unwrap().path()).unwrap(),
+            saved
+        );
+        app.audition_range = None;
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn playback_frames_reuse_drawing_without_polling_background_jobs() {
         let mut app = super::CleanSlateApp::default();
         app.timeline.seek(0);
@@ -2409,6 +2669,9 @@ struct ReferenceAudition {
 }
 
 pub struct CleanSlateApp {
+    help_open: bool,
+    shortcuts_open: bool,
+    help_close_selected: bool,
     sound_draft: Option<(SoundParameter, String)>,
     sound_error: Option<String>,
     sound_typing: bool,
@@ -2532,6 +2795,9 @@ impl Default for CleanSlateApp {
             source_inspection: None,
             import_choices: vec![],
             import_dialog: false,
+            help_open: false,
+            shortcuts_open: false,
+            help_close_selected: false,
             track_name_draft: None,
             sound_draft: None,
             sound_error: None,
@@ -2836,6 +3102,9 @@ impl Drop for PreviewProcessing {
 
 #[derive(Debug, Clone)]
 enum Message {
+    Help,
+    KeyboardShortcuts,
+    CloseHelp,
     ImportChannel(usize, bool),
     ImportChannelName(usize, String),
     ConfirmChannels,
@@ -3881,8 +4150,13 @@ impl CleanSlateApp {
     }
 
     fn gain_event(&mut self, track: usize, event: crate::GainEditorEvent) {
+        if let crate::GainEditorEvent::FitRange(start, end) = event {
+            let _ = self.update(Message::Timeline(TimelineEvent::FitRange(start, end)));
+            return;
+        }
         self.render_generation.invalidate();
         match event {
+            crate::GainEditorEvent::FitRange(_, _) => unreachable!(),
             crate::GainEditorEvent::Begin(id, point) => {
                 if let Some(project) = &self.project
                     && let Some(source) = project.sources.get(track)
@@ -4003,6 +4277,12 @@ impl CleanSlateApp {
     }
 
     fn handle_edit_key(&mut self, key: &keyboard::Key, modifiers: keyboard::Modifiers) -> bool {
+        if self.sound_menu.is_some() {
+            if matches!(key, keyboard::Key::Named(keyboard::key::Named::Escape)) {
+                self.sound_menu = None;
+            }
+            return true;
+        }
         if self.gain_menu.is_some() {
             if matches!(key, keyboard::Key::Named(keyboard::key::Named::Escape)) {
                 self.gain_menu = None;
@@ -4063,7 +4343,9 @@ impl CleanSlateApp {
         if !self.gain_tool {
             return false;
         }
-        if key.as_ref() == keyboard::Key::Named(keyboard::key::Named::Escape) {
+        if key.as_ref() == keyboard::Key::Named(keyboard::key::Named::Escape)
+            && self.gain_drag.is_some()
+        {
             self.gain_drag = None;
             self.rebuild_effective();
             return true;
@@ -4465,6 +4747,65 @@ impl CleanSlateApp {
 
 impl CleanSlateApp {
     fn update(&mut self, message: Message) -> Task<Message> {
+        if self.help_open || self.shortcuts_open {
+            match &message {
+                Message::KeyPressed(key, modifiers)
+                    if self.help_open
+                        && modifiers.control()
+                        && key.as_ref() == keyboard::Key::Character("/") =>
+                {
+                    return self.update(Message::KeyboardShortcuts);
+                }
+                Message::KeyPressed(keyboard::Key::Named(keyboard::key::Named::Escape), _)
+                | Message::CloseHelp => {
+                    self.help_open = false;
+                    self.shortcuts_open = false;
+                    return Task::none();
+                }
+                Message::KeyPressed(keyboard::Key::Named(key), _) => {
+                    use keyboard::key::Named;
+                    let operation = iced::widget::operation::scroll_by;
+                    return match key {
+                        Named::Tab | Named::ArrowDown | Named::ArrowUp if self.help_open => {
+                            self.help_close_selected = !self.help_close_selected;
+                            Task::none()
+                        }
+                        Named::Enter => {
+                            return self.update(
+                                if self.shortcuts_open || self.help_close_selected {
+                                    Message::CloseHelp
+                                } else {
+                                    Message::KeyboardShortcuts
+                                },
+                            );
+                        }
+                        Named::Tab => Task::none(),
+                        Named::PageDown | Named::ArrowDown => operation(
+                            "shortcut-reference",
+                            iced::widget::operation::AbsoluteOffset {
+                                x: 0.0,
+                                y: if *key == Named::PageDown { 400.0 } else { 40.0 },
+                            },
+                        ),
+                        Named::PageUp | Named::ArrowUp => operation(
+                            "shortcut-reference",
+                            iced::widget::operation::AbsoluteOffset {
+                                x: 0.0,
+                                y: if *key == Named::PageUp { -400.0 } else { -40.0 },
+                            },
+                        ),
+                        Named::Home => iced::widget::operation::snap_to(
+                            "shortcut-reference",
+                            iced::widget::operation::RelativeOffset::START,
+                        ),
+                        Named::End => iced::widget::operation::snap_to_end("shortcut-reference"),
+                        _ => Task::none(),
+                    };
+                }
+                Message::KeyboardShortcuts | Message::Tick | Message::PlaybackFrame => {}
+                _ => return Task::none(),
+            }
+        }
         if (self.import_dialog || self.sources_busy())
             && matches!(
                 &message,
@@ -4722,6 +5063,9 @@ impl CleanSlateApp {
                 return self.update(Message::OpenReferenceMenu(track, point));
             }
             Message::TrackTimeline(track, event) => {
+                if matches!(event, TimelineEvent::FitRange(_, _)) {
+                    return self.update(Message::Timeline(event));
+                }
                 self.close_reference_menu();
                 self.selected_example = None;
                 self.example_draft = None;
@@ -5076,7 +5420,42 @@ impl CleanSlateApp {
                 if self.handle_edit_key(&key, modifiers) {
                     return Task::none();
                 }
+                if modifiers.control() && key.as_ref() == keyboard::Key::Character("/") {
+                    return self.update(Message::KeyboardShortcuts);
+                }
+                if modifiers.alt() && matches!(key.as_ref(), keyboard::Key::Character("h" | "H")) {
+                    return self.update(Message::Help);
+                }
+                if !modifiers.command()
+                    && !modifiers.alt()
+                    && matches!(key.as_ref(), keyboard::Key::Character("f" | "F"))
+                {
+                    if self.project.is_some() {
+                        if modifiers.shift() {
+                            if let Some((start, end)) = self.timeline.selection()
+                                && start < end
+                            {
+                                self.timeline.fit_range(start, end);
+                                self.playback_scroll = PlaybackScroll::Off;
+                            }
+                        } else {
+                            self.timeline.fit_full();
+                            self.playback_scroll = PlaybackScroll::Off;
+                        }
+                    }
+                    return Task::none();
+                }
                 match key.as_ref() {
+                    keyboard::Key::Named(keyboard::key::Named::Escape) => {
+                        self.timeline.set_selection(None);
+                        self.selection_track = None;
+                        self.calibration_selection = None;
+                        self.selected_example = None;
+                        self.example_draft = None;
+                        if let Some(review) = &mut self.review {
+                            review.clear_selection();
+                        }
+                    }
                     keyboard::Key::Named(keyboard::key::Named::Space) => {
                         if self.audition.is_some() || self.audition_range.is_some() {
                             self.stop_audition();
@@ -5319,8 +5698,26 @@ impl CleanSlateApp {
                 }
             }
             Message::CancelExportDialog => self.export_dialog = None,
+            Message::Help => {
+                self.help_open = true;
+                self.help_close_selected = false;
+            }
+            Message::KeyboardShortcuts => {
+                self.help_open = false;
+                self.shortcuts_open = true;
+            }
+            Message::CloseHelp => {
+                self.help_open = false;
+                self.shortcuts_open = false;
+            }
             Message::SubmitExport => self.submit_export(),
             Message::Timeline(event) => match event {
+                TimelineEvent::FitRange(start, end) => {
+                    if self.project.is_some() && start < end {
+                        self.playback_scroll = PlaybackScroll::Off;
+                        self.timeline.fit_range(start, end);
+                    }
+                }
                 TimelineEvent::Seek(sample)
                 | TimelineEvent::Drag(sample)
                 | TimelineEvent::DragEnd(sample) => {
@@ -5342,7 +5739,7 @@ impl CleanSlateApp {
                     direction,
                 } => {
                     self.timeline.zoom_at(cursor_x, width, direction);
-                    self.timeline.follow_playhead(self.playback_scroll);
+                    self.playback_scroll = PlaybackScroll::Off;
                 }
                 TimelineEvent::Pan { delta_x, width } => {
                     self.playback_scroll = PlaybackScroll::Off;
@@ -5412,19 +5809,20 @@ impl CleanSlateApp {
         } else {
             Subscription::none()
         };
-        let rename_keys = if self.track_name_draft.is_some() {
-            // Text inputs capture Escape, so cancellation must also see captured events.
-            iced::event::listen_with(|event, _, _| match event {
-                iced::Event::Keyboard(keyboard::Event::KeyPressed {
-                    key: keyboard::Key::Named(keyboard::key::Named::Escape),
-                    ..
-                }) => Some(Message::CancelTrackName),
-                _ => None,
-            })
-        } else {
-            Subscription::none()
-        };
-        let sound_keys = if self.sound_draft.is_some() {
+        let rename_keys =
+            if self.track_name_draft.is_some() && !self.help_open && !self.shortcuts_open {
+                // Text inputs capture Escape, so cancellation must also see captured events.
+                iced::event::listen_with(|event, _, _| match event {
+                    iced::Event::Keyboard(keyboard::Event::KeyPressed {
+                        key: keyboard::Key::Named(keyboard::key::Named::Escape),
+                        ..
+                    }) => Some(Message::CancelTrackName),
+                    _ => None,
+                })
+            } else {
+                Subscription::none()
+            };
+        let sound_keys = if self.sound_draft.is_some() && !self.help_open && !self.shortcuts_open {
             iced::event::listen_with(|event, _, _| match event {
                 iced::Event::Keyboard(keyboard::Event::KeyPressed {
                     key: keyboard::Key::Named(keyboard::key::Named::Escape),
@@ -5456,6 +5854,18 @@ impl CleanSlateApp {
         } else {
             Subscription::none()
         };
+        let help_keys = if self.help_open || self.shortcuts_open {
+            iced::event::listen_with(|event, status, _| match event {
+                iced::Event::Keyboard(keyboard::Event::KeyPressed { key, modifiers, .. })
+                    if status == iced::event::Status::Captured =>
+                {
+                    Some(Message::KeyPressed(key, modifiers))
+                }
+                _ => None,
+            })
+        } else {
+            Subscription::none()
+        };
         Subscription::batch([
             drops,
             processing,
@@ -5463,10 +5873,203 @@ impl CleanSlateApp {
             rename_keys,
             sound_keys,
             import_keys,
+            help_keys,
         ])
     }
 
+    fn shortcut_reference(&self) -> Element<'_, Message> {
+        let mut content = column![
+            row![text("Keyboard shortcuts").size(24), Space::new().width(Fill), button("Close    Enter / Esc").on_press(Message::CloseHelp)].spacing(16),
+            text("Workspace shortcuts apply when text fields, dialogs and speaker popups are closed. Ctrl means Command on macOS for undo/redo; help uses Ctrl+/.").size(14),
+        ].spacing(12);
+        for (heading, entries) in [
+            (
+                "Playback & timeline",
+                vec![
+                    ("Space", "Play / stop; selection plays once"),
+                    ("Home", "Seek to selection start, or recording start"),
+                    (
+                        "1 / 2 / 3",
+                        "Original / Processed / Removed; 2 and 3 need a prepared preview",
+                    ),
+                    (
+                        "F / Shift+F",
+                        "Fit recording / fit selection; no selection does nothing",
+                    ),
+                    ("Ctrl+/", "Open this reference"),
+                    (
+                        "Alt+H",
+                        "Open Help; Tab or Up/Down selects an entry, Enter opens it",
+                    ),
+                    (
+                        "Escape",
+                        "Cancel active interaction first; otherwise clear range selection",
+                    ),
+                    (
+                        "Click / drag waveform",
+                        "Seek / select a range and open speaker labeling",
+                    ),
+                    (
+                        "Alt+drag",
+                        "Fit a temporary range; existing selection, labels and gain stay intact",
+                    ),
+                    (
+                        "Wheel / Ctrl+wheel",
+                        "Zoom around pointer; stop following without stopping playback",
+                    ),
+                    ("Middle-button drag", "Pan and stop following"),
+                ],
+            ),
+            (
+                "Speaker labels",
+                vec![
+                    (
+                        "Space (popup)",
+                        "Pause / resume Original loop audition across all tracks",
+                    ),
+                    ("1–8 (popup)", "Toggle available speakers"),
+                    (
+                        "R / Enter / Escape (popup)",
+                        "Clear speakers (room tone) / save / cancel; selection stays",
+                    ),
+                    ("Click label strip", "Select a saved example"),
+                    (
+                        "Drag selected label handles",
+                        "Resize example; Escape or leaving waveform cancels",
+                    ),
+                    ("Right-click waveform / label", "Open reference actions"),
+                    (
+                        "Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y",
+                        "Undo / redo labels when gain editing is off",
+                    ),
+                ],
+            ),
+            (
+                "Gain editing",
+                vec![
+                    (
+                        "Drag gain point",
+                        "Move a manual point while Edit gain points is on",
+                    ),
+                    ("Delete", "Delete the selected manual gain edit"),
+                    ("Left / Right arrows", "Move selected point by 0.01 seconds"),
+                    ("Up / Down arrows", "Change selected point gain by 0.01"),
+                    (
+                        "Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y",
+                        "Undo / redo gain while Edit gain points is on",
+                    ),
+                    (
+                        "Escape",
+                        "Cancel gain drag first; idle gain editing permits deselection",
+                    ),
+                    ("Right-click", "Open gain actions where offered"),
+                ],
+            ),
+            (
+                "Values, text & dialogs",
+                vec![
+                    (
+                        "Click sound value",
+                        "Type a value; attenuation also accepts Mute",
+                    ),
+                    (
+                        "Enter / Tab / Shift+Tab",
+                        "Commit sound value / commit and focus next / previous value",
+                    ),
+                    (
+                        "Ctrl+click / right-click sound control",
+                        "Reset parameter / open Reset to default",
+                    ),
+                    (
+                        "Escape (sound value)",
+                        "Cancel value draft; keep last valid value",
+                    ),
+                    ("Enter / Escape (track name)", "Save / cancel rename"),
+                    (
+                        "Tab / Shift+Tab",
+                        "Navigate text inputs and sliders; arrows operate focused sliders",
+                    ),
+                    (
+                        "Escape (import, export, Help)",
+                        "Close active dialog; Enter also closes this reference",
+                    ),
+                    (
+                        "Page Up / Down, Up / Down (Help)",
+                        "Scroll reference; Home / End jumps to top / bottom",
+                    ),
+                    (
+                        "Text fields",
+                        "Typing owns keys; workspace shortcuts stay suppressed",
+                    ),
+                ],
+            ),
+        ] {
+            content = content.push(text(heading).size(18));
+            for (binding, description) in entries {
+                content = content.push(
+                    row![
+                        text(binding).width(240).size(14),
+                        text(description).size(14)
+                    ]
+                    .spacing(16),
+                );
+            }
+        }
+        content.into()
+    }
+
     fn view(&self) -> Element<'_, Message> {
+        if self.help_open || self.shortcuts_open {
+            return responsive(|size| {
+                let content = if self.shortcuts_open {
+                    self.shortcut_reference()
+                } else {
+                    column![
+                        text("Help").size(24),
+                        text("Tab or Up/Down to select · Enter to activate · Esc to close")
+                            .size(14),
+                        button(if self.help_close_selected {
+                            "Keyboard shortcuts    Ctrl+/"
+                        } else {
+                            "› Keyboard shortcuts    Ctrl+/"
+                        })
+                        .on_press(Message::KeyboardShortcuts),
+                        button(if self.help_close_selected {
+                            "› Close"
+                        } else {
+                            "Close"
+                        })
+                        .on_press(Message::CloseHelp)
+                    ]
+                    .spacing(16)
+                    .into()
+                };
+                stack![
+                    self.workspace(compact_workspace(size.width), size.height, size.width),
+                    opaque(
+                        container(
+                            container(
+                                scrollable(content).id("shortcut-reference").height(
+                                    (size.height - 120.0)
+                                        .clamp(160.0, if self.help_open { 180.0 } else { 620.0 })
+                                )
+                            )
+                            .padding(24)
+                            .max_width(if self.help_open { 460 } else { 760 })
+                            .style(container::rounded_box)
+                        )
+                        .center_x(Fill)
+                        .center_y(Fill)
+                        .style(|_| container::Style {
+                            background: Some(iced::Color::from_rgba(0.0, 0.0, 0.0, 0.7).into()),
+                            ..Default::default()
+                        })
+                    )
+                ]
+                .into()
+            })
+            .into();
+        }
         if let Some(dialog) = &self.export_dialog {
             return stack![
                 responsive(|size| self.workspace(
@@ -6098,6 +6701,9 @@ impl CleanSlateApp {
             button("Import tracks")
                 .style(primary_button)
                 .on_press(Message::ImportStems),
+            button("Help")
+                .style(secondary_button)
+                .on_press(Message::Help),
             button("New project")
                 .style(secondary_button)
                 .on_press_maybe(self.can_start_new_project().then_some(Message::NewProject)),

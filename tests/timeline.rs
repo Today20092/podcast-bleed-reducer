@@ -1,6 +1,40 @@
 use rust_app::{SourceTimebase, TICKS_PER_SECOND, timeline::TimelineViewport};
 
 #[test]
+fn fit_navigation_preserves_playhead_and_selection_with_clipped_context() {
+    let tick = TICKS_PER_SECOND as f64;
+    let mut viewport = TimelineViewport::new(100 * TICKS_PER_SECOND);
+    viewport.seek(8 * TICKS_PER_SECOND);
+    viewport.set_selection(Some((40 * TICKS_PER_SECOND, 50 * TICKS_PER_SECOND)));
+    for (start, end, expected_start, expected_visible) in [
+        (40.0, 50.0, 39.0, 12.0),
+        (0.0, 2.0, 0.0, 2.4),
+        (98.0, 100.0, 97.6, 2.4),
+        (50.0, 50.1, 49.55, 1.0),
+    ] {
+        viewport.fit_range((start * tick) as u64, (end * tick) as u64);
+        assert!((viewport.start() / tick - expected_start).abs() < 0.00001);
+        assert!((viewport.visible_samples() / tick - expected_visible).abs() < 0.00001);
+    }
+    let before = (viewport.start(), viewport.visible_samples());
+    viewport.fit_range(10, 10);
+    viewport.fit_range(20, 10);
+    assert_eq!((viewport.start(), viewport.visible_samples()), before);
+    viewport.fit_full();
+    assert_eq!(viewport.start(), 0.0);
+    assert_eq!(viewport.visible_samples(), 100.0 * tick);
+    assert_eq!(viewport.playhead(), 8 * TICKS_PER_SECOND);
+    assert_eq!(
+        viewport.selection(),
+        Some((40 * TICKS_PER_SECOND, 50 * TICKS_PER_SECOND))
+    );
+    let mut short = TimelineViewport::new(TICKS_PER_SECOND / 2);
+    short.fit_range(1, 2);
+    assert_eq!(short.start(), 0.0);
+    assert_eq!(short.visible_samples(), tick / 2.0);
+}
+
+#[test]
 fn captured_lock_survives_seeks_zoom_resize_and_session_edges() {
     use rust_app::timeline::PlaybackScroll;
     let mut viewport = TimelineViewport::new(100 * TICKS_PER_SECOND);

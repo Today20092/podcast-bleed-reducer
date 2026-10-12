@@ -261,6 +261,10 @@ impl ReviewWorkspace {
     pub fn set_selection(&mut self, start: crate::TimePosition, end: crate::TimePosition) {
         self.selection = Some((start.min(end), end.max(start)));
     }
+
+    pub fn clear_selection(&mut self) {
+        self.selection = None;
+    }
     pub fn set_comparison(&mut self, comparison: Comparison) {
         self.comparison = comparison;
     }

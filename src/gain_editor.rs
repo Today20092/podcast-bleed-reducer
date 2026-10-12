@@ -3,12 +3,13 @@ use crate::{
     AutomaticEnvelope, GainConstraints, GainEnvelope, Project, TrackId, timeline::TimelineViewport,
 };
 use iced::{
-    Color, Point, Rectangle, Renderer, Theme, mouse,
+    Color, Point, Rectangle, Renderer, Theme, keyboard, mouse,
     widget::canvas::{self, Action},
 };
 
 #[derive(Clone, Debug)]
 pub enum GainEditorEvent {
+    FitRange(u64, u64),
     Begin(u64, usize),
     Move(u64, f32),
     End,
@@ -69,6 +70,8 @@ pub(crate) struct GainCanvasState {
     geometry: canvas::Cache,
     revision: std::cell::Cell<Option<u64>>,
     dragging: bool,
+    modifiers: keyboard::Modifiers,
+    zoom_drag: Option<crate::waveform::ZoomDrag>,
 }
 impl<Message: 'static> canvas::Program<Message> for GainCanvas<'_, Message> {
     type State = GainCanvasState;
@@ -82,9 +85,38 @@ impl<Message: 'static> canvas::Program<Message> for GainCanvas<'_, Message> {
         if !self.editing {
             return None;
         }
+        if let canvas::Event::Keyboard(keyboard::Event::ModifiersChanged(modifiers)) = event {
+            state.modifiers = *modifiers;
+            return None;
+        }
+        if state.zoom_drag.is_some() {
+            return crate::waveform::ZoomDrag::update(
+                &mut state.zoom_drag,
+                event,
+                self.viewport,
+                bounds,
+                cursor,
+                |start, end| (self.on_event)(GainEditorEvent::FitRange(start, end)),
+            );
+        }
         match event {
+            canvas::Event::Keyboard(keyboard::Event::KeyPressed {
+                key: keyboard::Key::Named(keyboard::key::Named::Escape),
+                ..
+            }) if state.dragging => {
+                state.dragging = false;
+                Some(Action::publish((self.on_event)(GainEditorEvent::Cancel)).and_capture())
+            }
             canvas::Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) => {
                 let point = cursor.position_in(bounds)?;
+                if state.modifiers.alt() {
+                    state.zoom_drag = Some(crate::waveform::ZoomDrag::begin(
+                        self.viewport,
+                        point.x,
+                        bounds.width,
+                    ));
+                    return Some(Action::request_redraw().and_capture());
+                }
                 let hit = hit_gain_point(
                     self.constraints,
                     self.track,
@@ -274,6 +306,10 @@ impl<Message: 'static> canvas::Program<Message> for GainCanvas<'_, Message> {
                 }
             }
         });
-        vec![geometry]
+        let mut overlay = canvas::Frame::new(renderer, bounds.size());
+        if let Some(drag) = &state.zoom_drag {
+            drag.draw(&mut overlay, bounds.height);
+        }
+        vec![geometry, overlay.into_geometry()]
     }
 }

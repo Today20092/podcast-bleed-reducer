@@ -82,6 +82,23 @@ impl TimelineViewport {
             .clamp(0.0, self.total_samples as f64 - self.visible);
     }
 
+    pub fn fit_full(&mut self) {
+        self.start = 0.0;
+        self.visible = self.total_samples as f64;
+    }
+
+    pub fn fit_range(&mut self, start: TimePosition, end: TimePosition) {
+        let end = end.min(self.total_samples);
+        if start >= end {
+            return;
+        }
+        self.visible = ((end - start) as f64 * 1.2)
+            .max(TICKS_PER_SECOND as f64)
+            .min(self.total_samples as f64);
+        self.start = ((start as f64 + end as f64 - self.visible) / 2.0)
+            .clamp(0.0, self.total_samples as f64 - self.visible);
+    }
+
     pub fn seek(&mut self, sample: TimePosition) {
         self.playhead = sample.min(self.total_samples.saturating_sub(1));
     }
@@ -144,6 +161,7 @@ impl TimelineViewport {
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum TimelineEvent {
+    FitRange(TimePosition, TimePosition),
     Seek(TimePosition),
     Drag(TimePosition),
     DragEnd(TimePosition),
