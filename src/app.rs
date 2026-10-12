@@ -1118,9 +1118,11 @@ mod tests {
         assert_eq!(app.solo_tracks, 0);
         let _ = app.update(space());
         assert!(app.audition_range.is_none() && app.reference_menu.is_some());
+        assert!(app.reference_audition.as_ref().unwrap().paused);
         drain(&mut app);
         let _ = app.update(space());
         assert_eq!(app.audition_range, Some(range));
+        assert!(!app.reference_audition.as_ref().unwrap().paused);
         let _ = app.update(Message::Stop);
         drain(&mut app);
         let _ = app.update(space());
@@ -5989,6 +5991,12 @@ impl CleanSlateApp {
                 .on_press(Message::Previous),
             button(if self.audition_range.is_some() {
                 "Preparing audio…"
+            } else if self
+                .reference_audition
+                .as_ref()
+                .is_some_and(|snapshot| snapshot.paused)
+            {
+                "Paused · Resume"
             } else if self.audition.is_some() {
                 "Playing"
             } else {
