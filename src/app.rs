@@ -454,12 +454,12 @@ mod tests {
     }
 
     #[test]
-    fn new_project_is_blocked_while_importing_or_exporting() {
+    fn new_project_cancels_pending_imports_but_is_blocked_while_exporting() {
         let mut app = super::CleanSlateApp::default();
         app.pending_imports.push("queued.wav".into());
-        assert!(!app.can_start_new_project());
+        assert!(app.can_start_new_project());
         app.reset_project(true);
-        assert_eq!(app.pending_imports.len(), 1);
+        assert!(app.pending_imports.is_empty());
         app.pending_imports.clear();
         let cancelled = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
         let (_sender, result) = super::mpsc::channel();
@@ -1904,8 +1904,8 @@ mod tests {
         });
         let _ = app.update(super::Message::FileDropped(source));
         assert!(
-            cancelled.load(super::Ordering::Relaxed),
-            "dropping the old preview job must cancel it"
+            !cancelled.load(super::Ordering::Relaxed),
+            "metadata inspection does not cancel accepted-track analysis"
         );
         assert!(
             app.project.is_none(),
@@ -1939,6 +1939,7 @@ mod tests {
             "multi-file drops are coalesced before reading"
         );
         finish_import(&mut app);
+        assert!(app.project.is_some(), "{:?}", app.messages);
         assert_eq!(
             app.project.as_ref().unwrap().source_paths(),
             [a, directory.join("B.wav")]
@@ -2140,6 +2141,179 @@ mod tests {
             "Zoom full import, waveforms, validation and reopen: {:.2}s",
             started.elapsed().as_secs_f64()
         );
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn progressive_rows_preserve_edits_order_readiness_and_retry_current_sources() {
+        let root = crate::audio_io::multichannel_tests::root();
+        let a = root.join("a.wav");
+        let b = root.join("b.wav");
+        let c = root.join("c.wav");
+        write_wav(&a, &[0.0; 4800]);
+        write_wav(&b, &[0.0; 16]);
+        write_wav(&c, &[0.0; 4800]);
+        let mut app = super::CleanSlateApp::default();
+        app.begin_source_loading(super::SourceRequest::AddChannels(vec![
+            crate::AudioSource::mono(a.clone()),
+        ]));
+        assert!(!app.import_dialog);
+        assert_eq!(app.import_jobs.len(), 1);
+        assert_eq!(app.import_jobs[0].waveforms[0].sample_count, 4800);
+        assert!(app.project.is_none());
+        finish_import(&mut app);
+        let project_path = app.project.as_ref().unwrap().path().to_owned();
+        app.timeline.set_selection(Some((1, 2)));
+        app.timeline.seek(1);
+        app.begin_source_loading(super::SourceRequest::AddChannels(vec![
+            crate::AudioSource::mono(b.clone()),
+            crate::AudioSource::mono(c.clone()),
+        ]));
+        assert_eq!(app.reserved_track_count(), 3);
+        assert_eq!(app.timeline.selection(), Some((1, 2)));
+        assert_eq!(app.timeline.playhead(), 1);
+        app.project
+            .as_mut()
+            .unwrap()
+            .rename_track(0, "Edited during import".into())
+            .unwrap();
+        let _ = app.update(super::Message::Attenuation(-3.0));
+        finish_import(&mut app);
+        assert_eq!(app.project.as_ref().unwrap().sources.len(), 2);
+        assert_eq!(
+            app.project.as_ref().unwrap().sources[0].display_name(),
+            "Edited during import"
+        );
+        assert_eq!(
+            app.project.as_ref().unwrap().parameters().attenuation_db,
+            -3.0
+        );
+        assert!(app.import_jobs[1].error.is_some());
+        assert!(app.import_jobs[2].accepted);
+        let saved = std::fs::read(&project_path).unwrap();
+        assert_eq!(
+            crate::Project::open(&project_path).unwrap().source_paths(),
+            [a, c]
+        );
+        let failed_id = app.import_jobs[1].id;
+        write_wav(&b, &[0.25; 4800]);
+        let _ = app.update(super::Message::RetryImport(failed_id));
+        finish_import(&mut app);
+        assert!(app.import_jobs[1].accepted);
+        assert_eq!(app.project.as_ref().unwrap().sources.len(), 3);
+        let rows = app.import_display_rows();
+        assert_eq!(
+            rows.iter().map(|r| r.0.unwrap()).collect::<Vec<_>>(),
+            [0, 2, 1]
+        );
+        assert_ne!(std::fs::read(&project_path).unwrap(), saved);
+        app.stop_audition();
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn provisional_reservations_limit_cancel_and_new_project_reject_late_results() {
+        let root = crate::audio_io::multichannel_tests::root();
+        let inputs = (0..8)
+            .map(|index| {
+                let path = root.join(format!("queued-{index}.wav"));
+                write_wav(&path, &[0.1; 4800]);
+                crate::AudioSource::mono(path)
+            })
+            .collect::<Vec<_>>();
+        let mut app = super::CleanSlateApp::default();
+        app.reserve_import(inputs.clone());
+        assert_eq!(app.reserved_track_count(), 8);
+        let flag = app.import_jobs[0].cancelled.clone();
+        app.reserve_import(vec![inputs[0].clone()]);
+        assert_eq!(app.import_jobs.len(), 1);
+        assert!(app.messages[0].contains("eight-track"));
+        let _ = app.update(super::Message::CancelPendingImports);
+        assert!(flag.load(super::Ordering::Relaxed));
+        assert!(app.import_jobs.is_empty());
+        assert!(app.project.is_none());
+        app.reserve_import(inputs);
+        let flag = app.import_jobs[0].cancelled.clone();
+        app.reset_project(true);
+        assert!(flag.load(super::Ordering::Relaxed));
+        app.poll_sources();
+        assert!(app.project.is_none());
+        assert!(app.import_jobs.is_empty());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    #[ignore = "measures local full recording; use an isolated LOCALAPPDATA cache root"]
+    fn progressive_import_stage_benchmark() {
+        let source = std::env::var_os("CLEANSLATE_IMPORT_BENCHMARK").expect("set recording path");
+        let source = std::path::PathBuf::from(source);
+        let root = crate::audio_io::multichannel_tests::root();
+        let baseline = std::env::var_os("CLEANSLATE_IMPORT_BASELINE").is_some();
+        for warm in [false, true] {
+            let started = std::time::Instant::now();
+            let inputs = crate::wav_channel_sources(&source).unwrap();
+            let choices_ms = started.elapsed().as_secs_f64() * 1000.0;
+            let mut preview_ms = None;
+            let mut ready_ms = None;
+            let mut stages = vec![];
+            if baseline {
+                let (sender, receiver) = super::mpsc::channel();
+                let parameters = crate::AutomixParameters::default();
+                let worker = std::thread::spawn(move || {
+                    super::load_sources(
+                        super::SourceRequest::AddChannels(inputs),
+                        None,
+                        parameters,
+                        &sender,
+                    )
+                });
+                for event in receiver {
+                    let ms = started.elapsed().as_secs_f64() * 1000.0;
+                    match event {
+                        super::SourceEvent::Stage(stage) => stages.push((stage, ms)),
+                        super::SourceEvent::Waveform(_, _) => {
+                            preview_ms.get_or_insert(ms);
+                        }
+                        _ => {}
+                    }
+                }
+                let loaded = worker.join().unwrap().unwrap();
+                ready_ms = Some(started.elapsed().as_secs_f64() * 1000.0);
+                assert_eq!(loaded.project.sources.len(), 3);
+            } else {
+                let metadata = inputs.iter().map(|s| s.metadata(None).unwrap()).collect();
+                let mut job = crate::import::Job::from_metadata(1, inputs, metadata);
+                let skeleton_ms = started.elapsed().as_secs_f64() * 1000.0;
+                stages.push(("Skeleton", skeleton_ms));
+                job.start();
+                let receiver = job.events.take().unwrap();
+                for event in receiver {
+                    let ms = started.elapsed().as_secs_f64() * 1000.0;
+                    match event {
+                        crate::import::Event::Preview(_) => {
+                            preview_ms.get_or_insert(ms);
+                        }
+                        crate::import::Event::Ready(identities, _) => {
+                            let project = crate::Project::accept_recording(
+                                None,
+                                root.join(format!("bench-{warm}.cleanslate")),
+                                identities,
+                                crate::AutomixParameters::default(),
+                            )
+                            .unwrap();
+                            assert_eq!(project.sources.len(), 3);
+                            ready_ms = Some(started.elapsed().as_secs_f64() * 1000.0);
+                        }
+                        crate::import::Event::Finished(result) => result.unwrap(),
+                        _ => {}
+                    }
+                }
+            }
+            println!(
+                "IMPORT_BENCH {}",
+                serde_json::json!({"baseline":baseline,"warm":warm,"choices_ms":choices_ms,"first_preview_ms":preview_ms,"ready_ms":ready_ms,"total_ms":started.elapsed().as_secs_f64()*1000.0,"stages":stages})
+            );
+        }
         std::fs::remove_dir_all(root).unwrap();
     }
 
@@ -2944,6 +3118,10 @@ pub struct CleanSlateApp {
     track_name_draft: Option<(usize, String)>,
     import_due: Option<Instant>,
     source_loading: Option<SourceLoading>,
+    import_jobs: Vec<crate::import::Job>,
+    next_import_id: u64,
+    import_metadata: Vec<(crate::AudioSource, crate::SourceMetadata)>,
+    import_metadata_failed: Vec<PathBuf>,
     messages: Vec<String>,
     processing: Option<Processing>,
     exporting: Option<ExportProcessing>,
@@ -3074,6 +3252,10 @@ impl Default for CleanSlateApp {
             sound_modifiers: keyboard::Modifiers::default(),
             import_due: None,
             source_loading: None,
+            import_jobs: vec![],
+            next_import_id: 0,
+            import_metadata: vec![],
+            import_metadata_failed: vec![],
             messages: vec![],
             processing: None,
             exporting: None,
@@ -3146,7 +3328,14 @@ struct ImportChoice {
 
 struct SourceInspection {
     paths: Vec<PathBuf>,
-    result: Receiver<Result<Vec<crate::AudioSource>, String>>,
+    result: Receiver<Result<Vec<(crate::AudioSource, Option<crate::SourceMetadata>)>, String>>,
+    cancelled: Arc<AtomicBool>,
+}
+
+impl Drop for SourceInspection {
+    fn drop(&mut self) {
+        self.cancelled.store(true, Ordering::Relaxed);
+    }
 }
 
 struct LoadedSession {
@@ -3385,6 +3574,9 @@ enum Message {
     ImportChannelName(usize, String),
     ConfirmChannels,
     CancelChannels,
+    RemoveImport(u64),
+    RetryImport(u64),
+    CancelPendingImports,
     EditTrackName(usize),
     TrackName(String),
     SaveTrackName,
@@ -3607,12 +3799,7 @@ impl CleanSlateApp {
                     .on_press(Message::ResetSound(parameter)),
             );
         }
-        iced::widget::tooltip(
-            content,
-            text("Click to type. Ctrl+click resets. Right-click: Reset to default."),
-            iced::widget::tooltip::Position::Top,
-        )
-        .into()
+        content.into()
     }
     fn install_waveforms(&mut self, waveforms: Vec<WaveformCache>) {
         self.close_reference_menu();
@@ -3713,22 +3900,231 @@ impl CleanSlateApp {
 
         self.pending_imports.extend(additions);
         self.import_dialog = true;
-        self.close_reference_menu();
-        self.gain_menu = None;
         self.pending_imports
             .sort_by_key(|path| path.to_string_lossy().to_lowercase());
         // A desktop multi-file drop arrives as separate events. Collect the burst
         // before starting one source pass, without delaying placeholder rows.
         self.import_due = Some(Instant::now() + Duration::from_millis(150));
         self.messages.clear();
-        self.stop_audition();
-        self.preview_pending = None;
-        self.preview_generation += 1;
-        self.preview_processing = None;
+    }
+
+    fn reserved_track_count(&self) -> usize {
+        self.project.as_ref().map_or(0, |p| p.sources.len())
+            + self
+                .import_jobs
+                .iter()
+                .filter(|j| !j.accepted)
+                .map(|j| j.sources.len())
+                .sum::<usize>()
+    }
+
+    fn reserve_import(&mut self, additions: Vec<crate::AudioSource>) {
+        if self.reserved_track_count() + additions.len() > 8 || additions.is_empty() {
+            self.messages = vec!["Import blocked: accepted and pending tracks together must fit the eight-track limit.".into()];
+            return;
+        }
+        if additions.iter().any(|s| {
+            self.import_jobs.iter().any(|j| {
+                j.sources
+                    .iter()
+                    .any(|old| old.path == s.path && old.channel == s.channel)
+            })
+        }) {
+            self.messages = vec!["These channels are already accepted or reserved. Retry or remove their existing rows.".into()];
+            return;
+        }
+        let mut recordings: Vec<Vec<crate::AudioSource>> = vec![];
+        for source in additions {
+            if let Some(recording) = recordings.iter_mut().find(|r| r[0].path == source.path) {
+                recording.push(source);
+            } else {
+                recordings.push(vec![source]);
+            }
+        }
+        for recording in recordings {
+            self.next_import_id += 1;
+            let metadata = recording.iter().map(|s| {
+                if self.import_metadata_failed.contains(&s.path) { return Err(crate::RenderBlocker("Source metadata could not be read. Check the file, then Retry or Remove.".into())); }
+                self.import_metadata.iter().rev().find(|(source, _)| source.path == s.path && source.channel == s.channel)
+                .map(|(_, metadata)| *metadata).map_or_else(|| s.metadata(None), Ok)
+            }).collect::<Result<Vec<_>, _>>();
+            match metadata.map(|metadata| {
+                crate::import::Job::from_metadata(self.next_import_id, recording.clone(), metadata)
+            }) {
+                Ok(job) => {
+                    if let Some(waveform) = job.waveforms.first() {
+                        if self.project.is_none() && self.import_jobs.is_empty() {
+                            self.timeline.set_total_samples(waveform.duration());
+                        } else {
+                            self.timeline.extend_total_samples(waveform.duration());
+                        }
+                    }
+                    self.import_jobs.push(job);
+                }
+                Err(error) => self.import_jobs.push(crate::import::Job::failed(
+                    self.next_import_id,
+                    recording,
+                    error.to_string(),
+                )),
+            }
+        }
+        self.import_dialog = false;
+        self.start_next_import();
+    }
+
+    fn start_next_import(&mut self) {
+        if self.import_jobs.iter().any(|job| job.events.is_some()) {
+            return;
+        }
+        if let Some(job) = self
+            .import_jobs
+            .iter_mut()
+            .find(|job| !job.accepted && job.error.is_none())
+        {
+            job.start();
+        }
+    }
+
+    fn cancel_pending_imports(&mut self) {
+        self.import_jobs.retain(|job| job.accepted);
+        for job in &mut self.import_jobs {
+            job.cancelled.store(true, Ordering::Relaxed);
+            job.events = None;
+            job.status = "Ready".into();
+        }
+        self.pending_imports.clear();
+        self.source_inspection = None;
+        self.import_due = None;
+        self.import_choices.clear();
+        self.import_dialog = false;
+    }
+
+    fn poll_import_jobs(&mut self) {
+        // Bounded event work keeps navigation responsive even when a worker is faster than drawing.
+        for _ in 0..4 {
+            let Some(index) = self.import_jobs.iter().position(|job| job.events.is_some()) else {
+                break;
+            };
+            let event = self.import_jobs[index].events.as_ref().unwrap().try_recv();
+            match event {
+                Ok(crate::import::Event::Metadata(waveforms)) => {
+                    if let Some(waveform) = waveforms.first() {
+                        self.timeline.extend_total_samples(waveform.duration());
+                    }
+                    self.import_jobs[index].waveforms = waveforms;
+                }
+                Ok(crate::import::Event::Preview(waveforms)) => {
+                    self.import_jobs[index].waveforms = waveforms;
+                    self.import_jobs[index].status = "Coarse preview · not yet validated".into();
+                }
+                Ok(crate::import::Event::Progress(stage, done, total)) => {
+                    self.import_jobs[index].status = if total == 0 {
+                        stage.into()
+                    } else {
+                        format!("{stage} · {:.0}%", 100.0 * done as f64 / total as f64)
+                    };
+                }
+                Ok(crate::import::Event::Ready(identities, waveforms)) => {
+                    let path = self.project.as_ref().map_or_else(
+                        || {
+                            available_project_path(
+                                self.import_jobs[index].sources[0]
+                                    .path
+                                    .parent()
+                                    .unwrap_or_else(|| std::path::Path::new(".")),
+                            )
+                        },
+                        |p| p.path().to_owned(),
+                    );
+                    self.import_jobs[index].status = "Finishing · atomic project save".into();
+                    let first = self.project.as_ref().map_or(0, |p| p.sources.len());
+                    match Project::accept_recording(
+                        self.project.as_ref(),
+                        path,
+                        identities,
+                        self.preview_parameters,
+                    ) {
+                        Ok(project) => {
+                            self.import_jobs[index].track_ids = project.sources[first..]
+                                .iter()
+                                .map(|s| s.track_id)
+                                .collect();
+                            self.project = Some(project);
+                            self.waveforms.extend(waveforms.clone());
+                            self.import_jobs[index].waveforms = waveforms;
+                            self.import_jobs[index].accepted = true;
+                            self.import_jobs[index].status = "Ready · saving waveform cache".into();
+                            self.source_generation += 1;
+                            if let Some(snapshot) = &mut self.reference_audition {
+                                snapshot.source_generation = self.source_generation;
+                            }
+                            self.preview_generation += 1;
+                            if let Some(processing) = self.preview_processing.take() {
+                                processing.cancelled.store(true, Ordering::Relaxed);
+                            }
+                            self.preview_pending = None;
+                            self.preview = None;
+                            self.supervised_result = None;
+                            self.effective_result = None;
+                            self.reference_stale = true;
+                            self.gain_constraints =
+                                self.project.as_ref().unwrap().gain_constraints();
+                            self.audition_preparation.invalidate();
+                            self.audition_ready = false;
+                            if self.audition.is_none() {
+                                self.audition_preparation.request_sources(
+                                    self.project.as_ref().unwrap().audio_sources(),
+                                );
+                            } else {
+                                self.messages.push("New recording is ready. It joins the mix the next time playback starts.".into());
+                            }
+                            self.render_generation.invalidate();
+                        }
+                        Err(error) => {
+                            self.import_jobs[index].error = Some(error.to_string());
+                            self.messages.push(format!("Import blocked: {error}"));
+                            self.import_jobs[index].status = "Failed · Retry or Remove".into();
+                            self.import_jobs[index]
+                                .cancelled
+                                .store(true, Ordering::Relaxed);
+                            self.import_jobs[index].events = None;
+                        }
+                    }
+                }
+                Ok(crate::import::Event::Finished(result)) => {
+                    let job = &mut self.import_jobs[index];
+                    job.events = None;
+                    if job.accepted {
+                        job.status = "Ready".into();
+                    } else {
+                        job.error =
+                            Some(result.err().unwrap_or_else(|| {
+                                "Import finished without validated audio".into()
+                            }));
+                        job.status = "Failed · Retry or Remove".into();
+                        self.messages
+                            .push(format!("Import blocked: {}", job.error.as_deref().unwrap()));
+                    }
+                }
+                Err(mpsc::TryRecvError::Empty) => break,
+                Err(mpsc::TryRecvError::Disconnected) => {
+                    let job = &mut self.import_jobs[index];
+                    job.events = None;
+                    if !job.accepted {
+                        job.error = Some("Import worker stopped unexpectedly; Retry.".into());
+                    }
+                }
+            }
+        }
+        self.start_next_import();
     }
 
     fn sources_busy(&self) -> bool {
         self.source_loading.is_some()
+            || self
+                .import_jobs
+                .iter()
+                .any(|job| job.events.is_some() || (!job.accepted && job.error.is_none()))
             || self.source_inspection.is_some()
             || !self.pending_imports.is_empty()
             || !self.import_choices.is_empty()
@@ -3748,11 +4144,19 @@ impl CleanSlateApp {
             },
             |loading| loading.paths.clone(),
         );
+        for job in self.import_jobs.iter().filter(|job| !job.accepted) {
+            paths.extend(job.sources.iter().map(|source| source.path.clone()));
+        }
         paths.extend(self.pending_imports.iter().cloned());
         paths
     }
 
     fn begin_source_loading(&mut self, request: SourceRequest) {
+        if let SourceRequest::AddChannels(additions) = request {
+            self.reserve_import(additions);
+            return;
+        }
+        self.cancel_pending_imports();
         if self.source_loading.is_some() || self.processing.is_some() {
             return;
         }
@@ -3817,6 +4221,7 @@ impl CleanSlateApp {
     }
 
     fn poll_sources(&mut self) {
+        self.poll_import_jobs();
         if let Some(inspection) = &self.source_inspection {
             let result = match inspection.result.try_recv() {
                 Ok(result) => Some(result),
@@ -3827,6 +4232,20 @@ impl CleanSlateApp {
             };
             if let Some(result) = result {
                 self.source_inspection = None;
+                let result = result.map(|inputs| {
+                    inputs
+                        .into_iter()
+                        .map(|(source, metadata)| {
+                            if let Some(metadata) = metadata {
+                                self.import_metadata_failed.retain(|p| *p != source.path);
+                                self.import_metadata.push((source.clone(), metadata));
+                            } else {
+                                self.import_metadata_failed.push(source.path.clone());
+                            }
+                            source
+                        })
+                        .collect::<Vec<_>>()
+                });
                 match result {
                     Ok(inputs) if inputs.iter().any(|s| s.channel.is_some()) => {
                         self.import_choices = inputs
@@ -3928,6 +4347,8 @@ impl CleanSlateApp {
                 .collect();
             if !additions.is_empty() {
                 let (sender, result) = mpsc::channel();
+                let cancelled = Arc::new(AtomicBool::new(false));
+                let worker_cancelled = cancelled.clone();
                 let mut paths = self
                     .project
                     .as_ref()
@@ -3937,19 +4358,38 @@ impl CleanSlateApp {
                     let inputs = additions
                         .into_iter()
                         .map(|path| {
-                            let metadata =
-                                crate::SourceMetadata::read(&path).map_err(|e| e.to_string())?;
+                            let Ok(metadata) = crate::SourceMetadata::read_cancellable(
+                                &path,
+                                Some(&worker_cancelled),
+                            ) else {
+                                return Ok(vec![(crate::AudioSource::mono(path), None)]);
+                            };
                             if metadata.channels > 1 {
-                                crate::wav_channel_sources(&path).map_err(|e| e.to_string())
+                                crate::wav_channel_sources(&path)
+                                    .map(|sources| {
+                                        sources
+                                            .into_iter()
+                                            .map(|source| {
+                                                let mut selected = metadata;
+                                                selected.channels = 1;
+                                                (source, Some(selected))
+                                            })
+                                            .collect()
+                                    })
+                                    .map_err(|e| e.to_string())
                             } else {
-                                Ok(vec![crate::AudioSource::mono(path)])
+                                Ok(vec![(crate::AudioSource::mono(path), Some(metadata))])
                             }
                         })
                         .collect::<Result<Vec<_>, String>>()
                         .map(|inputs| inputs.into_iter().flatten().collect());
                     let _ = sender.send(inputs);
                 });
-                self.source_inspection = Some(SourceInspection { paths, result });
+                self.source_inspection = Some(SourceInspection {
+                    paths,
+                    result,
+                    cancelled,
+                });
             } else {
                 self.start_preview();
             }
@@ -3990,7 +4430,7 @@ impl CleanSlateApp {
     }
 
     fn can_prepare_export(&self) -> bool {
-        !self.sources_busy()
+        self.source_loading.is_none()
             && self.processing.is_none()
             && self.exporting.is_none()
             && !self.reference_stale
@@ -4165,7 +4605,7 @@ impl CleanSlateApp {
         }];
     }
     fn export_ready(&self) -> bool {
-        !self.sources_busy()
+        self.source_loading.is_none()
             && !self.reference_stale
             && self.gain_drag.is_none()
             && self.preview_pending.is_none()
@@ -4196,7 +4636,7 @@ impl CleanSlateApp {
         });
     }
     fn can_start_new_project(&self) -> bool {
-        !self.sources_busy() && self.processing.is_none() && self.exporting.is_none()
+        self.source_loading.is_none() && self.processing.is_none() && self.exporting.is_none()
     }
 
     fn reset_project(&mut self, confirmed: bool) {
@@ -4204,6 +4644,7 @@ impl CleanSlateApp {
             return;
         }
         self.stop_audition();
+        self.cancel_pending_imports();
         self.render_generation.invalidate();
         *self = Self {
             appearance: self.appearance,
@@ -5215,7 +5656,7 @@ impl CleanSlateApp {
                 _ => return Task::none(),
             }
         }
-        if (self.import_dialog || self.sources_busy())
+        if self.import_dialog
             && matches!(
                 &message,
                 Message::KeyPressed(keyboard::Key::Named(keyboard::key::Named::Escape), _)
@@ -5262,7 +5703,7 @@ impl CleanSlateApp {
         {
             return Task::none();
         }
-        if (self.import_dialog || self.sources_busy())
+        if self.import_dialog
             && !matches!(
                 message,
                 Message::FileDropped(_)
@@ -5271,6 +5712,9 @@ impl CleanSlateApp {
                     | Message::ConfirmChannels
                     | Message::CancelChannels
                     | Message::ImportStems
+                    | Message::CancelPendingImports
+                    | Message::RemoveImport(_)
+                    | Message::RetryImport(_)
                     | Message::Tick
                     | Message::SoundModifiers(_)
             )
@@ -5334,7 +5778,7 @@ impl CleanSlateApp {
                     })
                     .map(|c| c.source.clone())
                     .collect();
-                let count = self.project.as_ref().map_or(0, |p| p.sources.len()) + additions.len();
+                let count = self.reserved_track_count() + additions.len();
                 if additions.is_empty() || count > 8 {
                     self.messages = vec![
                         "Select at least one channel, with at most eight tracks in the project."
@@ -5371,7 +5815,21 @@ impl CleanSlateApp {
                 self.import_choices.clear();
                 self.import_dialog = false;
                 self.messages.clear();
-                self.start_preview();
+            }
+            Message::CancelPendingImports => self.cancel_pending_imports(),
+            Message::RemoveImport(id) => {
+                self.import_jobs.retain(|job| job.id != id || job.accepted);
+                self.start_next_import();
+            }
+            Message::RetryImport(id) => {
+                if let Some(index) = self
+                    .import_jobs
+                    .iter()
+                    .position(|job| job.id == id && !job.accepted && job.error.is_some())
+                {
+                    self.import_jobs[index].retry();
+                    self.start_next_import();
+                }
             }
             Message::EditTrackName(index) => {
                 if let Some(source) = self.project.as_ref().and_then(|p| p.sources.get(index)) {
@@ -5683,7 +6141,7 @@ impl CleanSlateApp {
             }
             Message::Tick => {
                 self.poll_sources();
-                if !self.sources_busy() {
+                if self.source_loading.is_none() {
                     self.poll_processing();
                 }
                 self.poll_audition();
@@ -6320,7 +6778,7 @@ impl CleanSlateApp {
         } else {
             Subscription::none()
         };
-        let import_keys = if self.import_dialog || self.sources_busy() {
+        let import_keys = if self.import_dialog {
             iced::event::listen_with(|event, _, _| match event {
                 iced::Event::Keyboard(keyboard::Event::KeyPressed {
                     key: keyboard::Key::Named(keyboard::key::Named::Escape),
@@ -6624,7 +7082,7 @@ impl CleanSlateApp {
             ]
             .into();
         }
-        if self.import_dialog || self.sources_busy() {
+        if self.import_dialog {
             return responsive(|size| {
                 stack![
                     self.workspace(compact_workspace(size.width), size.height, size.width),
@@ -6666,9 +7124,9 @@ impl CleanSlateApp {
         .spacing(12);
         choices = choices.push(
             text(format!(
-                "{} selected · {} existing tracks · maximum 8",
+                "{} selected · {} accepted or reserved tracks · maximum 8",
                 self.import_choices.iter().filter(|c| c.selected).count(),
-                self.project.as_ref().map_or(0, |p| p.sources.len())
+                self.reserved_track_count()
             ))
             .size(14),
         );
@@ -6783,9 +7241,48 @@ impl CleanSlateApp {
         (missing, room)
     }
 
+    fn import_display_rows(&self) -> Vec<(Option<usize>, Option<(usize, usize)>)> {
+        let mut rows = vec![];
+        if let Some(project) = &self.project {
+            for (index, source) in project.sources.iter().enumerate() {
+                if !self
+                    .import_jobs
+                    .iter()
+                    .any(|job| job.track_ids.contains(&source.track_id))
+                {
+                    rows.push((Some(index), None));
+                }
+            }
+        }
+        for (job_index, job) in self.import_jobs.iter().enumerate() {
+            for channel in 0..job.sources.len() {
+                if job.accepted {
+                    if let Some(index) = self.project.as_ref().and_then(|p| {
+                        p.sources
+                            .iter()
+                            .position(|s| s.track_id == job.track_ids[channel])
+                    }) {
+                        rows.push((Some(index), None));
+                    }
+                } else {
+                    rows.push((None, Some((job_index, channel))));
+                }
+            }
+        }
+        rows
+    }
+
     fn workspace_status(&self) -> String {
         if self.sources_busy() {
-            return "Loading tracks".into();
+            return format!(
+                "{} accepted · {} pending · background import",
+                self.project.as_ref().map_or(0, |p| p.sources.len()),
+                self.import_jobs
+                    .iter()
+                    .filter(|j| !j.accepted)
+                    .map(|j| j.sources.len())
+                    .sum::<usize>()
+            );
         }
         let Some(project) = &self.project else {
             return "Import tracks to begin".into();
@@ -7246,7 +7743,7 @@ impl CleanSlateApp {
             button("Save project")
                 .style(secondary_button)
                 .on_press_maybe(
-                    (self.project.is_some() && !self.sources_busy())
+                    (self.project.is_some() && self.source_loading.is_none())
                         .then_some(Message::SaveProject)
                 ),
         ]
@@ -7254,11 +7751,17 @@ impl CleanSlateApp {
         .align_y(iced::Center);
 
         let mut timeline_content = column![].spacing(6).height(Fill);
+        if self.import_jobs.iter().any(|job| !job.accepted) {
+            timeline_content = timeline_content.push(row![
+                text("Pending audio is excluded from Save, Analyze and Export. Ready tracks remain editable.").size(14),
+                button("Cancel all pending").style(secondary_button).on_press(Message::CancelPendingImports)
+            ].spacing(12));
+        }
         if let Some(error) = &self.appearance_error {
             timeline_content =
                 timeline_content.push(text(error).size(14).color(self.appearance.colors().error));
         }
-        if self.project.is_none() {
+        if self.project.is_none() && self.import_jobs.is_empty() {
             timeline_content = timeline_content.push(
                 container(
                     column![
@@ -7275,7 +7778,8 @@ impl CleanSlateApp {
                 .center_y(Fill)
                 .height(Fill),
             );
-        } else if let Some(project) = &self.project {
+        }
+        if self.project.is_some() || !self.import_jobs.is_empty() {
             timeline_content = timeline_content.push(
                 container(
                     canvas(
@@ -7291,7 +7795,63 @@ impl CleanSlateApp {
                 )
                 .padding([0, 12]),
             );
-            for (index, source) in project.sources.iter().enumerate() {
+            for (accepted, pending) in self.import_display_rows() {
+                if let Some((job_index, channel)) = pending {
+                    let job = &self.import_jobs[job_index];
+                    let id = job.id;
+                    let mut actions = row![
+                        text(job.sources[channel].display_name()).size(14),
+                        Space::new().width(Fill),
+                        text(&job.status).size(14)
+                    ]
+                    .spacing(8);
+                    if job.error.is_some() {
+                        actions = actions.push(
+                            button("Retry")
+                                .style(primary_button)
+                                .on_press(Message::RetryImport(id)),
+                        );
+                    }
+                    actions = actions.push(
+                        button(if job.error.is_some() {
+                            "Remove"
+                        } else {
+                            "Cancel / Remove"
+                        })
+                        .style(secondary_button)
+                        .on_press(Message::RemoveImport(id)),
+                    );
+                    let mut content = column![actions].spacing(6);
+                    if let Some(error) = &job.error {
+                        content = content
+                            .push(text(error).size(14).color(self.appearance.colors().error));
+                    }
+                    content = content.push(
+                        canvas(
+                            TimelineCanvas::waveform(
+                                &job.waveforms[channel],
+                                &self.timeline,
+                                Message::Timeline,
+                                None,
+                                false,
+                            )
+                            .with_revision(self.drawing_revision),
+                        )
+                        .width(Fill)
+                        .height(Fill),
+                    );
+                    timeline_content = timeline_content.push(
+                        container(content)
+                            .padding(4)
+                            .height(Length::FillPortion(1))
+                            .width(Fill)
+                            .style(editor_panel),
+                    );
+                    continue;
+                }
+                let project = self.project.as_ref().unwrap();
+                let index = accepted.unwrap();
+                let source = &project.sources[index];
                 let filename = source.display_name();
                 let mut short_name = filename.chars().take(24).collect::<String>();
                 if filename.chars().count() > 24 {
@@ -7668,7 +8228,7 @@ impl CleanSlateApp {
         .padding(18)
         .width(if compact { Fill } else { Length::Fixed(320.0) })
         .style(editor_panel);
-        let inspector: Element<'_, Message> = if self.sources_busy() {
+        let inspector: Element<'_, Message> = if self.project.is_none() && self.sources_busy() {
             container(column![text("Loading tracks").size(20),
                 text("Waveforms appear as tracks load. Once the source checks finish, add speaker examples and run Analyze."),
                 text("You can scroll the tracks and drop more audio files. Editing becomes available when the import is validated."),

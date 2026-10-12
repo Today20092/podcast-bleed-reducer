@@ -107,12 +107,55 @@ impl SourceStamp {
 }
 
 impl WaveformCache {
+    pub(crate) fn refine_prefix(&mut self, detailed: &[(f32, f32)]) {
+        let level = &mut self.levels[0];
+        let complete = detailed.len() * BASE_BUCKET / level.samples_per_bucket;
+        for (index, peak) in level.peaks.iter_mut().take(complete).enumerate() {
+            let first = index * level.samples_per_bucket / BASE_BUCKET;
+            let last = ((index + 1) * level.samples_per_bucket)
+                .div_ceil(BASE_BUCKET)
+                .min(detailed.len());
+            *peak = detailed[first..last].iter().fold(
+                (f32::INFINITY, f32::NEG_INFINITY),
+                |(min, max), &(low, high)| (min.min(low), max.max(high)),
+            );
+        }
+    }
+    pub(crate) fn skeleton(metadata: crate::SourceMetadata) -> Self {
+        Self {
+            sample_count: metadata.grid.frame_count as usize,
+            sample_rate: metadata.grid.sample_rate,
+            levels: vec![WaveformLevel {
+                samples_per_bucket: BASE_BUCKET,
+                peaks: vec![],
+            }],
+        }
+    }
+
+    pub(crate) fn coarse(
+        peaks: Vec<(f32, f32)>,
+        metadata: crate::SourceMetadata,
+        bucket: usize,
+    ) -> Self {
+        Self {
+            sample_count: metadata.grid.frame_count as usize,
+            sample_rate: metadata.grid.sample_rate,
+            levels: vec![WaveformLevel {
+                samples_per_bucket: bucket,
+                peaks,
+            }],
+        }
+    }
     #[cfg(test)]
     fn from_samples(samples: &[f32], sample_rate: u32) -> Self {
         Self::from_peaks(summarize(samples, BASE_BUCKET), samples.len(), sample_rate)
     }
 
-    fn from_peaks(mut peaks: Vec<(f32, f32)>, sample_count: usize, sample_rate: u32) -> Self {
+    pub(crate) fn from_peaks(
+        mut peaks: Vec<(f32, f32)>,
+        sample_count: usize,
+        sample_rate: u32,
+    ) -> Self {
         let mut samples_per_bucket = BASE_BUCKET;
         let mut levels = vec![WaveformLevel {
             samples_per_bucket,
@@ -186,6 +229,45 @@ impl WaveformCache {
             .div_ceil(level.samples_per_bucket)
             .min(level.peaks.len());
         (level, first..last)
+    }
+}
+
+pub(crate) fn import_cache(
+    fingerprint: &str,
+    source: crate::SourceMetadata,
+) -> Option<WaveformCache> {
+    let bytes = fs::read(import_cache_root().join(format!("{fingerprint}.json"))).ok()?;
+    let cache: PersistedWaveform = serde_json::from_slice(&bytes).ok()?;
+    (cache.version == WAVEFORM_CACHE_VERSION
+        && cache.fingerprint == fingerprint
+        && cache.decoder_recipe == crate::analysis_audio::AUDIO_DECODER_RECIPE
+        && cache.source == source
+        && waveform_matches_source(&cache.waveform, source))
+    .then_some(cache.waveform)
+}
+
+fn import_cache_root() -> PathBuf {
+    std::env::var_os("LOCALAPPDATA")
+        .map(PathBuf::from)
+        .unwrap_or_else(std::env::temp_dir)
+        .join("CleanSlate/waveforms-v3")
+}
+
+pub(crate) fn save_import_cache(
+    fingerprint: String,
+    source: crate::SourceMetadata,
+    waveform: &WaveformCache,
+) {
+    let root = import_cache_root();
+    if let Ok(bytes) = serde_json::to_vec(&PersistedWaveform {
+        version: WAVEFORM_CACHE_VERSION,
+        fingerprint: fingerprint.clone(),
+        decoder_recipe: crate::analysis_audio::AUDIO_DECODER_RECIPE.into(),
+        source,
+        waveform: waveform.clone(),
+    }) && fs::create_dir_all(&root).is_ok()
+    {
+        let _ = crate::project::atomic_save(&root.join(format!("{fingerprint}.json")), &bytes);
     }
 }
 

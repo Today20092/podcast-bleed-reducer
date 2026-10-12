@@ -219,6 +219,14 @@ impl Project {
                 SourceIdentity::read(path, TrackId(index as u64 + 1), SpeakerId(index as u64 + 1))
             })
             .collect::<io::Result<Vec<_>>>()?;
+        Self::create_identities(path, sources, deferred_save)
+    }
+
+    fn create_identities(
+        path: PathBuf,
+        sources: Vec<SourceIdentity>,
+        deferred_save: bool,
+    ) -> io::Result<Self> {
         let mut project = Self {
             schema_version: PROJECT_SCHEMA_VERSION,
             ticks_per_second: TICKS_PER_SECOND,
@@ -894,9 +902,19 @@ impl Project {
                 "Review and rebind changed sources before analysis or export.",
             ));
         }
+        let mut container_hashes = BTreeMap::new();
         for source in &self.sources {
+            if !container_hashes.contains_key(&source.path) {
+                container_hashes.insert(
+                    source.path.clone(),
+                    fingerprint_cancellable(&source.path, cancelled)?,
+                );
+            }
             if !source.available
-                || source.audio_source().fingerprint(cancelled)? != source.fingerprint
+                || source
+                    .audio_source()
+                    .fingerprint_from_container(&container_hashes[&source.path])
+                    != source.fingerprint
                 || source
                     .audio_source()
                     .metadata(cancelled)
@@ -1494,9 +1512,86 @@ impl Project {
             Ok(())
         })
     }
+
+    /// Publish worker-validated identities against the live project, preserving intervening edits.
+    pub(crate) fn accept_recording(
+        current: Option<&Self>,
+        path: PathBuf,
+        mut sources: Vec<SourceIdentity>,
+        parameters: AutomixParameters,
+    ) -> io::Result<Self> {
+        let first = current.map_or(0, |p| {
+            p.sources
+                .iter()
+                .map(|s| s.track_id.0.max(s.speaker_id.0))
+                .max()
+                .unwrap_or(0)
+        });
+        for (index, source) in sources.iter_mut().enumerate() {
+            if !source.stamp_is_current() {
+                return Err(invalid("Source changed before import acceptance; retry."));
+            }
+            let id = first
+                .checked_add(index as u64 + 1)
+                .ok_or_else(|| invalid("Track ID overflow"))?;
+            source.track_id = TrackId(id);
+            source.speaker_id = SpeakerId(id);
+        }
+        let mut next = if let Some(current) = current {
+            current.clone()
+        } else {
+            Self::create_identities(path, sources.clone(), true)?
+        };
+        if next
+            .sources
+            .iter()
+            .any(|s| !s.available || !s.stamp_is_current())
+        {
+            return Err(invalid(
+                "Existing source changed; relink before accepting this recording.",
+            ));
+        }
+        let mut metadata = next.sources.iter().map(|s| s.metadata).collect::<Vec<_>>();
+        if current.is_some() {
+            metadata.extend(sources.iter().map(|s| s.metadata));
+        }
+        crate::engine::validate_source_metadata(&metadata).map_err(io_error)?;
+        next.defer_save();
+        if current.is_some() {
+            next.sources.extend(sources);
+        }
+        if current.is_none() {
+            next.parameters = parameters;
+        }
+        next.supplied_alignment = false;
+        next.step = WorkflowStep::Process;
+        next.invalidate("Session tracks changed; Analyze is required.");
+        next.validate_contract()?;
+        next.rebuild_runtime()?;
+        next.publish_prepared()?;
+        Ok(next)
+    }
 }
 
 impl SourceIdentity {
+    pub(crate) fn prepared(
+        source: crate::AudioSource,
+        metadata: SourceMetadata,
+        fingerprint: String,
+        stamp: SourceStamp,
+    ) -> Self {
+        Self {
+            track_id: TrackId(0),
+            speaker_id: SpeakerId(0),
+            path: source.path,
+            channel: source.channel,
+            name: source.name,
+            metadata,
+            fingerprint,
+            available: true,
+            loaded_stamp: Some(stamp),
+        }
+    }
     pub fn audio_source(&self) -> crate::AudioSource {
         crate::AudioSource {
             path: self.path.clone(),
@@ -1554,8 +1649,18 @@ pub(crate) fn fingerprint_cancellable(
     path: &Path,
     cancelled: Option<&std::sync::atomic::AtomicBool>,
 ) -> io::Result<String> {
+    fingerprint_progress(path, cancelled, |_, _| {})
+}
+
+pub(crate) fn fingerprint_progress(
+    path: &Path,
+    cancelled: Option<&std::sync::atomic::AtomicBool>,
+    mut progress: impl FnMut(u64, u64),
+) -> io::Result<String> {
     let mut hash = Sha256::new();
     let mut file = fs::File::open(path)?;
+    let total = file.metadata()?.len();
+    let mut completed = 0;
     let mut buffer = [0; 65_536];
     loop {
         if cancelled.is_some_and(|flag| flag.load(Ordering::Relaxed)) {
@@ -1569,6 +1674,8 @@ pub(crate) fn fingerprint_cancellable(
             break;
         }
         hash.update(&buffer[..count]);
+        completed += count as u64;
+        progress(completed, total);
     }
     Ok(format!("{:x}", hash.finalize()))
 }

@@ -792,7 +792,11 @@ impl LiveAudition {
         self.controls.settings.write().unwrap().solo = solo;
     }
     pub(crate) fn replace_envelopes(&self, envelopes: Vec<GainEnvelope>) {
-        self.controls.settings.write().unwrap().envelopes = Arc::new(envelopes);
+        let mut settings = self.controls.settings.write().unwrap();
+        // Added recordings join on the next start; the active stream keeps its source snapshot.
+        if settings.envelopes.len() == envelopes.len() {
+            settings.envelopes = Arc::new(envelopes);
+        }
     }
     pub(crate) fn position(&self) -> TimePosition {
         self.grid

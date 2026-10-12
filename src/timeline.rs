@@ -51,6 +51,10 @@ impl TimelineViewport {
         *self = Self::new(total_samples);
     }
 
+    pub(crate) fn extend_total_samples(&mut self, total_samples: TimePosition) {
+        self.total_samples = self.total_samples.max(total_samples);
+    }
+
     pub fn start(&self) -> f64 {
         self.start
     }
