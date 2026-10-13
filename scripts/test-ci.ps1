@@ -16,3 +16,10 @@ foreach ($command in @('cargo fmt --all -- --check', 'cargo clippy --all-targets
 }
 if ([regex]::Matches($check, 'if \(\$LASTEXITCODE -ne 0\)').Count -ne 3) { throw 'Every Cargo check must propagate failure' }
 Write-Output 'Native PR workflow regression checks: pass'
+
+$downloads = Get-Content -LiteralPath "$root/.github/workflows/release-downloads.yml" -Raw
+foreach ($required in @('pull-requests: write', 'actions: write', 'gh pr create', 'gh workflow run pr-checks.yml', 'HEAD:refs/heads/$branch')) {
+    if (-not $downloads.Contains($required)) { throw "Missing protected-branch download automation: $required" }
+}
+if ($downloads -match '(?m)^\s+git push\s*\r?$|git push.*(?:--force|refs/heads/main)') { throw 'Download automation must push only a new PR branch' }
+Write-Output 'Protected-branch download automation checks: pass'
