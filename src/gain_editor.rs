@@ -3,12 +3,13 @@ use crate::{
     AutomaticEnvelope, GainConstraints, GainEnvelope, Project, TrackId, timeline::TimelineViewport,
 };
 use iced::{
-    Color, Point, Rectangle, Renderer, Theme, mouse,
+    Point, Rectangle, Renderer, Theme, keyboard, mouse,
     widget::canvas::{self, Action},
 };
 
 #[derive(Clone, Debug)]
 pub enum GainEditorEvent {
+    FitRange(u64, u64),
     Begin(u64, usize),
     Move(u64, f32),
     End,
@@ -66,9 +67,12 @@ pub(crate) struct GainCanvas<'a, Message> {
 }
 #[derive(Default)]
 pub(crate) struct GainCanvasState {
+    appearance: std::cell::Cell<Option<crate::appearance::Appearance>>,
     geometry: canvas::Cache,
     revision: std::cell::Cell<Option<u64>>,
     dragging: bool,
+    modifiers: keyboard::Modifiers,
+    zoom_drag: Option<crate::waveform::ZoomDrag>,
 }
 impl<Message: 'static> canvas::Program<Message> for GainCanvas<'_, Message> {
     type State = GainCanvasState;
@@ -82,9 +86,38 @@ impl<Message: 'static> canvas::Program<Message> for GainCanvas<'_, Message> {
         if !self.editing {
             return None;
         }
+        if let canvas::Event::Keyboard(keyboard::Event::ModifiersChanged(modifiers)) = event {
+            state.modifiers = *modifiers;
+            return None;
+        }
+        if state.zoom_drag.is_some() {
+            return crate::waveform::ZoomDrag::update(
+                &mut state.zoom_drag,
+                event,
+                self.viewport,
+                bounds,
+                cursor,
+                |start, end| (self.on_event)(GainEditorEvent::FitRange(start, end)),
+            );
+        }
         match event {
+            canvas::Event::Keyboard(keyboard::Event::KeyPressed {
+                key: keyboard::Key::Named(keyboard::key::Named::Escape),
+                ..
+            }) if state.dragging => {
+                state.dragging = false;
+                Some(Action::publish((self.on_event)(GainEditorEvent::Cancel)).and_capture())
+            }
             canvas::Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) => {
                 let point = cursor.position_in(bounds)?;
+                if state.modifiers.alt() {
+                    state.zoom_drag = Some(crate::waveform::ZoomDrag::begin(
+                        self.viewport,
+                        point.x,
+                        bounds.width,
+                    ));
+                    return Some(Action::request_redraw().and_capture());
+                }
                 let hit = hit_gain_point(
                     self.constraints,
                     self.track,
@@ -130,19 +163,23 @@ impl<Message: 'static> canvas::Program<Message> for GainCanvas<'_, Message> {
         &self,
         state: &Self::State,
         renderer: &Renderer,
-        _theme: &Theme,
+        theme: &Theme,
         bounds: Rectangle,
         _cursor: mouse::Cursor,
     ) -> Vec<canvas::Geometry> {
-        if state.revision.replace(Some(self.revision)) != Some(self.revision) {
+        let appearance = crate::appearance::Appearance::from_theme(theme);
+        let colors = appearance.colors();
+        let revision_changed = state.revision.replace(Some(self.revision)) != Some(self.revision);
+        let appearance_changed = state.appearance.replace(Some(appearance)) != Some(appearance);
+        if revision_changed || appearance_changed {
             state.geometry.clear();
         }
         let geometry = state.geometry.draw(renderer, bounds.size(), |frame| {
             let start = self.viewport.start().max(0.0) as u64;
             let end = (self.viewport.start() + self.viewport.visible_samples()).ceil() as u64;
             for (automatic, color, width) in [
-                (true, Color::from_rgb8(125, 145, 165), 1.0),
-                (false, Color::from_rgb8(80, 220, 200), 2.0),
+                (true, colors.automatic_gain, 1.0),
+                (false, colors.waveform, 2.0),
             ] {
                 let samples = crate::editor_drawing::sample_visible_curve(
                     self.viewport,
@@ -221,9 +258,9 @@ impl<Message: 'static> canvas::Program<Message> for GainCanvas<'_, Message> {
                     Point::new(left, bounds.height - 5.0),
                     iced::Size::new((right - left).max(1.0), 5.0),
                     if active {
-                        Color::from_rgb8(90, 135, 255)
+                        colors.active_label
                     } else {
-                        Color::from_rgb8(100, 105, 125)
+                        colors.inactive
                     },
                 );
             }
@@ -241,7 +278,7 @@ impl<Message: 'static> canvas::Program<Message> for GainCanvas<'_, Message> {
                 frame.fill_rectangle(
                     Point::new(left, 3.0),
                     iced::Size::new((right - left).max(1.0), 5.0),
-                    Color::from_rgb8(220, 175, 65),
+                    colors.protection,
                 );
             }
             for edit in self
@@ -267,13 +304,14 @@ impl<Message: 'static> canvas::Program<Message> for GainCanvas<'_, Message> {
                         self.viewport.x_for_sample(point.time, bounds.width),
                         gain_y(point.gain, bounds.height),
                     );
-                    frame.fill(
-                        &canvas::Path::circle(position, 4.0),
-                        Color::from_rgb8(235, 150, 245),
-                    );
+                    frame.fill(&canvas::Path::circle(position, 4.0), colors.manual_gain);
                 }
             }
         });
-        vec![geometry]
+        let mut overlay = canvas::Frame::new(renderer, bounds.size());
+        if let Some(drag) = &state.zoom_drag {
+            drag.draw(&mut overlay, bounds.height, theme);
+        }
+        vec![geometry, overlay.into_geometry()]
     }
 }

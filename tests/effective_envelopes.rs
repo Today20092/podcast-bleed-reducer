@@ -6,6 +6,28 @@ use rust_app::{
 fn ownership() -> std::sync::Arc<rust_app::TemporalOwnership> {
     ownership_with_offset(0)
 }
+
+#[test]
+fn zero_fades_and_gap_mute_absence_without_touching_speech() {
+    let result = ownership();
+    let grid = SourceTimebase::new(48000, 153600).unwrap();
+    let envelope = AutomaticEnvelope::from_ownership(
+        &result,
+        TrackId(1),
+        grid,
+        GainFadeSettings {
+            attenuation: 0.0,
+            fade_in: 0,
+            fade_out: 0,
+            minimum_gap: 0,
+        },
+        None,
+    )
+    .unwrap();
+    assert_eq!(envelope.gain_at_time(OWNERSHIP_FRAME_TICKS * 42), 0.0);
+    assert_eq!(envelope.gain_at_time(OWNERSHIP_FRAME_TICKS * 30), 1.0);
+    assert_eq!(envelope.gain_at_time(OWNERSHIP_FRAME_TICKS * 85), 0.0);
+}
 fn ownership_with_offset(offset: usize) -> std::sync::Arc<rust_app::TemporalOwnership> {
     let rows = (0..100)
         .map(|frame| {
@@ -255,7 +277,7 @@ fn live_gap_setting_persists_and_human_absence_and_manual_gain_remain_authoritat
             .minimum_gap_ms,
         10.0
     );
-    for invalid in [0.0, 5001.0, f32::NAN] {
+    for invalid in [-1.0, 60001.0, f32::NAN] {
         assert!(
             project
                 .set_parameters(rust_app::AutomixParameters {
@@ -392,7 +414,7 @@ fn source_grid_rounding_preserves_every_boundary_sample_including_arbitrary_rate
             },
             None
         )
-        .is_err()
+        .is_ok()
     );
 }
 

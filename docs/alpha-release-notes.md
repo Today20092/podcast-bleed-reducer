@@ -1,4 +1,56 @@
-CleanSlate's experimental offline desktop alpha.
+CleanSlate v0.1.0-alpha.3 — editor workflow, progressive imports and faster playback.
+
+Changes since the last published desktop release, v0.1.0-alpha.2:
+
+## Added
+
+- Original-audio selection loops while labeling speakers, with pause/resume, Stop,
+  and restoration of the previous audition state after labeling.
+- Typed sound-setting values, exact mute, and value reset gestures.
+- A searchable/scannable keyboard shortcut reference and selection-fit navigation.
+- An application menu with Settings, Help and About, including credits.
+- Persistent dark and light appearance.
+- Immediate provisional timeline rows during imports, overall stages and per-recording
+  status, measured progress where available, and whole-recording rough previews that
+  refine in the background.
+- Queued imports, independent readiness for separate recordings, failed rows with
+  retry/remove, individual cancellation and cancellation of all pending work.
+
+## Improved
+
+- Import setup is centered and the inactive gain editor is hidden.
+- Multichannel import decoding shares recording work rather than decoding every
+  selected channel independently. Validation and waveform work run in the background.
+- Completed imports remain usable while other recordings load. Canceling pending work
+  preserves completed recordings and edits. New tracks join playback on its next start.
+- Ready-session playback reuses validated prepared audio, the output stream and transport.
+  Repeated selections avoid full preparation and repeated device initialization.
+- Shortcut help separates actions into readable rows. Redundant sound-value hover
+  instructions were removed.
+
+## Fixed
+
+- Stop remains accessible in the speaker-label popup; paused playback is shown correctly.
+- Shortcut-reference scrolling reserves room for its scrollbar; About credits fit the dialog.
+- Playback completion cannot stop a newly requested selection before it is acknowledged.
+- Seeking immediately after replacing a range uses the new bounds and preserves the newer seek.
+- Short preparation/buffering states are debounced; long waits retain visible status.
+- Failed output devices are detected and can be retried explicitly.
+
+## Verification and limits
+
+The Windows build passed 263 automated tests (18 ignored), strict Clippy and formatting.
+The owner tested repeated playback, selections, labeling loops, seeking, import during
+playback and import feedback and reported that everything was working well.
+On the owner's Focusrite device, warm software first-sample readiness measured
+18.91 ms median and 21.57 ms p95, compared with 89.42 ms median and 102.57 ms p95
+for the previous stream-opening path. This is a software measurement, not physical
+audible latency. The measured warm cycles had zero steady-state underruns.
+
+Configurable keyboard shortcuts, S-to-save and zoom/playhead-lock preferences
+remain planned in ticket 41 and are not included.
+Physical device disconnect recovery, independent speech/overlap preservation and
+long-session release qualification remain pending. This is an experimental alpha.
 
 Choose the attached download for your system:
 

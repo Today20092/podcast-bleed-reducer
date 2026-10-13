@@ -136,9 +136,39 @@ pub fn prepare_export_with_settings(
     settings: crate::ExportSettings,
     cancelled: Option<&AtomicBool>,
 ) -> Result<PreparedExport, RenderBlocker> {
+    prepare_export_in_order(
+        project,
+        destination,
+        settings,
+        &(0..project.sources.len()).collect::<Vec<_>>(),
+        cancelled,
+    )
+}
+
+pub fn prepare_export_in_order(
+    project: &Project,
+    destination: &Path,
+    settings: crate::ExportSettings,
+    source_order: &[usize],
+    cancelled: Option<&AtomicBool>,
+) -> Result<PreparedExport, RenderBlocker> {
+    if source_order.len() != project.sources.len()
+        || source_order
+            .iter()
+            .any(|index| *index >= project.sources.len())
+        || source_order.iter().copied().collect::<HashSet<_>>().len() != source_order.len()
+    {
+        return Err(RenderBlocker(
+            "Export order must include every accepted track exactly once.".into(),
+        ));
+    }
     project.validate_sources_cancellable(cancelled)?;
     settings.validate_layout(project)?;
     let plan = delivery_plan(project, cancelled, settings.layout)?;
+    let plan: Vec<_> = source_order
+        .iter()
+        .map(|index| plan[*index].clone())
+        .collect();
     if destination.exists() && fs::read_dir(destination)?.next().is_some() {
         return Err(RenderBlocker("export destination is not empty".into()));
     }
@@ -157,12 +187,12 @@ pub fn prepare_export_with_settings(
         vec![(
             "session-clean.wav".to_owned(),
             plan.iter().map(|(_, p)| p.clone()).collect::<Vec<_>>(),
-            0,
+            source_order[0],
         )]
     } else {
         plan.iter()
             .enumerate()
-            .map(|(i, (name, path))| (name.clone(), vec![path.clone()], i))
+            .map(|(i, (name, path))| (name.clone(), vec![path.clone()], source_order[i]))
             .collect()
     };
     for (name, paths, index) in groups {

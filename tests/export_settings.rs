@@ -123,6 +123,60 @@ fn prepare_current(
 }
 
 #[test]
+fn explicit_editor_order_preserves_rendered_channels_and_rejects_partial_orders() {
+    let (root, mut project, audio) = fixture::session();
+    prepare_current(&root, &mut project, &audio);
+    let settings = ExportSettings {
+        layout: ExportLayout::Multichannel,
+        encoding: ExportEncoding::Float32,
+    };
+    assert!(
+        rust_app::prepare_export_in_order(&project, &root.join("invalid"), settings, &[1, 1], None)
+            .is_err()
+    );
+    assert!(
+        rust_app::prepare_export_in_order(&project, &root.join("invalid"), settings, &[1], None)
+            .is_err()
+    );
+    let gate = rust_app::RenderGeneration::default();
+    for (name, order) in [("normal", [0, 1]), ("reversed", [1, 0])] {
+        rust_app::prepare_export_in_order(&project, &root.join(name), settings, &order, None)
+            .unwrap()
+            .publish(&project, &gate, gate.current(), None)
+            .unwrap();
+    }
+    let read = |name: &str| {
+        let mut reader =
+            bwavfile::WaveReader::open(root.join(name).join("session-clean.wav")).unwrap();
+        let mut samples = vec![0.0_f32; reader.frame_length().unwrap() as usize * 2];
+        reader
+            .audio_frame_reader()
+            .unwrap()
+            .read_frames(&mut samples)
+            .unwrap();
+        samples
+    };
+    let normal = read("normal");
+    let reversed = read("reversed");
+    assert!(
+        normal
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .any(|frame| frame[0] != frame[1])
+    );
+    assert!(
+        normal
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .zip(reversed.as_chunks::<2>().0)
+            .all(|(normal, reversed)| normal[0] == reversed[1] && normal[1] == reversed[0])
+    );
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn layout_blocks_mixed_rates_grids_encodings_and_oversized_riff() {
     let (root, mut project, _) = fixture::session_at_rates([16_000, 48_000]);
     let settings = ExportSettings {
@@ -307,6 +361,76 @@ fn read_samples(path: &std::path::Path) -> (bwavfile::WaveFmt, Vec<f32>) {
         .read_frames(&mut samples)
         .unwrap();
     (format, samples)
+}
+
+#[test]
+fn explicit_mute_remains_exact_silence_in_integer_float_and_multichannel_delivery() {
+    let (root, mut project, audio) = fixture::session();
+    project
+        .set_parameters(rust_app::AutomixParameters {
+            mute: true,
+            open_ms: 0.0,
+            close_ms: 0.0,
+            minimum_gap_ms: 0.0,
+            ..project.parameters()
+        })
+        .unwrap();
+    prepare_current(&root, &mut project, &audio);
+    let gate = rust_app::RenderGeneration::default();
+    for layout in [ExportLayout::SeparateMono, ExportLayout::Multichannel] {
+        for encoding in [ExportEncoding::Pcm24, ExportEncoding::Float32] {
+            let destination = root.join(format!("mute-{layout:?}-{encoding:?}"));
+            rust_app::prepare_export_with_settings(
+                &project,
+                &destination,
+                ExportSettings { layout, encoding },
+                None,
+            )
+            .unwrap()
+            .publish(&project, &gate, gate.current(), None)
+            .unwrap();
+            let paths = if layout == ExportLayout::Multichannel {
+                vec![destination.join("session-clean.wav")]
+            } else {
+                vec![
+                    destination.join("speaker-0-clean.wav"),
+                    destination.join("speaker-1-clean.wav"),
+                ]
+            };
+            for path in paths {
+                let (format, samples) = read_samples(&path);
+                let count = 4000 * usize::from(format.channel_count);
+                assert!(
+                    samples[..count].iter().all(|s| *s == 0.0),
+                    "mute room-tone plateau: {path:?}"
+                );
+                assert!(
+                    samples[count..].iter().any(|s| *s != 0.0),
+                    "known speech stays audible"
+                );
+            }
+        }
+    }
+    project
+        .set_parameters(rust_app::AutomixParameters {
+            mute: false,
+            attenuation_db: -120.0,
+            ..project.parameters()
+        })
+        .unwrap();
+    assert!(
+        rust_app::prepare_export_with_settings(
+            &project,
+            &root.join("stale"),
+            ExportSettings {
+                layout: ExportLayout::SeparateMono,
+                encoding: ExportEncoding::Float32
+            },
+            None
+        )
+        .is_err()
+    );
+    std::fs::remove_dir_all(root).unwrap();
 }
 
 #[test]

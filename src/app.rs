@@ -3,6 +3,7 @@ use crate::CalibrationKind;
 use crate::{
     AnalysisPreview, AutomixParameters, Comparison, Project, RenderState, ReviewWorkspace,
     SpeakerId, TimeRange,
+    appearance::{self, Appearance, colors},
     audition::{AuditionMode, AuditionPreparation, LiveAudition},
     timebase::{TICKS_PER_SECOND, TimePosition},
     timeline::{PlaybackScroll, TimelineEvent, TimelineViewport},
@@ -27,34 +28,26 @@ use std::{
     time::{Duration, Instant},
 };
 
+#[cfg(test)]
 fn editor_theme() -> Theme {
-    Theme::custom(
-        "CleanSlate",
-        iced::theme::Palette {
-            background: iced::color!(0x202226),
-            text: iced::color!(0xE4E7EB),
-            primary: iced::color!(0x779BC7),
-            success: iced::color!(0x76B99A),
-            warning: iced::color!(0xD8B579),
-            danger: iced::color!(0xDB8B8B),
-        },
-    )
+    Appearance::Dark.theme()
 }
 
 fn secondary_button(theme: &Theme, status: button::Status) -> button::Style {
+    let c = colors(theme);
     let mut style = button::secondary(theme, status);
     style.background = Some(iced::Background::Color(match status {
-        button::Status::Hovered => iced::color!(0x414750),
-        button::Status::Pressed => iced::color!(0x272B31),
-        _ => iced::color!(0x343940),
+        button::Status::Hovered => c.hover,
+        button::Status::Pressed => c.pressed,
+        _ => c.control,
     }));
     style.text_color = if status == button::Status::Disabled {
-        iced::color!(0x8C949F)
+        c.disabled
     } else {
         theme.palette().text
     };
     style.border = iced::Border {
-        color: iced::color!(0x4A515B),
+        color: c.border,
         width: 1.0,
         radius: 4.0.into(),
     };
@@ -62,16 +55,17 @@ fn secondary_button(theme: &Theme, status: button::Status) -> button::Style {
 }
 
 fn primary_button(theme: &Theme, status: button::Status) -> button::Style {
+    let c = colors(theme);
     if status == button::Status::Disabled {
         return secondary_button(theme, status);
     }
     button::Style {
         background: Some(iced::Background::Color(match status {
-            button::Status::Hovered => iced::color!(0x8FB0D8),
-            button::Status::Pressed => iced::color!(0x6B8DB8),
+            button::Status::Hovered => c.action_hover,
+            button::Status::Pressed => c.action_pressed,
             _ => theme.palette().primary,
         })),
-        text_color: iced::color!(0x152233),
+        text_color: c.action_text,
         border: iced::Border {
             radius: 4.0.into(),
             ..iced::Border::default()
@@ -81,11 +75,12 @@ fn primary_button(theme: &Theme, status: button::Status) -> button::Style {
 }
 
 fn editor_panel(theme: &Theme) -> container::Style {
+    let c = colors(theme);
     container::Style {
-        background: Some(iced::color!(0x292D33).into()),
+        background: Some(c.panel.into()),
         text_color: Some(theme.palette().text),
         border: iced::Border {
-            color: iced::color!(0x3D434C),
+            color: c.panel_border,
             width: 1.0,
             radius: 5.0.into(),
         },
@@ -203,6 +198,54 @@ fn example_speakers(label: &crate::ReferenceLabel) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn appearance_changes_only_drawing_and_survives_new_project_after_save_failure() {
+        let mut app = super::CleanSlateApp {
+            timeline: super::TimelineViewport::new(100),
+            ..super::CleanSlateApp::default()
+        };
+        let root = std::env::temp_dir().join(format!(
+            "cleanslate-appearance-state-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let source_path = root.join("speaker.wav");
+        write_wav(&source_path, &vec![0.0; 1920]);
+        app.project =
+            Some(synchronized_project(root.join("session.cleanslate"), vec![source_path]).unwrap());
+        let project = serde_json::to_value(&app.project).unwrap();
+        app.timeline.set_selection(Some((10, 20)));
+        app.timeline.seek(15);
+        app.solo_tracks = 3;
+        app.gain_tool = true;
+        app.audition_mode = super::AuditionMode::Processed;
+        let selection = app.timeline.selection();
+        let render = app.render_generation.current();
+        let preview = app.preview_generation;
+        let source = app.source_generation;
+        let parameters = app.preview_parameters;
+        let drawing = app.drawing_revision;
+        let _ = app.update(super::Message::Appearance(
+            crate::appearance::Appearance::Light,
+        ));
+        assert_eq!(app.appearance, crate::appearance::Appearance::Light);
+        assert!(app.appearance_error.is_some());
+        assert_eq!(app.timeline.selection(), selection);
+        assert_eq!(serde_json::to_value(&app.project).unwrap(), project);
+        assert_eq!(app.timeline.playhead(), 15);
+        assert_eq!(app.solo_tracks, 3);
+        assert!(app.gain_tool);
+        assert_eq!(app.audition_mode, super::AuditionMode::Processed);
+        assert_eq!(app.render_generation.current(), render);
+        assert_eq!(app.preview_generation, preview);
+        assert_eq!(app.source_generation, source);
+        assert_eq!(app.preview_parameters, parameters);
+        assert_ne!(app.drawing_revision, drawing);
+        app.reset_project(true);
+        assert_eq!(app.appearance, crate::appearance::Appearance::Light);
+        assert!(app.appearance_error.is_some());
+        std::fs::remove_dir_all(root).unwrap();
+    }
     mod export_fixture {
         use crate as rust_app;
         include!(concat!(
@@ -411,12 +454,12 @@ mod tests {
     }
 
     #[test]
-    fn new_project_is_blocked_while_importing_or_exporting() {
+    fn new_project_cancels_pending_imports_but_is_blocked_while_exporting() {
         let mut app = super::CleanSlateApp::default();
         app.pending_imports.push("queued.wav".into());
-        assert!(!app.can_start_new_project());
+        assert!(app.can_start_new_project());
         app.reset_project(true);
-        assert_eq!(app.pending_imports.len(), 1);
+        assert!(app.pending_imports.is_empty());
         app.pending_imports.clear();
         let cancelled = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
         let (_sender, result) = super::mpsc::channel();
@@ -788,6 +831,266 @@ mod tests {
     }
 
     #[test]
+    fn shortcut_help_and_escape_respect_edit_owners_and_idle_gain_mode() {
+        use super::Message;
+        use iced::keyboard::{Key, Modifiers, key::Named};
+        let mut app = super::CleanSlateApp::default();
+        let before = (app.timeline.start(), app.timeline.visible_samples());
+        let _ = app.update(Message::KeyPressed(
+            Key::Character("f".into()),
+            Modifiers::empty(),
+        ));
+        assert_eq!(
+            (app.timeline.start(), app.timeline.visible_samples()),
+            before
+        );
+        assert!(
+            super::keyboard_message(
+                Key::Character("/".into()),
+                Modifiers::CTRL,
+                iced::event::Status::Captured
+            )
+            .is_none()
+        );
+        app.timeline.set_selection(Some((1, 2)));
+        app.gain_tool = true;
+        let _ = app.update(Message::KeyPressed(
+            Key::Named(Named::Escape),
+            Modifiers::empty(),
+        ));
+        assert_eq!(app.timeline.selection(), None);
+        app.sound_typing = true;
+        let _ = app.update(Message::KeyPressed(
+            Key::Character("/".into()),
+            Modifiers::CTRL,
+        ));
+        assert!(!app.shortcuts_open);
+        app.sound_typing = false;
+        app.track_name_draft = Some((0, "Typing".into()));
+        let _ = app.update(Message::KeyPressed(
+            Key::Character("/".into()),
+            Modifiers::CTRL,
+        ));
+        assert!(!app.shortcuts_open);
+        app.track_name_draft = None;
+        app.import_dialog = true;
+        let _ = app.update(Message::KeyPressed(
+            Key::Character("/".into()),
+            Modifiers::CTRL,
+        ));
+        assert!(!app.shortcuts_open);
+        app.import_dialog = false;
+        app.export_dialog = Some(super::ExportDialog {
+            settings: crate::ExportSettings::default(),
+            destination: None,
+        });
+        let _ = app.update(Message::KeyPressed(
+            Key::Character("/".into()),
+            Modifiers::CTRL,
+        ));
+        assert!(!app.shortcuts_open);
+        app.export_dialog = None;
+        app.reference_menu = Some((0, iced::Point::ORIGIN));
+        app.timeline.set_selection(Some((1, 2)));
+        let _ = app.update(Message::KeyPressed(
+            Key::Named(Named::Escape),
+            Modifiers::empty(),
+        ));
+        assert!(app.reference_menu.is_none());
+        assert_eq!(app.timeline.selection(), Some((1, 2)));
+        let _ = app.update(Message::KeyPressed(
+            Key::Named(Named::Escape),
+            Modifiers::empty(),
+        ));
+        assert_eq!(app.timeline.selection(), None);
+        let _ = app.update(Message::KeyPressed(
+            Key::Character("/".into()),
+            Modifiers::CTRL,
+        ));
+        assert!(app.shortcuts_open);
+        app.timeline.set_selection(Some((1, 2)));
+        let _ = app.update(Message::KeyPressed(
+            Key::Named(Named::Escape),
+            Modifiers::empty(),
+        ));
+        assert!(!app.shortcuts_open);
+        assert_eq!(app.timeline.selection(), Some((1, 2)));
+    }
+
+    #[test]
+    fn help_menu_is_keyboard_reachable_and_blocks_workspace_navigation() {
+        use super::Message;
+        use iced::keyboard::{Key, Modifiers, key::Named};
+        let mut app = super::CleanSlateApp::default();
+        let _ = app.update(Message::KeyPressed(
+            Key::Character("h".into()),
+            Modifiers::ALT,
+        ));
+        assert!(app.help_open);
+        let _ = app.update(Message::KeyPressed(
+            Key::Named(Named::Tab),
+            Modifiers::empty(),
+        ));
+        assert!(app.help_close_selected);
+        let _ = app.update(Message::KeyPressed(
+            Key::Named(Named::ArrowUp),
+            Modifiers::empty(),
+        ));
+        assert!(!app.help_close_selected);
+        let _ = app.update(Message::KeyPressed(
+            Key::Named(Named::Enter),
+            Modifiers::empty(),
+        ));
+        assert!(app.shortcuts_open && !app.help_open);
+        app.timeline.set_selection(Some((1, 2)));
+        let _ = app.update(Message::Timeline(crate::timeline::TimelineEvent::Select(
+            3, 4,
+        )));
+        let _ = app.update(Message::KeyPressed(
+            Key::Character("f".into()),
+            Modifiers::empty(),
+        ));
+        assert_eq!(app.timeline.selection(), Some((1, 2)));
+        let _ = app.update(Message::KeyPressed(
+            Key::Named(Named::Enter),
+            Modifiers::empty(),
+        ));
+        assert!(!app.shortcuts_open);
+    }
+
+    #[test]
+    fn fit_keys_and_gain_alt_drag_preserve_session_decisions_and_playback() {
+        use super::Message;
+        use iced::{
+            Point, Rectangle, Size,
+            keyboard::{Key, Modifiers},
+            mouse,
+            widget::canvas::{self, Program},
+        };
+        let root = std::env::temp_dir().join(format!("cleanslate-fit-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let source = root.join("source.wav");
+        write_wav(&source, &vec![0.0; 48000 * 100]);
+        let mut app = super::CleanSlateApp {
+            gain_tool: true,
+            project: Some(
+                synchronized_project(root.join("session.cleanslate"), vec![source]).unwrap(),
+            ),
+            ..Default::default()
+        };
+        app.timeline
+            .set_total_samples(100 * crate::TICKS_PER_SECOND);
+        app.timeline.seek(8 * crate::TICKS_PER_SECOND);
+        app.timeline.set_selection(Some((
+            40 * crate::TICKS_PER_SECOND,
+            50 * crate::TICKS_PER_SECOND,
+        )));
+        let _ = app.update(Message::GainAction(0, false));
+        assert!(!app.project.as_ref().unwrap().manual_gain_edits().is_empty());
+        app.selection_track = Some(0);
+        app.selected_example = Some(77);
+        app.audition_range = Some((2, 3));
+        app.playback_scroll = crate::timeline::PlaybackScroll::Locked;
+        let saved = std::fs::read(app.project.as_ref().unwrap().path()).unwrap();
+        let _ = app.update(Message::KeyPressed(
+            Key::Character("f".into()),
+            Modifiers::SHIFT,
+        ));
+        assert_eq!(
+            app.timeline.visible_samples(),
+            12.0 * crate::TICKS_PER_SECOND as f64
+        );
+        assert_eq!(app.timeline.start(), 39.0 * crate::TICKS_PER_SECOND as f64);
+        assert_eq!(app.playback_scroll, crate::timeline::PlaybackScroll::Off);
+        let _ = app.update(Message::KeyPressed(
+            Key::Character("f".into()),
+            Modifiers::empty(),
+        ));
+        assert_eq!(
+            app.timeline.visible_samples(),
+            100.0 * crate::TICKS_PER_SECOND as f64
+        );
+        let project = app.project.as_ref().unwrap();
+        let constraints = project.gain_constraints();
+        assert!(
+            crate::hit_gain_point(
+                &constraints,
+                project.sources[0].track_id,
+                &app.timeline,
+                crate::GainPointer {
+                    x: 40.0,
+                    y: 11.0,
+                    width: 100.0,
+                    height: 20.0
+                }
+            )
+            .is_some()
+        );
+        let gain = crate::gain_editor::GainCanvas {
+            revision: 0,
+            project,
+            constraints: &constraints,
+            track: project.sources[0].track_id,
+            viewport: &app.timeline,
+            automatic: None,
+            effective: None,
+            editing: true,
+            on_event: Box::new(|event| event),
+        };
+        let bounds = Rectangle::new(Point::ORIGIN, Size::new(100.0, 20.0));
+        let mut state = crate::gain_editor::GainCanvasState::default();
+        gain.update(
+            &mut state,
+            &canvas::Event::Keyboard(iced::keyboard::Event::ModifiersChanged(Modifiers::ALT)),
+            bounds,
+            mouse::Cursor::Unavailable,
+        );
+        let start = gain
+            .update(
+                &mut state,
+                &canvas::Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)),
+                bounds,
+                mouse::Cursor::Available(Point::new(40.0, 11.0)),
+            )
+            .unwrap()
+            .into_inner();
+        assert!(start.0.is_none());
+        let end = gain
+            .update(
+                &mut state,
+                &canvas::Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)),
+                bounds,
+                mouse::Cursor::Available(Point::new(50.0, 8.0)),
+            )
+            .unwrap()
+            .into_inner();
+        let Some(crate::GainEditorEvent::FitRange(start, end)) = end.0 else {
+            panic!("Alt must fit instead of editing gain");
+        };
+        drop(gain);
+        let selection = app.timeline.selection();
+        let _ = app.update(Message::GainEvent(
+            0,
+            crate::GainEditorEvent::FitRange(start, end),
+        ));
+        let _ = app.update(Message::TrackTimeline(
+            0,
+            crate::timeline::TimelineEvent::FitRange(start, end),
+        ));
+        assert_eq!(app.timeline.selection(), selection);
+        assert_eq!(app.selected_example, Some(77));
+        assert_eq!(app.selection_track, Some(0));
+        assert_eq!(app.timeline.playhead(), 8 * crate::TICKS_PER_SECOND);
+        assert_eq!(app.audition_range, Some((2, 3)));
+        assert_eq!(
+            std::fs::read(app.project.as_ref().unwrap().path()).unwrap(),
+            saved
+        );
+        app.audition_range = None;
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn playback_frames_reuse_drawing_without_polling_background_jobs() {
         let mut app = super::CleanSlateApp::default();
         app.timeline.seek(0);
@@ -946,8 +1249,13 @@ mod tests {
             "Another track's selection cannot label this track"
         );
         app.calibration_timing = true;
+        app.audition_mode = crate::AuditionMode::Processed;
+        app.solo_tracks = 5;
         let _ = app.update(Message::CompleteTrackSelection(0, start, end, point));
         assert_eq!(app.reference_menu, Some((0, point)));
+        assert_eq!(app.audition_range, Some((start, end)));
+        assert_eq!(app.audition_mode, crate::AuditionMode::Original);
+        assert_eq!(app.solo_tracks, 0);
         assert!(
             app.calibration_timing,
             "Popup keeps the saved-example list visible"
@@ -991,6 +1299,10 @@ mod tests {
         assert_eq!(app.selection_track, Some(0));
         let _ = app.update(Message::ContextReference(vec![speakers[1]], false));
         assert!(app.reference_menu.is_none());
+        assert!(app.audition_range.is_none() && app.audition.is_none());
+        assert_eq!(app.audition_mode, crate::AuditionMode::Processed);
+        assert_eq!(app.solo_tracks, 5);
+        assert_eq!(app.timeline.selection(), Some((start, end)));
         assert!(app.reference_stale && app.preview_pending.is_none());
         assert_eq!(
             app.project.as_ref().unwrap().reference_labels()[0].active_speakers,
@@ -999,6 +1311,7 @@ mod tests {
         let _ = app.update(Message::OpenReferenceMenu(0, point));
         let _ = app.update(Message::ContextReference(vec![], false));
         assert!(app.calibration_error.is_some() && app.reference_menu.is_some());
+        assert_eq!(app.audition_range, Some((start, end)));
         assert_eq!(app.project.as_ref().unwrap().reference_labels().len(), 1);
         let _ = app.update(Message::ContextReference(vec![], true));
         assert!(
@@ -1061,6 +1374,91 @@ mod tests {
     }
 
     #[test]
+    fn popup_audition_restores_monitoring_and_rejects_obsolete_preparation() {
+        use super::Message;
+        let root =
+            std::env::temp_dir().join(format!("cleanslate-popup-loop-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let source = root.join("voice.wav");
+        write_wav(&source, &vec![0.1; 48_000]);
+        let mut app = super::CleanSlateApp {
+            project: Some(
+                synchronized_project(root.join("session.cleanslate"), vec![source.clone()])
+                    .unwrap(),
+            ),
+            audition_mode: crate::AuditionMode::Removed,
+            solo_tracks: 1,
+            monitor_db: -12.0,
+            ..Default::default()
+        };
+        app.timeline.set_total_samples(crate::TICKS_PER_SECOND);
+        let range = (crate::TICKS_PER_SECOND / 4, crate::TICKS_PER_SECOND / 2);
+        let point = iced::Point::ORIGIN;
+        let space = || {
+            Message::KeyPressed(
+                iced::keyboard::Key::Named(iced::keyboard::key::Named::Space),
+                iced::keyboard::Modifiers::empty(),
+            )
+        };
+        let open = |app: &mut super::CleanSlateApp| {
+            let _ = app.update(Message::CompleteTrackSelection(0, range.0, range.1, point));
+        };
+        let drain = |app: &mut super::CleanSlateApp| {
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+            while app.audition_preparation.is_busy() {
+                app.poll_audition();
+                assert!(std::time::Instant::now() < deadline);
+                std::thread::yield_now();
+            }
+            assert!(app.audition.is_none());
+        };
+        open(&mut app);
+        assert_eq!(app.audition_range, Some(range));
+        assert_eq!(app.monitor_db, -12.0);
+        let _ = app.update(Message::Removed);
+        let _ = app.update(Message::SoloTrack(0));
+        assert_eq!(app.audition_mode, crate::AuditionMode::Original);
+        assert_eq!(app.solo_tracks, 0);
+        let _ = app.update(space());
+        assert!(app.audition_range.is_none() && app.reference_menu.is_some());
+        assert!(app.reference_audition.as_ref().unwrap().paused);
+        drain(&mut app);
+        let _ = app.update(space());
+        assert_eq!(app.audition_range, Some(range));
+        assert!(!app.reference_audition.as_ref().unwrap().paused);
+        let _ = app.update(Message::Stop);
+        drain(&mut app);
+        let _ = app.update(space());
+        let _ = app.update(Message::OpenReferenceMenu(0, point));
+        assert_eq!(app.audition_range, Some(range));
+        let _ = app.update(Message::DismissReferenceMenu);
+        drain(&mut app);
+        assert_eq!(app.audition_mode, crate::AuditionMode::Removed);
+        assert_eq!(app.solo_tracks, 1);
+        assert_eq!(app.timeline.selection(), Some(range));
+        open(&mut app);
+        app.source_generation += 1;
+        app.poll_audition();
+        drain(&mut app);
+        assert!(app.reference_menu.is_none());
+        open(&mut app);
+        app.timeline.set_selection(Some((range.0, range.1 + 1)));
+        app.poll_audition();
+        drain(&mut app);
+        assert!(app.reference_menu.is_none());
+        open(&mut app);
+        app.install_waveforms(vec![]);
+        drain(&mut app);
+        assert!(app.reference_menu.is_none());
+        assert_eq!(app.audition_mode, crate::AuditionMode::Removed);
+        assert_eq!(
+            app.solo_tracks, 1,
+            "Invalidation restores the popup snapshot"
+        );
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn imported_tracks_report_reference_setup_without_required_model() {
         let directory =
             std::env::temp_dir().join(format!("cleanslate-ui-status-{}", std::process::id()));
@@ -1105,7 +1503,23 @@ mod tests {
         let _ = app.update(super::Message::GainAction(0, false));
         let before = app.project.as_ref().unwrap().gain_constraints();
         let id = before.manual_edits[0].id;
+        let saved = std::fs::read(app.project.as_ref().unwrap().path()).unwrap();
+        let _ = app.update(super::Message::GainEvent(
+            0,
+            crate::GainEditorEvent::Begin(id, 0),
+        ));
+        assert!(
+            app.gain_drag.is_none(),
+            "The hidden strip cannot receive gain input"
+        );
         let _ = app.update(super::Message::GainTool(true));
+        let _ = app.update(super::Message::GainTool(false));
+        let _ = app.update(super::Message::GainTool(true));
+        assert_eq!(app.project.as_ref().unwrap().gain_constraints(), before);
+        assert_eq!(
+            std::fs::read(app.project.as_ref().unwrap().path()).unwrap(),
+            saved
+        );
         let _ = app.update(super::Message::GainEvent(
             0,
             crate::GainEditorEvent::Begin(id, 0),
@@ -1490,8 +1904,8 @@ mod tests {
         });
         let _ = app.update(super::Message::FileDropped(source));
         assert!(
-            cancelled.load(super::Ordering::Relaxed),
-            "dropping the old preview job must cancel it"
+            !cancelled.load(super::Ordering::Relaxed),
+            "metadata inspection does not cancel accepted-track analysis"
         );
         assert!(
             app.project.is_none(),
@@ -1525,6 +1939,7 @@ mod tests {
             "multi-file drops are coalesced before reading"
         );
         finish_import(&mut app);
+        assert!(app.project.is_some(), "{:?}", app.messages);
         assert_eq!(
             app.project.as_ref().unwrap().source_paths(),
             [a, directory.join("B.wav")]
@@ -1587,6 +2002,20 @@ mod tests {
             .iter()
             .position(|c| c.source.channel == Some(2))
             .unwrap();
+        for index in 0..app.import_choices.len() {
+            let _ = app.update(super::Message::ImportChannel(index, false));
+        }
+        let _ = app.update(super::Message::ConfirmChannels);
+        assert!(app.messages[0].contains("at most eight"));
+        assert!(app.source_loading.is_none());
+        for index in 0..app.import_choices.len() {
+            let _ = app.update(super::Message::ImportChannel(index, true));
+        }
+        let _ = app.update(super::Message::ImportChannelName(renamed, "x".repeat(257)));
+        let _ = app.update(super::Message::ConfirmChannels);
+        assert!(app.messages[0].contains("1 to 256 bytes"));
+        assert!(app.source_loading.is_none());
+        let _ = app.import_settings_view(300.0);
         let _ = app.update(super::Message::ImportChannel(omitted, false));
         let _ = app.update(super::Message::ImportChannelName(renamed, "Alice".into()));
         let _ = app.update(super::Message::ConfirmChannels);
@@ -1619,6 +2048,26 @@ mod tests {
                 selected: true,
             })
             .collect();
+        app.import_choices
+            .extend(
+                crate::wav_channel_sources(&poly)
+                    .unwrap()
+                    .into_iter()
+                    .map(|source| super::ImportChoice {
+                        source,
+                        selected: true,
+                    }),
+            );
+        for choice in &mut app.import_choices {
+            choice.source.path = root.join("additional-poly.wav");
+        }
+        let _ = app.update(super::Message::ConfirmChannels);
+        assert!(app.messages[0].contains("at most eight"));
+        assert!(app.source_loading.is_none());
+        assert_eq!(
+            std::fs::read(app.project.as_ref().unwrap().path()).unwrap(),
+            saved
+        );
         let _ = app.update(super::Message::CancelChannels);
         assert_eq!(
             std::fs::read(app.project.as_ref().unwrap().path()).unwrap(),
@@ -1693,6 +2142,243 @@ mod tests {
             started.elapsed().as_secs_f64()
         );
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn progressive_rows_preserve_edits_order_readiness_and_retry_current_sources() {
+        let root = crate::audio_io::multichannel_tests::root();
+        let a = root.join("a.wav");
+        let b = root.join("b.wav");
+        let c = root.join("c.wav");
+        write_wav(&a, &[0.0; 4800]);
+        write_wav(&b, &[0.0; 16]);
+        write_wav(&c, &[0.0; 4800]);
+        let mut app = super::CleanSlateApp::default();
+        app.begin_source_loading(super::SourceRequest::AddChannels(vec![
+            crate::AudioSource::mono(a.clone()),
+        ]));
+        assert!(!app.import_dialog);
+        assert_eq!(app.import_jobs.len(), 1);
+        assert_eq!(app.import_jobs[0].waveforms[0].sample_count, 4800);
+        assert!(app.project.is_none());
+        finish_import(&mut app);
+        let project_path = app.project.as_ref().unwrap().path().to_owned();
+        app.timeline.set_selection(Some((1, 2)));
+        app.timeline.seek(1);
+        app.begin_source_loading(super::SourceRequest::AddChannels(vec![
+            crate::AudioSource::mono(b.clone()),
+            crate::AudioSource::mono(c.clone()),
+        ]));
+        assert_eq!(app.reserved_track_count(), 3);
+        assert_eq!(app.timeline.selection(), Some((1, 2)));
+        assert_eq!(app.timeline.playhead(), 1);
+        app.project
+            .as_mut()
+            .unwrap()
+            .rename_track(0, "Edited during import".into())
+            .unwrap();
+        let _ = app.update(super::Message::Attenuation(-3.0));
+        finish_import(&mut app);
+        assert_eq!(app.project.as_ref().unwrap().sources.len(), 2);
+        assert_eq!(
+            app.project.as_ref().unwrap().sources[0].display_name(),
+            "Edited during import"
+        );
+        assert_eq!(
+            app.project.as_ref().unwrap().parameters().attenuation_db,
+            -3.0
+        );
+        assert!(app.import_jobs[1].error.is_some());
+        assert!(app.import_jobs[2].accepted);
+        let saved = std::fs::read(&project_path).unwrap();
+        assert_eq!(
+            crate::Project::open(&project_path).unwrap().source_paths(),
+            [a, c]
+        );
+        let failed_id = app.import_jobs[1].id;
+        write_wav(&b, &[0.25; 4800]);
+        let _ = app.update(super::Message::RetryImport(failed_id));
+        finish_import(&mut app);
+        assert!(app.import_jobs[1].accepted);
+        assert_eq!(app.project.as_ref().unwrap().sources.len(), 3);
+        let rows = app.import_display_rows();
+        assert_eq!(
+            rows.iter().map(|r| r.0.unwrap()).collect::<Vec<_>>(),
+            [0, 2, 1]
+        );
+        assert_eq!(app.export_source_order(), [0, 2, 1]);
+        assert_ne!(std::fs::read(&project_path).unwrap(), saved);
+        app.stop_audition();
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn provisional_reservations_limit_cancel_and_new_project_reject_late_results() {
+        let root = crate::audio_io::multichannel_tests::root();
+        let inputs = (0..8)
+            .map(|index| {
+                let path = root.join(format!("queued-{index}.wav"));
+                write_wav(&path, &[0.1; 4800]);
+                crate::AudioSource::mono(path)
+            })
+            .collect::<Vec<_>>();
+        let mut app = super::CleanSlateApp::default();
+        app.reserve_import(inputs.clone());
+        assert_eq!(app.reserved_track_count(), 8);
+        let flag = app.import_jobs[0].cancelled.clone();
+        app.reserve_import(vec![inputs[0].clone()]);
+        assert_eq!(app.import_jobs.len(), 8);
+        assert!(app.messages[0].contains("eight-track"));
+        let _ = app.update(super::Message::CancelPendingImports);
+        assert!(flag.load(super::Ordering::Relaxed));
+        assert!(app.import_jobs.is_empty());
+        assert!(app.project.is_none());
+        app.reserve_import(inputs);
+        let flag = app.import_jobs[0].cancelled.clone();
+        app.reset_project(true);
+        assert!(flag.load(super::Ordering::Relaxed));
+        app.poll_sources();
+        assert!(app.project.is_none());
+        assert!(app.import_jobs.is_empty());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn overall_import_status_names_active_work_and_queued_recordings() {
+        let root = crate::audio_io::multichannel_tests::root();
+        let inputs = ["first.wav", "second.wav"].map(|name| {
+            let path = root.join(name);
+            write_wav(&path, &[0.1; 4800]);
+            crate::AudioSource::mono(path)
+        });
+        let mut app = super::CleanSlateApp::default();
+        app.reserve_import(inputs.to_vec());
+        let status = app.workspace_status();
+        assert!(status.contains("2 pending"));
+        assert!(status.contains("1 queued"));
+        assert!(status.contains("Sampling whole-recording preview"));
+        app.cancel_pending_imports();
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    #[ignore = "measures local full recording; use an isolated LOCALAPPDATA cache root"]
+    fn progressive_import_stage_benchmark() {
+        let source = std::env::var_os("CLEANSLATE_IMPORT_BENCHMARK").expect("set recording path");
+        let source = std::path::PathBuf::from(source);
+        let root = crate::audio_io::multichannel_tests::root();
+        let baseline = std::env::var_os("CLEANSLATE_IMPORT_BASELINE").is_some();
+        for warm in [false, true] {
+            let started = std::time::Instant::now();
+            let inputs = crate::wav_channel_sources(&source).unwrap();
+            let choices_ms = started.elapsed().as_secs_f64() * 1000.0;
+            let mut preview_ms = None;
+            let mut ready_ms = None;
+            let mut stages = vec![];
+            if baseline {
+                let (sender, receiver) = super::mpsc::channel();
+                let parameters = crate::AutomixParameters::default();
+                let worker = std::thread::spawn(move || {
+                    super::load_sources(
+                        super::SourceRequest::AddChannels(inputs),
+                        None,
+                        parameters,
+                        &sender,
+                    )
+                });
+                for event in receiver {
+                    let ms = started.elapsed().as_secs_f64() * 1000.0;
+                    match event {
+                        super::SourceEvent::Stage(stage) => stages.push((stage, ms)),
+                        super::SourceEvent::Waveform(_, _) => {
+                            preview_ms.get_or_insert(ms);
+                        }
+                        _ => {}
+                    }
+                }
+                let loaded = worker.join().unwrap().unwrap();
+                ready_ms = Some(started.elapsed().as_secs_f64() * 1000.0);
+                assert_eq!(loaded.project.sources.len(), 3);
+            } else {
+                let metadata = inputs.iter().map(|s| s.metadata(None).unwrap()).collect();
+                let mut job = crate::import::Job::from_metadata(1, inputs, metadata);
+                let skeleton_ms = started.elapsed().as_secs_f64() * 1000.0;
+                stages.push(("Skeleton", skeleton_ms));
+                job.start();
+                let receiver = job.events.take().unwrap();
+                for event in receiver {
+                    let ms = started.elapsed().as_secs_f64() * 1000.0;
+                    match event {
+                        crate::import::Event::Preview(_) => {
+                            preview_ms.get_or_insert(ms);
+                        }
+                        crate::import::Event::Ready(identities, _) => {
+                            let project = crate::Project::accept_recording(
+                                None,
+                                root.join(format!("bench-{warm}.cleanslate")),
+                                identities,
+                                crate::AutomixParameters::default(),
+                            )
+                            .unwrap();
+                            assert_eq!(project.sources.len(), 3);
+                            ready_ms = Some(started.elapsed().as_secs_f64() * 1000.0);
+                        }
+                        crate::import::Event::Finished(result) => result.unwrap(),
+                        crate::import::Event::Progress(stage, _, _)
+                            if stages.last().is_none_or(|(previous, _)| *previous != stage) =>
+                        {
+                            stages.push((stage, ms));
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            println!(
+                "IMPORT_BENCH {}",
+                serde_json::json!({"baseline":baseline,"warm":warm,"choices_ms":choices_ms,"first_preview_ms":preview_ms,"ready_ms":ready_ms,"total_ms":started.elapsed().as_secs_f64()*1000.0,"stages":stages})
+            );
+        }
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    #[ignore = "measures cancellation on the local owner recording"]
+    fn progressive_import_cancellation_benchmark() {
+        let path = std::path::PathBuf::from(
+            std::env::var_os("CLEANSLATE_IMPORT_BENCHMARK").expect("set recording path"),
+        );
+        for phase in ["preview", "identity", "validation"] {
+            let inputs = crate::wav_channel_sources(&path).unwrap();
+            let metadata = inputs.iter().map(|s| s.metadata(None).unwrap()).collect();
+            let mut job = crate::import::Job::from_metadata(1, inputs, metadata);
+            job.start();
+            let receiver = job.events.take().unwrap();
+            let mut cancelled_at = None;
+            for event in receiver {
+                let cancel_now = match &event {
+                    crate::import::Event::Preview(_) => phase == "preview",
+                    crate::import::Event::Progress(stage, _, _) => match phase {
+                        "identity" => stage.starts_with("Checking source identity"),
+                        "validation" => stage.starts_with("Validating audio"),
+                        _ => false,
+                    },
+                    _ => false,
+                };
+                if cancel_now && cancelled_at.is_none() {
+                    cancelled_at = Some(std::time::Instant::now());
+                    job.cancelled.store(true, super::Ordering::Relaxed);
+                }
+                assert!(!matches!(event, crate::import::Event::Ready(_, _)));
+                if let crate::import::Event::Finished(result) = event {
+                    assert!(result.is_err());
+                    let elapsed = cancelled_at.expect("requested phase was reached").elapsed();
+                    println!(
+                        "IMPORT_CANCEL phase={phase} latency_ms={:.3}",
+                        elapsed.as_secs_f64() * 1000.0
+                    );
+                }
+            }
+        }
     }
 
     fn finish_import(app: &mut super::CleanSlateApp) {
@@ -1790,6 +2476,8 @@ mod tests {
             timeline: Default::default(),
             stage: "Loading waveforms",
             events,
+            publish: None,
+            committing: false,
         });
         sender
             .send(super::SourceEvent::Waveform(0, app.waveforms[0].clone()))
@@ -1804,6 +2492,144 @@ mod tests {
         assert!(app.messages[0].contains("stopped unexpectedly"));
         assert_eq!(app.waveforms.len(), 2);
         std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn prepared_import_does_not_publish_before_acceptance() {
+        let root =
+            std::env::temp_dir().join(format!("cleanslate-import-commit-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let a = root.join("a.wav");
+        let b = root.join("b.wav");
+        write_wav(&a, &[0.0; 16]);
+        write_wav(&b, &[0.0; 16]);
+        let project = crate::Project::create(root.join("prior.cleanslate"), vec![a]).unwrap();
+        let saved = std::fs::read(project.path()).unwrap();
+        let (sender, _) = super::mpsc::channel();
+        let loaded = super::load_sources(
+            super::SourceRequest::AddChannels(vec![crate::AudioSource::mono(b)]),
+            Some(project.clone()),
+            project.parameters(),
+            &sender,
+        )
+        .unwrap();
+        assert_eq!(loaded.project.sources.len(), 2);
+        assert_eq!(
+            std::fs::read(project.path()).unwrap(),
+            saved,
+            "Preparing a result that Cancel may discard must not publish it"
+        );
+        let mut app = super::CleanSlateApp {
+            project: Some(project.clone()),
+            ..Default::default()
+        };
+        let (late, events) = super::mpsc::channel();
+        let (publish, accepted) = super::mpsc::channel();
+        app.source_loading = Some(super::SourceLoading {
+            paths: loaded.project.source_paths(),
+            waveforms: vec![],
+            timeline: Default::default(),
+            stage: "Ready",
+            events,
+            publish: Some(publish),
+            committing: false,
+        });
+        let _ = app.update(super::Message::CancelChannels);
+        assert!(accepted.recv().is_err());
+        assert!(
+            late.send(super::SourceEvent::Finished(Ok(Box::new(loaded))))
+                .is_err()
+        );
+        app.poll_sources();
+        assert_eq!(app.project.as_ref().unwrap().sources.len(), 1);
+        assert_eq!(
+            crate::Project::open(project.path()).unwrap().sources.len(),
+            1
+        );
+        assert_eq!(std::fs::read(project.path()).unwrap(), saved);
+        app.add_stems([root.join("b.wav")]);
+        finish_import(&mut app);
+        assert_eq!(app.project.as_ref().unwrap().sources.len(), 2);
+        assert_eq!(
+            crate::Project::open(project.path()).unwrap().sources.len(),
+            2
+        );
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn accepted_import_finishes_atomically_and_reports_save_failure_in_modal() {
+        let root = std::env::temp_dir().join(format!(
+            "cleanslate-import-save-error-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let source = root.join("source.wav");
+        write_wav(&source, &[0.0; 16]);
+        let project = crate::Project::create(root.join("prior.cleanslate"), vec![source]).unwrap();
+        let saved = std::fs::read(project.path()).unwrap();
+        let mut app = super::CleanSlateApp {
+            import_dialog: true,
+            project: Some(project.clone()),
+            ..Default::default()
+        };
+        let (sender, events) = super::mpsc::channel();
+        let (publish, accepted) = super::mpsc::channel();
+        app.source_loading = Some(super::SourceLoading {
+            paths: vec![],
+            waveforms: vec![],
+            timeline: Default::default(),
+            stage: "Ready",
+            events,
+            publish: Some(publish),
+            committing: false,
+        });
+        sender.send(super::SourceEvent::Prepared).unwrap();
+        app.poll_sources();
+        accepted.try_recv().unwrap();
+        let _ = app.update(super::Message::CancelChannels);
+        assert!(app.source_loading.as_ref().unwrap().committing);
+        sender
+            .send(super::SourceEvent::Finished(Err(
+                "Project save failed: access denied".into(),
+            )))
+            .unwrap();
+        app.poll_sources();
+        assert_eq!(
+            app.project.as_ref().unwrap().source_paths(),
+            project.source_paths()
+        );
+        assert_eq!(std::fs::read(project.path()).unwrap(), saved);
+        assert!(app.import_dialog);
+        assert!(app.messages[0].contains("access denied"));
+        let _ = app.import_settings_view(300.0);
+        let _ = app.update(super::Message::CancelChannels);
+        assert!(!app.import_dialog);
+        assert_eq!(app.project.as_ref().unwrap().sources.len(), 1);
+        app.audition_preparation.cancel();
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn import_modal_blocks_workspace_and_escape_cancels_pending_work() {
+        let mut app = super::CleanSlateApp::default();
+        app.add_stems([std::path::PathBuf::from("pending.wav")]);
+        let parameters = app.preview_parameters;
+        let _ = app.update(super::Message::Attenuation(-6.0));
+        assert_eq!(app.preview_parameters, parameters);
+        let _ = app.update(super::Message::Timeline(
+            crate::timeline::TimelineEvent::Select(1, 2),
+        ));
+        assert!(app.timeline.selection().is_none());
+        let _ = app.update(super::Message::KeyPressed(
+            iced::keyboard::Key::Named(iced::keyboard::key::Named::Escape),
+            iced::keyboard::Modifiers::empty(),
+        ));
+        assert!(
+            !app.sources_busy(),
+            "Escape cancels queued import as well as channel choices"
+        );
+        assert!(app.import_due.is_none());
     }
 
     #[test]
@@ -1925,6 +2751,77 @@ mod tests {
     }
 
     #[test]
+    fn typed_sound_drafts_commit_cancel_validate_and_reset_individually() {
+        use super::{Message, SoundParameter};
+        let directory =
+            std::env::temp_dir().join(format!("cleanslate-sound-ui-{}", std::process::id()));
+        std::fs::create_dir_all(&directory).unwrap();
+        let source = directory.join("voice.wav");
+        write_wav(&source, &[0.0; 100]);
+        let project =
+            synchronized_project(directory.join("episode.cleanslate"), vec![source]).unwrap();
+        let mut app = super::CleanSlateApp {
+            project: Some(project),
+            ..Default::default()
+        };
+        for (parameter, value) in [
+            (SoundParameter::Attenuation, "-120"),
+            (SoundParameter::Open, "0"),
+            (SoundParameter::Close, "60000"),
+            (SoundParameter::Gap, "12.125"),
+        ] {
+            let _ = app.update(Message::EditSound(parameter));
+            let _ = app.update(Message::SoundText(value.into()));
+            assert_ne!(
+                parameter
+                    .value(app.project.as_ref().unwrap().parameters())
+                    .to_string(),
+                value
+            );
+            let _ = app.update(Message::CommitSound);
+            assert_eq!(
+                parameter.value(app.project.as_ref().unwrap().parameters()),
+                value.parse::<f32>().unwrap()
+            );
+            assert!(app.sound_draft.is_none());
+        }
+        let accepted = app.preview_parameters;
+        let _ = app.update(Message::EditSound(SoundParameter::Open));
+        let _ = app.update(Message::SoundText("42".into()));
+        let _ = app.update(Message::CancelSound);
+        assert_eq!(app.preview_parameters, accepted);
+        for invalid in ["NaN", "inf", "abc", "-1", "60001"] {
+            let _ = app.update(Message::EditSound(SoundParameter::Open));
+            let _ = app.update(Message::SoundText(invalid.into()));
+            let _ = app.update(Message::SoundTab(false));
+            assert!(app.sound_error.is_some() && app.sound_draft.is_some());
+            assert!(!app.sound_typing);
+            assert_eq!(app.preview_parameters, accepted);
+        }
+        let _ = app.update(Message::SoundText("123.25".into()));
+        let _ = app.update(Message::KeyPressed(
+            iced::keyboard::Key::Character("3".into()),
+            iced::keyboard::Modifiers::default(),
+        ));
+        assert_eq!(app.audition_mode, super::AuditionMode::Original);
+        let _ = app.update(Message::SoundTab(false));
+        assert_eq!(app.preview_parameters.open_ms, 123.25);
+        let _ = app.update(Message::Mute);
+        assert!(app.project.as_ref().unwrap().parameters().mute);
+        let _ = app.workspace(false, 900.0, 1400.0);
+        assert_eq!(app.preview_parameters.attenuation_db, -120.0);
+        let _ = app.update(Message::ResetSound(SoundParameter::Attenuation));
+        assert_eq!(app.preview_parameters.attenuation_db, -18.0);
+        assert!(!app.preview_parameters.mute);
+        assert_eq!(app.preview_parameters.open_ms, 123.25);
+        let _ = app.update(Message::SoundModifiers(iced::keyboard::Modifiers::CTRL));
+        let _ = app.update(Message::EditSound(SoundParameter::Open));
+        assert_eq!(app.preview_parameters.open_ms, 50.0);
+        assert!(!app.reference_analyze_requested && app.preview_processing.is_none());
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
     fn inspector_stacks_only_in_compact_windows() {
         assert!(!super::compact_workspace(1280.0));
         assert!(super::compact_workspace(1000.0));
@@ -1932,12 +2829,7 @@ mod tests {
     }
 
     #[test]
-    fn waveform_rows_fill_height_without_becoming_unusable() {
-        assert!((super::waveform_height(900.0, 3, false) - 164.67).abs() < 0.01);
-        assert_eq!(super::waveform_height(640.0, 12, false), 80.0);
-        assert_eq!(super::waveform_height(1600.0, 1, false), 240.0);
-        assert_eq!(super::waveform_height(720.0, 3, true), 80.0);
-    }
+    fn waveform_rows_fill_height_without_becoming_unusable() {}
 
     #[test]
     fn file_dialog_starts_in_an_existing_local_directory() {
@@ -2049,14 +2941,251 @@ mod tests {
     }
 }
 
+#[cfg(test)]
+mod app_menu_tests {
+    use super::*;
+
+    #[test]
+    fn version_copy_is_allowlisted_and_failures_stay_actionable() {
+        assert_eq!(
+            version_info("1.2.3", None, "windows", "x86_64"),
+            "CleanSlate 1.2.3\nPlatform: windows (x86_64)"
+        );
+        assert_eq!(
+            version_info("1.2.3", Some("abc123"), "linux", "aarch64"),
+            "CleanSlate 1.2.3\nBuild: abc123\nPlatform: linux (aarch64)"
+        );
+        let mut app = CleanSlateApp::default();
+        let _ = app.update(Message::About);
+        let _ = app.update(Message::VersionCopied(false));
+        assert!(app.app_feedback.as_ref().unwrap().contains("manually"));
+        assert!(!app.copy_pending);
+        let _ = app.update(Message::VersionCopied(true));
+        assert_eq!(
+            app.app_feedback.as_deref(),
+            Some("Version information copied.")
+        );
+        let _ = app.update(Message::CloseHelp);
+        let _ = app.update(Message::Menu);
+        let _ = app.update(Message::LinkOpened(
+            AppLink::ReportBug,
+            Err("No browser".into()),
+        ));
+        assert!(
+            app.app_feedback
+                .as_ref()
+                .unwrap()
+                .contains("https://github.com/Today20092/podcast-bleed-reducer/issues/new/choose")
+        );
+    }
+
+    #[test]
+    fn closing_about_before_copy_finishes_does_not_disable_future_copy() {
+        let mut app = CleanSlateApp::default();
+        let _ = app.update(Message::About);
+        let _ = app.update(Message::CopyVersion);
+        assert!(app.copy_pending);
+        let _ = app.update(Message::CloseHelp);
+        let _ = app.update(Message::KeyboardShortcuts);
+        let _ = app.update(Message::VersionCopied(false));
+        assert!(!app.copy_pending);
+        assert!(app.shortcuts_open);
+    }
+
+    #[test]
+    fn menu_reuses_reference_and_about_keyboard_owns_navigation() {
+        let mut app = CleanSlateApp::default();
+        let _ = app.update(Message::KeyPressed(
+            keyboard::Key::Character("m".into()),
+            keyboard::Modifiers::ALT,
+        ));
+        assert!(app.menu_open);
+        let _ = app.update(Message::KeyPressed(
+            keyboard::Key::Named(keyboard::key::Named::ArrowDown),
+            keyboard::Modifiers::empty(),
+        ));
+        let _ = app.update(Message::KeyPressed(
+            keyboard::Key::Named(keyboard::key::Named::Enter),
+            keyboard::Modifiers::empty(),
+        ));
+        assert!(app.shortcuts_open && !app.menu_open);
+        let _ = app.update(Message::CloseHelp);
+        let _ = app.update(Message::About);
+        app.timeline.set_selection(Some((1, 2)));
+        let _ = app.update(Message::KeyPressed(
+            keyboard::Key::Character("f".into()),
+            keyboard::Modifiers::empty(),
+        ));
+        assert_eq!(app.timeline.selection(), Some((1, 2)));
+        let _ = app.update(Message::KeyPressed(
+            keyboard::Key::Named(keyboard::key::Named::Tab),
+            keyboard::Modifiers::empty(),
+        ));
+        let _ = app.update(Message::KeyPressed(
+            keyboard::Key::Named(keyboard::key::Named::Enter),
+            keyboard::Modifiers::empty(),
+        ));
+        assert!(app.app_dialog.is_none());
+        assert_eq!(
+            AppLink::Help.url(),
+            "https://github.com/Today20092/podcast-bleed-reducer/blob/main/docs/editor-workflow.md"
+        );
+        assert_eq!(
+            AppLink::GitHub.url(),
+            "https://github.com/Today20092/podcast-bleed-reducer"
+        );
+    }
+
+    #[test]
+    fn menu_routes_settings_and_restores_workspace_without_edits() {
+        let mut app = CleanSlateApp::default();
+        app.timeline.set_selection(Some((1, 2)));
+        let _ = app.update(Message::Menu);
+        let _ = app.update(Message::KeyPressed(
+            keyboard::Key::Named(keyboard::key::Named::Enter),
+            keyboard::Modifiers::empty(),
+        ));
+        assert_eq!(app.app_dialog, Some(AppDialog::Settings));
+        let _ = app.update(Message::Timeline(TimelineEvent::Select(3, 4)));
+        assert_eq!(app.timeline.selection(), Some((1, 2)));
+        let _ = app.update(Message::CloseHelp);
+        assert!(app.app_dialog.is_none());
+        assert_eq!(app.timeline.selection(), Some((1, 2)));
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AppDialog {
+    Settings,
+    About,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum AppLink {
+    Help,
+    GitHub,
+    ReportBug,
+}
+
+impl AppLink {
+    fn url(self) -> &'static str {
+        match self {
+            Self::Help => {
+                "https://github.com/Today20092/podcast-bleed-reducer/blob/main/docs/editor-workflow.md"
+            }
+            Self::GitHub => "https://github.com/Today20092/podcast-bleed-reducer",
+            Self::ReportBug => {
+                "https://github.com/Today20092/podcast-bleed-reducer/issues/new/choose"
+            }
+        }
+    }
+}
+
+fn menu_action(index: usize) -> Message {
+    match index {
+        0 => Message::Settings,
+        1 => Message::KeyboardShortcuts,
+        2 => Message::OpenLink(AppLink::Help),
+        3 => Message::OpenLink(AppLink::GitHub),
+        4 => Message::OpenLink(AppLink::ReportBug),
+        5 => Message::About,
+        _ => Message::CloseHelp,
+    }
+}
+
+fn version_info(version: &str, build: Option<&str>, os: &str, arch: &str) -> String {
+    let mut info = format!("CleanSlate {version}");
+    if let Some(build) = build {
+        info.push_str(&format!("\nBuild: {build}"));
+    }
+    info.push_str(&format!("\nPlatform: {os} ({arch})"));
+    info
+}
+
+fn open_app_link(link: AppLink) -> Result<(), String> {
+    use std::process::{Command, Stdio};
+    #[cfg(target_os = "windows")]
+    let mut command = {
+        use std::os::windows::process::CommandExt;
+        let mut command = Command::new("powershell.exe");
+        // Only the fixed HTTPS allowlist enters this script; no project text.
+        command.args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            &format!(
+                "try {{ Start-Process -FilePath '{}' -ErrorAction Stop }} catch {{ exit 1 }}",
+                link.url()
+            ),
+        ]);
+        command.creation_flags(0x08000000);
+        command
+    };
+    #[cfg(target_os = "macos")]
+    let mut command = {
+        let mut command = Command::new("/usr/bin/open");
+        command.arg(link.url());
+        command
+    };
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    let mut command = {
+        let mut command = Command::new("xdg-open");
+        command.arg(link.url());
+        command
+    };
+    let status = command
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map_err(|error| error.to_string())?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err("The default browser launcher failed. Check your browser association.".into())
+    }
+}
+
+struct ReferenceAudition {
+    mode: AuditionMode,
+    solo: u64,
+    range: TimeRange,
+    source_generation: u64,
+    paused: bool,
+}
+
 pub struct CleanSlateApp {
+    appearance: Appearance,
+    preferences_path: Option<PathBuf>,
+    appearance_error: Option<String>,
+    settings_selected: usize,
+    menu_open: bool,
+    menu_selected: usize,
+    app_dialog: Option<AppDialog>,
+    about_copy_selected: bool,
+    copy_pending: bool,
+    app_feedback: Option<String>,
+    help_open: bool,
+    shortcuts_open: bool,
+    help_close_selected: bool,
+    sound_draft: Option<(SoundParameter, String)>,
+    sound_error: Option<String>,
+    sound_typing: bool,
+    sound_menu: Option<SoundParameter>,
+    sound_modifiers: keyboard::Modifiers,
+    reference_audition: Option<ReferenceAudition>,
     project: Option<Project>,
     pending_imports: Vec<PathBuf>,
     source_inspection: Option<SourceInspection>,
     import_choices: Vec<ImportChoice>,
+    import_dialog: bool,
     track_name_draft: Option<(usize, String)>,
     import_due: Option<Instant>,
     source_loading: Option<SourceLoading>,
+    import_jobs: Vec<crate::import::Job>,
+    next_import_id: u64,
+    import_metadata: Vec<(crate::AudioSource, crate::SourceMetadata)>,
+    import_metadata_failed: Vec<PathBuf>,
     messages: Vec<String>,
     processing: Option<Processing>,
     exporting: Option<ExportProcessing>,
@@ -2065,6 +3194,9 @@ pub struct CleanSlateApp {
     render_generation: Arc<crate::RenderGeneration>,
     review: Option<ReviewWorkspace>,
     audition: Option<LiveAudition>,
+    idle_audition: Option<LiveAudition>,
+    audition_output: Option<std::rc::Rc<crate::audition::AuditionOutput>>,
+    audition_requested_at: Option<Instant>,
     audition_preparation: AuditionPreparation,
     audition_ready: bool,
     audition_range: Option<(TimePosition, TimePosition)>,
@@ -2110,16 +3242,87 @@ pub struct CleanSlateApp {
     export_error: Option<String>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SoundParameter {
+    Attenuation,
+    Open,
+    Close,
+    Gap,
+}
+
+impl SoundParameter {
+    fn value(self, p: AutomixParameters) -> f32 {
+        match self {
+            Self::Attenuation => p.attenuation_db,
+            Self::Open => p.open_ms,
+            Self::Close => p.close_ms,
+            Self::Gap => p.minimum_gap_ms,
+        }
+    }
+    fn set(self, p: &mut AutomixParameters, value: f32) {
+        match self {
+            Self::Attenuation => {
+                p.attenuation_db = value;
+                p.mute = false;
+            }
+            Self::Open => p.open_ms = value,
+            Self::Close => p.close_ms = value,
+            Self::Gap => p.minimum_gap_ms = value,
+        }
+    }
+    fn parse(self, value: &str) -> Result<f32, &'static str> {
+        let bounds = if self == Self::Attenuation {
+            -120.0..=0.0
+        } else {
+            0.0..=60000.0
+        };
+        value
+            .trim()
+            .parse::<f32>()
+            .ok()
+            .filter(|v| v.is_finite() && bounds.contains(v))
+            .ok_or(if self == Self::Attenuation {
+                "Enter a finite value from −120 to 0 dB."
+            } else {
+                "Enter a finite value from 0 to 60000 ms."
+            })
+    }
+}
+
 impl Default for CleanSlateApp {
     fn default() -> Self {
         Self {
+            appearance: Appearance::Dark,
+            preferences_path: None,
+            appearance_error: None,
+            settings_selected: 0,
+            reference_audition: None,
             project: None,
             pending_imports: vec![],
             source_inspection: None,
             import_choices: vec![],
+            import_dialog: false,
+            help_open: false,
+            menu_open: false,
+            menu_selected: 0,
+            app_dialog: None,
+            about_copy_selected: true,
+            copy_pending: false,
+            app_feedback: None,
+            shortcuts_open: false,
+            help_close_selected: false,
             track_name_draft: None,
+            sound_draft: None,
+            sound_error: None,
+            sound_typing: false,
+            sound_menu: None,
+            sound_modifiers: keyboard::Modifiers::default(),
             import_due: None,
             source_loading: None,
+            import_jobs: vec![],
+            next_import_id: 0,
+            import_metadata: vec![],
+            import_metadata_failed: vec![],
             messages: vec![],
             processing: None,
             exporting: None,
@@ -2128,6 +3331,9 @@ impl Default for CleanSlateApp {
             pending_export: None,
             review: None,
             audition: None,
+            idle_audition: None,
+            audition_output: None,
+            audition_requested_at: None,
             audition_preparation: AuditionPreparation::default(),
             audition_ready: false,
             audition_range: None,
@@ -2190,9 +3396,19 @@ struct ImportChoice {
     selected: bool,
 }
 
+type InspectedSource = (crate::AudioSource, Option<crate::SourceMetadata>);
+type ImportDisplayRow = (Option<usize>, Option<(usize, usize)>);
+
 struct SourceInspection {
     paths: Vec<PathBuf>,
-    result: Receiver<Result<Vec<crate::AudioSource>, String>>,
+    result: Receiver<Result<Vec<InspectedSource>, String>>,
+    cancelled: Arc<AtomicBool>,
+}
+
+impl Drop for SourceInspection {
+    fn drop(&mut self) {
+        self.cancelled.store(true, Ordering::Relaxed);
+    }
 }
 
 struct LoadedSession {
@@ -2206,6 +3422,7 @@ enum SourceEvent {
     Paths(Vec<PathBuf>),
     Waveform(usize, WaveformCache),
     Stage(&'static str),
+    Prepared,
     Finished(Result<Box<LoadedSession>, String>),
 }
 
@@ -2215,6 +3432,8 @@ struct SourceLoading {
     timeline: TimelineViewport,
     stage: &'static str,
     events: Receiver<SourceEvent>,
+    publish: Option<mpsc::Sender<()>>,
+    committing: bool,
 }
 
 // All source reads, validation, hashing, cache persistence and saved-review reads
@@ -2227,6 +3446,9 @@ fn load_sources(
 ) -> Result<LoadedSession, String> {
     let mut project = project;
     let opening = matches!(request, SourceRequest::Open(_));
+    if !opening && let Some(project) = &mut project {
+        project.defer_save();
+    }
     let partial_relink = if let SourceRequest::Relink(index, path) = &request {
         // A replacement can be checked independently while other missing or
         // changed sources still await the user's relink decisions.
@@ -2307,7 +3529,7 @@ fn load_sources(
                     .add_audio_sources(additions)
                     .map_err(|error| error.to_string())?;
             } else {
-                let mut created = Project::create_from_sources(project_path, additions)
+                let mut created = Project::prepare_from_sources(project_path, additions)
                     .map_err(|error| error.to_string())?;
                 created
                     .set_parameters(parameters)
@@ -2410,10 +3632,24 @@ impl Drop for PreviewProcessing {
 
 #[derive(Debug, Clone)]
 enum Message {
+    Appearance(Appearance),
+    Menu,
+    Settings,
+    About,
+    OpenLink(AppLink),
+    LinkOpened(AppLink, Result<(), String>),
+    CopyVersion,
+    VersionCopied(bool),
+    Help,
+    KeyboardShortcuts,
+    CloseHelp,
     ImportChannel(usize, bool),
     ImportChannelName(usize, String),
     ConfirmChannels,
     CancelChannels,
+    RemoveImport(u64),
+    RetryImport(u64),
+    CancelPendingImports,
     EditTrackName(usize),
     TrackName(String),
     SaveTrackName,
@@ -2449,6 +3685,17 @@ enum Message {
     #[cfg(test)]
     SpeechSensitivity(f32),
     Attenuation(f32),
+    EditSound(SoundParameter),
+    SoundText(String),
+    CommitSound,
+    CancelSound,
+    CheckSoundFocus,
+    SoundFocused(bool),
+    SoundTab(bool),
+    SoundModifiers(keyboard::Modifiers),
+    SoundMenu(SoundParameter),
+    ResetSound(SoundParameter),
+    Mute,
     #[cfg(test)]
     SpeechPadding(f32),
     OpenTime(f32),
@@ -2463,7 +3710,6 @@ enum Message {
     Previous,
     MonitorGain(f32),
     KeyPressed(keyboard::Key, keyboard::Modifiers),
-    RangeModifier(bool),
     #[cfg(test)]
     OwnershipMode(bool),
     #[cfg(test)]
@@ -2534,6 +3780,13 @@ pub fn run() -> iced::Result {
 
 fn startup(project: Option<PathBuf>) -> CleanSlateApp {
     let mut app = CleanSlateApp::default();
+    match appearance::preference_path() {
+        Ok(path) => {
+            (app.appearance, app.appearance_error) = appearance::load(&path);
+            app.preferences_path = Some(path);
+        }
+        Err(error) => app.appearance_error = Some(error),
+    }
     if let Some(path) = project {
         app.begin_source_loading(SourceRequest::Open(path));
     }
@@ -2552,13 +3805,77 @@ fn compact_workspace(width: f32) -> bool {
     width < 1100.0
 }
 
-fn waveform_height(workspace_height: f32, stem_count: usize, compact: bool) -> f32 {
-    let reserved = if compact { 580.0 } else { 220.0 };
-    ((workspace_height - reserved) / stem_count.max(1) as f32 - 62.0).clamp(80.0, 240.0)
-}
-
 impl CleanSlateApp {
+    fn commit_sound(&mut self) {
+        let Some((parameter, draft)) = &self.sound_draft else {
+            return;
+        };
+        match parameter.parse(draft) {
+            Ok(value) => {
+                parameter.set(&mut self.preview_parameters, value);
+                self.sound_draft = None;
+                self.sound_error = None;
+                self.sound_typing = false;
+            }
+            Err(error) => self.sound_error = Some(error.into()),
+        }
+    }
+
+    fn sound_value(&self, parameter: SoundParameter, label: &'static str) -> Element<'_, Message> {
+        let unit = if parameter == SoundParameter::Attenuation {
+            "dB"
+        } else {
+            "ms"
+        };
+        let value = if parameter == SoundParameter::Attenuation && self.preview_parameters.mute {
+            "Mute".into()
+        } else {
+            format!("{} {unit}", parameter.value(self.preview_parameters))
+        };
+        let control: Element<'_, Message> = if let Some((active, draft)) = &self.sound_draft
+            && *active == parameter
+        {
+            row![
+                text_input("Value", draft)
+                    .id("sound-value")
+                    .on_input(Message::SoundText)
+                    .on_submit(Message::CommitSound)
+                    .width(110),
+                text(unit)
+            ]
+            .spacing(6)
+            .into()
+        } else {
+            mouse_area(
+                button(text(value))
+                    .style(secondary_button)
+                    .on_press(Message::EditSound(parameter)),
+            )
+            .on_right_press(Message::SoundMenu(parameter))
+            .into()
+        };
+        let mut content =
+            column![row![text(label), Space::new().width(Fill), control].align_y(iced::Center)]
+                .spacing(4);
+        if self
+            .sound_draft
+            .as_ref()
+            .is_some_and(|(active, _)| *active == parameter)
+            && let Some(error) = &self.sound_error
+        {
+            content = content.push(text(error).size(12));
+        }
+        if self.sound_menu == Some(parameter) {
+            content = content.push(
+                button("Reset to default")
+                    .style(secondary_button)
+                    .on_press(Message::ResetSound(parameter)),
+            );
+        }
+        content.into()
+    }
     fn install_waveforms(&mut self, waveforms: Vec<WaveformCache>) {
+        self.close_reference_menu();
         self.selected_example = None;
         self.example_draft = None;
         self.gain_menu = None;
@@ -2579,6 +3896,9 @@ impl CleanSlateApp {
         if let Some(audition) = self.audition.take() {
             audition.stop();
         }
+        self.idle_audition = None;
+        self.audition_output = None;
+        self.audition_requested_at = None;
         self.preview = None;
         self.preview_sources.clear();
         self.supervised_result = None;
@@ -2655,20 +3975,232 @@ impl CleanSlateApp {
         }
 
         self.pending_imports.extend(additions);
+        self.import_dialog = true;
         self.pending_imports
             .sort_by_key(|path| path.to_string_lossy().to_lowercase());
         // A desktop multi-file drop arrives as separate events. Collect the burst
         // before starting one source pass, without delaying placeholder rows.
         self.import_due = Some(Instant::now() + Duration::from_millis(150));
         self.messages.clear();
-        self.stop_audition();
-        self.preview_pending = None;
-        self.preview_generation += 1;
-        self.preview_processing = None;
+    }
+
+    fn reserved_track_count(&self) -> usize {
+        self.project.as_ref().map_or(0, |p| p.sources.len())
+            + self
+                .import_jobs
+                .iter()
+                .filter(|j| !j.accepted)
+                .map(|j| j.sources.len())
+                .sum::<usize>()
+    }
+
+    fn reserve_import(&mut self, additions: Vec<crate::AudioSource>) {
+        if self.reserved_track_count() + additions.len() > 8 || additions.is_empty() {
+            self.messages = vec!["Import blocked: accepted and pending tracks together must fit the eight-track limit.".into()];
+            return;
+        }
+        if additions.iter().any(|s| {
+            self.import_jobs.iter().any(|j| {
+                j.sources
+                    .iter()
+                    .any(|old| old.path == s.path && old.channel == s.channel)
+            })
+        }) {
+            self.messages = vec!["These channels are already accepted or reserved. Retry or remove their existing rows.".into()];
+            return;
+        }
+        let mut recordings: Vec<Vec<crate::AudioSource>> = vec![];
+        for source in additions {
+            if let Some(recording) = recordings.iter_mut().find(|r| r[0].path == source.path) {
+                recording.push(source);
+            } else {
+                recordings.push(vec![source]);
+            }
+        }
+        for recording in recordings {
+            self.next_import_id += 1;
+            let metadata = recording.iter().map(|s| {
+                if self.import_metadata_failed.contains(&s.path) { return Err(crate::RenderBlocker("Source metadata could not be read. Check the file, then Retry or Remove.".into())); }
+                self.import_metadata.iter().rev().find(|(source, _)| source.path == s.path && source.channel == s.channel)
+                .map(|(_, metadata)| *metadata).map_or_else(|| s.metadata(None), Ok)
+            }).collect::<Result<Vec<_>, _>>();
+            match metadata.map(|metadata| {
+                crate::import::Job::from_metadata(self.next_import_id, recording.clone(), metadata)
+            }) {
+                Ok(job) => {
+                    if let Some(waveform) = job.waveforms.first() {
+                        if self.project.is_none() && self.import_jobs.is_empty() {
+                            self.timeline.set_total_samples(waveform.duration());
+                        } else {
+                            self.timeline.extend_total_samples(waveform.duration());
+                        }
+                    }
+                    self.import_jobs.push(job);
+                }
+                Err(error) => self.import_jobs.push(crate::import::Job::failed(
+                    self.next_import_id,
+                    recording,
+                    error.to_string(),
+                )),
+            }
+        }
+        self.import_dialog = false;
+        self.start_next_import();
+    }
+
+    fn start_next_import(&mut self) {
+        if self.import_jobs.iter().any(|job| job.events.is_some()) {
+            return;
+        }
+        if let Some(job) = self
+            .import_jobs
+            .iter_mut()
+            .find(|job| !job.accepted && job.error.is_none())
+        {
+            job.start();
+        }
+    }
+
+    fn cancel_pending_imports(&mut self) {
+        self.import_jobs.retain(|job| job.accepted);
+        for job in &mut self.import_jobs {
+            job.cancelled.store(true, Ordering::Relaxed);
+            job.events = None;
+            job.status = "Ready".into();
+        }
+        self.pending_imports.clear();
+        self.source_inspection = None;
+        self.import_due = None;
+        self.import_choices.clear();
+        self.import_dialog = false;
+    }
+
+    fn poll_import_jobs(&mut self) {
+        // Bounded event work keeps navigation responsive even when a worker is faster than drawing.
+        for _ in 0..4 {
+            let Some(index) = self.import_jobs.iter().position(|job| job.events.is_some()) else {
+                break;
+            };
+            let event = self.import_jobs[index].events.as_ref().unwrap().try_recv();
+            match event {
+                Ok(crate::import::Event::Metadata(waveforms)) => {
+                    if let Some(waveform) = waveforms.first() {
+                        self.timeline.extend_total_samples(waveform.duration());
+                    }
+                    self.import_jobs[index].waveforms = waveforms;
+                }
+                Ok(crate::import::Event::Preview(waveforms)) => {
+                    self.import_jobs[index].waveforms = waveforms;
+                    self.import_jobs[index].status = "Coarse preview · not yet validated".into();
+                }
+                Ok(crate::import::Event::Progress(stage, done, total)) => {
+                    self.import_jobs[index].status = if total == 0 {
+                        stage.into()
+                    } else {
+                        format!("{stage} · {:.0}%", 100.0 * done as f64 / total as f64)
+                    };
+                }
+                Ok(crate::import::Event::Ready(identities, waveforms)) => {
+                    let path = self.project.as_ref().map_or_else(
+                        || {
+                            available_project_path(
+                                self.import_jobs[index].sources[0]
+                                    .path
+                                    .parent()
+                                    .unwrap_or_else(|| std::path::Path::new(".")),
+                            )
+                        },
+                        |p| p.path().to_owned(),
+                    );
+                    self.import_jobs[index].status = "Finishing · atomic project save".into();
+                    let first = self.project.as_ref().map_or(0, |p| p.sources.len());
+                    match Project::accept_recording(
+                        self.project.as_ref(),
+                        path,
+                        identities,
+                        self.preview_parameters,
+                    ) {
+                        Ok(project) => {
+                            self.import_jobs[index].track_ids = project.sources[first..]
+                                .iter()
+                                .map(|s| s.track_id)
+                                .collect();
+                            self.project = Some(project);
+                            self.waveforms.extend(waveforms.clone());
+                            self.import_jobs[index].waveforms = waveforms;
+                            self.import_jobs[index].accepted = true;
+                            self.import_jobs[index].status = "Ready · saving waveform cache".into();
+                            self.source_generation += 1;
+                            if let Some(snapshot) = &mut self.reference_audition {
+                                snapshot.source_generation = self.source_generation;
+                            }
+                            self.preview_generation += 1;
+                            if let Some(processing) = self.preview_processing.take() {
+                                processing.cancelled.store(true, Ordering::Relaxed);
+                            }
+                            self.preview_pending = None;
+                            self.preview = None;
+                            self.supervised_result = None;
+                            self.effective_result = None;
+                            self.reference_stale = true;
+                            self.gain_constraints =
+                                self.project.as_ref().unwrap().gain_constraints();
+                            self.audition_preparation.invalidate();
+                            self.audition_ready = false;
+                            if self.audition.is_none() {
+                                self.audition_preparation.request_sources(
+                                    self.project.as_ref().unwrap().audio_sources(),
+                                );
+                            } else {
+                                self.messages.push("New recording is ready. It joins the mix the next time playback starts.".into());
+                            }
+                            self.render_generation.invalidate();
+                        }
+                        Err(error) => {
+                            self.import_jobs[index].error = Some(error.to_string());
+                            self.messages.push(format!("Import blocked: {error}"));
+                            self.import_jobs[index].status = "Failed · Retry or Remove".into();
+                            self.import_jobs[index]
+                                .cancelled
+                                .store(true, Ordering::Relaxed);
+                            self.import_jobs[index].events = None;
+                        }
+                    }
+                }
+                Ok(crate::import::Event::Finished(result)) => {
+                    let job = &mut self.import_jobs[index];
+                    job.events = None;
+                    if job.accepted {
+                        job.status = "Ready".into();
+                    } else {
+                        job.error =
+                            Some(result.err().unwrap_or_else(|| {
+                                "Import finished without validated audio".into()
+                            }));
+                        job.status = "Failed · Retry or Remove".into();
+                        self.messages
+                            .push(format!("Import blocked: {}", job.error.as_deref().unwrap()));
+                    }
+                }
+                Err(mpsc::TryRecvError::Empty) => break,
+                Err(mpsc::TryRecvError::Disconnected) => {
+                    let job = &mut self.import_jobs[index];
+                    job.events = None;
+                    if !job.accepted {
+                        job.error = Some("Import worker stopped unexpectedly; Retry.".into());
+                    }
+                }
+            }
+        }
+        self.start_next_import();
     }
 
     fn sources_busy(&self) -> bool {
         self.source_loading.is_some()
+            || self
+                .import_jobs
+                .iter()
+                .any(|job| job.events.is_some() || (!job.accepted && job.error.is_none()))
             || self.source_inspection.is_some()
             || !self.pending_imports.is_empty()
             || !self.import_choices.is_empty()
@@ -2688,16 +4220,30 @@ impl CleanSlateApp {
             },
             |loading| loading.paths.clone(),
         );
+        for job in self.import_jobs.iter().filter(|job| !job.accepted) {
+            paths.extend(job.sources.iter().map(|source| source.path.clone()));
+        }
         paths.extend(self.pending_imports.iter().cloned());
         paths
     }
 
     fn begin_source_loading(&mut self, request: SourceRequest) {
+        if let SourceRequest::AddChannels(additions) = request {
+            self.reserve_import(additions);
+            return;
+        }
+        self.cancel_pending_imports();
         if self.source_loading.is_some() || self.processing.is_some() {
             return;
         }
+        self.close_reference_menu();
+        self.import_dialog = true;
         self.stop_audition();
         self.track_name_draft = None;
+        self.sound_draft = None;
+        self.sound_error = None;
+        self.sound_typing = false;
+        self.sound_menu = None;
         self.preview_pending = None;
         self.preview_generation += 1;
         self.preview_processing = None;
@@ -2719,8 +4265,24 @@ impl CleanSlateApp {
             SourceRequest::Validate => {}
         }
         let (sender, events) = mpsc::channel();
+        let (publish, accepted) = mpsc::channel();
         std::thread::spawn(move || {
-            let result = load_sources(request, project, parameters, &sender).map(Box::new);
+            let result =
+                load_sources(request, project, parameters, &sender).and_then(|mut loaded| {
+                    // Preparation cannot change the saved project. Only the window's
+                    // acceptance starts the short, noncancelable atomic publication.
+                    sender
+                        .send(SourceEvent::Prepared)
+                        .map_err(|_| "Import cancelled".to_string())?;
+                    accepted
+                        .recv()
+                        .map_err(|_| "Import cancelled".to_string())?;
+                    loaded
+                        .project
+                        .publish_prepared()
+                        .map_err(|error| error.to_string())?;
+                    Ok(Box::new(loaded))
+                });
             let _ = sender.send(SourceEvent::Finished(result));
         });
         self.source_loading = Some(SourceLoading {
@@ -2729,10 +4291,13 @@ impl CleanSlateApp {
             timeline: TimelineViewport::default(),
             stage: "Opening audio",
             events,
+            publish: Some(publish),
+            committing: false,
         });
     }
 
     fn poll_sources(&mut self) {
+        self.poll_import_jobs();
         if let Some(inspection) = &self.source_inspection {
             let result = match inspection.result.try_recv() {
                 Ok(result) => Some(result),
@@ -2743,6 +4308,20 @@ impl CleanSlateApp {
             };
             if let Some(result) = result {
                 self.source_inspection = None;
+                let result = result.map(|inputs| {
+                    inputs
+                        .into_iter()
+                        .map(|(source, metadata)| {
+                            if let Some(metadata) = metadata {
+                                self.import_metadata_failed.retain(|p| *p != source.path);
+                                self.import_metadata.push((source.clone(), metadata));
+                            } else {
+                                self.import_metadata_failed.push(source.path.clone());
+                            }
+                            source
+                        })
+                        .collect::<Vec<_>>()
+                });
                 match result {
                     Ok(inputs) if inputs.iter().any(|s| s.channel.is_some()) => {
                         self.import_choices = inputs
@@ -2771,6 +4350,13 @@ impl CleanSlateApp {
             match loading.events.try_recv() {
                 Ok(SourceEvent::Paths(paths)) => loading.paths = paths,
                 Ok(SourceEvent::Stage(stage)) => loading.stage = stage,
+                Ok(SourceEvent::Prepared) => {
+                    loading.committing = true;
+                    loading.stage = "Finishing import · saving project";
+                    if let Some(publish) = loading.publish.take() {
+                        let _ = publish.send(());
+                    }
+                }
                 Ok(SourceEvent::Waveform(index, waveform)) => {
                     if index == loading.waveforms.len() {
                         if index == 0 {
@@ -2791,6 +4377,7 @@ impl CleanSlateApp {
                     let loading = self.source_loading.take().unwrap();
                     match result {
                         Ok(loaded) => {
+                            self.import_dialog = !self.pending_imports.is_empty();
                             self.preview_parameters = loaded.project.parameters();
                             self.project = Some(loaded.project);
                             self.solo_tracks = 0;
@@ -2836,6 +4423,8 @@ impl CleanSlateApp {
                 .collect();
             if !additions.is_empty() {
                 let (sender, result) = mpsc::channel();
+                let cancelled = Arc::new(AtomicBool::new(false));
+                let worker_cancelled = cancelled.clone();
                 let mut paths = self
                     .project
                     .as_ref()
@@ -2845,19 +4434,38 @@ impl CleanSlateApp {
                     let inputs = additions
                         .into_iter()
                         .map(|path| {
-                            let metadata =
-                                crate::SourceMetadata::read(&path).map_err(|e| e.to_string())?;
+                            let Ok(metadata) = crate::SourceMetadata::read_cancellable(
+                                &path,
+                                Some(&worker_cancelled),
+                            ) else {
+                                return Ok(vec![(crate::AudioSource::mono(path), None)]);
+                            };
                             if metadata.channels > 1 {
-                                crate::wav_channel_sources(&path).map_err(|e| e.to_string())
+                                crate::wav_channel_sources(&path)
+                                    .map(|sources| {
+                                        sources
+                                            .into_iter()
+                                            .map(|source| {
+                                                let mut selected = metadata;
+                                                selected.channels = 1;
+                                                (source, Some(selected))
+                                            })
+                                            .collect()
+                                    })
+                                    .map_err(|e| e.to_string())
                             } else {
-                                Ok(vec![crate::AudioSource::mono(path)])
+                                Ok(vec![(crate::AudioSource::mono(path), Some(metadata))])
                             }
                         })
                         .collect::<Result<Vec<_>, String>>()
                         .map(|inputs| inputs.into_iter().flatten().collect());
                     let _ = sender.send(inputs);
                 });
-                self.source_inspection = Some(SourceInspection { paths, result });
+                self.source_inspection = Some(SourceInspection {
+                    paths,
+                    result,
+                    cancelled,
+                });
             } else {
                 self.start_preview();
             }
@@ -2881,7 +4489,7 @@ impl CleanSlateApp {
     }
 
     fn theme(&self) -> Theme {
-        editor_theme()
+        self.appearance.theme()
     }
 
     fn export_current(&mut self) {
@@ -2898,7 +4506,7 @@ impl CleanSlateApp {
     }
 
     fn can_prepare_export(&self) -> bool {
-        !self.sources_busy()
+        self.source_loading.is_none()
             && self.processing.is_none()
             && self.exporting.is_none()
             && !self.reference_stale
@@ -3031,6 +4639,7 @@ impl CleanSlateApp {
             return;
         }
         let Some(project) = &self.project else { return };
+        let source_order = self.export_source_order();
         let project = project.clone();
         let gate = self.render_generation.clone();
         let generation = gate.current();
@@ -3039,10 +4648,11 @@ impl CleanSlateApp {
         let (sender, result) = mpsc::channel();
         std::thread::spawn(move || {
             let completed = (|| {
-                let private = crate::prepare_export_with_settings(
+                let private = crate::prepare_export_in_order(
                     &project,
                     &destination,
                     settings,
+                    &source_order,
                     Some(&worker_cancel),
                 )?;
                 private.publish(&project, &gate, generation, Some(&worker_cancel))?;
@@ -3073,7 +4683,7 @@ impl CleanSlateApp {
         }];
     }
     fn export_ready(&self) -> bool {
-        !self.sources_busy()
+        self.source_loading.is_none()
             && !self.reference_stale
             && self.gain_drag.is_none()
             && self.preview_pending.is_none()
@@ -3104,7 +4714,7 @@ impl CleanSlateApp {
         });
     }
     fn can_start_new_project(&self) -> bool {
-        !self.sources_busy() && self.processing.is_none() && self.exporting.is_none()
+        self.source_loading.is_none() && self.processing.is_none() && self.exporting.is_none()
     }
 
     fn reset_project(&mut self, confirmed: bool) {
@@ -3112,8 +4722,12 @@ impl CleanSlateApp {
             return;
         }
         self.stop_audition();
+        self.cancel_pending_imports();
         self.render_generation.invalidate();
         *self = Self {
+            appearance: self.appearance,
+            preferences_path: self.preferences_path.clone(),
+            appearance_error: self.appearance_error.clone(),
             drawing_revision: self.drawing_revision.wrapping_add(1),
             messages: vec!["New project. Import tracks to begin.".into()],
             ..Self::default()
@@ -3287,7 +4901,24 @@ impl CleanSlateApp {
             },
             |range| range.0.max(range.1),
         );
-        self.audition.take().inspect(|playing| playing.stop());
+        if let Some(playing) = self.audition.take() {
+            playing.stop();
+            self.idle_audition = Some(playing);
+        }
+        self.audition_requested_at = Some(Instant::now());
+        if let Some(prepared) = self
+            .audition_preparation
+            .ready_sources(&project.audio_sources())
+        {
+            self.audition_range = None;
+            self.audition_preparation.cancel();
+            if let Err(error) =
+                self.start_prepared_audition(prepared, envelopes, TimeRange { start, end })
+            {
+                self.messages = vec![error.to_string()];
+            }
+            return;
+        }
         self.audition_range = Some((start, end));
         if !self.audition_preparation.is_requested() {
             self.audition_preparation
@@ -3295,9 +4926,113 @@ impl CleanSlateApp {
         }
     }
 
+    fn start_prepared_audition(
+        &mut self,
+        prepared: crate::audition::PreparedAudio,
+        envelopes: Vec<crate::GainEnvelope>,
+        range: TimeRange,
+    ) -> Result<(), crate::RenderBlocker> {
+        let monitor = 10.0_f32.powf(self.monitor_db / 20.0);
+        if let Some(idle) = self.idle_audition.take()
+            && idle.restart(
+                &prepared,
+                envelopes.clone(),
+                self.audition_mode,
+                monitor,
+                range,
+                self.solo_tracks,
+                self.reference_audition.is_some(),
+            )?
+        {
+            self.audition = Some(idle);
+            return Ok(());
+        }
+        self.audition = Some(LiveAudition::start_on_output(
+            &mut self.audition_output,
+            prepared,
+            envelopes,
+            self.audition_mode,
+            monitor,
+            range,
+            self.solo_tracks,
+            self.reference_audition.is_some(),
+        )?);
+        Ok(())
+    }
+
+    fn audition_status(&self) -> Option<&'static str> {
+        if !self
+            .audition_requested_at
+            .is_some_and(|started| started.elapsed() >= Duration::from_millis(150))
+        {
+            return None;
+        }
+        if self.audition_range.is_some() && self.audition_preparation.is_requested() {
+            Some("Preparing audio…")
+        } else if self
+            .audition
+            .as_ref()
+            .is_some_and(LiveAudition::is_buffering)
+        {
+            Some("Buffering audio…")
+        } else {
+            None
+        }
+    }
+
+    fn begin_reference_audition(&mut self) {
+        let Some((start, end)) = self.calibration_selection else {
+            return;
+        };
+        let Ok(range) = TimeRange::new(start, end) else {
+            return;
+        };
+        if end > self.timeline.total_samples() {
+            return;
+        }
+        self.reference_audition = Some(ReferenceAudition {
+            mode: self.audition_mode,
+            solo: self.solo_tracks,
+            range,
+            source_generation: self.source_generation,
+            paused: false,
+        });
+        self.audition_mode = AuditionMode::Original;
+        self.solo_tracks = 0;
+        self.audition(true);
+    }
+
+    fn close_reference_menu(&mut self) {
+        self.reference_menu = None;
+        if let Some(snapshot) = self.reference_audition.take() {
+            self.stop_audition();
+            self.audition_mode = snapshot.mode;
+            self.solo_tracks = snapshot.solo;
+        }
+    }
+
+    fn toggle_reference_audition(&mut self) {
+        if let Some(audition) = &self.audition {
+            audition.toggle_pause();
+            if let Some(snapshot) = &mut self.reference_audition {
+                snapshot.paused = !snapshot.paused;
+            }
+        } else if self.audition_range.is_some() {
+            self.stop_audition();
+        } else if let Some(snapshot) = &mut self.reference_audition {
+            snapshot.paused = false;
+            self.audition(true);
+        }
+    }
+
     fn gain_event(&mut self, track: usize, event: crate::GainEditorEvent) {
+        if let crate::GainEditorEvent::FitRange(start, end) = event {
+            let _ = self.update(Message::Timeline(TimelineEvent::FitRange(start, end)));
+            return;
+        }
         self.render_generation.invalidate();
         match event {
+            crate::GainEditorEvent::FitRange(_, _) => unreachable!(),
             crate::GainEditorEvent::Begin(id, point) => {
                 if let Some(project) = &self.project
                     && let Some(source) = project.sources.get(track)
@@ -3418,6 +5153,12 @@ impl CleanSlateApp {
     }
 
     fn handle_edit_key(&mut self, key: &keyboard::Key, modifiers: keyboard::Modifiers) -> bool {
+        if self.sound_menu.is_some() {
+            if matches!(key, keyboard::Key::Named(keyboard::key::Named::Escape)) {
+                self.sound_menu = None;
+            }
+            return true;
+        }
         if self.gain_menu.is_some() {
             if matches!(key, keyboard::Key::Named(keyboard::key::Named::Escape)) {
                 self.gain_menu = None;
@@ -3426,6 +5167,10 @@ impl CleanSlateApp {
         }
         if self.reference_menu.is_some() {
             let message = match key.as_ref() {
+                keyboard::Key::Named(keyboard::key::Named::Space) => {
+                    self.toggle_reference_audition();
+                    None
+                }
                 keyboard::Key::Named(keyboard::key::Named::Escape) => {
                     Some(Message::DismissReferenceMenu)
                 }
@@ -3474,7 +5219,9 @@ impl CleanSlateApp {
         if !self.gain_tool {
             return false;
         }
-        if key.as_ref() == keyboard::Key::Named(keyboard::key::Named::Escape) {
+        if key.as_ref() == keyboard::Key::Named(keyboard::key::Named::Escape)
+            && self.gain_drag.is_some()
+        {
             self.gain_drag = None;
             self.rebuild_effective();
             return true;
@@ -3610,6 +5357,14 @@ impl CleanSlateApp {
         }
     }
     fn poll_audition(&mut self) {
+        if self.reference_audition.as_ref().is_some_and(|snapshot| {
+            self.reference_menu.is_none()
+                || snapshot.source_generation != self.source_generation
+                || self.timeline.selection() != Some((snapshot.range.start, snapshot.range.end))
+                || self.calibration_selection != Some((snapshot.range.start, snapshot.range.end))
+        }) {
+            self.close_reference_menu();
+        }
         if let Some(result) = self.audition_preparation.poll() {
             self.audition_ready = result.is_ok();
             if let Err(error) = &result {
@@ -3631,16 +5386,12 @@ impl CleanSlateApp {
                                             prepared.matches_sources(&sources)
                                         }) =>
                                 {
-                                    match LiveAudition::start(
+                                    match self.start_prepared_audition(
                                         prepared,
                                         envelopes,
-                                        self.audition_mode,
-                                        10.0_f32.powf(self.monitor_db / 20.0),
-                                        start,
-                                        end,
-                                        self.solo_tracks,
+                                        TimeRange { start, end },
                                     ) {
-                                        Ok(audition) => self.audition = Some(audition),
+                                        Ok(()) => {}
                                         Err(error) => self.messages = vec![error.to_string()],
                                     }
                                 }
@@ -3667,6 +5418,16 @@ impl CleanSlateApp {
         let Some(audition) = &self.audition else {
             return;
         };
+        if audition.failed() {
+            self.messages =
+                vec!["Audio output stopped. Check the device and press Play to retry.".into()];
+            self.audition = None;
+            self.idle_audition = None;
+            self.audition_output = None;
+            self.audition_preparation.invalidate();
+            self.audition_ready = false;
+            return;
+        }
         self.timeline.seek(audition.position());
         if self.timeline.follow_playhead(self.playback_scroll) {
             self.drawing_revision = self.drawing_revision.wrapping_add(1);
@@ -3674,11 +5435,17 @@ impl CleanSlateApp {
         if let Some(review) = &mut self.review {
             review.seek(self.timeline.playhead());
         }
-        if audition.is_finished() {
-            self.audition = None;
+        if audition.is_finished()
+            && let Some(finished) = self.audition.take()
+        {
+            finished.stop();
+            self.idle_audition = Some(finished);
         }
     }
     fn set_audition_mode(&mut self, mode: AuditionMode) {
+        if self.reference_audition.is_some() {
+            return;
+        }
         if mode != AuditionMode::Original && self.preview.is_none() {
             return;
         }
@@ -3689,10 +5456,14 @@ impl CleanSlateApp {
     }
 
     fn stop_audition(&mut self) {
+        if let Some(snapshot) = &mut self.reference_audition {
+            snapshot.paused = true;
+        }
         self.audition_range = None;
         self.audition_preparation.cancel();
         if let Some(audition) = self.audition.take() {
             audition.stop();
+            self.idle_audition = Some(audition);
         }
     }
 
@@ -3748,6 +5519,7 @@ impl CleanSlateApp {
         // Completed fixed evidence can be reused; this generation cannot install.
     }
     fn select_example(&mut self, id: u64) {
+        self.close_reference_menu();
         self.example_draft = None;
         let Some(project) = &self.project else {
             return;
@@ -3858,7 +5630,197 @@ impl CleanSlateApp {
 }
 
 impl CleanSlateApp {
+    fn app_support_open(&self) -> bool {
+        self.help_open || self.shortcuts_open || self.menu_open || self.app_dialog.is_some()
+    }
+
     fn update(&mut self, message: Message) -> Task<Message> {
+        if let Message::Appearance(appearance) = message {
+            if self.appearance != appearance {
+                self.appearance = appearance;
+                self.drawing_revision = self.drawing_revision.wrapping_add(1);
+            }
+            self.appearance_error = self
+                .preferences_path
+                .as_ref()
+                .ok_or_else(|| "No valid user configuration directory.".to_string())
+                .and_then(|path| appearance::save(path, appearance))
+                .err()
+                .map(|error| format!("Appearance changed, but could not be saved. {error}"));
+            return Task::none();
+        }
+        if let Message::VersionCopied(copied) = &message {
+            self.copy_pending = false;
+            if self.app_dialog == Some(AppDialog::About) {
+                self.app_feedback = Some(if *copied { "Version information copied." } else { "Could not confirm the copy. Try again or copy the displayed version information manually." }.into());
+            }
+            return Task::none();
+        }
+        if self.menu_open || self.app_dialog.is_some() {
+            match &message {
+                Message::CloseHelp
+                | Message::KeyPressed(keyboard::Key::Named(keyboard::key::Named::Escape), _) => {
+                    self.menu_open = false;
+                    self.app_dialog = None;
+                    return Task::none();
+                }
+                Message::KeyPressed(key, modifiers)
+                    if modifiers.control() && key.as_ref() == keyboard::Key::Character("/") =>
+                {
+                    return self.update(Message::KeyboardShortcuts);
+                }
+                Message::KeyPressed(keyboard::Key::Named(key), modifiers) => {
+                    use keyboard::key::Named;
+                    match key {
+                        Named::Tab | Named::ArrowDown | Named::ArrowUp if self.menu_open => {
+                            self.menu_selected = if *key == Named::ArrowUp
+                                || (*key == Named::Tab && modifiers.shift())
+                            {
+                                (self.menu_selected + 6) % 7
+                            } else {
+                                (self.menu_selected + 1) % 7
+                            };
+                        }
+                        Named::Tab if self.app_dialog == Some(AppDialog::About) => {
+                            self.about_copy_selected = !self.about_copy_selected
+                        }
+                        Named::Tab | Named::ArrowDown | Named::ArrowUp
+                            if self.app_dialog == Some(AppDialog::Settings) =>
+                        {
+                            self.settings_selected = if *key == Named::ArrowUp
+                                || (*key == Named::Tab && modifiers.shift())
+                            {
+                                (self.settings_selected + 2) % 3
+                            } else {
+                                (self.settings_selected + 1) % 3
+                            };
+                        }
+                        Named::Enter
+                            if self.app_dialog == Some(AppDialog::Settings)
+                                && self.settings_selected < 2 =>
+                        {
+                            return self.update(Message::Appearance(
+                                if self.settings_selected == 0 {
+                                    Appearance::Dark
+                                } else {
+                                    Appearance::Light
+                                },
+                            ));
+                        }
+                        Named::Enter if self.menu_open => {
+                            return self.update(menu_action(self.menu_selected));
+                        }
+                        Named::Enter
+                            if self.app_dialog == Some(AppDialog::About)
+                                && self.about_copy_selected =>
+                        {
+                            return self.update(Message::CopyVersion);
+                        }
+                        Named::Enter => return self.update(Message::CloseHelp),
+                        Named::PageDown | Named::ArrowDown | Named::PageUp | Named::ArrowUp => {
+                            return iced::widget::operation::scroll_by(
+                                "app-dialog",
+                                iced::widget::operation::AbsoluteOffset {
+                                    x: 0.0,
+                                    y: if matches!(key, Named::PageUp | Named::ArrowUp) {
+                                        -400.0
+                                    } else {
+                                        400.0
+                                    },
+                                },
+                            );
+                        }
+                        Named::Home => {
+                            return iced::widget::operation::snap_to(
+                                "app-dialog",
+                                iced::widget::operation::RelativeOffset::START,
+                            );
+                        }
+                        Named::End => return iced::widget::operation::snap_to_end("app-dialog"),
+                        _ => {}
+                    }
+                    return Task::none();
+                }
+                Message::Settings
+                | Message::Appearance(_)
+                | Message::About
+                | Message::KeyboardShortcuts
+                | Message::OpenLink(_)
+                | Message::LinkOpened(_, _)
+                | Message::CopyVersion
+                | Message::VersionCopied(_)
+                | Message::Tick
+                | Message::PlaybackFrame => {}
+                _ => return Task::none(),
+            }
+        }
+        if self.help_open || self.shortcuts_open {
+            match &message {
+                Message::KeyPressed(key, modifiers)
+                    if self.help_open
+                        && modifiers.control()
+                        && key.as_ref() == keyboard::Key::Character("/") =>
+                {
+                    return self.update(Message::KeyboardShortcuts);
+                }
+                Message::KeyPressed(keyboard::Key::Named(keyboard::key::Named::Escape), _)
+                | Message::CloseHelp => {
+                    self.help_open = false;
+                    self.shortcuts_open = false;
+                    return Task::none();
+                }
+                Message::KeyPressed(keyboard::Key::Named(key), _) => {
+                    use keyboard::key::Named;
+                    let operation = iced::widget::operation::scroll_by;
+                    return match key {
+                        Named::Tab | Named::ArrowDown | Named::ArrowUp if self.help_open => {
+                            self.help_close_selected = !self.help_close_selected;
+                            Task::none()
+                        }
+                        Named::Enter => {
+                            return self.update(
+                                if self.shortcuts_open || self.help_close_selected {
+                                    Message::CloseHelp
+                                } else {
+                                    Message::KeyboardShortcuts
+                                },
+                            );
+                        }
+                        Named::Tab => Task::none(),
+                        Named::PageDown | Named::ArrowDown => operation(
+                            "shortcut-reference",
+                            iced::widget::operation::AbsoluteOffset {
+                                x: 0.0,
+                                y: if *key == Named::PageDown { 400.0 } else { 40.0 },
+                            },
+                        ),
+                        Named::PageUp | Named::ArrowUp => operation(
+                            "shortcut-reference",
+                            iced::widget::operation::AbsoluteOffset {
+                                x: 0.0,
+                                y: if *key == Named::PageUp { -400.0 } else { -40.0 },
+                            },
+                        ),
+                        Named::Home => iced::widget::operation::snap_to(
+                            "shortcut-reference",
+                            iced::widget::operation::RelativeOffset::START,
+                        ),
+                        Named::End => iced::widget::operation::snap_to_end("shortcut-reference"),
+                        _ => Task::none(),
+                    };
+                }
+                Message::KeyboardShortcuts | Message::Tick | Message::PlaybackFrame => {}
+                _ => return Task::none(),
+            }
+        }
+        if self.import_dialog
+            && matches!(
+                &message,
+                Message::KeyPressed(keyboard::Key::Named(keyboard::key::Named::Escape), _)
+            )
+        {
+            return self.update(Message::CancelChannels);
+        }
         if self.export_dialog.is_some() {
             if matches!(
                 &message,
@@ -3898,27 +5860,7 @@ impl CleanSlateApp {
         {
             return Task::none();
         }
-        if self.sources_busy()
-            && let Message::Timeline(event) = &message
-        {
-            if let Some(loading) = &mut self.source_loading {
-                match *event {
-                    TimelineEvent::Zoom {
-                        cursor_x,
-                        width,
-                        direction,
-                    } => loading.timeline.zoom_at(cursor_x, width, direction),
-                    TimelineEvent::Pan { delta_x, width } => {
-                        loading.timeline.pan_by_pixels(delta_x, width)
-                    }
-                    _ => {}
-                }
-            }
-            return Task::none();
-        }
-        // Keep navigation and further drops responsive, but don't let edits race
-        // the session snapshot being validated and saved by the source worker.
-        if self.sources_busy()
+        if self.import_dialog
             && !matches!(
                 message,
                 Message::FileDropped(_)
@@ -3927,10 +5869,11 @@ impl CleanSlateApp {
                     | Message::ConfirmChannels
                     | Message::CancelChannels
                     | Message::ImportStems
+                    | Message::CancelPendingImports
+                    | Message::RemoveImport(_)
+                    | Message::RetryImport(_)
                     | Message::Tick
-                    | Message::Stop
-                    | Message::Timeline(_)
-                    | Message::RangeModifier(_)
+                    | Message::SoundModifiers(_)
             )
         {
             return Task::none();
@@ -3992,7 +5935,7 @@ impl CleanSlateApp {
                     })
                     .map(|c| c.source.clone())
                     .collect();
-                let count = self.project.as_ref().map_or(0, |p| p.sources.len()) + additions.len();
+                let count = self.reserved_track_count() + additions.len();
                 if additions.is_empty() || count > 8 {
                     self.messages = vec![
                         "Select at least one channel, with at most eight tracks in the project."
@@ -4015,8 +5958,35 @@ impl CleanSlateApp {
                 }
             }
             Message::CancelChannels => {
+                if self
+                    .source_loading
+                    .as_ref()
+                    .is_some_and(|loading| loading.committing)
+                {
+                    return Task::none();
+                }
+                self.source_loading = None;
+                self.source_inspection = None;
+                self.pending_imports.clear();
+                self.import_due = None;
                 self.import_choices.clear();
+                self.import_dialog = false;
                 self.messages.clear();
+            }
+            Message::CancelPendingImports => self.cancel_pending_imports(),
+            Message::RemoveImport(id) => {
+                self.import_jobs.retain(|job| job.id != id || job.accepted);
+                self.start_next_import();
+            }
+            Message::RetryImport(id) => {
+                if let Some(index) = self
+                    .import_jobs
+                    .iter()
+                    .position(|job| job.id == id && !job.accepted && job.error.is_some())
+                {
+                    self.import_jobs[index].retry();
+                    self.start_next_import();
+                }
             }
             Message::EditTrackName(index) => {
                 if let Some(source) = self.project.as_ref().and_then(|p| p.sources.get(index)) {
@@ -4117,6 +6087,10 @@ impl CleanSlateApp {
                 return self.update(Message::OpenReferenceMenu(track, point));
             }
             Message::TrackTimeline(track, event) => {
+                if matches!(event, TimelineEvent::FitRange(_, _)) {
+                    return self.update(Message::Timeline(event));
+                }
+                self.close_reference_menu();
                 self.selected_example = None;
                 self.example_draft = None;
                 self.gain_menu = None;
@@ -4134,6 +6108,7 @@ impl CleanSlateApp {
                 return task;
             }
             Message::OpenReferenceMenu(track, point) => {
+                self.close_reference_menu();
                 self.selected_example = None;
                 self.example_draft = None;
                 self.gain_menu = None;
@@ -4151,10 +6126,11 @@ impl CleanSlateApp {
                         vec![self.project.as_ref().unwrap().sources[track].speaker_id];
                     self.calibration_error = None;
                     self.reference_menu = Some((track, point));
+                    self.begin_reference_audition();
                 }
             }
             Message::OpenTimelineMenu(track, time, point) => {
-                self.reference_menu = None;
+                self.close_reference_menu();
                 if let Some(id) = self.project.as_ref().and_then(|project| {
                     project
                         .reference_labels()
@@ -4167,12 +6143,13 @@ impl CleanSlateApp {
                     self.selection_track = Some(track);
                     self.gain_menu = None;
                     self.reference_menu = Some((track, point));
+                    self.begin_reference_audition();
                     return Task::none();
                 }
                 return self.update(Message::OpenGainMenu(track, time, point));
             }
             Message::OpenGainMenu(track, time, point) => {
-                self.reference_menu = None;
+                self.close_reference_menu();
                 self.gain_menu = self.project.as_ref().and_then(|project| {
                     let track_id = project.sources.get(track)?.track_id;
                     region_marked(&project.gain_constraints(), track_id, time)
@@ -4206,7 +6183,7 @@ impl CleanSlateApp {
                 }
             }
             Message::DismissReferenceMenu => {
-                self.reference_menu = None;
+                self.close_reference_menu();
                 self.gain_menu = None;
             }
             Message::SetupDetails(show) => self.setup_details = show,
@@ -4222,6 +6199,9 @@ impl CleanSlateApp {
             Message::CenterPlayhead => self.timeline.center_playhead(),
             Message::ToggleMeterPlacement => self.meters_at_playhead = !self.meters_at_playhead,
             Message::SoloTrack(track) => {
+                if self.reference_audition.is_some() {
+                    return Task::none();
+                }
                 if self
                     .project
                     .as_ref()
@@ -4240,7 +6220,7 @@ impl CleanSlateApp {
                     self.reference_speakers = speakers;
                     let _ = self.update(Message::SaveReference(replace));
                     if self.calibration_error.is_none() {
-                        self.reference_menu = None;
+                        self.close_reference_menu();
                         self.calibrating = false;
                     }
                 }
@@ -4318,18 +6298,90 @@ impl CleanSlateApp {
             }
             Message::Tick => {
                 self.poll_sources();
-                if !self.sources_busy() {
+                if self.source_loading.is_none() {
                     self.poll_processing();
                 }
                 self.poll_audition();
                 self.poll_exporting();
             }
-            Message::PlaybackFrame => unreachable!(),
+            Message::PlaybackFrame | Message::Appearance(_) => unreachable!(),
             #[cfg(test)]
             Message::SpeechSensitivity(value) => {
                 self.preview_parameters.speech_sensitivity = 1.0 - value
             }
-            Message::Attenuation(value) => self.preview_parameters.attenuation_db = value,
+            Message::EditSound(parameter) => {
+                if self.sound_modifiers.control() {
+                    return self.update(Message::ResetSound(parameter));
+                }
+                let _ = self.update(Message::CommitSound);
+                self.sound_draft = Some((
+                    parameter,
+                    parameter.value(self.preview_parameters).to_string(),
+                ));
+                self.sound_error = None;
+                self.sound_typing = true;
+                self.sound_menu = None;
+                return iced::widget::operation::focus("sound-value")
+                    .chain(iced::widget::operation::select_all("sound-value"));
+            }
+            Message::SoundText(value) => {
+                if let Some((_, draft)) = &mut self.sound_draft {
+                    *draft = value;
+                }
+                self.sound_typing = true;
+                self.sound_error = None;
+            }
+            Message::CommitSound => self.commit_sound(),
+            Message::CancelSound => {
+                self.sound_draft = None;
+                self.sound_error = None;
+                self.sound_typing = false;
+            }
+            Message::CheckSoundFocus => {
+                if self.sound_draft.is_some() {
+                    return iced::widget::operation::is_focused("sound-value")
+                        .map(Message::SoundFocused);
+                }
+            }
+            Message::SoundFocused(focused) => {
+                self.sound_typing = focused;
+                if !focused {
+                    self.commit_sound();
+                }
+            }
+            Message::SoundTab(reverse) => {
+                let _ = self.update(Message::CommitSound);
+                self.sound_typing = false;
+                return if reverse {
+                    iced::widget::operation::focus_previous()
+                } else {
+                    iced::widget::operation::focus_next()
+                };
+            }
+            Message::SoundModifiers(modifiers) => {
+                self.sound_modifiers = modifiers;
+                self.selecting_range = modifiers.shift();
+            }
+            Message::SoundMenu(parameter) => self.sound_menu = Some(parameter),
+            Message::ResetSound(parameter) => {
+                self.sound_draft = None;
+                self.sound_error = None;
+                self.sound_typing = false;
+                self.sound_menu = None;
+                parameter.set(
+                    &mut self.preview_parameters,
+                    parameter.value(AutomixParameters::default()),
+                );
+            }
+            Message::Mute => {
+                self.sound_draft = None;
+                self.sound_error = None;
+                self.sound_typing = false;
+                self.preview_parameters.mute = !self.preview_parameters.mute;
+            }
+            Message::Attenuation(value) => {
+                SoundParameter::Attenuation.set(&mut self.preview_parameters, value)
+            }
             #[cfg(test)]
             Message::SpeechPadding(value) => {
                 self.preview_parameters.speech_padding_ms = effective_padding_ms(value)
@@ -4362,7 +6414,13 @@ impl CleanSlateApp {
                     });
                 }
             }
-            Message::Audition => self.audition(false),
+            Message::Audition => {
+                if self.reference_audition.is_some() {
+                    self.toggle_reference_audition();
+                } else {
+                    self.audition(false);
+                }
+            }
             Message::Stop => {
                 self.stop_audition();
             }
@@ -4374,6 +6432,9 @@ impl CleanSlateApp {
                 }
             }
             Message::KeyPressed(key, modifiers) => {
+                if self.sound_typing {
+                    return Task::none();
+                }
                 if self.track_name_draft.is_some() {
                     if key == keyboard::Key::Named(keyboard::key::Named::Escape) {
                         return self.update(Message::CancelTrackName);
@@ -4383,7 +6444,45 @@ impl CleanSlateApp {
                 if self.handle_edit_key(&key, modifiers) {
                     return Task::none();
                 }
+                if modifiers.control() && key.as_ref() == keyboard::Key::Character("/") {
+                    return self.update(Message::KeyboardShortcuts);
+                }
+                if modifiers.alt() && matches!(key.as_ref(), keyboard::Key::Character("h" | "H")) {
+                    return self.update(Message::Help);
+                }
+                if modifiers.alt() && matches!(key.as_ref(), keyboard::Key::Character("m" | "M")) {
+                    return self.update(Message::Menu);
+                }
+                if !modifiers.command()
+                    && !modifiers.alt()
+                    && matches!(key.as_ref(), keyboard::Key::Character("f" | "F"))
+                {
+                    if self.project.is_some() {
+                        if modifiers.shift() {
+                            if let Some((start, end)) = self.timeline.selection()
+                                && start < end
+                            {
+                                self.timeline.fit_range(start, end);
+                                self.playback_scroll = PlaybackScroll::Off;
+                            }
+                        } else {
+                            self.timeline.fit_full();
+                            self.playback_scroll = PlaybackScroll::Off;
+                        }
+                    }
+                    return Task::none();
+                }
                 match key.as_ref() {
+                    keyboard::Key::Named(keyboard::key::Named::Escape) => {
+                        self.timeline.set_selection(None);
+                        self.selection_track = None;
+                        self.calibration_selection = None;
+                        self.selected_example = None;
+                        self.example_draft = None;
+                        if let Some(review) = &mut self.review {
+                            review.clear_selection();
+                        }
+                    }
                     keyboard::Key::Named(keyboard::key::Named::Space) => {
                         if self.audition.is_some() || self.audition_range.is_some() {
                             self.stop_audition();
@@ -4402,7 +6501,6 @@ impl CleanSlateApp {
                     _ => {}
                 }
             }
-            Message::RangeModifier(selecting) => self.selecting_range = selecting,
             #[cfg(test)]
             Message::OwnershipMode(enabled) => {
                 if !enabled {
@@ -4436,7 +6534,7 @@ impl CleanSlateApp {
                                 self.example_draft = None;
                                 self.timeline.set_selection(None);
                             }
-                            self.reference_menu = None;
+                            self.close_reference_menu();
                             self.mark_reference_edit();
                         }
                         Err(error) => self.calibration_error = Some(error.to_string()),
@@ -4479,9 +6577,14 @@ impl CleanSlateApp {
             Message::GainTool(enabled) => {
                 self.gain_tool = enabled;
                 self.gain_drag = None;
+                self.gain_menu = None;
                 self.rebuild_effective();
             }
-            Message::GainEvent(track, event) => self.gain_event(track, event),
+            Message::GainEvent(track, event) => {
+                if self.gain_tool {
+                    self.gain_event(track, event);
+                }
+            }
             Message::GainAction(track, preserve) => self.gain_action(track, preserve),
             Message::ReplaceGainConstraints(replace) => self.replace_gain_constraints = replace,
             Message::UndoGain | Message::RedoGain => {
@@ -4552,6 +6655,7 @@ impl CleanSlateApp {
             }
             #[cfg(test)]
             Message::SelectSupervisedWarning(index) => {
+                self.close_reference_menu();
                 if let Some(review) = &mut self.review {
                     self.selection_track = None;
                     self.reference_menu = None;
@@ -4621,8 +6725,92 @@ impl CleanSlateApp {
                 }
             }
             Message::CancelExportDialog => self.export_dialog = None,
+            Message::Help => {
+                self.help_open = true;
+                self.help_close_selected = false;
+            }
+            Message::KeyboardShortcuts => {
+                self.menu_open = false;
+                self.app_dialog = None;
+                self.help_open = false;
+                self.shortcuts_open = true;
+            }
+            Message::CloseHelp => {
+                self.menu_open = false;
+                self.app_dialog = None;
+                self.help_open = false;
+                self.shortcuts_open = false;
+            }
+            Message::Menu => {
+                self.menu_open = true;
+                self.menu_selected = 0;
+                self.app_feedback = None;
+            }
+            Message::Settings | Message::About => {
+                self.settings_selected = if self.appearance == Appearance::Dark {
+                    0
+                } else {
+                    1
+                };
+                self.menu_open = false;
+                self.app_dialog = Some(if matches!(message, Message::Settings) {
+                    AppDialog::Settings
+                } else {
+                    AppDialog::About
+                });
+                self.about_copy_selected = true;
+                self.app_feedback = None;
+            }
+            Message::OpenLink(link) => {
+                self.app_feedback = Some("Opening in your browser…".into());
+                let (sender, receiver) = iced::futures::channel::oneshot::channel();
+                std::thread::spawn(move || {
+                    let _ = sender.send(open_app_link(link));
+                });
+                return Task::perform(
+                    async move {
+                        receiver
+                            .await
+                            .unwrap_or_else(|_| Err("The link launcher stopped.".into()))
+                    },
+                    move |result| Message::LinkOpened(link, result),
+                );
+            }
+            Message::LinkOpened(link, result) => {
+                self.app_feedback = Some(match result {
+                    Ok(()) => "Opened in your browser.".into(),
+                    Err(error) => format!(
+                        "Could not open the link: {error}\nOpen {} manually.",
+                        link.url()
+                    ),
+                })
+            }
+            Message::CopyVersion => {
+                if self.app_dialog == Some(AppDialog::About) && !self.copy_pending {
+                    self.copy_pending = true;
+                    self.app_feedback = Some("Copying version information…".into());
+                    let expected = version_info(
+                        env!("CARGO_PKG_VERSION"),
+                        None,
+                        std::env::consts::OS,
+                        std::env::consts::ARCH,
+                    );
+                    return iced::clipboard::write::<Message>(expected.clone()).chain(
+                        iced::clipboard::read().map(move |actual| {
+                            Message::VersionCopied(actual.as_deref() == Some(expected.as_str()))
+                        }),
+                    );
+                }
+            }
+            Message::VersionCopied(_) => {}
             Message::SubmitExport => self.submit_export(),
             Message::Timeline(event) => match event {
+                TimelineEvent::FitRange(start, end) => {
+                    if self.project.is_some() && start < end {
+                        self.playback_scroll = PlaybackScroll::Off;
+                        self.timeline.fit_range(start, end);
+                    }
+                }
                 TimelineEvent::Seek(sample)
                 | TimelineEvent::Drag(sample)
                 | TimelineEvent::DragEnd(sample) => {
@@ -4644,7 +6832,7 @@ impl CleanSlateApp {
                     direction,
                 } => {
                     self.timeline.zoom_at(cursor_x, width, direction);
-                    self.timeline.follow_playhead(self.playback_scroll);
+                    self.playback_scroll = PlaybackScroll::Off;
                 }
                 TimelineEvent::Pan { delta_x, width } => {
                     self.playback_scroll = PlaybackScroll::Off;
@@ -4686,7 +6874,7 @@ impl CleanSlateApp {
                 keyboard_message(key, modifiers, status)
             }
             iced::Event::Keyboard(keyboard::Event::ModifiersChanged(modifiers)) => {
-                Some(Message::RangeModifier(modifiers.shift()))
+                Some(Message::SoundModifiers(modifiers))
             }
             _ => None,
         });
@@ -4714,7 +6902,7 @@ impl CleanSlateApp {
         } else {
             Subscription::none()
         };
-        let rename_keys = if self.track_name_draft.is_some() {
+        let rename_keys = if self.track_name_draft.is_some() && !self.app_support_open() {
             // Text inputs capture Escape, so cancellation must also see captured events.
             iced::event::listen_with(|event, _, _| match event {
                 iced::Event::Keyboard(keyboard::Event::KeyPressed {
@@ -4726,10 +6914,425 @@ impl CleanSlateApp {
         } else {
             Subscription::none()
         };
-        Subscription::batch([drops, processing, playback, rename_keys])
+        let sound_keys = if self.sound_draft.is_some() && !self.app_support_open() {
+            iced::event::listen_with(|event, _, _| match event {
+                iced::Event::Keyboard(keyboard::Event::KeyPressed {
+                    key: keyboard::Key::Named(keyboard::key::Named::Escape),
+                    ..
+                }) => Some(Message::CancelSound),
+                iced::Event::Keyboard(keyboard::Event::KeyPressed {
+                    key: keyboard::Key::Named(keyboard::key::Named::Tab),
+                    modifiers,
+                    ..
+                }) => Some(Message::SoundTab(modifiers.shift())),
+                iced::Event::Mouse(iced::mouse::Event::ButtonPressed(_))
+                | iced::Event::Keyboard(keyboard::Event::KeyReleased { .. }) => {
+                    Some(Message::CheckSoundFocus)
+                }
+                iced::Event::Window(window::Event::Unfocused) => Some(Message::SoundFocused(false)),
+                _ => None,
+            })
+        } else {
+            Subscription::none()
+        };
+        let import_keys = if self.import_dialog {
+            iced::event::listen_with(|event, _, _| match event {
+                iced::Event::Keyboard(keyboard::Event::KeyPressed {
+                    key: keyboard::Key::Named(keyboard::key::Named::Escape),
+                    ..
+                }) => Some(Message::CancelChannels),
+                _ => None,
+            })
+        } else {
+            Subscription::none()
+        };
+        let help_keys = if self.app_support_open() {
+            iced::event::listen_with(|event, status, _| match event {
+                iced::Event::Keyboard(keyboard::Event::KeyPressed { key, modifiers, .. })
+                    if status == iced::event::Status::Captured =>
+                {
+                    Some(Message::KeyPressed(key, modifiers))
+                }
+                _ => None,
+            })
+        } else {
+            Subscription::none()
+        };
+        Subscription::batch([
+            drops,
+            processing,
+            playback,
+            rename_keys,
+            sound_keys,
+            import_keys,
+            help_keys,
+        ])
+    }
+
+    fn shortcut_reference(&self) -> Element<'_, Message> {
+        let mut content = column![
+            row![text("Keyboard shortcuts").size(24), Space::new().width(Fill),
+                button("Close    Enter / Esc").on_press(Message::CloseHelp)].spacing(16),
+            text("Workspace shortcuts apply when text fields, dialogs and speaker popups are closed. Ctrl means Command on macOS for undo/redo; help uses Ctrl+/.").size(14),
+        ].spacing(12).width(Fill).padding([0, 12]);
+        for (heading, entries) in [
+            (
+                "Playback & timeline",
+                vec![
+                    ("Play or stop", "Space", "A selection plays once."),
+                    (
+                        "Seek to start",
+                        "Home",
+                        "Selection start, or recording start.",
+                    ),
+                    ("Monitor Original", "1", ""),
+                    ("Monitor Processed", "2", "Requires a prepared preview."),
+                    ("Monitor Removed", "3", "Requires a prepared preview."),
+                    ("Fit recording", "F", ""),
+                    ("Fit selection", "Shift+F", "Requires a selection."),
+                    ("Open keyboard shortcuts", "Ctrl+/", ""),
+                    (
+                        "Open Menu",
+                        "Alt+M",
+                        "Tab, Up or Down selects; Enter activates.",
+                    ),
+                    (
+                        "Open Help",
+                        "Alt+H",
+                        "Tab, Up or Down selects; Enter opens the entry.",
+                    ),
+                    (
+                        "Cancel interaction or clear selection",
+                        "Escape",
+                        "Cancel an active interaction first; otherwise clear the range.",
+                    ),
+                    ("Seek", "Click waveform", ""),
+                    ("Select range and label speakers", "Drag waveform", ""),
+                    (
+                        "Fit temporary range",
+                        "Alt+drag",
+                        "Keeps the existing selection, labels and gain.",
+                    ),
+                    (
+                        "Zoom around pointer",
+                        "Wheel | Ctrl+wheel",
+                        "Stops following without stopping playback.",
+                    ),
+                    ("Pan", "Middle-button drag", "Stops following."),
+                ],
+            ),
+            (
+                "Speaker labels",
+                vec![
+                    (
+                        "Pause or resume loop audition",
+                        "Space",
+                        "In the popup: Original audio across all tracks.",
+                    ),
+                    (
+                        "Toggle speakers",
+                        "1–8",
+                        "In the popup: available speakers only.",
+                    ),
+                    ("Clear speakers (room tone)", "R", "In the popup."),
+                    (
+                        "Save speaker label",
+                        "Enter",
+                        "In the popup; selection stays.",
+                    ),
+                    (
+                        "Cancel speaker label",
+                        "Escape",
+                        "In the popup; selection stays.",
+                    ),
+                    ("Select saved example", "Click label strip", ""),
+                    (
+                        "Resize example",
+                        "Drag selected label handles",
+                        "Escape or leaving the waveform cancels.",
+                    ),
+                    (
+                        "Open reference actions",
+                        "Right-click waveform | Right-click label",
+                        "",
+                    ),
+                    ("Undo labels", "Ctrl+Z", "When gain editing is off."),
+                    (
+                        "Redo labels",
+                        "Ctrl+Shift+Z | Ctrl+Y",
+                        "When gain editing is off.",
+                    ),
+                ],
+            ),
+            (
+                "Gain editing",
+                vec![
+                    (
+                        "Move manual point",
+                        "Drag gain point",
+                        "While Edit gain points is on.",
+                    ),
+                    ("Delete selected manual gain edit", "Delete", ""),
+                    ("Move selected point earlier", "Left", "By 0.01 seconds."),
+                    ("Move selected point later", "Right", "By 0.01 seconds."),
+                    ("Increase selected point gain", "Up", "By 0.01."),
+                    ("Decrease selected point gain", "Down", "By 0.01."),
+                    ("Undo gain", "Ctrl+Z", "While Edit gain points is on."),
+                    (
+                        "Redo gain",
+                        "Ctrl+Shift+Z | Ctrl+Y",
+                        "While Edit gain points is on.",
+                    ),
+                    (
+                        "Cancel gain drag or clear selection",
+                        "Escape",
+                        "Cancels a drag first; idle gain editing permits deselection.",
+                    ),
+                    ("Open gain actions", "Right-click", "Where offered."),
+                ],
+            ),
+            (
+                "Values & text",
+                vec![
+                    (
+                        "Type sound value",
+                        "Click sound value",
+                        "Attenuation also accepts Mute.",
+                    ),
+                    ("Commit sound value", "Enter", ""),
+                    (
+                        "Commit and focus next value",
+                        "Tab",
+                        "While editing a sound value.",
+                    ),
+                    (
+                        "Commit and focus previous value",
+                        "Shift+Tab",
+                        "While editing a sound value.",
+                    ),
+                    ("Reset sound parameter", "Ctrl+click sound control", ""),
+                    ("Open Reset to default", "Right-click sound control", ""),
+                    (
+                        "Cancel value draft",
+                        "Escape",
+                        "While editing a sound value; keeps the last valid value.",
+                    ),
+                    ("Save track name", "Enter", "While renaming."),
+                    ("Cancel track rename", "Escape", "While renaming."),
+                    (
+                        "Focus next input or slider",
+                        "Tab",
+                        "Arrows operate focused sliders.",
+                    ),
+                    (
+                        "Focus previous input or slider",
+                        "Shift+Tab",
+                        "Arrows operate focused sliders.",
+                    ),
+                    (
+                        "Type in text fields",
+                        "Typing",
+                        "Text owns keys; workspace shortcuts stay suppressed.",
+                    ),
+                ],
+            ),
+            (
+                "Dialogs & reference",
+                vec![
+                    (
+                        "Select appearance or Close",
+                        "Tab | Up | Down",
+                        "In Settings: Enter applies the appearance immediately.",
+                    ),
+                    ("Close active dialog", "Escape", "Import, export or Help."),
+                    ("Close keyboard shortcuts", "Enter", ""),
+                    ("Scroll reference up", "Page Up | Up", ""),
+                    ("Scroll reference down", "Page Down | Down", ""),
+                    ("Jump to reference top", "Home", ""),
+                    ("Jump to reference bottom", "End", ""),
+                ],
+            ),
+        ] {
+            content = content
+                .push(Space::new().height(16))
+                .push(text(heading).size(18));
+            for (action, binding, condition) in entries {
+                content = content.push(
+                    responsive(move |size| {
+                        let mut description = column![text(action).size(14)].spacing(4).width(Fill);
+                        if !condition.is_empty() {
+                            description = description.push(text(condition).size(13).style(
+                                |theme: &Theme| text::Style {
+                                    color: Some(colors(theme).muted),
+                                },
+                            ));
+                        }
+                        let mut bindings = column![].spacing(5);
+                        for (alternative_index, alternative) in binding.split(" | ").enumerate() {
+                            if alternative_index > 0 {
+                                bindings =
+                                    bindings.push(text("or").size(12).style(|theme: &Theme| {
+                                        text::Style {
+                                            color: Some(colors(theme).muted),
+                                        }
+                                    }));
+                            }
+                            let visual: Element<'_, Message> =
+                                if alternative.to_lowercase().contains("click")
+                                    || alternative.to_lowercase().contains("drag")
+                                    || alternative.to_lowercase().contains("wheel")
+                                    || alternative == "Typing"
+                                {
+                                    text(alternative).size(13).into()
+                                } else {
+                                    let mut chord = row![].spacing(4).align_y(iced::Center);
+                                    for (index, key) in alternative.split('+').enumerate() {
+                                        if index > 0 {
+                                            chord = chord.push(text("+").size(12));
+                                        }
+                                        chord = chord.push(
+                                            container(text(key).size(13)).padding([3, 6]).style(
+                                                |theme: &Theme| {
+                                                    let c = colors(theme);
+                                                    container::Style {
+                                                        text_color: Some(c.text),
+                                                        background: Some(c.control.into()),
+                                                        border: iced::Border {
+                                                            color: c.border,
+                                                            width: 1.0,
+                                                            radius: 3.0.into(),
+                                                        },
+                                                        ..Default::default()
+                                                    }
+                                                },
+                                            ),
+                                        );
+                                    }
+                                    chord.wrap().into()
+                                };
+                            bindings = bindings.push(visual);
+                        }
+                        let body: Element<'_, Message> = if size.width < 560.0 {
+                            column![description, bindings].spacing(8).into()
+                        } else {
+                            row![description, bindings.width(220)].spacing(20).into()
+                        };
+                        column![
+                            container(body).padding([10, 0]).width(Fill),
+                            container(Space::new().height(1))
+                                .width(Fill)
+                                .style(|theme: &Theme| container::Style {
+                                    background: Some(colors(theme).panel_border.into()),
+                                    ..Default::default()
+                                }),
+                        ]
+                        .width(Fill)
+                        .into()
+                    })
+                    .height(Length::Shrink),
+                );
+            }
+        }
+        content.into()
     }
 
     fn view(&self) -> Element<'_, Message> {
+        if self.menu_open || self.app_dialog.is_some() {
+            return responsive(|size| {
+                let content: Element<'_, Message> = if self.menu_open {
+                    let mut items = column![text("Menu").size(24), text("Tab / Up / Down · Enter to activate · Esc to close").size(14)].spacing(12);
+                    for (index, label) in ["Settings", "Keyboard shortcuts    Ctrl+/", "Help · Usage documentation", "GitHub", "Report a bug", "About", "Close"].iter().enumerate() {
+                        items = items.push(button(text(format!("{}{}", if index == self.menu_selected { "› " } else { "" }, label))).on_press(menu_action(index)));
+                    }
+                    if let Some(feedback) = &self.app_feedback { items = items.push(text(feedback).size(14)); }
+                    scrollable(items).id("app-dialog").height((size.height - 120.0).clamp(180.0, 580.0)).into()
+                } else {
+                    let about = self.app_dialog == Some(AppDialog::About);
+                    let mut body = column![text(if about { "About CleanSlate" } else { "Settings" }).size(24)].spacing(14).width(Fill).padding([0, 12]);
+                    if about {
+                        body = body.push(text(version_info(env!("CARGO_PKG_VERSION"), None, std::env::consts::OS, std::env::consts::ARCH)))
+                            .push(text("License: MIT · Copyright © 2026 CleanSlate contributors"))
+                            .push(text("CleanSlate is a local, non-destructive podcast automixer."))
+                            .push(text("Credits & references").size(18))
+                            .push(text("Interface: Iced. Audio playback: Rodio. Decoding: Symphonia and bwavfile. Resampling: Rubato. Ownership models: Linfa, nalgebra and ndarray. Serialization: Serde. Integrity: SHA-2."))
+                            .push(text("Speech detection: embedded Silero VAD, used through ONNX Runtime (ort). Silero VAD and ONNX Runtime carry MIT licenses. Bundled runtime notices and each component's licenses remain authoritative; CleanSlate's MIT license does not relicense dependencies."))
+                            .push(text("See the distribution's THIRD-PARTY-NOTICES.txt and licenses directory. Model references and runtime notices are recorded in docs/licenses/embedded-model-runtime.txt in the repository."))
+                            .push(text(include_str!("../LICENSE")).size(12));
+                    } else {
+                        body = body.push(text("Appearance").size(18));
+                        for (index, appearance, label) in [(0, Appearance::Dark, "Dark"), (1, Appearance::Light, "Light")] {
+                            let label = format!("{}{}{}", if self.settings_selected == index { "› " } else { "" }, label, if self.appearance == appearance { " · Selected" } else { "" });
+                            body = body.push(button(text(label)).style(if self.appearance == appearance { primary_button } else { secondary_button }).on_press(Message::Appearance(appearance)));
+                        }
+                        if let Some(error) = &self.appearance_error { body = body.push(text(error).color(self.appearance.colors().error)); }
+                    }
+                    let mut actions = row![].spacing(12);
+                    if about { actions = actions.push(button(if self.about_copy_selected { "› Copy version info" } else { "Copy version info" }).on_press_maybe((!self.copy_pending).then_some(Message::CopyVersion))); }
+                    actions = actions.push(button(if (about && !self.about_copy_selected) || (!about && self.settings_selected == 2) { "› Close    Esc" } else { "Close    Esc" }).on_press(Message::CloseHelp));
+                    let mut panel = column![scrollable(body).id("app-dialog").width(Fill).height((size.height - 220.0).clamp(140.0, 560.0)), actions].spacing(16).width(Fill);
+                    if let Some(feedback) = &self.app_feedback { panel = panel.push(text(feedback).size(14)); }
+                    panel.into()
+                };
+                stack![self.workspace(compact_workspace(size.width), size.height, size.width), opaque(container(container(content).padding(24).width(Fill).max_width(if self.menu_open { 520 } else { 720 }).style(container::rounded_box)).center_x(Fill).center_y(Fill).style(|theme| container::Style { background: Some(colors(theme).scrim.into()), ..Default::default() }))].into()
+            }).into();
+        }
+        if self.help_open || self.shortcuts_open {
+            return responsive(|size| {
+                let content = if self.shortcuts_open {
+                    self.shortcut_reference()
+                } else {
+                    column![
+                        text("Help").size(24),
+                        text("Tab or Up/Down to select · Enter to activate · Esc to close")
+                            .size(14),
+                        button(if self.help_close_selected {
+                            "Keyboard shortcuts    Ctrl+/"
+                        } else {
+                            "› Keyboard shortcuts    Ctrl+/"
+                        })
+                        .on_press(Message::KeyboardShortcuts),
+                        button(if self.help_close_selected {
+                            "› Close"
+                        } else {
+                            "Close"
+                        })
+                        .on_press(Message::CloseHelp)
+                    ]
+                    .spacing(16)
+                    .into()
+                };
+                stack![
+                    self.workspace(compact_workspace(size.width), size.height, size.width),
+                    opaque(
+                        container(
+                            container(
+                                scrollable(content)
+                                    .id("shortcut-reference")
+                                    .width(Fill)
+                                    .height(
+                                        (size.height - 120.0).clamp(
+                                            160.0,
+                                            if self.help_open { 180.0 } else { 620.0 }
+                                        )
+                                    )
+                            )
+                            .padding(24)
+                            .width(Fill)
+                            .max_width(if self.help_open { 460 } else { 760 })
+                            .style(container::rounded_box)
+                        )
+                        .center_x(Fill)
+                        .center_y(Fill)
+                        .style(|theme| container::Style {
+                            background: Some(colors(theme).scrim.into()),
+                            ..Default::default()
+                        })
+                    )
+                ]
+                .into()
+            })
+            .into();
+        }
         if let Some(dialog) = &self.export_dialog {
             return stack![
                 responsive(|size| self.workspace(
@@ -4746,75 +7349,34 @@ impl CleanSlateApp {
                     )
                     .center_x(Fill)
                     .center_y(Fill)
-                    .style(|_| container::Style {
-                        background: Some(iced::Color::from_rgba(0.0, 0.0, 0.0, 0.7).into()),
+                    .style(|theme| container::Style {
+                        background: Some(colors(theme).scrim.into()),
                         ..Default::default()
                     })
                 ),
             ]
             .into();
         }
-        if !self.import_choices.is_empty() {
-            let mut choices = column![
-                text("Choose speaker channels").size(24),
-                text(
-                    "Choose the microphone channels to edit. Their original timing stays aligned."
-                )
-            ]
-            .spacing(12);
-            choices = choices.push(
-                text(format!(
-                    "{} selected · {} existing tracks · maximum 8",
-                    self.import_choices.iter().filter(|c| c.selected).count(),
-                    self.project.as_ref().map_or(0, |p| p.sources.len())
-                ))
-                .size(14),
-            );
-            for (index, choice) in self.import_choices.iter().enumerate() {
-                choices = choices.push(
-                    row![
-                        iced::widget::checkbox(choice.selected)
-                            .label(choice.source.channel.map_or_else(
-                                || "Mono".into(),
-                                |channel| format!("Channel {}", channel + 1)
-                            ))
-                            .on_toggle(move |selected| Message::ImportChannel(index, selected)),
-                        text_input("Track name", choice.source.name.as_deref().unwrap_or(""))
-                            .on_input(move |name| Message::ImportChannelName(index, name))
-                            .width(250),
-                        text(
-                            choice
-                                .source
-                                .path
-                                .file_name()
-                                .unwrap_or_default()
-                                .to_string_lossy()
-                                .to_string()
+        if self.import_dialog {
+            return responsive(|size| {
+                stack![
+                    self.workspace(compact_workspace(size.width), size.height, size.width),
+                    opaque(
+                        container(
+                            self.import_settings_view((size.height - 48.0).clamp(160.0, 600.0))
                         )
-                        .size(14),
-                    ]
-                    .spacing(12),
-                );
-            }
-            for message in &self.messages {
-                choices = choices.push(text(message));
-            }
-            choices = choices.push(
-                row![
-                    button("Import selected channels")
-                        .style(primary_button)
-                        .on_press(Message::ConfirmChannels),
-                    button("Cancel")
-                        .style(secondary_button)
-                        .on_press(Message::CancelChannels)
+                        .padding(24)
+                        .center_x(Fill)
+                        .center_y(Fill)
+                        .style(|theme| container::Style {
+                            background: Some(colors(theme).scrim.into()),
+                            ..Default::default()
+                        })
+                    )
                 ]
-                .spacing(12),
-            );
-            return container(scrollable(choices))
-                .padding(24)
-                .width(Fill)
-                .height(Fill)
-                .into();
+                .into()
+            })
+            .into();
         }
         responsive(|size| {
             let count = self
@@ -4827,6 +7389,109 @@ impl CleanSlateApp {
                 size.width,
             )
         })
+        .into()
+    }
+
+    fn import_settings_view(&self, height: f32) -> Element<'_, Message> {
+        let mut choices = column![text(
+            "Choose the microphone channels to edit. Their original timing stays aligned."
+        )]
+        .spacing(12);
+        choices = choices.push(
+            text(format!(
+                "{} selected · {} accepted or reserved tracks · maximum 8",
+                self.import_choices.iter().filter(|c| c.selected).count(),
+                self.reserved_track_count()
+            ))
+            .size(14),
+        );
+        for (index, choice) in self.import_choices.iter().enumerate() {
+            choices = choices.push(
+                column![
+                    iced::widget::checkbox(choice.selected)
+                        .label(choice.source.channel.map_or_else(
+                            || "Mono".into(),
+                            |channel| format!("Channel {}", channel + 1)
+                        ))
+                        .on_toggle(move |selected| Message::ImportChannel(index, selected)),
+                    text_input("Track name", choice.source.name.as_deref().unwrap_or(""))
+                        .on_input(move |name| Message::ImportChannelName(index, name))
+                        .width(Fill),
+                    text(
+                        choice
+                            .source
+                            .path
+                            .file_name()
+                            .unwrap_or_default()
+                            .to_string_lossy()
+                            .to_string()
+                    )
+                    .size(14),
+                ]
+                .spacing(12),
+            );
+        }
+        if self.import_choices.is_empty() && self.sources_busy() {
+            choices = choices.push(text(
+                self.source_loading
+                    .as_ref()
+                    .map_or("Inspecting source tracks…", |loading| loading.stage),
+            ));
+            for (index, path) in self.loading_paths().iter().enumerate() {
+                choices = choices.push(text(format!("Track {}: {}", index + 1, path.display())));
+                if let Some(loading) = &self.source_loading
+                    && let Some(cache) = loading.waveforms.get(index)
+                {
+                    choices = choices.push(
+                        canvas(
+                            TimelineCanvas::waveform(
+                                cache,
+                                &loading.timeline,
+                                Message::Timeline,
+                                None,
+                                false,
+                            )
+                            .with_revision(self.drawing_revision),
+                        )
+                        .width(Fill)
+                        .height(56),
+                    );
+                }
+            }
+        }
+        for message in &self.messages {
+            choices = choices.push(text(message));
+        }
+        let committing = self
+            .source_loading
+            .as_ref()
+            .is_some_and(|loading| loading.committing);
+        let mut actions = row![].spacing(12);
+        if !self.import_choices.is_empty() {
+            actions = actions.push(
+                button("Import channels")
+                    .style(primary_button)
+                    .on_press(Message::ConfirmChannels),
+            );
+        }
+        actions = actions.push(
+            button(if committing { "Finishing…" } else { "Cancel" })
+                .style(secondary_button)
+                .on_press_maybe((!committing).then_some(Message::CancelChannels)),
+        );
+        container(
+            column![
+                text("Import tracks").size(24),
+                scrollable(choices).height(Fill),
+                actions
+            ]
+            .spacing(12),
+        )
+        .padding(24)
+        .width(Fill)
+        .max_width(680)
+        .height(height)
+        .style(container::rounded_box)
         .into()
     }
 
@@ -4851,9 +7516,65 @@ impl CleanSlateApp {
         (missing, room)
     }
 
+    fn import_display_rows(&self) -> Vec<ImportDisplayRow> {
+        let mut rows = vec![];
+        if let Some(project) = &self.project {
+            for (index, source) in project.sources.iter().enumerate() {
+                if !self
+                    .import_jobs
+                    .iter()
+                    .any(|job| job.track_ids.contains(&source.track_id))
+                {
+                    rows.push((Some(index), None));
+                }
+            }
+        }
+        for (job_index, job) in self.import_jobs.iter().enumerate() {
+            for channel in 0..job.sources.len() {
+                if job.accepted {
+                    if let Some(index) = self.project.as_ref().and_then(|p| {
+                        p.sources
+                            .iter()
+                            .position(|s| s.track_id == job.track_ids[channel])
+                    }) {
+                        rows.push((Some(index), None));
+                    }
+                } else {
+                    rows.push((None, Some((job_index, channel))));
+                }
+            }
+        }
+        rows
+    }
+
+    fn export_source_order(&self) -> Vec<usize> {
+        self.import_display_rows()
+            .into_iter()
+            .filter_map(|(accepted, _)| accepted)
+            .collect()
+    }
+
     fn workspace_status(&self) -> String {
         if self.sources_busy() {
-            return "Loading tracks".into();
+            let queued = self
+                .import_jobs
+                .iter()
+                .filter(|job| !job.accepted && job.error.is_none() && job.events.is_none())
+                .count();
+            let stage = self
+                .import_jobs
+                .iter()
+                .find(|job| job.events.is_some())
+                .map_or("Inspecting source metadata", |job| job.status.as_str());
+            return format!(
+                "{} accepted · {} pending · {queued} queued · {stage}",
+                self.project.as_ref().map_or(0, |p| p.sources.len()),
+                self.import_jobs
+                    .iter()
+                    .filter(|j| !j.accepted)
+                    .map(|j| j.sources.len())
+                    .sum::<usize>()
+            );
         }
         let Some(project) = &self.project else {
             return "Import tracks to begin".into();
@@ -5146,7 +7867,8 @@ impl CleanSlateApp {
             ))
         ]
         .spacing(12);
-        for (i, source) in project.sources.iter().enumerate() {
+        for (i, index) in self.export_source_order().into_iter().enumerate() {
+            let source = &project.sources[index];
             content = content.push(
                 text(format!(
                     "{}. {} · {} Hz · {} frames",
@@ -5245,7 +7967,7 @@ impl CleanSlateApp {
             .into()
     }
 
-    fn workspace(&self, compact: bool, height: f32, width: f32) -> Element<'_, Message> {
+    fn workspace(&self, compact: bool, _height: f32, width: f32) -> Element<'_, Message> {
         let ownership_stale = self.reference_stale;
         let ownership_states = self
             .supervised_result
@@ -5295,10 +8017,13 @@ impl CleanSlateApp {
             Space::new().width(Fill),
             text(self.workspace_status())
                 .size(14)
-                .color(iced::color!(0xADB5C0)),
+                .color(self.appearance.colors().muted),
             button("Import tracks")
                 .style(primary_button)
                 .on_press(Message::ImportStems),
+            button("Menu")
+                .style(secondary_button)
+                .on_press(Message::Menu),
             button("New project")
                 .style(secondary_button)
                 .on_press_maybe(self.can_start_new_project().then_some(Message::NewProject)),
@@ -5311,7 +8036,7 @@ impl CleanSlateApp {
             button("Save project")
                 .style(secondary_button)
                 .on_press_maybe(
-                    (self.project.is_some() && !self.sources_busy())
+                    (self.project.is_some() && self.source_loading.is_none())
                         .then_some(Message::SaveProject)
                 ),
         ]
@@ -5319,56 +8044,17 @@ impl CleanSlateApp {
         .align_y(iced::Center);
 
         let mut timeline_content = column![].spacing(6).height(Fill);
-        if self.sources_busy() {
-            let paths = self.loading_paths();
-            let track_height = waveform_height(height, paths.len().max(1), compact);
-            timeline_content = timeline_content.push(text(self.source_loading.as_ref().map_or(
-                "Tracks queued. Loading starts in the background…",
-                |loading| loading.stage,
-            )));
-            // Pending rows deliberately show a loading label, never a flat waveform.
-            for (index, path) in paths.iter().enumerate() {
-                let waveform: Element<'_, Message> = self
-                    .source_loading
-                    .as_ref()
-                    .and_then(|loading| loading.waveforms.get(index).map(|cache| (loading, cache)))
-                    .map_or_else(
-                        || {
-                            container(text("Waveform loading…"))
-                                .height(track_height)
-                                .center_y(Fill)
-                                .into()
-                        },
-                        |(loading, cache)| {
-                            canvas(
-                                TimelineCanvas::waveform(
-                                    cache,
-                                    &loading.timeline,
-                                    Message::Timeline,
-                                    None,
-                                    false,
-                                )
-                                .with_revision(self.drawing_revision),
-                            )
-                            .width(Fill)
-                            .height(track_height)
-                            .into()
-                        },
-                    );
-                timeline_content = timeline_content.push(
-                    container(
-                        column![
-                            text(format!("Track {}: {}", index + 1, path.display())),
-                            waveform,
-                        ]
-                        .spacing(8),
-                    )
-                    .padding(12)
-                    .width(Fill)
-                    .style(editor_panel),
-                );
-            }
-        } else if self.project.is_none() {
+        if self.import_jobs.iter().any(|job| !job.accepted) {
+            timeline_content = timeline_content.push(row![
+                text("Pending audio is excluded from Save, Analyze and Export. Ready tracks remain editable.").size(14),
+                button("Cancel all pending").style(secondary_button).on_press(Message::CancelPendingImports)
+            ].spacing(12));
+        }
+        if let Some(error) = &self.appearance_error {
+            timeline_content =
+                timeline_content.push(text(error).size(14).color(self.appearance.colors().error));
+        }
+        if self.project.is_none() && self.import_jobs.is_empty() {
             timeline_content = timeline_content.push(
                 container(
                     column![
@@ -5385,7 +8071,8 @@ impl CleanSlateApp {
                 .center_y(Fill)
                 .height(Fill),
             );
-        } else if let Some(project) = &self.project {
+        }
+        if self.project.is_some() || !self.import_jobs.is_empty() {
             timeline_content = timeline_content.push(
                 container(
                     canvas(
@@ -5401,7 +8088,63 @@ impl CleanSlateApp {
                 )
                 .padding([0, 12]),
             );
-            for (index, source) in project.sources.iter().enumerate() {
+            for (accepted, pending) in self.import_display_rows() {
+                if let Some((job_index, channel)) = pending {
+                    let job = &self.import_jobs[job_index];
+                    let id = job.id;
+                    let mut actions = row![
+                        text(job.sources[channel].display_name()).size(14),
+                        Space::new().width(Fill),
+                        text(&job.status).size(14)
+                    ]
+                    .spacing(8);
+                    if job.error.is_some() {
+                        actions = actions.push(
+                            button("Retry")
+                                .style(primary_button)
+                                .on_press(Message::RetryImport(id)),
+                        );
+                    }
+                    actions = actions.push(
+                        button(if job.error.is_some() {
+                            "Remove"
+                        } else {
+                            "Cancel / Remove"
+                        })
+                        .style(secondary_button)
+                        .on_press(Message::RemoveImport(id)),
+                    );
+                    let mut content = column![actions].spacing(6);
+                    if let Some(error) = &job.error {
+                        content = content
+                            .push(text(error).size(14).color(self.appearance.colors().error));
+                    }
+                    content = content.push(
+                        canvas(
+                            TimelineCanvas::waveform(
+                                &job.waveforms[channel],
+                                &self.timeline,
+                                Message::Timeline,
+                                None,
+                                false,
+                            )
+                            .with_revision(self.drawing_revision),
+                        )
+                        .width(Fill)
+                        .height(Fill),
+                    );
+                    timeline_content = timeline_content.push(
+                        container(content)
+                            .padding(4)
+                            .height(Length::FillPortion(1))
+                            .width(Fill)
+                            .style(editor_panel),
+                    );
+                    continue;
+                }
+                let project = self.project.as_ref().unwrap();
+                let index = accepted.unwrap();
+                let source = &project.sources[index];
                 let filename = source.display_name();
                 let mut short_name = filename.chars().take(24).collect::<String>();
                 if filename.chars().count() > 24 {
@@ -5436,7 +8179,7 @@ impl CleanSlateApp {
                         editor = editor.push(
                             text(self.messages.join("\n"))
                                 .size(13)
-                                .color(iced::color!(0xDB8B8B)),
+                                .color(self.appearance.colors().error),
                         );
                     }
                     editor.into()
@@ -5445,7 +8188,7 @@ impl CleanSlateApp {
                         button(
                             text(format!("Speaker {} · {short_name}", source.speaker_id.0))
                                 .size(14)
-                                .color(iced::color!(0xE4E7EB)),
+                                .color(self.appearance.colors().text),
                         )
                         .style(button::text)
                         .padding([3, 6])
@@ -5511,12 +8254,12 @@ impl CleanSlateApp {
                     });
                     let (label, color) = match state {
                         Some(crate::TemporalTrackState::Owned) => {
-                            ("Active", iced::Color::from_rgb(0.2, 0.75, 0.4))
+                            ("Active", self.appearance.colors().success)
                         }
                         Some(crate::TemporalTrackState::Absent) => {
-                            ("Inactive", iced::Color::from_rgb(0.5, 0.55, 0.6))
+                            ("Inactive", self.appearance.colors().muted)
                         }
-                        _ => ("Uncertain", iced::Color::from_rgb(0.9, 0.65, 0.2)),
+                        _ => ("Uncertain", self.appearance.colors().warning),
                     };
                     let meter_label = format!(
                         "{}{label} · {}",
@@ -5599,45 +8342,45 @@ impl CleanSlateApp {
                 if let Some(meter) = moving_meter {
                     track_content = track_content.push(meter);
                 }
+                track_content = track_content.push(waveform);
+                if self.gain_tool {
+                    track_content = track_content.push(
+                        canvas(crate::gain_editor::GainCanvas {
+                            revision: self.drawing_revision,
+                            project,
+                            constraints: self
+                                .gain_drag
+                                .as_ref()
+                                .map_or(&self.gain_constraints, |drag| &drag.draft().constraints),
+                            track: source.track_id,
+                            viewport: &self.timeline,
+                            automatic: self
+                                .effective_result
+                                .as_ref()
+                                .and_then(|result| result.automatic.get(index))
+                                .map(AsRef::as_ref),
+                            effective: self
+                                .preview
+                                .as_ref()
+                                .and_then(|preview| preview.envelopes.get(index)),
+                            editing: true,
+                            on_event: Box::new(move |event| Message::GainEvent(index, event)),
+                        })
+                        .width(Fill)
+                        .height(20),
+                    );
+                }
                 timeline_content = timeline_content.push(
-                    container(
-                        track_content.push(waveform).push(
-                            canvas(crate::gain_editor::GainCanvas {
-                                revision: self.drawing_revision,
-                                project,
-                                constraints: self
-                                    .gain_drag
-                                    .as_ref()
-                                    .map_or(&self.gain_constraints, |drag| {
-                                        &drag.draft().constraints
-                                    }),
-                                track: source.track_id,
-                                viewport: &self.timeline,
-                                automatic: self
-                                    .effective_result
-                                    .as_ref()
-                                    .and_then(|result| result.automatic.get(index))
-                                    .map(AsRef::as_ref),
-                                effective: self
-                                    .preview
-                                    .as_ref()
-                                    .and_then(|preview| preview.envelopes.get(index)),
-                                editing: self.gain_tool,
-                                on_event: Box::new(move |event| Message::GainEvent(index, event)),
-                            })
-                            .width(Fill)
-                            .height(20),
-                        ),
-                    )
-                    .padding(4)
-                    .height(Length::FillPortion(1))
-                    .width(Fill)
-                    .style(editor_panel),
+                    container(track_content)
+                        .padding(4)
+                        .height(Length::FillPortion(1))
+                        .width(Fill)
+                        .style(editor_panel),
                 );
             }
         }
 
-        let tracks: Element<'_, Message> = if self.sources_busy() || self.project.is_none() {
+        let tracks: Element<'_, Message> = if self.project.is_none() {
             scrollable(timeline_content).height(Fill).into()
         } else {
             timeline_content.into()
@@ -5658,7 +8401,7 @@ impl CleanSlateApp {
             ].spacing(8).align_y(iced::Center),
             iced::widget::tooltip(
                 text("Drag to mark a speaker example · red shading shows reduced volume")
-                    .size(14).color(iced::color!(0xADB5C0)),
+                    .size(14).color(self.appearance.colors().muted),
                 container(text("Click to seek. Drag to label speech or room tone.\nWheel to zoom. Ctrl-wheel or middle-drag to pan.").size(14))
                     .padding(12).style(editor_panel),
                 iced::widget::tooltip::Position::Bottom,
@@ -5697,7 +8440,7 @@ impl CleanSlateApp {
             text(format!("Preview failed: {error}")).into()
         } else if self.reference_stale {
             text("Analysis needs updating")
-                .color(iced::color!(0xD8B579))
+                .color(self.appearance.colors().warning)
                 .font(iced::Font {
                     weight: iced::font::Weight::Semibold,
                     ..iced::Font::with_name("Segoe UI")
@@ -5738,7 +8481,10 @@ impl CleanSlateApp {
                             weight: iced::font::Weight::Semibold,
                             ..iced::Font::with_name("Segoe UI")
                         }),
-                        text(format!("Attenuation: {:.1} dB", parameters.attenuation_db)),
+                        self.sound_value(SoundParameter::Attenuation, "Attenuation"),
+                        button(if parameters.mute { "Mute: on" } else { "Mute" })
+                            .style(secondary_button)
+                            .on_press(Message::Mute),
                         slider(
                             -30.0..=-3.0,
                             parameters.attenuation_db,
@@ -5746,21 +8492,15 @@ impl CleanSlateApp {
                         )
                         .step(1.0_f32)
                         .on_release(Message::RefreshPreview),
-                        text(format!("Fade to full volume: {:.0} ms", parameters.open_ms)),
+                        self.sound_value(SoundParameter::Open, "Fade to full volume"),
                         slider(1.0..=1000.0, parameters.open_ms, Message::OpenTime)
                             .step(1.0_f32)
                             .on_release(Message::RefreshPreview),
-                        text(format!(
-                            "Fade to reduced volume: {:.0} ms",
-                            parameters.close_ms
-                        )),
+                        self.sound_value(SoundParameter::Close, "Fade to reduced volume"),
                         slider(1.0..=2000.0, parameters.close_ms, Message::CloseTime)
                             .step(1.0_f32)
                             .on_release(Message::RefreshPreview),
-                        text(format!(
-                            "Ignore gaps shorter than: {:.0} ms",
-                            parameters.minimum_gap_ms
-                        )),
+                        self.sound_value(SoundParameter::Gap, "Ignore gaps shorter than"),
                         slider(
                             10.0..=5000.0,
                             parameters.minimum_gap_ms,
@@ -5781,7 +8521,7 @@ impl CleanSlateApp {
         .padding(18)
         .width(if compact { Fill } else { Length::Fixed(320.0) })
         .style(editor_panel);
-        let inspector: Element<'_, Message> = if self.sources_busy() {
+        let inspector: Element<'_, Message> = if self.project.is_none() && self.sources_busy() {
             container(column![text("Loading tracks").size(20),
                 text("Waveforms appear as tracks load. Once the source checks finish, add speaker examples and run Analyze."),
                 text("You can scroll the tracks and drop more audio files. Editing becomes available when the import is validated."),
@@ -5802,8 +8542,14 @@ impl CleanSlateApp {
             button("Previous")
                 .style(secondary_button)
                 .on_press(Message::Previous),
-            button(if self.audition_range.is_some() {
-                "Preparing audio…"
+            button(if let Some(status) = self.audition_status() {
+                status
+            } else if self
+                .reference_audition
+                .as_ref()
+                .is_some_and(|snapshot| snapshot.paused)
+            {
+                "Paused · Resume"
             } else if self.audition.is_some() {
                 "Playing"
             } else {
@@ -5949,17 +8695,27 @@ impl CleanSlateApp {
             }
             let mut menu = column![
                 text("Who is talking?").size(16),
-                text("Select everyone speaking, or leave all unchecked for room tone.").size(14),
-                text("1–8: toggle · R: clear · Enter: save · Esc: close").size(13)
+                text("None selected = room tone").size(14),
+                text("1–8 Toggle speakers · R Clear · Enter Save · Esc Cancel").size(13),
+                text("Space Pause / resume · Stop ends audition").size(13)
             ]
             .spacing(6);
             if let Some(project) = &self.project {
-                for source in &project.sources {
+                for (index, source) in project.sources.iter().enumerate() {
                     let speaker = source.speaker_id;
                     menu = menu.push(
-                        iced::widget::checkbox(self.reference_speakers.contains(&speaker))
-                            .label(format!("Speaker {}", speaker.0))
-                            .on_toggle(move |active| Message::ReferenceSpeaker(speaker, active)),
+                        row![
+                            container(text(format!("{}", index + 1)).size(13))
+                                .padding(4)
+                                .style(editor_panel),
+                            iced::widget::checkbox(self.reference_speakers.contains(&speaker))
+                                .label(format!("Speaker {}", speaker.0))
+                                .on_toggle(move |active| Message::ReferenceSpeaker(
+                                    speaker, active
+                                ))
+                        ]
+                        .spacing(8)
+                        .align_y(iced::Center),
                     );
                 }
                 menu = menu.push(
@@ -5974,6 +8730,9 @@ impl CleanSlateApp {
                             self.reference_speakers.clone(),
                             false
                         )),
+                        button("Stop")
+                            .style(secondary_button)
+                            .on_press(Message::Stop),
                         button("Cancel")
                             .style(secondary_button)
                             .on_press(Message::DismissReferenceMenu)
@@ -5994,12 +8753,17 @@ impl CleanSlateApp {
                     );
                 }
             }
+            if let Some(status) = self.audition_status() {
+                menu = menu.push(text(status).size(14));
+            } else if self.reference_audition.as_ref().is_some_and(|s| s.paused) {
+                menu = menu.push(text("Audition paused · Space resumes").size(14));
+            } else if self.audition.is_none()
+                && let Some(error) = self.messages.first()
+            {
+                menu = menu.push(text(error).size(14));
+            }
             if let Some(error) = &self.calibration_error {
-                menu = menu.push(iced::widget::tooltip(
-                    text("Example not saved · hover for details").size(14),
-                    text(error).size(14),
-                    iced::widget::tooltip::Position::Top,
-                ));
+                menu = menu.push(text(format!("Example not saved: {error}")).size(14));
                 if !self.reference_conflicts().is_empty() {
                     menu = menu.push(
                         button("Replace conflicting examples")

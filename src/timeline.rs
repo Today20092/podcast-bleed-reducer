@@ -51,6 +51,10 @@ impl TimelineViewport {
         *self = Self::new(total_samples);
     }
 
+    pub(crate) fn extend_total_samples(&mut self, total_samples: TimePosition) {
+        self.total_samples = self.total_samples.max(total_samples);
+    }
+
     pub fn start(&self) -> f64 {
         self.start
     }
@@ -78,6 +82,23 @@ impl TimelineViewport {
     pub fn show_range(&mut self, start: TimePosition, end: TimePosition) {
         let span = end.saturating_sub(start).max(TICKS_PER_SECOND / 10) as f64;
         self.visible = (span * 3.0).min(self.total_samples as f64);
+        self.start = ((start as f64 + end as f64 - self.visible) / 2.0)
+            .clamp(0.0, self.total_samples as f64 - self.visible);
+    }
+
+    pub fn fit_full(&mut self) {
+        self.start = 0.0;
+        self.visible = self.total_samples as f64;
+    }
+
+    pub fn fit_range(&mut self, start: TimePosition, end: TimePosition) {
+        let end = end.min(self.total_samples);
+        if start >= end {
+            return;
+        }
+        self.visible = ((end - start) as f64 * 1.2)
+            .max(TICKS_PER_SECOND as f64)
+            .min(self.total_samples as f64);
         self.start = ((start as f64 + end as f64 - self.visible) / 2.0)
             .clamp(0.0, self.total_samples as f64 - self.visible);
     }
@@ -144,6 +165,7 @@ impl TimelineViewport {
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum TimelineEvent {
+    FitRange(TimePosition, TimePosition),
     Seek(TimePosition),
     Drag(TimePosition),
     DragEnd(TimePosition),

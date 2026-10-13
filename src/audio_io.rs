@@ -118,17 +118,21 @@ impl AudioSource {
         &self,
         cancelled: Option<&std::sync::atomic::AtomicBool>,
     ) -> Result<String, std::io::Error> {
-        use sha2::{Digest, Sha256};
         let fingerprint = crate::project::fingerprint_cancellable(&self.path, cancelled)?;
-        Ok(self.channel.map_or_else(
-            || fingerprint.clone(),
+        Ok(self.fingerprint_from_container(&fingerprint))
+    }
+
+    pub(crate) fn fingerprint_from_container(&self, fingerprint: &str) -> String {
+        use sha2::{Digest, Sha256};
+        self.channel.map_or_else(
+            || fingerprint.to_owned(),
             |channel| {
                 format!(
                     "{:x}",
                     Sha256::digest(format!("{fingerprint}/wav-channel-{channel}").as_bytes())
                 )
             },
-        ))
+        )
     }
 
     pub fn display_name(&self) -> String {
@@ -397,6 +401,25 @@ pub(crate) fn decode_source_chunks(
     cancelled: Option<&std::sync::atomic::AtomicBool>,
     mut consume: impl FnMut(u32, &[f32]) -> Result<(), RenderBlocker>,
 ) -> Result<DecodedMetadata, RenderBlocker> {
+    decode_recording_chunks(std::slice::from_ref(source), cancelled, |rate, channels| {
+        consume(rate, &channels[0])
+    })
+}
+
+/// Selected WAV channels share one bounded container traversal.
+pub(crate) fn decode_recording_chunks(
+    sources: &[AudioSource],
+    cancelled: Option<&std::sync::atomic::AtomicBool>,
+    mut consume: impl FnMut(u32, &[Vec<f32>]) -> Result<(), RenderBlocker>,
+) -> Result<DecodedMetadata, RenderBlocker> {
+    let source = sources
+        .first()
+        .ok_or_else(|| RenderBlocker("No channels selected".into()))?;
+    if sources.iter().any(|s| s.path != source.path) {
+        return Err(RenderBlocker(
+            "A recording must use one source container".into(),
+        ));
+    }
     let path = &source.path;
     crate::prepared_analysis::check_cancelled(cancelled)?;
     let Ok(mut reader) = WaveReader::open(path) else {
@@ -405,7 +428,9 @@ pub(crate) fn decode_source_chunks(
                 "Channel selection requires a WAV source.".into(),
             ));
         }
-        let metadata = crate::media::decode(path, cancelled, consume)?;
+        let metadata = crate::media::decode(path, cancelled, |rate, samples| {
+            consume(rate, &[samples.to_vec()])
+        })?;
         let mut format = WaveFmt::new_pcm_mono(metadata.grid.sample_rate, 32);
         format.tag = 3; // Decoded non-WAV sources export IEEE-float32 without clipping/quantization.
         return Ok(DecodedMetadata {
@@ -419,6 +444,9 @@ pub(crate) fn decode_source_chunks(
     let channel = usize::from(source.channel.unwrap_or(0));
     let mut format = native_format;
     if channels == 0
+        || sources
+            .iter()
+            .any(|s| usize::from(s.channel.unwrap_or(0)) >= channels)
         || channel >= channels
         || (source.channel.is_none() && channels != 1)
         || format.sample_rate == 0
@@ -455,7 +483,12 @@ pub(crate) fn decode_source_chunks(
     if format.common_format() == CommonFormat::IeeeFloatPCM && format.bits_per_sample == 64 {
         // bwavfile 2.0.1 panics when constructing its float64 frame reader.
         // Retain its native metadata/BEXT, decode samples to the engine's f32 contract.
-        let decoded = crate::media::decode_channel(path, source.channel, cancelled, consume)?;
+        let decoded = crate::media::decode_channels(
+            path,
+            &sources.iter().map(|s| s.channel).collect::<Vec<_>>(),
+            cancelled,
+            consume,
+        )?;
         if decoded.grid != metadata.grid {
             return Err(RenderBlocker(
                 "float64 WAV decoded grid disagrees with native metadata".into(),
@@ -467,28 +500,63 @@ pub(crate) fn decode_source_chunks(
             bext,
         });
     }
-    let mut frames = reader.audio_frame_reader()?;
+    let mut frames = Some(reader.audio_frame_reader()?);
     let block_frames = (65_536 / channels).max(1);
+    // Float32 already matches engine samples; avoid a virtual read/conversion per sample.
+    let mut raw = if native_format.common_format() == CommonFormat::IeeeFloatPCM
+        && native_format.bits_per_sample == 32
+    {
+        let mut frames = frames.take().unwrap();
+        frames.locate(0)?;
+        Some(frames.into_inner())
+    } else {
+        None
+    };
+    let mut raw_bytes = if raw.is_some() {
+        vec![0_u8; block_frames * channels * 4]
+    } else {
+        vec![]
+    };
     let mut buffer = vec![0.0_f32; block_frames * channels];
-    let mut selected = Vec::with_capacity(block_frames);
+    let mut selected = vec![Vec::with_capacity(block_frames); sources.len()];
     let mut count = 0_u64;
     while count < frame_count {
         crate::prepared_analysis::check_cancelled(cancelled)?;
         let requested = usize::try_from((frame_count - count).min(block_frames as u64)).unwrap();
-        let read = frames.read_frames(&mut buffer[..requested * channels])? as usize;
+        let read = if let Some(input) = &mut raw {
+            use std::io::Read;
+            let bytes = &mut raw_bytes[..requested * channels * 4];
+            input.read_exact(bytes).map_err(|error| {
+                RenderBlocker(format!(
+                    "{}: truncated or unreadable audio: {error}",
+                    path.display()
+                ))
+            })?;
+            for (sample, bytes) in buffer.iter_mut().zip(bytes.as_chunks::<4>().0) {
+                *sample = f32::from_le_bytes(*bytes);
+            }
+            requested
+        } else {
+            frames
+                .as_mut()
+                .unwrap()
+                .read_frames(&mut buffer[..requested * channels])? as usize
+        };
         if read == 0 {
             return Err(RenderBlocker(format!(
                 "{}: truncated audio",
                 path.display()
             )));
         }
-        selected.clear();
-        selected.extend(
-            buffer[..read * channels]
-                .chunks_exact(channels)
-                .map(|frame| frame[channel]),
-        );
-        if selected.iter().any(|sample| !sample.is_finite()) {
+        for (samples, source) in selected.iter_mut().zip(sources) {
+            samples.clear();
+            samples.extend(
+                buffer[..read * channels]
+                    .chunks_exact(channels)
+                    .map(|frame| frame[usize::from(source.channel.unwrap_or(0))]),
+            );
+        }
+        if selected.iter().flatten().any(|sample| !sample.is_finite()) {
             return Err(RenderBlocker(format!(
                 "{}: contains invalid samples",
                 path.display()

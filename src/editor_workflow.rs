@@ -303,15 +303,15 @@ impl EditorAnalysisWorker {
 pub fn project_fade_settings(project: &Project) -> Result<crate::GainFadeSettings, RenderBlocker> {
     let parameters = project.parameters();
     let duration = |ms: f32| -> Result<u64, RenderBlocker> {
-        if !ms.is_finite() || ms <= 0.0 {
+        if !ms.is_finite() || !(0.0..=60000.0).contains(&ms) {
             return Err(RenderBlocker(
-                "Fade durations must be finite and positive.".into(),
+                "Fade durations must be finite and between 0 and 60000 ms.".into(),
             ));
         }
         crate::time_from_seconds(f64::from(ms) / 1000.0, crate::Rounding::Ceil)
     };
     Ok(crate::GainFadeSettings {
-        attenuation: 10_f32.powf(parameters.attenuation_db / 20.0),
+        attenuation: parameters.attenuation_gain(),
         fade_in: duration(parameters.open_ms)?,
         fade_out: duration(parameters.close_ms)?,
         minimum_gap: duration(parameters.minimum_gap_ms)?,

@@ -2,6 +2,87 @@
 mod fixture;
 
 #[test]
+fn mute_and_finite_floor_share_audition_envelopes_and_removed_is_original_minus_processed() {
+    let (root, mut project, audio) = fixture::session();
+    let cancel = std::sync::atomic::AtomicBool::new(false);
+    let analysis = rust_app::EditorAnalysisWorker::default()
+        .analyze_acoustic_evidence(
+            &project,
+            &audio,
+            &std::sync::atomic::AtomicU8::new(0),
+            &cancel,
+        )
+        .unwrap();
+    let mut cache = rust_app::EffectiveEnvelopeCache::default();
+    project
+        .set_parameters(rust_app::AutomixParameters {
+            attenuation_db: -120.0,
+            open_ms: 0.0,
+            close_ms: 0.0,
+            minimum_gap_ms: 0.0,
+            ..project.parameters()
+        })
+        .unwrap();
+    let finite = analysis.install(&mut project, &mut cache, None).unwrap();
+    assert!(
+        finite
+            .envelopes
+            .iter()
+            .all(|envelope| envelope.gain_at_time(0) > 0.0)
+    );
+    project
+        .set_parameters(rust_app::AutomixParameters {
+            mute: true,
+            ..project.parameters()
+        })
+        .unwrap();
+    let mute = cache
+        .update(
+            &project,
+            &analysis.temporal,
+            rust_app::project_fade_settings(&project).unwrap(),
+            None,
+        )
+        .unwrap();
+    assert_ne!(finite.cache_key, mute.cache_key);
+    assert!(
+        mute.envelopes
+            .iter()
+            .all(|envelope| envelope.gain_at_time(0) == 0.0)
+    );
+    let device =
+        rust_app::PreparedAudio::prepare_for_rate(&project.source_paths(), 16000, &cancel).unwrap();
+    let pcm = device.read_frames(0..1).unwrap();
+    for (mode, expected) in [
+        (rust_app::AuditionMode::Processed, 0.0),
+        (rust_app::AuditionMode::Original, pcm[0][0] + pcm[1][0]),
+        (rust_app::AuditionMode::Removed, pcm[0][0] + pcm[1][0]),
+    ] {
+        let mut playback = device
+            .playback(
+                mute.envelopes.clone(),
+                mode,
+                1.0,
+                0,
+                rust_app::TICKS_PER_SECOND / 4,
+            )
+            .unwrap();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+        loop {
+            let sample = playback.next().unwrap();
+            if playback.position_frame() == 1 {
+                assert_eq!(sample, expected);
+                break;
+            }
+            assert!(std::time::Instant::now() < deadline);
+            std::thread::yield_now();
+        }
+    }
+    drop(device);
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn mixed_native_exports_and_monitored_playback_share_the_effective_time_evaluator() {
     for rates in [[44100, 96000], [48000, 47999]] {
         let (root, mut project, audio) = fixture::session_at_rates(rates);

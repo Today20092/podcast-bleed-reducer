@@ -8,7 +8,7 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
 pub const EFFECTIVE_ENVELOPE_RECIPE: &str =
-    "finite-smootherstep5-live-bounded-gap-source-time-halfopen-linear-manual-v4";
+    "finite-smootherstep5-zero-fades-mute-live-bounded-gap-source-time-halfopen-linear-manual-v5";
 
 #[cfg(test)]
 mod zoom_tests {
@@ -202,8 +202,6 @@ impl AutomaticEnvelope {
         let duration = grid.duration()?;
         if !settings.attenuation.is_finite()
             || !(0.0..=1.0).contains(&settings.attenuation)
-            || settings.fade_in == 0
-            || settings.fade_out == 0
             || settings.fade_in.checked_add(settings.fade_out).is_none()
             || duration == 0
             || duration > ownership.duration
@@ -289,7 +287,7 @@ impl AutomaticEnvelope {
                     ((u128::from(gap) * u128::from(settings.fade_out)
                         / u128::from(settings.fade_in + settings.fade_out))
                         as u64)
-                        .clamp(1, gap - 1)
+                        .min(gap)
                 } else {
                     settings.fade_out
                 };
