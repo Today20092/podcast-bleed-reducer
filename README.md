@@ -13,6 +13,12 @@ CleanSlate is an offline microphone bleed-reduction tool for multitrack podcasts
 
 [Download](#download) · [Usage guide](docs/editor-workflow.md) · [How it works](docs/ownership-explained.md) · [Roadmap](ROADMAP.md) · [Contribute](CONTRIBUTING.md) · [Report an issue](https://github.com/Today20092/podcast-bleed-reducer/issues/new/choose)
 
+## Watch the demo
+
+[![Watch the CleanSlate alpha demo on YouTube](https://img.youtube.com/vi/OFSipS6v0w4/hqdefault.jpg)](https://youtu.be/OFSipS6v0w4)
+
+[Watch my CleanSlate alpha demo on YouTube](https://youtu.be/OFSipS6v0w4).
+
 ## Download
 
 Choose your platform below. CleanSlate runs locally without Python, a model download or an internet connection. Links appear here when packages are published, including alpha prereleases. Draft releases are not public downloads.
