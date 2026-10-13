@@ -55,9 +55,19 @@ Recording, live input monitoring, plugins, ASIO/backend selection, user buffer-s
 
 ## Results
 
+Final software verification, 2026-10-12: implementation committed on `codex/editor-workflow-31-37`. Ready starts reuse validated prepared audio, the output stream and bounded worker; range/seek commands bypass preparation polling. All 263 tests passed across 33 suites, with 18 ignored. Strict all-target/all-feature Clippy, formatting, GUI BuildOnly and Release build passed. Both reviews have zero remaining source findings after completion/position and pending-seek fixes. The opt-in device benchmark passed, including a simulated CPAL error signal and exactly one stream open on explicit retry.
+
+The [measurement record](../../../docs/research/selection-playback-40-measurements.md) distinguishes source-callback readiness from hardware audible onset and unavailable GUI/conversion stages. Quiet Release warm p95 was 21.57 ms versus baseline 102.57 ms, meeting the proposed software target at this marker. No steady-state underruns occurred in the sampled 350 ms intervals; startup missing-buffer counts and measurement limits are recorded. Physical listening/device-unplug checks remain pending, so keep this ticket claimed rather than declaring release or listening acceptance.
+
+The owner requested help cleaning disk space. Cargo package-scoped debug cleanup removed 16.8 GiB, then another 9.2 GiB after verification; final C: free space measured 72,055,238,656 bytes, about 67.1 GiB. These are Cargo's artifact-size counts, not a claim that every change in volume free space came from this cleanup. Source, recordings and projects were preserved. Old and new debug/Release executables were backed up under `C:/Users/User/.codex/build-preserved/podcast-automix-rust-gui`; current debug and Release paths remain available. No further cleanup approval is pending.
+
+Current test executable: `C:/Users/User/.codex/worktrees/progressive-import-38/podcast-automix-rust-gui/target/release/rust-app.exe`. It contains ticket 40; the worktree name reflects the retained build cache, not a different implementation branch. The original ticket-38 Release binary remains backed up as `import-38-release.exe`.
+
 2026-10-12: Claimed after the owner tested ticket 38's latest Release executable, reported "its good so far" and explicitly requested implementation of ticket 40. This authorizes proceeding from that tested import baseline; it does not claim exhaustive GUI/listening or release qualification. Use the accepted prepared-audio and transport interfaces for regression tests of reuse, ranges, cancellation and source snapshots. Research references are collected separately; no third-party code has been copied.
 
 ## Comments
+
+### Earlier implementation checkpoints
 
 Implementation checkpoint: ready cache hits bypass the preparation worker and GUI result poll; output and the bounded source worker are retained across stop/start/range changes. Complete range commands are applied by the device iterator, obsolete blocks are rejected, and completion waits for command acknowledgment. Pending ranges report their new start using the full prepared grid. Device errors invalidate output and offer explicit Play retry. Preparation/buffering messages are distinguished and delayed by 150 ms. No dependencies or third-party source were added.
 

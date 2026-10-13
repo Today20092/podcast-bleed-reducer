@@ -431,10 +431,19 @@ struct Settings {
 
 impl Controls {
     fn position_frame(&self) -> usize {
-        self.settings.read().unwrap().range.map_or_else(
-            || self.position.load(Ordering::Relaxed),
-            |(start, _, _)| start,
-        )
+        let settings = self.settings.read().unwrap();
+        settings
+            .seek
+            .or_else(|| settings.range.map(|(start, _, _)| start))
+            .unwrap_or_else(|| self.position.load(Ordering::Relaxed))
+    }
+    fn seek(&self, frame: usize) {
+        let mut settings = self.settings.write().unwrap();
+        let end = settings
+            .range
+            .map_or_else(|| self.end.load(Ordering::Acquire), |(_, end, _)| end);
+        settings.seek = Some(frame.min(end));
+        self.commands.fetch_add(1, Ordering::AcqRel);
     }
     fn is_finished(&self) -> bool {
         self.applied_command.load(Ordering::Acquire) == self.commands.load(Ordering::Acquire)
@@ -542,7 +551,14 @@ impl AuditionPlayback {
             .expect("bounded playback position")
     }
     pub fn seek(&self, time: TimePosition) {
-        self.source.seek(time);
+        let frame = self
+            .grid
+            .frame_at_time(
+                time.min(self.grid.duration().expect("validated duration")),
+                Rounding::Floor,
+            )
+            .expect("bounded seek") as usize;
+        self.source.controls.seek(frame);
     }
     pub fn set_mode(&self, mode: AuditionMode) {
         self.source.set_mode(mode);
@@ -665,18 +681,6 @@ impl AuditionSource {
     pub fn position_frame(&self) -> usize {
         self.controls.position_frame()
     }
-    pub fn seek(&self, time: TimePosition) {
-        let grid = SourceTimebase::new(self.sample_rate, self.end as u64)
-            .expect("validated playback grid");
-        let frame = grid
-            .frame_at_time(
-                time.min(grid.duration().expect("validated duration")),
-                Rounding::Floor,
-            )
-            .expect("bounded seek");
-        self.controls.settings.write().unwrap().seek = Some(frame as usize);
-        self.controls.commands.fetch_add(1, Ordering::AcqRel);
-    }
     pub fn set_mode(&self, mode: AuditionMode) {
         self.controls.settings.write().unwrap().mode = mode;
     }
@@ -707,7 +711,7 @@ impl Iterator for AuditionSource {
                 if let Some((start, end, repeating)) = settings.range.take() {
                     self.end = end;
                     self.controls.end.store(end, Ordering::Release);
-                    settings.seek = Some(start);
+                    settings.seek.get_or_insert(start);
                     settings.loop_start = repeating.then_some(start);
                 }
                 if let Some(position) = settings.seek.take() {
@@ -902,6 +906,7 @@ pub(crate) struct AuditionOutput {
 }
 
 pub(crate) struct LiveAudition {
+    buffering_started: std::cell::Cell<std::time::Instant>,
     grid: SourceTimebase,
     output: Rc<AuditionOutput>,
     prepared: PreparedAudio,
@@ -974,6 +979,7 @@ impl LiveAudition {
         player.append(source);
         player.play();
         Ok(Self {
+            buffering_started: std::cell::Cell::new(std::time::Instant::now()),
             grid,
             output,
             prepared,
@@ -1012,6 +1018,7 @@ impl LiveAudition {
             settings.seek = None;
         }
         restart_controls(&self.controls, self.grid, range, repeating)?;
+        self.buffering_started.set(std::time::Instant::now());
         self.player.play();
         Ok(true)
     }
@@ -1021,7 +1028,8 @@ impl LiveAudition {
     }
 
     pub(crate) fn is_buffering(&self) -> bool {
-        !self.player.is_paused()
+        self.buffering_started.get().elapsed() >= Duration::from_millis(150)
+            && !self.player.is_paused()
             && self.controls.first_buffer_command.load(Ordering::Acquire)
                 != self.controls.commands.load(Ordering::Acquire)
     }
@@ -1055,9 +1063,8 @@ impl LiveAudition {
                 Rounding::Floor,
             )
             .expect("bounded playback seek");
-        self.controls.settings.write().unwrap().seek =
-            Some((frame as usize).min(self.controls.end.load(Ordering::Acquire)));
-        self.controls.commands.fetch_add(1, Ordering::AcqRel);
+        self.controls.seek(frame as usize);
+        self.buffering_started.set(std::time::Instant::now());
     }
     pub(crate) fn is_finished(&self) -> bool {
         self.controls.is_finished() || self.player.empty()
@@ -1067,6 +1074,7 @@ impl LiveAudition {
         self.player.pause();
     }
     pub(crate) fn toggle_pause(&self) {
+        self.buffering_started.set(std::time::Instant::now());
         if self.player.is_paused() {
             self.player.play();
         } else {
@@ -1153,6 +1161,12 @@ mod tests {
                 "START {trial} cache_ms={cache_ms:.3} attach_ms={attach_ms:.3} first_ms={:.3}",
                 timer.elapsed().as_secs_f64() * 1000.0
             );
+            let underruns = live.controls.underruns.load(Ordering::Relaxed);
+            std::thread::sleep(Duration::from_millis(350));
+            println!(
+                "STEADY {trial} underruns={}",
+                live.controls.underruns.load(Ordering::Relaxed) - underruns
+            );
             live.stop();
         }
         let final_work = PLAYBACK_WORK.with(|counts| counts.get());
@@ -1182,6 +1196,47 @@ mod tests {
                 .underruns
                 .load(Ordering::Relaxed)
         );
+        let failed = live.take().unwrap();
+        // Inject the same boundary signal set by CPAL's error callback.
+        failed.output.failed.store(true, Ordering::Release);
+        assert!(failed.failed());
+        let range = TimeRange {
+            start: 0,
+            end: crate::TICKS_PER_SECOND,
+        };
+        assert!(
+            !failed
+                .restart(
+                    &prepared,
+                    vec![],
+                    AuditionMode::Original,
+                    0.0,
+                    range,
+                    0,
+                    false
+                )
+                .unwrap()
+        );
+        assert_eq!(PLAYBACK_WORK.with(|counts| counts.get()[1]), final_work[1]);
+        drop(failed);
+        let retried = LiveAudition::start_on_output(
+            &mut output,
+            prepared,
+            vec![],
+            AuditionMode::Original,
+            0.0,
+            range,
+            0,
+            false,
+        )
+        .unwrap();
+        assert!(!retried.failed());
+        assert_eq!(
+            PLAYBACK_WORK.with(|counts| counts.get()[1]),
+            final_work[1] + 1
+        );
+        retried.stop();
+        println!("DEVICE_FAILURE explicit retry opened exactly one replacement stream");
     }
 
     #[test]
@@ -1285,6 +1340,44 @@ mod tests {
             let sample = playback.next().unwrap();
             if sample != 0.0 {
                 assert_eq!(sample, 0.2);
+                break;
+            }
+            assert!(std::time::Instant::now() < deadline);
+            std::thread::yield_now();
+        }
+    }
+
+    #[test]
+    fn seek_after_range_replacement_uses_the_new_range_bounds() {
+        let prepared = prepared_samples(&[vec![0.1, 0.2, 0.3, 0.4]], "seek-new-bounds");
+        let grid = SourceTimebase::new(48_000, 4).unwrap();
+        let time = |frame| grid.time_at_frame(frame, Rounding::Floor).unwrap();
+        let mut playback = prepared
+            .transport(
+                vec![],
+                AuditionMode::Original,
+                1.0,
+                TimeRange {
+                    start: time(0),
+                    end: time(2),
+                },
+            )
+            .unwrap();
+        playback
+            .restart(
+                TimeRange {
+                    start: time(2),
+                    end: time(4),
+                },
+                false,
+            )
+            .unwrap();
+        playback.seek(time(3));
+        let deadline = std::time::Instant::now() + Duration::from_secs(1);
+        loop {
+            let sample = playback.next().unwrap();
+            if sample != 0.0 {
+                assert_eq!(sample, 0.4);
                 break;
             }
             assert!(std::time::Instant::now() < deadline);
