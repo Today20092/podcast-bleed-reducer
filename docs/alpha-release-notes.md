@@ -6,6 +6,8 @@ preserving production device-rate validation and the complete test suite.
 The alpha.4 candidate also exposed a concurrent cache-publication race on Linux.
 Alpha.5 accepts a competing publisher only after verifying its complete matching
 artifact; invalid cache data and ordinary errors still block preparation.
+Native render failure-injection tests also allow cold preparation time on loaded
+CI runners without busy-spinning; failure and cancellation assertions are retained.
 
 Changes since the last published desktop release, v0.1.0-alpha.2:
 
