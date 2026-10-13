@@ -25,3 +25,25 @@ to obtain the active test name; serialization is a probe, not a root-cause claim
 - Run the original Windows release checks successfully.
 - Complete native tests and package self-checks for all four platforms.
 - Record remaining physical/acoustic qualification limits.
+
+## Diagnosis and fix
+
+Sequential full-suite run 38359840556 reproduced 0xc0000005 in
+app::tests::fresh_original_playback_and_transient_gain_feedback_do_not_require_analysis.
+Serialization therefore did not cure the crash.
+
+ready_sources queried CPAL before checking whether cached audio existed, bypassing
+launch's headless test rate seam. This made an ordinary cold GUI unit test access
+the Windows native enumerator from a short-lived test thread. The lookup now
+returns before hardware probing on cache miss and shares preparation_output_rate
+with launch. Production still probes the device on the GUI thread; tests use the
+existing 48 kHz seam. Source stamps and rate mismatch guards remain.
+
+The cache regression checks empty, valid shared, wrong-rate and changed-source
+states. Temporary serial execution was reverted. Fixed run 38361304187 passed
+Windows Check and test with the original parallel command; package checks and
+remaining platforms are pending at this checkpoint.
+
+The failed alpha.3 tag remains unchanged. The corrected candidate is alpha.4.
+No physical disconnect/recovery, independent acoustic or long-session qualification
+is claimed by this native CI fix.
