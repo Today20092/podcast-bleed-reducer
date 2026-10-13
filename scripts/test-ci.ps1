@@ -1,8 +1,8 @@
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $root = Split-Path -Parent $PSScriptRoot
-$pr = Get-Content -LiteralPath "$root/.github/workflows/pr-checks.yml" -Raw
-$release = Get-Content -LiteralPath "$root/.github/workflows/portable-release.yml" -Raw
+$pr = (Get-Content -LiteralPath "$root/.github/workflows/pr-checks.yml" -Raw).Replace("`r`n", "`n")
+$release = (Get-Content -LiteralPath "$root/.github/workflows/portable-release.yml" -Raw).Replace("`r`n", "`n")
 foreach ($workflow in @($pr, $release)) {
     if ($workflow -notmatch 'run: ./scripts/check.ps1' -or $workflow -match 'cargo (fmt|clippy|test)') { throw 'PR and release must use the shared check command' }
 }
