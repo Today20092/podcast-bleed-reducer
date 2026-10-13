@@ -19,6 +19,16 @@ Analysis is acoustic-only; Nemotron and its native runtime have been removed. Fo
 
 ## Checks
 
+Pull requests run the same checks as release tags on Windows x64, Linux x64,
+macOS Apple Silicon and macOS Intel. Run `./scripts/check.ps1` with PowerShell 7
+to execute that shared command locally. It also checks packaging scripts and
+workflow invariants. PR jobs have read-only permissions and do not build release
+packages or save caches. Configure the four `Check <platform>` statuses as required
+branch checks if merges must wait for them.
+
+For compact release-run diagnostics and artifact readiness, see
+[Release status](release-status.md).
+
 ```powershell
 cargo test --all-targets --locked
 cargo fmt --all -- --check
