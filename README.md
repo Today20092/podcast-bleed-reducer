@@ -11,7 +11,13 @@ CleanSlate is an offline microphone bleed-reduction tool for multitrack podcasts
   <a href="Cargo.toml"><img alt="Desktop GUI: Iced 0.14" src="https://img.shields.io/badge/GUI-Iced%200.14-B5DFE8?style=for-the-badge&amp;labelColor=29626B"></a>
 </p>
 
-[Download](#download) · [Usage guide](docs/editor-workflow.md) · [How ownership and bleed work](docs/ownership-explained.md) · [Build from source](docs/development.md) · [Release guide](docs/releasing.md)
+[Download](#download) · [Usage guide](docs/editor-workflow.md) · [How it works](docs/ownership-explained.md) · [Roadmap](ROADMAP.md) · [Contribute](CONTRIBUTING.md) · [Report an issue](https://github.com/Today20092/podcast-bleed-reducer/issues/new/choose)
+
+## Watch the demo
+
+[![Watch the CleanSlate alpha demo on YouTube](https://img.youtube.com/vi/OFSipS6v0w4/hqdefault.jpg)](https://youtu.be/OFSipS6v0w4)
+
+[Watch my CleanSlate alpha demo on YouTube](https://youtu.be/OFSipS6v0w4).
 
 ## Download
 
@@ -20,10 +26,10 @@ Choose your platform below. CleanSlate runs locally without Python, a model down
 <!-- downloads:start -->
 | Platform | Download | How to run |
 | --- | --- | --- |
-| Windows 11, 64-bit | Not published yet | Extract the entire ZIP, then open `CleanSlate.exe`. Keep the support files together. |
-| Mac, Apple Silicon, macOS 13+ | Not published yet | Open the DMG and drag `CleanSlate.app` to Applications. |
-| Mac, Intel, macOS 13+ | Not published yet | Open the DMG and drag `CleanSlate.app` to Applications. |
-| Linux, 64-bit x86, glibc 2.35+ | Not published yet | Allow the AppImage to run as a program in its file properties, then open it. |
+| Windows 11, 64-bit | [Download v0.1.0-alpha.2](https://github.com/Today20092/podcast-bleed-reducer/releases/download/v0.1.0-alpha.2/CleanSlate-0.1.0-alpha.2-windows-x64.zip) · [SHA-256](https://github.com/Today20092/podcast-bleed-reducer/releases/download/v0.1.0-alpha.2/CleanSlate-0.1.0-alpha.2-windows-x64.zip.sha256) | Extract the entire ZIP, then open `CleanSlate.exe`. Keep the support files together. |
+| Mac, Apple Silicon, macOS 13+ | [Download v0.1.0-alpha.2](https://github.com/Today20092/podcast-bleed-reducer/releases/download/v0.1.0-alpha.2/CleanSlate-0.1.0-alpha.2-macos-arm64.dmg) · [SHA-256](https://github.com/Today20092/podcast-bleed-reducer/releases/download/v0.1.0-alpha.2/CleanSlate-0.1.0-alpha.2-macos-arm64.dmg.sha256) | Open the DMG and drag `CleanSlate.app` to Applications. |
+| Mac, Intel, macOS 13+ | [Download v0.1.0-alpha.2](https://github.com/Today20092/podcast-bleed-reducer/releases/download/v0.1.0-alpha.2/CleanSlate-0.1.0-alpha.2-macos-x64.dmg) · [SHA-256](https://github.com/Today20092/podcast-bleed-reducer/releases/download/v0.1.0-alpha.2/CleanSlate-0.1.0-alpha.2-macos-x64.dmg.sha256) | Open the DMG and drag `CleanSlate.app` to Applications. |
+| Linux, 64-bit x86, glibc 2.35+ | [Download v0.1.0-alpha.2](https://github.com/Today20092/podcast-bleed-reducer/releases/download/v0.1.0-alpha.2/CleanSlate-0.1.0-alpha.2-linux-x64.AppImage) · [SHA-256](https://github.com/Today20092/podcast-bleed-reducer/releases/download/v0.1.0-alpha.2/CleanSlate-0.1.0-alpha.2-linux-x64.AppImage.sha256) | Allow the AppImage to run as a program in its file properties, then open it. |
 <!-- downloads:end -->
 
 On a Mac, **Apple menu → About This Mac** shows either an Apple chip or an Intel processor. Linux packages target Ubuntu 22.04 or newer and require a working desktop and audio system. If your system cannot mount an AppImage, run it with `--appimage-extract-and-run`.
@@ -32,7 +38,7 @@ These are experimental alpha packages. Windows builds are unsigned. Mac builds u
 
 ## Try it
 
-CleanSlate is in development. While downloads remain unpublished, use the [build guide](docs/development.md) to build and open the editor from this checkout.
+Download the experimental application for your platform [above](#download), then open it using the steps in the table. To build from source, follow the [build guide](docs/development.md).
 
 [![From aligned tracks to processed WAVs.](docs/diagrams/workflow.svg)](docs/diagrams/workflow.svg)
 
@@ -40,11 +46,11 @@ CleanSlate is in development. While downloads remain unpublished, use the [build
 
 The steps below describe the same workflow. Tracks must already be synchronized; CleanSlate does not align them for you.
 
-1. Import synchronized mono tracks, one dedicated microphone per speaker.
+1. Import synchronized mono tracks or selected channels from a multichannel WAV, one dedicated microphone per speaker.
 2. Listen in Original mode. Drag across a waveform and select everyone speaking; select nobody for room tone. Supply a solo example for each speaker and a room-tone example.
 3. Run Analyze. The learned models evaluate the whole recording, including sections you have not labeled.
 4. Compare Original, Processed and Removed. Adjust attenuation, gap duration and fades. Add labels or manual gain edits where needed.
-5. Save your editable project and create individual processed WAVs when the result sounds right.
+5. Save your editable project and export processed WAVs when the result sounds right. Choose separate mono files or one WAV with separate channels when the source rates and timing are compatible.
 
 See the [usage guide](docs/editor-workflow.md) for editing, reanalysis and export details.
 
@@ -65,19 +71,39 @@ Automatic attenuation uses S-shaped fades: gain starts changing gently, moves fa
 
 Manual gain points use straight lines between points and remain authoritative after reanalysis. See the [gain-envelope contract](docs/effective-envelopes.md) for how these layers combine. The aim is transparent attenuation without audible clicks, pumping or obvious ducking; confirm the result by listening. Existing renders made with the previous exponential fades need to be regenerated.
 
+## How it works
+
+Speech detection asks whether a microphone contains speech. Ownership asks whether its assigned person is speaking, rather than another person's voice entering that microphone as bleed.
+
+CleanSlate prepares 16 kHz analysis audio, measures speech and microphone relationships in 32 ms frames, and trains one logistic regression model per track from your reference labels. Each model combines those measurements with learned weights to estimate local ownership. Thresholds turn estimates into decisions over time; your labels specify the speaker set inside their exact ranges. Gain settings and manual edits then produce the curve used for audition and export.
+
+Read [How CleanSlate reduces microphone bleed](docs/ownership-explained.md) for the operation order, model inputs, how weights are learned, overlap and practical limits.
+
 ## Defaults and limits
 
 Analysis uses acoustic measurements and your speaker examples. It runs locally; there is no Nemotron runtime, download or analysis option.
 
 Supply aligned tracks; CleanSlate does not automatically synchronize them. Ownership scores are model estimates, not guaranteed accuracy. Review the result by listening, especially to Removed audio. Independent quality, listening and eight-speaker/two-hour Windows release qualification remain pending.
 
-The planned alpha remains experimental while independent quality, listening and long-session checks are pending. See the [evaluation tracker](.scratch/offline-supervised-editor/issues/14-independent-release-evaluation.md). The earlier Nemotron experiment is retained as a [research idea](docs/research/nemotron.md).
+The alpha remains experimental while independent quality, listening and long-session checks are pending. See the [evaluation tracker](.scratch/offline-supervised-editor/issues/14-independent-release-evaluation.md). The earlier Nemotron experiment is retained as a [research idea](docs/research/nemotron.md).
 
 ## Documentation and development
 
+### Why I made CleanSlate
+
+I make many podcasts and wanted a local tool I could use without paying a recurring automixing fee. After recording, I wanted to import my synchronized microphone tracks, check them by listening, and reduce room bleed when each person wasn't speaking.
+
+I used FabFilter Pro-G, but on my recordings the level difference between a person's voice and bleed from other speakers was sometimes too small to set a reliable gate threshold. I needed something smarter about who was speaking, so it could attenuate inactive microphones while preserving wanted speech. CleanSlate is my attempt to make that first pass useful, with listening and manual gain edits before export.
+
+The focus is podcast bleed reduction. Finish other production work in your usual audio editor. See the [roadmap](ROADMAP.md) for current priorities and future possibilities.
+
 ### How this project is built
 
-All coding for this project is done with AI agents using GPT Astra and GPT 6.1 Sol. Development follows Matt Pocock's workflow, with specifications, scoped tickets, implementation and review. Human feedback guides the GUI and checks whether the attenuation sounds right.
+All coding for this project so far has been done with AI agents using GPT Astra and GPT 6.1 Sol. Development follows Matt Pocock's workflow, with specifications, scoped tickets, implementation and review. Human feedback guides the GUI and checks whether the attenuation sounds right. The [contributing guide](CONTRIBUTING.md) explains our workflow and links to [Matt's agent skills](https://github.com/mattpocock/skills). The skills are recommended for agent-assisted work; human-written contributions are welcome.
+
+### Help shape the project
+
+Report bugs, confusing controls, user-flow problems, listening results or feature ideas through [GitHub Issues](https://github.com/Today20092/podcast-bleed-reducer/issues/new/choose). The forms help describe the problem consistently. You do not need to write code to contribute. Review screenshots and logs for private information before posting; share recordings only with permission from everyone recorded.
 
 ### Technology
 
@@ -91,7 +117,10 @@ All coding for this project is done with AI agents using GPT Astra and GPT 6.1 S
 
 ### Guides
 
-- [Ownership architecture](docs/ownership-explained.md): labels, acoustic inputs, bleed calibration, weights, logistic regression and gain decisions, with an illustrated workflow.
+- [Contributing](CONTRIBUTING.md): feedback, development workflow, optional AI skills and pull requests.
+- [Roadmap](ROADMAP.md): current priorities and ideas that need investigation.
+
+- [How it works](docs/ownership-explained.md): speech detection, operation order, model inputs, learned weights and gain decisions, with an illustrated workflow.
 - [Developer guide](docs/development.md): builds and checks.
 - [Release guide](docs/releasing.md): Windows ZIPs, Mac application bundles, Linux AppImages, package checks and draft releases.
 - [GUI development](docs/gui-development.md): repeatable build-and-launch workflow using a separate project copy.

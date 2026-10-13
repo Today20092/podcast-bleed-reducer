@@ -4,9 +4,10 @@ Labels: wayfinder:map
 Status: complete
 
 2026-10-10 owner authorized future macOS and Linux release packages alongside
-Windows and direct platform downloads in the README. Claimed build
+Windows and direct platform downloads in the README. Completed build
 [ticket 26](../offline-supervised-editor/issues/26-cross-platform-release-packages.md)
-tracks this extension; stable qualification gates 14/15 remain unchanged.
+records the published four-platform `v0.1.0-alpha.2` and verified README downloads
+on 2026-10-11; stable qualification gates 14/15 remain unchanged.
 
 2026-10-09 owner override: acoustic-only analysis supersedes the required/optional
 Nemotron decisions below. Nemotron is removed, with a research note retained.

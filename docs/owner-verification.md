@@ -1,5 +1,7 @@
 # Owner verification
 
+This is a chronological evidence record, not a current launch guide. Paths, executable hashes, screenshots and measurements below belong to the candidates named in each section. Optional Nemotron controls, model-check instructions, review navigation and fixed phrase guards are superseded. Use the [current editor workflow](editor-workflow.md), [GUI development guide](gui-development.md) and [temporal policy](temporal-ownership.md) for today's behavior. Historical numbers do not qualify the current release.
+
 ## Uniform red attenuation backgrounds
 
 The open GUI development candidate now shows uniform muted red backgrounds wherever effective gain is below unity, including fades and manual attenuation. Full-volume spans stay neutral. Red means reduced gain; it does not classify the waveform as speech-free. Waveforms, purple gain curves, reference bars, protection and blue selection rendering remain above the fill. A timeline legend explains the color. The shading stays visible in Original, Processed and Removed.
@@ -18,9 +20,9 @@ The owner's acoustic feedback is "much better". The next candidate removes the r
 
 Run Analyze once after opening an older saved result: fixed acoustic temporal bridging has moved into gain generation, so shorter slider values can take effect. After that, slider changes reuse the same ownership evidence. Compare at low/high settings, save/reopen, and check wanted words in Removed. Check zoom and horizontal pan after analysis. Removing roughly one ownership-overview query per visible bucket and all automatic hatch/dot geometry reduces redraw work; actual interactive latency still needs physical verification.
 
-The owner closed the preceding GUI before saving and authorized using the last saved project. No discarded edits were reconstructed. See [the ownership explanation](ownership-explained.md) for the code-derived Mermaid diagram and probability formula. Earlier verification records below describe their respective candidates.
+The owner closed the preceding GUI before saving and authorized using the last saved project. No discarded edits were reconstructed. See [the ownership explanation](ownership-explained.md) for the illustrated processing order and probability formula. Earlier verification records below describe their respective candidates.
 
-## Current acoustic feedback candidate — 2026-10-09
+## Historical acoustic feedback candidate — 2026-10-09
 
 Launch `C:/Users/User/.codex/worktrees/offline-timebase/podcast-automix-rust-gui/target/owner-ui/debug/rust-app.exe` and open `C:/Users/User/Documents/Codex/2026-08-14/podcast-automix-rust-gui/test-audio/quick-test-10min/261005-quick-test.cleanslate`. The saved session now contains the owner's 15 references, including room tone; none are in the marked 125–157-second regression. Original source audio and saved labels were preserved. The records below describe earlier checkpoints.
 

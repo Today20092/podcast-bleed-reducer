@@ -1,15 +1,38 @@
-# Conservative temporal ownership
+# Ownership decisions over time
 
-Ticket 10 adds an offline stage after the independent supervised models. It retains the original owner probabilities, raw Silero probabilities, assigned Nemotron activity and maximum activity across every anonymous channel. Gain settings and protected manual edits are not inputs.
+This stage follows the independent [supervised ownership models](supervised-ownership-models.md). It turns per-frame estimates into track states, then applies every current human reference over its exact time range. Gain settings and manual edits are later inputs to the [effective envelope](effective-envelopes.md). Start with the [reader explanation](ownership-explained.md#5-ownership-becomes-a-gain-curve).
 
-The frozen development recipe is `independent-bands-consistent-activity-gap-preservation-v1`: owner high 0.8, owner low 0.2, activity high 0.5, quiet low 0.2, and at most two 32 ms frames of interior gap preservation. A positive frame requires consistent owner, raw speech and assigned activity evidence. Intermediate, missing, contradictory or poorly explained evidence becomes `UncertainUnity`. There is no minimum speech duration, winner selection, or rule that deletes short positive speech. Different tracks may own the same frame. Quiet speech with insufficient raw evidence remains preserved uncertainty.
+## Current acoustic editor policy
 
-A low owner estimate permits absence only when assigned activity is low and raw speech is quiet or there is other global activity. If every track is absent but any raw or global speech evidence remains active, the whole frame is preserved for review. Thus an empty owner set alone never establishes no speech. Bounded context only changes an interior absent gap to preserved uncertainty; it cannot erase a positive frame or bridge a long silence.
+The current editor supplies acoustic ownership estimates and raw Silero evidence, with no assigned Nemotron activity. `TemporalEvidenceGrid::acoustic_only` selects the acoustic branch. Each track begins absent and uses hysteresis:
 
-All current human reference intervals apply after statistical context, including frames omitted by training sampling. Their exact half-open project ticks split the timeline. Solo and overlap labels retain their explicitly marked owners; room-tone truth has an empty active set. Consistent duplicate references are united; contradictory truth blocks installation. Statistical warnings are clipped out of current human-truth intervals. Manual gain edits remain a separate later layer. Current source bindings and synchronization validation are required before reuse, and source fingerprints are checked again before installation. Changed labels cannot be applied to an old supervised result.
+| Evidence | Decision |
+| --- | --- |
+| Ownership estimate at least 0.8 | Enter `Owned` |
+| Ownership estimate at most 0.2 | Enter `Absent` |
+| Estimate strictly between 0.2 and 0.8 | Keep the prior owned/absent state |
+| Missing estimate, missing raw speech or explicit preservation reason | Preserve as `UncertainUnity` |
 
-`TemporalOwnershipCache::optimize` consumes the real source-bound supervised result. Supplied `TemporalEvidenceGrid` entry points serve development tests and composition; they do not certify model inference or recording quality. Evidence payloads, source and reference identity, settings and the recipe participate in cache identity. Cancellation or trust-boundary failure leaves the last completed result intact. Source time ends at the native EOF. Warning clipping uses ordered overlap lookups and cancellation checks, rather than scanning the whole timeline for each warning.
+Intermediate estimates alone do not become uncertainty. Raw Silero is a model input and must be present, but the acoustic temporal branch does not additionally require its score to exceed 0.5. There is no winner selection or minimum speech duration. Different tracks may own the same frame. An empty owner set in this acoustic branch does not trigger the old global-speech preservation rule.
 
-The result exposes independent per-track states, retained probabilities, grouped warning spans and a conservative adapter to the retained renderer: any unresolved track makes that legacy region uncertain and therefore unity. `ReviewWorkspace::from_ownership` makes warnings seekable and keys them by analysis identity, interval, tracks and reason. Ticket 11 composes per-track gain envelopes; ticket 12 connects the complete worker/UI pipeline. This ticket does not clear the provisional UI export gate or certify the legacy job as supervised analysis.
+The general temporal defaults include a two-frame gap guard, but `EditorAnalysisWorker` explicitly sets `preserved_gap_frames` to zero. The editor's **Ignore gaps shorter than** control instead bridges bounded automatic gaps during gain generation, with a 768 ms default. Gain changes reuse the ownership evidence; explicit human absence is not bridged. This separates detection from the user's sound settings.
 
-Controlled development fixtures cover a one-frame independent overlap, noisy/contradictory estimates, short preserved gaps, long silence, exact off-grid human boundaries, room truth, 4,096 alternating regions, unchanged gain reuse, label/settings invalidation, cancelled jobs and synchronization withdrawal. Existing supervised fixtures exercise the real analysis adapter without inventing recording labels. These parameters and synthetic outcomes are not independent release accuracy measurements; ticket 14 owns real speech/overlap preservation, bleed improvement and listening approval. Acceptance truth must never be supplied as project references while measuring unassisted predictions.
+## Exact human constraints
+
+All current reference intervals apply after statistical decisions, including frames omitted by training sampling. Their exact half-open source-time boundaries split the timeline. Solo and overlap labels mark the selected speakers `Owned` and the other tracks `Absent`; room-tone truth makes every track absent. Consistent overlapping labels are united, contradictory labels block installation, and statistical warnings are clipped out of current human-truth intervals.
+
+These labels are both training examples and direct constraints. A mislabeled section can therefore force a wrong decision inside its own range. Manual gain edits remain a separate, intentional correction layer.
+
+## Identity and failure boundaries
+
+`TemporalOwnershipCache::optimize` consumes the source-bound supervised result. Project source order, duration, synchronization, reference bindings, evidence identity, settings and the temporal recipe must match. Source fingerprints are checked before computation and again before installation. Changed labels cannot be applied to an old supervised result. Cancellation or validation failure leaves the previous completed result intact.
+
+The result retains probabilities, per-track states, exact regions and grouped preservation warnings. The current GUI lets users inspect waveforms and audition directly; it has no uncertainty review queue. Internal uncertainty protection remains. Owned and uncertain regions stay at unity in automatic gain, while absent regions are eligible for attenuation. Manual constraints are composed afterward.
+
+## Historical policy and validation
+
+The retained non-acoustic branch supports controlled development fixtures from the retired pipeline. It uses assigned speaker activity, raw speech, global activity and conservative intermediate uncertainty. Those conditions and its two-frame guard do not describe current editor Analyze behavior. The recipe name `independent-bands-consistent-activity-gap-preservation-v1` is shared, so the acoustic flag and settings also participate in identity.
+
+Tests cover acoustic hysteresis, optional bounded gap preservation, exact off-grid human boundaries, room truth, contradictory references, source identity, cache invalidation and cancellation. They establish mechanics, not independent wanted-speech/overlap or listening acceptance; those remain tickets 14/15.
+
+Source: [temporal decisions and human constraints](../src/temporal_ownership.rs), [editor settings](../src/editor_workflow.rs), [automatic gain generation](../src/effective_envelope.rs).

@@ -1,0 +1,31 @@
+name: Feature proposal
+description: Describe a recording need or suggest future work.
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Check the [roadmap](https://github.com/Today20092/podcast-bleed-reducer/blob/main/ROADMAP.md) and existing issues first. Ideas beyond the current focus are welcome. A proposal does not imply acceptance or a delivery date. Do not include private recordings or personal information.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What recording or editing problem do you need solved?
+      description: Describe your setup and when the need arises.
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: What result would help you?
+    validations:
+      required: true
+  - type: textarea
+    id: workaround
+    attributes:
+      label: How do you handle it today?
+      description: Describe your workaround, or say that you have none.
+    validations:
+      required: true
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Optional proposed solution or alternatives
