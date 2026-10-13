@@ -1,6 +1,6 @@
 # Run native checks before release tags
 
-Status: claimed
+Status: done
 Type: task
 Assignee: Codex pr_checks
 Blocked by: none
@@ -39,3 +39,9 @@ Parent integration verification passed workflow and packaging regressions,
 strict-mode release-status fixtures and PowerShell parsing. The shared command now
 includes the release-status regression suite. No Rust/application behavior changed.
 Branch protection is not changed by this ticket; hosted PR results remain pending.
+
+Completion: run 38374588209 passed all four native PR jobs (Windows, Linux and
+both Mac architectures) after normalizing workflow CRLF input for Windows.
+The actual regression script also passed with forced CRLF input locally.
+Owner authorized merging after checks passed; PR 9 merged into main as 5b148a0.
+Branch-protection settings remain unchanged.
