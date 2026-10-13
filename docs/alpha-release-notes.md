@@ -1,8 +1,11 @@
-CleanSlate v0.1.0-alpha.4 — editor workflow, progressive imports and faster playback.
+CleanSlate v0.1.0-alpha.5 — editor workflow, progressive imports and faster playback.
 
 The alpha.3 candidate did not publish because its Windows headless tests crashed
 in audio-device enumeration. Alpha.4 corrects that test/preparation path while
 preserving production device-rate validation and the complete test suite.
+The alpha.4 candidate also exposed a concurrent cache-publication race on Linux.
+Alpha.5 accepts a competing publisher only after verifying its complete matching
+artifact; invalid cache data and ordinary errors still block preparation.
 
 Changes since the last published desktop release, v0.1.0-alpha.2:
 

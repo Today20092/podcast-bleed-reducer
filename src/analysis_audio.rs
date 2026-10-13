@@ -224,9 +224,80 @@ pub(crate) fn prepare_source_at_rate_in(
         let invalid = cache.join(format!(".invalid-{}-{stamp}-{nonce}", std::process::id()));
         fs::rename(&destination, invalid)?;
     }
-    fs::rename(&staging.0, &destination)?;
-    read_cached(&destination, &fingerprint, output_rate, cancelled)?
+    publish_staging(
+        &staging.0,
+        &destination,
+        &fingerprint,
+        output_rate,
+        cancelled,
+    )
+}
+
+fn publish_staging(
+    staging: &Path,
+    destination: &Path,
+    fingerprint: &str,
+    output_rate: u32,
+    cancelled: Option<&AtomicBool>,
+) -> Result<PreparedAnalysisAudio, RenderBlocker> {
+    if let Err(error) = fs::rename(staging, destination) {
+        // Another publisher may have installed the same complete artifact after our check.
+        if let Some(audio) = read_cached(destination, fingerprint, output_rate, cancelled)? {
+            return Ok(audio);
+        }
+        return Err(error.into());
+    }
+    read_cached(destination, fingerprint, output_rate, cancelled)?
         .ok_or_else(|| RenderBlocker("new analysis artifact failed integrity verification".into()))
+}
+
+#[cfg(test)]
+mod publication_tests {
+    use super::*;
+
+    #[test]
+    fn concurrent_publication_accepts_only_a_verified_winner() {
+        let root = std::env::temp_dir().join(format!("audio-publish-{}", std::process::id()));
+        fs::create_dir_all(&root).unwrap();
+        let source = root.join("source.wav");
+        let mut writer =
+            bwavfile::WaveWriter::create(&source, bwavfile::WaveFmt::new_pcm_mono(48_000, 16))
+                .unwrap()
+                .audio_frame_writer()
+                .unwrap();
+        writer.write_frames(&[0.25; 3073]).unwrap();
+        writer.end().unwrap();
+        let input = crate::AudioSource::mono(source);
+        let winner = prepare_source_at_rate_in(&input, &root.join("cache"), 16_000, None).unwrap();
+        let destination = winner.path.parent().unwrap();
+        let staging = Staging(root.join("losing-staging"));
+        fs::create_dir(&staging.0).unwrap();
+        // A publisher won after our existence check; its populated directory blocks rename.
+        let accepted = publish_staging(
+            &staging.0,
+            destination,
+            &winner.identity.source_fingerprint,
+            16_000,
+            None,
+        )
+        .unwrap();
+        assert_eq!(accepted.identity, winner.identity);
+        assert_eq!(accepted.audio_sha256, winner.audio_sha256);
+        assert!(staging.0.exists());
+        fs::write(winner.path(), b"corrupt").unwrap();
+        assert!(
+            publish_staging(
+                &staging.0,
+                destination,
+                &winner.identity.source_fingerprint,
+                16_000,
+                None,
+            )
+            .is_err()
+        );
+        drop(staging);
+        fs::remove_dir_all(root).unwrap();
+    }
 }
 
 struct Staging(PathBuf);
