@@ -416,6 +416,7 @@ struct Controls {
     underruns: AtomicUsize,
     commands: AtomicUsize,
     first_buffer_command: AtomicUsize,
+    applied_command: AtomicUsize,
 }
 
 struct Settings {
@@ -429,6 +430,17 @@ struct Settings {
 }
 
 impl Controls {
+    fn position_frame(&self) -> usize {
+        self.settings.read().unwrap().range.map_or_else(
+            || self.position.load(Ordering::Relaxed),
+            |(start, _, _)| start,
+        )
+    }
+    fn is_finished(&self) -> bool {
+        self.applied_command.load(Ordering::Acquire) == self.commands.load(Ordering::Acquire)
+            && self.settings.read().unwrap().loop_start.is_none()
+            && self.position.load(Ordering::Relaxed) >= self.end.load(Ordering::Acquire)
+    }
     fn new(
         mode: AuditionMode,
         monitor: f32,
@@ -444,6 +456,7 @@ impl Controls {
             underruns: AtomicUsize::new(0),
             commands: AtomicUsize::new(0),
             first_buffer_command: AtomicUsize::new(usize::MAX),
+            applied_command: AtomicUsize::new(0),
             settings: RwLock::new(Settings {
                 range: None,
                 loop_start: None,
@@ -505,6 +518,9 @@ pub struct AuditionPlayback {
     worker: PlaybackWorker,
 }
 impl AuditionPlayback {
+    pub fn is_finished(&self) -> bool {
+        self.source.failure.is_some() || self.source.controls.is_finished()
+    }
     pub fn restart(&mut self, range: TimeRange, repeating: bool) -> Result<(), RenderBlocker> {
         restart_controls(&self.source.controls, self.grid, range, repeating)
     }
@@ -521,7 +537,9 @@ impl AuditionPlayback {
         self.source.position_frame()
     }
     pub fn position(&self) -> TimePosition {
-        self.source.position()
+        self.grid
+            .time_at_frame(self.position_frame() as u64, Rounding::Floor)
+            .expect("bounded playback position")
     }
     pub fn seek(&self, time: TimePosition) {
         self.source.seek(time);
@@ -645,13 +663,7 @@ impl AuditionSource {
         }
     }
     pub fn position_frame(&self) -> usize {
-        self.controls.position.load(Ordering::Relaxed)
-    }
-    pub fn position(&self) -> TimePosition {
-        SourceTimebase::new(self.sample_rate, self.end as u64)
-            .expect("validated playback grid")
-            .time_at_frame(self.position_frame() as u64, Rounding::Floor)
-            .expect("bounded position")
+        self.controls.position_frame()
     }
     pub fn seek(&self, time: TimePosition) {
         let grid = SourceTimebase::new(self.sample_rate, self.end as u64)
@@ -710,6 +722,9 @@ impl Iterator for AuditionSource {
                         .store(self.position, Ordering::Relaxed);
                 }
                 self.command_generation = command;
+                self.controls
+                    .applied_command
+                    .store(command, Ordering::Release);
                 self.mode = settings.mode;
                 self.loop_start = settings.loop_start;
                 self.solo = settings.solo;
@@ -1029,10 +1044,7 @@ impl LiveAudition {
     }
     pub(crate) fn position(&self) -> TimePosition {
         self.grid
-            .time_at_frame(
-                self.controls.position.load(Ordering::Relaxed) as u64,
-                Rounding::Floor,
-            )
+            .time_at_frame(self.controls.position_frame() as u64, Rounding::Floor)
             .expect("bounded playback position")
     }
     pub(crate) fn seek(&self, position: TimePosition) {
@@ -1048,10 +1060,7 @@ impl LiveAudition {
         self.controls.commands.fetch_add(1, Ordering::AcqRel);
     }
     pub(crate) fn is_finished(&self) -> bool {
-        (self.controls.settings.read().unwrap().loop_start.is_none()
-            && self.controls.position.load(Ordering::Relaxed)
-                >= self.controls.end.load(Ordering::Acquire))
-            || self.player.empty()
+        self.controls.is_finished() || self.player.empty()
     }
     pub(crate) fn stop(&self) {
         self.controls.running.store(false, Ordering::Release);
@@ -1224,8 +1233,15 @@ mod tests {
         assert_eq!(next_at(&mut playback, 0), Some(0.1));
         assert_eq!(next_at(&mut playback, 1), Some(0.2));
         assert_eq!(playback.next(), Some(0.0));
-        playback.restart(range(2, 4), false).unwrap();
-        assert_eq!(next_at(&mut playback, 2), Some(0.3));
+        assert!(playback.is_finished());
+        playback.restart(range(3, 4), false).unwrap();
+        assert!(
+            !playback.is_finished(),
+            "a GUI tick before callback must not stop the new range"
+        );
+        assert_eq!(playback.position_frame(), 3);
+        assert_eq!(playback.position(), range(3, 4).start);
+        assert_eq!(next_at(&mut playback, 3), Some(0.4));
         playback.stop();
         let position = playback.position_frame();
         assert_eq!(playback.next(), Some(0.0));
@@ -1333,6 +1349,29 @@ mod tests {
         assert!(first.matches_sources(&preview_sources));
         let second = PreparedAudio::prepare(&paths, Some(first.clone()), &cancelled).unwrap();
         assert!(Arc::ptr_eq(&first.stems, &second.stems));
+        let inputs = paths
+            .iter()
+            .cloned()
+            .map(crate::AudioSource::mono)
+            .collect::<Vec<_>>();
+        let changed_rate = PreparedAudio::prepare_sources_for_rate(
+            &inputs,
+            Some(second.clone()),
+            24_000,
+            &cancelled,
+        )
+        .unwrap();
+        assert_eq!(changed_rate.sample_rate(), 24_000);
+        assert_eq!(changed_rate.frame_count(), 256);
+        assert!(!Arc::ptr_eq(&second.stems, &changed_rate.stems));
+        let rate_cache = PreparedAudio::prepare_sources_for_rate(
+            &inputs,
+            Some(changed_rate.clone()),
+            24_000,
+            &cancelled,
+        )
+        .unwrap();
+        assert!(Arc::ptr_eq(&changed_rate.stems, &rate_cache.stems));
         write(&[0.5; 1024]);
         assert!(!first.is_current(&paths));
         let changed = PreparedAudio::prepare(&paths, Some(second), &cancelled).unwrap();
