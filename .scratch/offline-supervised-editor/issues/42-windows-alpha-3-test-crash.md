@@ -44,6 +44,10 @@ states. Temporary serial execution was reverted. Fixed run 38361304187 passed
 Windows Check and test with the original parallel command; package checks and
 remaining platforms are pending at this checkpoint.
 
+Later verification: all four platforms passed Check and test in 38361304187.
+Windows, macOS arm64 and Linux package verification passed. Intel Mac packaging
+and the final tagged alpha.4 release remain pending.
+
 The failed alpha.3 tag remains unchanged. The corrected candidate is alpha.4.
 No physical disconnect/recovery, independent acoustic or long-session qualification
 is claimed by this native CI fix.
