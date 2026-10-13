@@ -1,6 +1,6 @@
 # Fix the Windows alpha 3 native test crash
 
-Status: claimed
+Status: done
 Type: bug
 Assignee: Codex
 Blocked by: none
@@ -51,3 +51,8 @@ and the final tagged alpha.4 release remain pending.
 The failed alpha.3 tag remains unchanged. The corrected candidate is alpha.4.
 No physical disconnect/recovery, independent acoustic or long-session qualification
 is claimed by this native CI fix.
+
+Final verification: run 38366852428 completed successfully with all four native
+test suites and package checks green. Windows passed 264 tests, 18 ignored.
+The exact packaged source is d5fe272f82c06d43c7121c23a3c13fe1a574cb57.
+Candidate alpha.5 includes the follow-up cache-publication and render harness fixes.

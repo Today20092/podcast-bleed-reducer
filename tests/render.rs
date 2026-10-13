@@ -11,7 +11,8 @@ use std::time::{Duration, Instant};
 use std::{fs, path::Path};
 
 fn wait_for_staging(root: &Path) -> std::path::PathBuf {
-    let deadline = Instant::now() + Duration::from_secs(5);
+    // Cold preparation can exceed five seconds on a loaded native CI runner.
+    let deadline = Instant::now() + Duration::from_secs(30);
     loop {
         if let Some(path) = fs::read_dir(root)
             .unwrap()
@@ -31,7 +32,7 @@ fn wait_for_staging(root: &Path) -> std::path::PathBuf {
             "timed out waiting for a private render in {}",
             root.display()
         );
-        std::thread::yield_now();
+        std::thread::sleep(Duration::from_millis(1));
     }
 }
 
