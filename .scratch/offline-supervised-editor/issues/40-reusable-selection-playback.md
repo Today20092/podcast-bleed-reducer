@@ -1,8 +1,8 @@
 # Make ready-session playback and selection audition start promptly
 
-Status: ready-for-agent
+Status: claimed
 Type: task
-Assignee: unassigned
+Assignee: Codex
 Blocked by: 04, 31, 38
 Target branch: codex/editor-workflow-31-37
 Spec: #accepted-design
@@ -55,7 +55,7 @@ Recording, live input monitoring, plugins, ASIO/backend selection, user buffer-s
 
 ## Results
 
-Pending. Specification created at the owner's request; no playback implementation or latency benchmark is claimed. Implementation must wait for ticket 38 and be claimed before editing. Research references are collected separately; no third-party code has been copied.
+2026-10-12: Claimed after the owner tested ticket 38's latest Release executable, reported "its good so far" and explicitly requested implementation of ticket 40. This authorizes proceeding from that tested import baseline; it does not claim exhaustive GUI/listening or release qualification. Use the accepted prepared-audio and transport interfaces for regression tests of reuse, ranges, cancellation and source snapshots. Research references are collected separately; no third-party code has been copied.
 
 ## Comments
 

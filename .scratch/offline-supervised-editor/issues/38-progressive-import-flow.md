@@ -58,6 +58,8 @@ Automatic synchronization, drift correction/checking, new audio formats, split s
 
 ## Results
 
+2026-10-12 owner feedback: tested the latest `target/release/rust-app.exe`, reported "its good so far" and explicitly requested ticket 40 implementation. Continue from this tested import baseline. This report does not assert exhaustive scenario-by-scenario GUI checks, physical audible-start timing or release qualification.
+
 ### Completed software measurements (2026-10-12)
 
 The original local `261005-T001.WAV` was read without modification/upload. Every trial selected all three channels with default parameters. Cold/warm below mean an isolated empty waveform-cache root followed by a second run; the Windows file cache was **not** flushed. Benchmarks ran separately from compilation. These are worker/test-harness stage times, excluding file-picker interaction, GUI scheduling/rendering and audible/device startup.

@@ -3194,6 +3194,9 @@ pub struct CleanSlateApp {
     render_generation: Arc<crate::RenderGeneration>,
     review: Option<ReviewWorkspace>,
     audition: Option<LiveAudition>,
+    idle_audition: Option<LiveAudition>,
+    audition_output: Option<std::rc::Rc<crate::audition::AuditionOutput>>,
+    audition_requested_at: Option<Instant>,
     audition_preparation: AuditionPreparation,
     audition_ready: bool,
     audition_range: Option<(TimePosition, TimePosition)>,
@@ -3328,6 +3331,9 @@ impl Default for CleanSlateApp {
             pending_export: None,
             review: None,
             audition: None,
+            idle_audition: None,
+            audition_output: None,
+            audition_requested_at: None,
             audition_preparation: AuditionPreparation::default(),
             audition_ready: false,
             audition_range: None,
@@ -3890,6 +3896,9 @@ impl CleanSlateApp {
         if let Some(audition) = self.audition.take() {
             audition.stop();
         }
+        self.idle_audition = None;
+        self.audition_output = None;
+        self.audition_requested_at = None;
         self.preview = None;
         self.preview_sources.clear();
         self.supervised_result = None;
@@ -4892,11 +4901,82 @@ impl CleanSlateApp {
             },
             |range| range.0.max(range.1),
         );
-        self.audition.take().inspect(|playing| playing.stop());
+        if let Some(playing) = self.audition.take() {
+            playing.stop();
+            self.idle_audition = Some(playing);
+        }
+        self.audition_requested_at = Some(Instant::now());
+        if let Some(prepared) = self
+            .audition_preparation
+            .ready_sources(&project.audio_sources())
+        {
+            self.audition_range = None;
+            self.audition_preparation.cancel();
+            if let Err(error) =
+                self.start_prepared_audition(prepared, envelopes, TimeRange { start, end })
+            {
+                self.messages = vec![error.to_string()];
+            }
+            return;
+        }
         self.audition_range = Some((start, end));
         if !self.audition_preparation.is_requested() {
             self.audition_preparation
                 .request_sources(project.audio_sources());
+        }
+    }
+
+    fn start_prepared_audition(
+        &mut self,
+        prepared: crate::audition::PreparedAudio,
+        envelopes: Vec<crate::GainEnvelope>,
+        range: TimeRange,
+    ) -> Result<(), crate::RenderBlocker> {
+        let monitor = 10.0_f32.powf(self.monitor_db / 20.0);
+        if let Some(idle) = self.idle_audition.take()
+            && idle.restart(
+                &prepared,
+                envelopes.clone(),
+                self.audition_mode,
+                monitor,
+                range,
+                self.solo_tracks,
+                self.reference_audition.is_some(),
+            )?
+        {
+            self.audition = Some(idle);
+            return Ok(());
+        }
+        self.audition = Some(LiveAudition::start_on_output(
+            &mut self.audition_output,
+            prepared,
+            envelopes,
+            self.audition_mode,
+            monitor,
+            range,
+            self.solo_tracks,
+            self.reference_audition.is_some(),
+        )?);
+        Ok(())
+    }
+
+    fn audition_status(&self) -> Option<&'static str> {
+        if !self
+            .audition_requested_at
+            .is_some_and(|started| started.elapsed() >= Duration::from_millis(150))
+        {
+            return None;
+        }
+        if self.audition_range.is_some() && self.audition_preparation.is_requested() {
+            Some("Preparing audio…")
+        } else if self
+            .audition
+            .as_ref()
+            .is_some_and(LiveAudition::is_buffering)
+        {
+            Some("Buffering audio…")
+        } else {
+            None
         }
     }
 
@@ -5306,18 +5386,12 @@ impl CleanSlateApp {
                                             prepared.matches_sources(&sources)
                                         }) =>
                                 {
-                                    match LiveAudition::start(
+                                    match self.start_prepared_audition(
                                         prepared,
                                         envelopes,
-                                        self.audition_mode,
-                                        10.0_f32.powf(self.monitor_db / 20.0),
                                         TimeRange { start, end },
-                                        self.solo_tracks,
-                                        self.reference_audition.is_some(),
                                     ) {
-                                        Ok(audition) => {
-                                            self.audition = Some(audition);
-                                        }
+                                        Ok(()) => {}
                                         Err(error) => self.messages = vec![error.to_string()],
                                     }
                                 }
@@ -5344,6 +5418,16 @@ impl CleanSlateApp {
         let Some(audition) = &self.audition else {
             return;
         };
+        if audition.failed() {
+            self.messages =
+                vec!["Audio output stopped. Check the device and press Play to retry.".into()];
+            self.audition = None;
+            self.idle_audition = None;
+            self.audition_output = None;
+            self.audition_preparation.invalidate();
+            self.audition_ready = false;
+            return;
+        }
         self.timeline.seek(audition.position());
         if self.timeline.follow_playhead(self.playback_scroll) {
             self.drawing_revision = self.drawing_revision.wrapping_add(1);
@@ -5351,8 +5435,11 @@ impl CleanSlateApp {
         if let Some(review) = &mut self.review {
             review.seek(self.timeline.playhead());
         }
-        if audition.is_finished() {
-            self.audition = None;
+        if audition.is_finished()
+            && let Some(finished) = self.audition.take()
+        {
+            finished.stop();
+            self.idle_audition = Some(finished);
         }
     }
     fn set_audition_mode(&mut self, mode: AuditionMode) {
@@ -5376,6 +5463,7 @@ impl CleanSlateApp {
         self.audition_preparation.cancel();
         if let Some(audition) = self.audition.take() {
             audition.stop();
+            self.idle_audition = Some(audition);
         }
     }
 
@@ -8454,8 +8542,8 @@ impl CleanSlateApp {
             button("Previous")
                 .style(secondary_button)
                 .on_press(Message::Previous),
-            button(if self.audition_range.is_some() {
-                "Preparing audio…"
+            button(if let Some(status) = self.audition_status() {
+                status
             } else if self
                 .reference_audition
                 .as_ref()
@@ -8665,8 +8753,8 @@ impl CleanSlateApp {
                     );
                 }
             }
-            if self.audition_range.is_some() {
-                menu = menu.push(text("Preparing audio…").size(14));
+            if let Some(status) = self.audition_status() {
+                menu = menu.push(text(status).size(14));
             } else if self.reference_audition.as_ref().is_some_and(|s| s.paused) {
                 menu = menu.push(text("Audition paused · Space resumes").size(14));
             } else if self.audition.is_none()
