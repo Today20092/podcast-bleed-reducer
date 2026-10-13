@@ -48,7 +48,10 @@ Changes since the last published desktop release, v0.1.0-alpha.2:
 
 ## Verification and limits
 
-The Windows build passed 263 automated tests (18 ignored), strict Clippy and formatting.
+The Windows build passed 264 automated tests (18 ignored), strict Clippy and formatting.
+All four platform test suites and packaged application checks passed in
+[the native verification run](https://github.com/Today20092/podcast-bleed-reducer/actions/runs/38366852428).
+Packages were built from commit d5fe272f82c06d43c7121c23a3c13fe1a574cb57.
 The owner tested repeated playback, selections, labeling loops, seeking, import during
 playback and import feedback and reported that everything was working well.
 On the owner's Focusrite device, warm software first-sample readiness measured

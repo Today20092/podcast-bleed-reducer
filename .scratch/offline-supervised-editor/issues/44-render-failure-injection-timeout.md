@@ -1,6 +1,6 @@
 # Stabilize native render failure-injection synchronization
 
-Status: claimed
+Status: done
 Type: bug
 Assignee: Codex
 Blocked by: none
@@ -22,3 +22,9 @@ instead of continuously consuming CPU with yield_now.
 - Original render suite passes locally and on native CI.
 - Every existing failure/cancellation assertion remains.
 - Complete all four native package checks before creating the release candidate.
+
+The original six-test render suite passed locally in 1.52 seconds. Run 38366852428
+passed every native suite, including Intel Mac, and all four package checks.
+An Apple Silicon hdiutil Resource busy failure was transient: its fresh-runner retry
+passed without a script change. Full workflow conclusion is success.
+No failure/cancellation/cleanup assertions or tests were removed.
