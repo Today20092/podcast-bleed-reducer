@@ -252,11 +252,32 @@ pub(crate) struct AuditionPreparation {
     pending: Option<Vec<crate::AudioSource>>,
 }
 
+// Keep CPAL's Windows enumerator on the GUI thread; headless tests never probe hardware.
+fn preparation_output_rate() -> Result<u32, RenderBlocker> {
+    #[cfg(not(test))]
+    {
+        use rodio::cpal::traits::{DeviceTrait, HostTrait};
+        let device = rodio::cpal::default_host()
+            .default_output_device()
+            .ok_or_else(|| RenderBlocker("audio output unavailable: no default device".into()))?;
+        device
+            .default_output_config()
+            .map(|config| config.sample_rate().0)
+            .map_err(|error| {
+                RenderBlocker(format!("audio output configuration unavailable: {error}"))
+            })
+    }
+    #[cfg(test)]
+    {
+        Ok(48_000)
+    }
+}
+
 impl AuditionPreparation {
     pub(crate) fn ready_sources(&self, sources: &[crate::AudioSource]) -> Option<PreparedAudio> {
-        let rate = output_configuration().ok()?.rate;
-        self.cache
-            .as_ref()
+        let cached = self.cache.as_ref()?;
+        let rate = preparation_output_rate().ok()?;
+        Some(cached)
             .filter(|audio| audio.sample_rate == rate && audio.is_current_sources(sources))
             .cloned()
     }
@@ -306,25 +327,7 @@ impl AuditionPreparation {
         let Some(paths) = self.pending.take() else {
             return;
         };
-        // Keep CPAL's cached Windows device enumerator on the long-lived GUI thread.
-        #[cfg(not(test))]
-        let output_rate = (|| {
-            use rodio::cpal::traits::{DeviceTrait, HostTrait};
-            let device = rodio::cpal::default_host()
-                .default_output_device()
-                .ok_or_else(|| {
-                    RenderBlocker("audio output unavailable: no default device".into())
-                })?;
-            device
-                .default_output_config()
-                .map(|config| config.sample_rate().0)
-                .map_err(|error| {
-                    RenderBlocker(format!("audio output configuration unavailable: {error}"))
-                })
-        })();
-        // Unit tests exercise real preparation/cancellation without sound hardware.
-        #[cfg(test)]
-        let output_rate = Ok::<_, RenderBlocker>(48_000);
+        let output_rate = preparation_output_rate();
         let cached = self.cache.take();
         let cancelled = Arc::new(AtomicBool::new(false));
         let worker_cancelled = Arc::clone(&cancelled);
@@ -1456,6 +1459,14 @@ mod tests {
         .unwrap();
         assert_eq!(changed_rate.sample_rate(), 24_000);
         assert_eq!(changed_rate.frame_count(), 256);
+        let mut preparation = AuditionPreparation::default();
+        assert!(preparation.ready_sources(&inputs).is_none());
+        preparation.cache = Some(second.clone());
+        let ready = preparation.ready_sources(&inputs).unwrap();
+        assert!(Arc::ptr_eq(&second.stems, &ready.stems));
+        preparation.cache = Some(changed_rate.clone());
+        assert!(preparation.ready_sources(&inputs).is_none());
+        preparation.cache = Some(second.clone());
         assert!(!Arc::ptr_eq(&second.stems, &changed_rate.stems));
         let rate_cache = PreparedAudio::prepare_sources_for_rate(
             &inputs,
@@ -1466,6 +1477,7 @@ mod tests {
         .unwrap();
         assert!(Arc::ptr_eq(&changed_rate.stems, &rate_cache.stems));
         write(&[0.5; 1024]);
+        assert!(preparation.ready_sources(&inputs).is_none());
         assert!(!first.is_current(&paths));
         let changed = PreparedAudio::prepare(&paths, Some(second), &cancelled).unwrap();
         assert_eq!(changed.stems[0].identity.frame_count, 1024);

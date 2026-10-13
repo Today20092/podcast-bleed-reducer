@@ -1,4 +1,4 @@
-param([string]$Version = '0.1.0-alpha.3', [string]$TargetDir = '')
+param([string]$Version = '0.1.0-alpha.4', [string]$TargetDir = '')
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
