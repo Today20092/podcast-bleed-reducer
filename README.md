@@ -22,9 +22,13 @@ CleanSlate is an offline microphone bleed-reduction tool for multitrack podcasts
 
 ## Watch the demo
 
-[![Watch the CleanSlate alpha demo on YouTube](https://img.youtube.com/vi/OFSipS6v0w4/hqdefault.jpg)](https://youtu.be/OFSipS6v0w4)
+[![Watch the CleanSlate walkthrough on YouTube](https://img.youtube.com/vi/Tumeje13o5g/hqdefault.jpg)](https://youtu.be/Tumeje13o5g)
 
-[Watch my CleanSlate alpha demo on YouTube](https://youtu.be/OFSipS6v0w4).
+[Watch: Why Your Podcast Audio Sounds Bad (And How to Fix It)](https://youtu.be/Tumeje13o5g).
+
+This 7½-minute walkthrough shows how to import synchronized tracks, label speaker examples, compare original, processed and removed audio, and export. It also shows how to correct mistakes by adding examples and analyzing again.
+
+Earlier video: [CleanSlate alpha demo](https://youtu.be/OFSipS6v0w4).
 
 ## Download
 

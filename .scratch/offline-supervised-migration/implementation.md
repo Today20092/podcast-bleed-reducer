@@ -2,6 +2,8 @@
 
 Status: accepted implementation plan, 2026-10-08
 
+2026-10-17 owner-requested documentation: [49 — README walkthrough video](../offline-supervised-editor/issues/49-readme-walkthrough-video.md) adds the newer transcript-reviewed video as the primary demo while retaining the alpha demo link. Documentation only; no application or release change.
+
 2026-10-17 owner-approved identity: [48 — Application icon and GitHub branding](../offline-supervised-editor/issues/48-application-icon-branding.md) is done, with Windows GUI/resource checks, the embedded-icon test and packaging regressions passing. [PR 12](https://github.com/Today20092/podcast-bleed-reducer/pull/12) carries native application icons and the README logo; hosted checks gate integration. Audio behavior and release qualification remain unchanged.
 
 2026-10-11 owner extension: [ticket 30](../offline-supervised-editor/issues/30-algorithm-documentation-coherence.md) aligns the README, reader explanation, model and temporal contracts, architecture and historical records with the current acoustic editor. This is documentation work; it changes no algorithm or release qualification.

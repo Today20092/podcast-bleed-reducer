@@ -3,6 +3,8 @@
 Labels: wayfinder:map
 Status: complete
 
+2026-10-17 owner requested adding the newer YouTube walkthrough to the README after transcript review. [Ticket 49](../offline-supervised-editor/issues/49-readme-walkthrough-video.md) covers this documentation-only addition and preserves the original alpha demo link.
+
 2026-10-17 owner approved the Open channel identity (mint/charcoal C with audio bars) and authorized application/GitHub integration. [Build ticket 48](../offline-supervised-editor/issues/48-application-icon-branding.md) tracks native icons, packaging and the README logo independently of audio/release gates.
 
 2026-10-10 owner authorized future macOS and Linux release packages alongside
