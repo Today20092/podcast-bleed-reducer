@@ -74,6 +74,7 @@ try {
         foreach ($license in ($licenseFiles | Sort-Object FullName -Unique)) { Copy-Item -LiteralPath $license.FullName -Destination $licenseDestination }
     }
     if ($IsMacOS) {
+        Copy-Item -LiteralPath (Join-Path $root 'assets/cleanslate.icns') -Destination (Join-Path $resources 'cleanslate.icns')
         $shortVersion = $Version.Split('-')[0]
         @"
 <?xml version="1.0" encoding="UTF-8"?>
@@ -83,6 +84,7 @@ try {
 <key>CFBundleDisplayName</key><string>CleanSlate</string>
 <key>CFBundleIdentifier</key><string>io.github.Today20092.CleanSlate</string>
 <key>CFBundleExecutable</key><string>CleanSlate</string>
+<key>CFBundleIconFile</key><string>cleanslate.icns</string>
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>CFBundleShortVersionString</key><string>$shortVersion</string>
 <key>CFBundleVersion</key><string>$shortVersion</string>

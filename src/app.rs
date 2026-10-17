@@ -199,6 +199,12 @@ fn example_speakers(label: &crate::ReferenceLabel) -> String {
 #[cfg(test)]
 mod tests {
     #[test]
+    fn embedded_application_icon_has_valid_rgba_dimensions() {
+        iced::window::icon::from_rgba(include_bytes!("../assets/cleanslate.rgba").to_vec(), 64, 64)
+            .expect("embedded application icon must remain valid");
+    }
+
+    #[test]
     fn appearance_changes_only_drawing_and_survives_new_project_after_save_failure() {
         let mut app = super::CleanSlateApp {
             timeline: super::TimelineViewport::new(100),
@@ -3771,6 +3777,10 @@ pub fn run() -> iced::Result {
     .default_font(iced::Font::with_name("Segoe UI"))
     .subscription(CleanSlateApp::subscription)
     .window(window::Settings {
+        icon: Some(
+            window::icon::from_rgba(include_bytes!("../assets/cleanslate.rgba").to_vec(), 64, 64)
+                .expect("embedded CleanSlate icon is 64 by 64 RGBA"),
+        ),
         maximized: true,
         min_size: Some(iced::Size::new(960.0, 900.0)),
         ..window::Settings::default()

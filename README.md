@@ -1,5 +1,12 @@
 # CleanSlate
 
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/cleanslate-logo-dark.svg">
+    <img src="assets/cleanslate-logo-light.svg" alt="CleanSlate" width="420">
+  </picture>
+</p>
+
 CleanSlate is an offline microphone bleed-reduction tool for multitrack podcasts. It uses a supervised algorithm to learn from a few examples of who is speaking, then attenuate each microphone when its assigned person is silent. Listen to the result and adjust the gain where needed.
 
 <p align="center">
