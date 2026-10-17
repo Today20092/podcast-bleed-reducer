@@ -17,7 +17,7 @@ try {
             $files = @('CleanSlate.exe', 'concrt140.dll', 'msvcp140.dll', 'msvcp140_1.dll', 'msvcp140_2.dll', 'msvcp140_atomic_wait.dll', 'msvcp140_codecvt_ids.dll', 'vcruntime140.dll', 'vcruntime140_1.dll')
         } elseif ($platform -like 'macos-*') {
             $resources = 'CleanSlate.app/Contents/Resources/'
-            $files = @('CleanSlate.app/Contents/MacOS/CleanSlate', 'CleanSlate.app/Contents/Info.plist', 'CleanSlate.app/Contents/_CodeSignature/CodeResources')
+            $files = @('CleanSlate.app/Contents/MacOS/CleanSlate', 'CleanSlate.app/Contents/Info.plist', 'CleanSlate.app/Contents/_CodeSignature/CodeResources', "${resources}cleanslate.icns")
         } else {
             $resources = 'usr/share/cleanslate/'
             $files = @('AppRun', 'usr/bin/CleanSlate', 'cleanslate.desktop', 'cleanslate.svg', '.DirIcon', 'usr/lib/libexample.so.1')
@@ -33,6 +33,14 @@ try {
         $original = @{ platform = $platform; version = '0.1.0-alpha.1'; files = $inventory } | ConvertTo-Json -Depth 5
         [IO.File]::WriteAllText($manifestPath, $original)
         & "$PSScriptRoot/check-package.ps1" -Package $package -IntegrityOnly | Out-Null
+
+        if ($platform -like 'macos-*') {
+            $manifest = $original | ConvertFrom-Json
+            $manifest.files = @($manifest.files | Where-Object { $_.path -ne "${resources}cleanslate.icns" })
+            $manifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $manifestPath
+            Assert-Fails { & "$PSScriptRoot/check-package.ps1" -Package $package -IntegrityOnly } 'Package missing .*cleanslate.icns'
+            [IO.File]::WriteAllText($manifestPath, $original)
+        }
 
         [IO.File]::WriteAllText((Join-Path $package $files[0]), 'corrupted')
         Assert-Fails { & "$PSScriptRoot/check-package.ps1" -Package $package -IntegrityOnly } 'Integrity failure'

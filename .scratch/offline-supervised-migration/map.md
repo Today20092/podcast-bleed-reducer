@@ -3,6 +3,8 @@
 Labels: wayfinder:map
 Status: complete
 
+2026-10-17 owner approved the Open channel identity (mint/charcoal C with audio bars) and authorized application/GitHub integration. [Build ticket 48](../offline-supervised-editor/issues/48-application-icon-branding.md) tracks native icons, packaging and the README logo independently of audio/release gates.
+
 2026-10-10 owner authorized future macOS and Linux release packages alongside
 Windows and direct platform downloads in the README. Completed build
 [ticket 26](../offline-supervised-editor/issues/26-cross-platform-release-packages.md)

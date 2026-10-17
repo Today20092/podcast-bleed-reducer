@@ -2,6 +2,8 @@
 
 Status: accepted implementation plan, 2026-10-08
 
+2026-10-17 owner-approved identity: [48 — Application icon and GitHub branding](../offline-supervised-editor/issues/48-application-icon-branding.md) is done, with Windows GUI/resource checks, the embedded-icon test and packaging regressions passing. [PR 12](https://github.com/Today20092/podcast-bleed-reducer/pull/12) carries native application icons and the README logo; hosted checks gate integration. Audio behavior and release qualification remain unchanged.
+
 2026-10-11 owner extension: [ticket 30](../offline-supervised-editor/issues/30-algorithm-documentation-coherence.md) aligns the README, reader explanation, model and temporal contracts, architecture and historical records with the current acoustic editor. This is documentation work; it changes no algorithm or release qualification.
 
 2026-10-11 owner extension: [ticket 28](../offline-supervised-editor/issues/28-export-settings-multichannel-wav.md) is done for the agreed Export dialog, per-project encoding preference, separate or multichannel WAV delivery, size estimates, final integer dither and overload safeguards. Its ticket records code, tests and GUI checks. This completes export scope, not independent audio-quality or stable release qualification.

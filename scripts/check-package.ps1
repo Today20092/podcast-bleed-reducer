@@ -12,7 +12,7 @@ switch ($manifest.platform) {
     }
     { $_ -like 'macos-*' } {
         $executable = 'CleanSlate.app/Contents/MacOS/CleanSlate'; $resources = 'CleanSlate.app/Contents/Resources/'
-        $required = @($executable, 'CleanSlate.app/Contents/Info.plist', 'CleanSlate.app/Contents/_CodeSignature/CodeResources')
+        $required = @($executable, 'CleanSlate.app/Contents/Info.plist', 'CleanSlate.app/Contents/_CodeSignature/CodeResources', "${resources}cleanslate.icns")
         $allowed = '^CleanSlate\.app/Contents/Resources/licenses/[A-Za-z0-9._+/-]+$'
     }
     'linux-x64' {
