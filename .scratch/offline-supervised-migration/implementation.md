@@ -1,5 +1,7 @@
 # Offline supervised editor implementation sequence
 
+2026-10-20: [54 — Shared local builds and development cleanup](../offline-supervised-editor/issues/54-local-build-consolidation.md) is done after shared-settings/workflow checks, strict Clippy, 278 passing tests (18 ignored), GUI build and native self-checks. Primary development is consolidated, old feature branches retired and the frozen baseline preserved. Use scripts/check.ps1 -Local and scripts/gui-dev.ps1 for the shared cache/profile. Local integration and batch PRs to main supersede the earlier mandatory per-feature-PR policy; one unused recovery cache remains a documented manual-cleanup exception.
+
 2026-10-20: [51 — Removable media and export](../offline-supervised-editor/issues/51-removable-media-export.md) is done for the owner-approved direct SD-card workflow: local working storage, read-only originals, independent destination folders, contextual I/O errors and bounded read recovery. Full and final publication checks, strict Clippy, GUI build and native self-check passed. Physical SD interruption/write-lock and listening checks remain unclaimed; independent release qualification is unchanged.
 
 Status: accepted implementation plan, 2026-10-08

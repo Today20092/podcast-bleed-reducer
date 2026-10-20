@@ -65,4 +65,6 @@ There is no automatic release after a particular number of features. Choose a ve
 
 ## What still needs human evidence
 
+Consolidation checks passed with 278 tests, 0 failures and 18 ignored, plus strict Clippy, fixtures, GUI build and native self-checks. At completion the active shared cache measured 4.74 GiB, versus about 95.23 GiB across the previous worktree targets. C: free space increased from 72.45 to 145.50 GiB. These are point-in-time measurements. The recovery folder retains verified scratch material and one unused 12.61 GiB legacy target whose deletion was blocked automatically and offered to the owner manually; it is separate from the active cache.
+
 The earlier combined Windows candidate passed 278 tests with 18 ignored, strict Clippy, GUI compilation, workflow fixtures and its offline self-check. Ticket 54 records the fresh checks with the smaller shared profile. Ignored tests include owner-recording/device measurements, external frozen-baseline evidence and the known quiet-overlap quality gate in ticket 14. Native visual/listening, physical SD interruption/write-lock and independent quality/long-session qualification remain outstanding. The application remains experimental.

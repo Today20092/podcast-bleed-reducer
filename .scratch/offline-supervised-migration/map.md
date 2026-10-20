@@ -1,5 +1,7 @@
 # Plan the offline supervised CleanSlate migration
 
+2026-10-20 owner-approved consolidation: [54 — Shared local builds and development cleanup](../offline-supervised-editor/issues/54-local-build-consolidation.md) is done. Completed branch histories and pending documentation are retained in development; only development/main remain as branches, with the primary checkout on development and the frozen baseline detached. Local GUI/check commands share one smaller application-data cache, pinned Rust and incremental profile. Solo feature PRs are optional; integrate locally, push development and promote tested batches to main. Fresh checks passed. The ticket records recovery snapshots and one 12.61 GiB retired cache awaiting owner deletion; stable release qualification remains unchanged.
+
 2026-10-20 owner-authorized storage hardening: [51 — Removable media and export](../offline-supervised-editor/issues/51-removable-media-export.md) supports direct read-only SD-card sources, local projects/analysis/intermediate renders, user-chosen export locations, actionable storage errors and bounded read recovery without bypassing identity/cancellation/publication safeguards.
 
 Labels: wayfinder:map
