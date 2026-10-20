@@ -24,6 +24,8 @@ Owner approved the shared-cache, consistent-toolchain, incremental-build, serial
 
 ## Results
 
+2026-10-20 backlog reconciliation: this ticket remains done. Its manual-cleanup exception is tracked as an explicit open item in [22](22-local-storage-cleanup.md#current-remaining-work--2026-10-20); no deletion completion is claimed.
+
 - Committed the primary checkout's pending documentation as `96e6a54`, then merged it into development as `9a22e94`. Resolved historical documentation conflicts by retaining current release links, completed-feature records and the newer specifications. The complete original documentation snapshot remains reachable through development history. Added the previously untracked research, roadmap/design records and documentation example. Future-work tickets remain specifications rather than implemented features.
 - `d9af762` implements the shared build settings, pinned Rust 1.99.0, reduced dependency debug information and local-check mode. GUI and `scripts/check.ps1 -Local` use `%LOCALAPPDATA%/CleanSlate/BuildCache`, locked/offline dependencies, one Cargo job and scripts/gui-dev.toml. Incremental compilation remains enabled; Cargo supplies target-directory locking. Hosted CI retains its original locked check behavior.
 - Updated AGENTS.md, contributor/build guides and branch-workflow.md for local development integration, optional solo feature PRs, development backup pushes and one tested-batch PR to main. Temporary feature branches/worktrees are only for requested parallel work and are retired after integration.

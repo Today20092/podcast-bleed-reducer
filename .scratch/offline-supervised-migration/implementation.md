@@ -1,5 +1,23 @@
 # Offline supervised editor implementation sequence
 
+## Current queue — reconciled 2026-10-20
+
+Owner follow-up accepts current sound/performance, closes 14, retires standing release ticket 15 into the per-release procedure and defers unnecessary waveform-overlay editor 35. There are now **5 active tickets and 2 deferred proposals**. The earlier three-agent audit consolidated duplicate implementation records while retaining unmet checks; owner-waived formal benchmarks are now optional future work, with no new ticket created. Original specifications and results remain in place. This section governs current routing; dated entries below preserve history.
+
+| Ticket | Current work | State |
+| --- | --- | --- |
+| [20](../offline-supervised-editor/issues/20-editor-first-documentation-visuals.md) | Gain composition and eleven-diagram browser pass completed; only screenshot refresh remains | Claimed; remaining captures wait for 23 |
+| [22](../offline-supervised-editor/issues/22-local-storage-cleanup.md) | Git temporary files removed and integrity verified; only retired recovery-target cleanup remains | Claimed; separate old build target still exists |
+| [23](../offline-supervised-editor/issues/23-gui-frontend-polish.md) | Integrated editor GUI/import/playback verification and remaining polish; absorbs 38/39/40 | Claimed; software integrated, acceptance incomplete |
+| [41](../offline-supervised-editor/issues/41-adjustable-keyboard-shortcuts.md) | Adjustable shortcuts and associated playhead commands/tooltips | Unimplemented, unclaimed; dependencies done |
+| [42](../offline-supervised-editor/issues/42-playhead-catch-up-scroll.md) | Catch-up scrolling | Unstarted; ticket unchanged by owner instruction |
+
+[17 — Advanced training panel](../offline-supervised-editor/issues/17-advanced-training-panel.md) and [35 — Waveform-overlay editing](../offline-supervised-editor/issues/35-waveform-automation-editor-design.md) are deferred outside the active queue. [14](../offline-supervised-editor/issues/14-independent-release-evaluation.md) is done on explicit owner acceptance; unperformed formal tests are not claimed as passing. **15/25 → [per-release checklist](../../docs/branch-workflow.md#release-checklist), 27 → 20, 38/39/40 → 23**. Ticket 41's former blocker 39 is removed because its prerequisite software is integrated; its remaining manual review is in 23. No release or main promotion is authorized. Automated Git-temp deletion was rejected, but subsequent owner-manual cleanup is verified: zero temporary objects remain and full Git integrity passed. Ticket 22 stays open only for the separate retired recovery target and final preservation checks.
+
+Earlier audit validation: three read-only agent audits covered all 14 formerly open records; a separate review found no actionable issues. That earlier eight-ticket snapshot passed dependency/link/whitespace assertions; the owner decisions above supersede its count. Ticket 42's unchanged SHA-256 is `cd9e048a9cf97d0048271f793bd556fd24a0e00cf925741436c2739d2aa4bf31`. Application tests/builds and hardware acceptance were not rerun for these tracker decisions. Separate documentation implementation/browser checks are recorded in 20; cleanup integrity checks and rejections are recorded in 22.
+
+## Historical implementation record
+
 2026-10-20: [54 — Shared local builds and development cleanup](../offline-supervised-editor/issues/54-local-build-consolidation.md) is done after shared-settings/workflow checks, strict Clippy, 278 passing tests (18 ignored), GUI build and native self-checks. Primary development is consolidated, old feature branches retired and the frozen baseline preserved. Use scripts/check.ps1 -Local and scripts/gui-dev.ps1 for the shared cache/profile. Local integration and batch PRs to main supersede the earlier mandatory per-feature-PR policy; one unused recovery cache remains a documented manual-cleanup exception.
 
 2026-10-20: [51 — Removable media and export](../offline-supervised-editor/issues/51-removable-media-export.md) is done for the owner-approved direct SD-card workflow: local working storage, read-only originals, independent destination folders, contextual I/O errors and bounded read recovery. Full and final publication checks, strict Clippy, GUI build and native self-check passed. Physical SD interruption/write-lock and listening checks remain unclaimed; independent release qualification is unchanged.
@@ -72,7 +90,7 @@ The architecture is [specified here](spec.md). The six wayfinder child tickets r
 23. [Polish application text and visual hierarchy](../offline-supervised-editor/issues/23-gui-frontend-polish.md). Owner confirmed the full frontend polish brief on 2026-10-09: restrained dark styling, clearer typography and plain language throughout, contextual gesture help and useful layout changes. Dependencies 16/21 are done; claimed by Codex. No audio behavior changes or release qualification.
 
 
-20. [Add editor-first documentation visuals after the GUI is settled](../offline-supervised-editor/issues/20-editor-first-documentation-visuals.md). Owner authorized screenshots from the open development build on 2026-10-09; README/workflow screenshot pass is implemented and the ticket remains claimed. Wider labeled examples, bleed, S-shaped fades and gain-composition visuals remain pending; interactive delivery needs triage. Not a new release requirement.
+20. [Add editor-first documentation visuals after the GUI is settled](../offline-supervised-editor/issues/20-editor-first-documentation-visuals.md). README/workflow screenshots and the solo/overlap/room, bleed and S-shaped fade teaching figures are implemented. Remaining gain composition, gain-edit/preservation captures, interactive-delivery triage and the common viewer review (including former 27) are tracked together here. Not a new release requirement.
 
 17. [Add an advanced training panel](../offline-supervised-editor/issues/17-advanced-training-panel.md). Requested on 2026-10-09 for future work only. Needs triage and explicit implementation authorization; it is not part of current GUI work or a new release requirement.
 
@@ -82,7 +100,7 @@ The owner extended ticket 41 with Center playhead and Lock / Unlock keyboard acc
 
 Ticket 41 also preserves lock across user zoom/fit actions by default and adds an off-by-default `Unlock playhead when zooming` local preference. Cover every distinct zoom entry point and both lock states in acceptance checks.
 
-2026-10-12 follow-up: [ticket 41 — Adjustable keyboard shortcuts](../offline-supervised-editor/issues/41-adjustable-keyboard-shortcuts.md) is specification-ready and blocked by 31, 34, 37 and 39. Add S as the default for saving examples, local remapping with context-aware conflicts and matching shortcut hints on `codex/editor-workflow-31-37`. This ticket is not implemented; dependency completion and scoped acceptance checks still govern execution.
+2026-10-20 dependency reconciliation: [ticket 41 — Adjustable keyboard shortcuts](../offline-supervised-editor/issues/41-adjustable-keyboard-shortcuts.md) remains specification-ready and unimplemented on development. Dependencies 31/34/37 are done; 39's prerequisite reference software is integrated and its manual checks now live in 23. Add S as the default for saving examples, local remapping with context-aware conflicts and matching shortcut hints when implementation is requested; scoped acceptance still governs completion.
 
 ## Existing work reconciliation
 

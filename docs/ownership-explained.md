@@ -148,7 +148,7 @@ The [fade-and-gap plots](effective-envelopes.md) compare a long gap, compressed 
 
 Processing multiplies the source samples by the gain curve. A constant gain reduces volume without reshaping the waveform; transitions change that gain over time. The goal is transparent attenuation without audible clicks, pumping or obvious ducking. The S-curve softens transitions, but listening is still needed to judge whether removing background sound or bleed is noticeable.
 
-Your manual gain points use straight-line interpolation and remain in effect after reanalysis until you remove them. Manual edits override automatic gain, while unity protection preserves full volume. Missing or invalid analysis evidence retains internal protection. See the [gain-envelope contract](effective-envelopes.md) for exact composition and endpoint behavior.
+Your manual gain points use straight-line interpolation and remain in effect after reanalysis until you remove them. Manual edits override automatic gain, while unity protection preserves full volume. The [aligned gain timelines](diagrams/gain-composition.html) show how valid edits and protection replace automatic values in their own spans. Missing or invalid analysis evidence retains internal protection. See the [gain-envelope contract](effective-envelopes.md) for exact composition and endpoint behavior.
 
 Display, Processed audition and export use the same final gain curve. Removed audition plays what processing takes away.
 

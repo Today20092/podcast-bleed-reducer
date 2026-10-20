@@ -1,9 +1,30 @@
-# Polish application text and visual hierarchy
+# Finish integrated editor verification and GUI polish
 
 Status: claimed
 Type: task
 Assignee: Codex
 Blocked by: 16, 21
+
+## Current remaining work — 2026-10-20
+
+Owner follow-up, 2026-10-20: confirmed that GUI work is continuing. Keep this consolidated editor-verification/polish ticket open; this is not a request to close the remaining GUI work or implement additional unrelated features.
+
+Subsequent owner acceptance: current audio quality/performance is satisfactory and 14 is closed. The formal timing/memory/instrumentation follow-ups inherited from 38/40 below are retained as optional future benchmarking notes, not outstanding acceptance blockers in this GUI ticket. No benchmark ticket is created now. Continue visible workflow checks, device/error recovery and demonstrated responsiveness bugs; these remain useful GUI work. Final downloaded-package checks move from retired 15 to docs/branch-workflow.md#release-checklist.
+
+This is the single acceptance queue for implemented GUI polish, progressive import (38), shortcut-reference presentation (39) and reusable playback (40). Those three implementation records are superseded into this ticket, with their specifications and results retained. Software integration is complete; closing duplicates does not establish manual, device or measurement acceptance. The 2026-10-20 combined verification in ticket 54 records 278 passing tests, 18 ignored, strict Clippy, GUI compilation and native self-checks. This audit changed tracker records only and ran no application tests.
+
+- [ ] Finish original polish review: measure text contrast; inspect Dark/Light, narrow/wide, enlarged OS text, focus/keyboard navigation, loading/empty/error/export/selected/long-content states. Preserve semantic timeline colors and all source/audio/export safeguards.
+- [ ] From 38: visually verify channel-choice counts, immediate correctly ordered skeletons, whole-recording preview then refinement, truthful per-track/overall feedback, cache-hit presentation and keyboard access in both themes and window sizes. Verify independent recording readiness, stable queued admission/eight-track limits, Retry/Remove, failure isolation and edits retained through readiness changes. Exercise individual/all/queued cancellation, New project/replacement and late results; pending/invalid sources must not enter unsafe save/analysis/export paths. Exercise imports during playback and label looping: current mix/selection/playhead remain stable and newly ready sources join on the next start.
+- [ ] From 39: owner verifies absence of redundant sound-value hover instructions while typing/reset/mute/validation/context menus work; readable one-action rows, themed keycaps, long-content wrapping and scrolling at narrow/wide widths in both themes; Close/Enter/Escape and text/dialog input ownership remain correct.
+- [ ] From 40: owner exercises repeated selection play/seek/stop/pause/resume, Original/Solo/Processed/Removed, monitor gain, label-loop changes and close/restore, and imports becoming ready during playback. Record perceived delay, clicks/dropouts, device unplug/error and explicit retry. Software tests and simulated device errors do not establish physical listening acceptance.
+
+The original acceptance and the preserved checks in 38/39/40 remain the detailed contracts if a scenario fails. Fix demonstrated failures here; no new GUI feature is authorized by consolidation. Adjustable shortcuts remain separate in 41. Ticket 42 is unchanged and unstarted. Finish GUI acceptance before refreshing settled-GUI captures under 20; this ticket does not qualify stable audio quality or publication.
+
+### Optional future benchmarking notes — no current acceptance action
+
+From 38: retain recorded headless cold/warm, traversal, worker-cancellation and memory evidence with cache/profile limits. GUI scheduling/readiness/cancellation latency and complete-app memory remain unmeasured. Worker timing is not visible readiness. Keep owner recordings local. The owner waived formal full-session qualification when closing 14; these notes do not reopen it.
+
+From 40: quiet Release warm p95 was 21.57 ms versus 102.57 ms baseline at the first-valid-PCM callback marker, with bounded retained stream/worker counts and sampled underrun limits. Controlled empty-cache conversion/cache-lookup comparisons, GUI input/result-delivery stages and process/GUI-GPU memory were not completed. That marker is distinct from a whole output buffer and hardware audible onset, so it does not establish the proposed 100 ms whole-buffer target. See [measurement limits](../../../docs/research/selection-playback-40-measurements.md). Revisit only if a separately requested benchmark or concrete performance issue warrants it.
 
 ## Scope
 

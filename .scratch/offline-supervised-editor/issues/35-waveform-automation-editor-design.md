@@ -1,11 +1,17 @@
 # Design waveform-overlay automation editing
 
-Status: needs-info
+Status: deferred
 Type: grilling
 Assignee: unassigned
 Blocked by: none
 Ideas: I09 follow-up
 Decision record: ../../../docs/roadmap-ideas.md
+
+## Current frontier — 2026-10-20
+
+Owner follow-up: direct waveform gain-point editing is not necessary given satisfactory automatic detection. Park this entire feature and its remaining technical specification outside the active queue. Retain existing manual gain editing and the accepted interview as optional future reference; no replacement editor, technical specification or build tickets are required now. Reopen only on a concrete owner request. The earlier specification-ready frontier below is historical and does not authorize further work.
+
+The owner interview is complete through Q59–Q63 below; this is ready for technical specification work, not blocked on another product interview and not authorized for implementation. Preserve the accepted interaction choices. Remaining work: inspect existing editing/evaluation/persistence contracts, specify curve/tension and smoothing mathematics, reduction error metrics, deterministic pencil timing and compatible saved curves, then link an accepted specification and scoped dependency-linked build tickets with observable acceptance. The earlier open-question lists below are historical interview checkpoints; the final decisions govern. Do not mark a replacement editor implemented or create extra product decisions without a concrete technical conflict.
 
 ## Design question
 
@@ -38,7 +44,7 @@ The owner requested separate design work informed by FL Studio. This is a design
 
 ## Results
 
-Pending owner design decisions. Resolve this design ticket only after the completion criteria are met; do not mark a replacement editor implemented.
+Product interview complete; technical synthesis and the accepted specification/build-ticket handoff remain. Resolve this design ticket only after the completion criteria are met; do not mark a replacement editor implemented.
 
 ### Reference review, 2026-10-12
 

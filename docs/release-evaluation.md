@@ -1,5 +1,7 @@
 # Release evaluation
 
+2026-10-20 owner decision: current sound/performance is accepted and ticket 14 is closed; the formal evaluation tools below remain available for optional future investigation. No new benchmark project is requested. Ticket 15's ordinary package checks continue in the [per-release checklist](branch-workflow.md#release-checklist). Closure does not supply missing independent truth, measurements or passing results.
+
 The existing `ownership_evaluate` and `release_gate` binaries accept the same project command:
 
 ```text
@@ -51,4 +53,4 @@ Public cancellation during an observed native child returned 26.39 ms after the 
 
 External `ticket14-capacity-7200-8` holds separate native/component reports, samplers, pinned executable/profile/runtime receipts and evidence indexes. An earlier unoptimized diagnostic was OS-stopped during preparation after 593.75 s; it is not completed performance or public cancellation evidence. [Owner verification](owner-verification.md) records the corresponding historical candidates and remaining human work; the [GUI development guide](gui-development.md) describes current builds.
 
-Ticket 14 remains claimed. Real independent quality, listening delivery/approval and representative timing approval remain pending. Typed prior-use provenance and verified mixed-rate historical comparison derivatives also remain documented tooling limits. Controlled fixtures establish mechanics and capacity only.
+Ticket 14 is closed on owner acceptance, with formal independent/representative timing measurements not completed. Typed prior-use provenance and verified mixed-rate historical comparison derivatives remain documented tooling limits. Controlled fixtures establish mechanics and capacity only; the owner decision does not change their meaning.

@@ -1,5 +1,7 @@
 # Owner verification
 
+Latest owner acceptance, 2026-10-20: the owner reports that the application sounds very good and works well, accepts current audio/performance and explicitly closes ticket 14. Formal benchmark/independent-comparison work is no longer required to keep that ticket open; historical missing measurements below remain missing evidence. Ticket 15 is retired into the [per-release checklist](branch-workflow.md#release-checklist). No release is promoted by this feedback.
+
 This is a chronological evidence record, not a current launch guide. Paths, executable hashes, screenshots and measurements below belong to the candidates named in each section. Optional Nemotron controls, model-check instructions, review navigation and fixed phrase guards are superseded. Use the [current editor workflow](editor-workflow.md), [GUI development guide](gui-development.md) and [temporal policy](temporal-ownership.md) for today's behavior. Historical numbers do not qualify the current release.
 
 ## Uniform red attenuation backgrounds

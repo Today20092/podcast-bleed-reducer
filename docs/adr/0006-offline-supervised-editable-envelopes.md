@@ -1,6 +1,6 @@
 # Use supervised offline ownership and protected editable envelopes
 
-Status: accepted 2026-10-08, amended by owner decisions on 2026-10-09. The acoustic editor pipeline is implemented; independent quality, listening and long-session qualification remain pending.
+Status: accepted 2026-10-08, amended by owner decisions on 2026-10-09 and 2026-10-20. The acoustic editor pipeline is implemented; the owner accepts current sound and performance. Formal independent/long-session measurements remain unperformed rather than an active qualification ticket.
 
 ## Current decision
 
@@ -18,7 +18,7 @@ Nemotron is removed from the application, GUI, dependencies and package. No diar
 
 Dedicated microphones and human examples let the application learn this recording's direct-speech and bleed relationships. The removed Nemotron experiment did not establish a benefit that justified retaining its integration. These decisions address known bleed failures while keeping import, transport, caching and safe outputs.
 
-Model estimates and numerical tests do not establish recording quality. Independent wanted-speech/overlap preservation, measured bleed improvement, owner listening and representative performance remain release gates in tickets 14/15. Public alpha packages are explicitly experimental and do not claim completion of those gates.
+Model estimates and numerical tests do not establish recording quality. On 2026-10-20 the owner accepted current sound/performance and explicitly closed 14 without requiring its remaining formal independent comparisons/benchmarks. Ticket 15 is retired into the [per-release checklist](../branch-workflow.md#release-checklist). Existing evidence limits and the quiet-overlap case remain recorded; owner acceptance is not a claim that unperformed tests passed. Public alpha packages remain experimental.
 
 ## Decision history
 

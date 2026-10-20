@@ -63,8 +63,18 @@ Use GitHub → Actions → Desktop draft release for build progress/artifacts an
 
 There is no automatic release after a particular number of features. Choose a version when the tested batch is ready, tag the reviewed source, verify every native package, then publish. Main and published alpha.6 stay unchanged during this consolidation.
 
-## What still needs human evidence
+## Release checklist
+
+Owner accepted the current application's sound and performance on 2026-10-20 and closed 14. Ticket 15 is retired into this procedure, including package checks carried from 25. Repeat these mechanical checks when preparing an owner-authorized release; they are not an ongoing feature backlog or a request to recreate already published packages.
+
+- [ ] Identify the intended source commit/version and tested build. Run the appropriate current source/package checks; retain checksums, dependency/model notices and truthful platform/support limits.
+- [ ] Verify the actual downloaded final package in clean offline Windows: launch, embedded inference, interactive import/audition, save/reopen/relink and validated export. Exercise supported codecs/rates and advertised session limits as appropriate for the change; distinguish synthetic self-checks from physical use.
+- [ ] Check real-device playback and applicable source/edit/cancellation/export safeguards. Reuse recorded GUI acceptance from 23; report unavailable checks and known limitations rather than claiming they passed.
+- [ ] Verify each advertised native package on its own platform before making new platform-qualification claims. Existing experimental packages do not establish fresh cross-platform hardware acceptance.
+- [ ] Get the owner's authorization for promotion/tagging/publication; keep alpha/stable wording aligned with actual evidence. Current owner acceptance does not claim frozen independent comparisons, whole-session benchmarks or absence of the known quiet-overlap limitation. A future benchmark project needs its own requested scope.
+
+## Historical consolidation evidence
 
 Consolidation checks passed with 278 tests, 0 failures and 18 ignored, plus strict Clippy, fixtures, GUI build and native self-checks. At completion the active shared cache measured 4.74 GiB, versus about 95.23 GiB across the previous worktree targets. C: free space increased from 72.45 to 145.50 GiB. These are point-in-time measurements. The recovery folder retains verified scratch material and one unused 12.61 GiB legacy target whose deletion was blocked automatically and offered to the owner manually; it is separate from the active cache.
 
-The earlier combined Windows candidate passed 278 tests with 18 ignored, strict Clippy, GUI compilation, workflow fixtures and its offline self-check. Ticket 54 records the fresh checks with the smaller shared profile. Ignored tests include owner-recording/device measurements, external frozen-baseline evidence and the known quiet-overlap quality gate in ticket 14. Native visual/listening, physical SD interruption/write-lock and independent quality/long-session qualification remain outstanding. The application remains experimental.
+The earlier combined Windows candidate passed 278 tests with 18 ignored, strict Clippy, GUI compilation, workflow fixtures and its offline self-check. Ticket 54 records the fresh checks with the smaller shared profile. Ignored tests include owner-recording/device measurements, external frozen-baseline evidence and the known quiet-overlap case recorded in 14. Those ignored checks have not passed through owner acceptance. Physical SD interruption/write-lock, fresh native-platform verification and formal independent/long-session measurements remain unperformed historical limitations; the owner no longer requires the formal evaluation project to keep 14 open. The application remains experimental.

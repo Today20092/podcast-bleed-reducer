@@ -1,6 +1,6 @@
 # Documentation diagrams
 
-This collection contains seven Mermaid replacements and three audio-behavior teaching figures. Each SVG is linked from its Markdown image so readers can open it at full size. Its matching HTML contains the editable SVG source and a text equivalent.
+This collection contains seven Mermaid replacements and four audio-behavior teaching figures. Each SVG is linked from its Markdown image so readers can open it at full size. Its matching HTML contains the editable SVG source and a text equivalent.
 
 ## Files and fidelity
 
@@ -27,8 +27,9 @@ Node wording is unchanged apart from line wrapping. The attenuation diagram abbr
 | Fades, compressed gaps and ignored gaps | [fades-and-gaps.html](fades-and-gaps.html) | [fades-and-gaps.svg](fades-and-gaps.svg) | [Effective envelopes](../effective-envelopes.md) |
 | Solo, overlap and room-tone labels | [speaker-label-examples.html](speaker-label-examples.html) | [speaker-label-examples.svg](speaker-label-examples.svg) | [Ownership guide](../ownership-explained.md#1-you-supply-examples) |
 | Direct speech and microphone bleed | [microphone-bleed.html](microphone-bleed.html) | [microphone-bleed.svg](microphone-bleed.svg) | [Acoustic evidence](../acoustic-evidence.md#a-simple-example) |
+| Automatic, manual, protected and applied gain | [gain-composition.html](gain-composition.html) | [gain-composition.svg](gain-composition.svg) | [Effective envelopes](../effective-envelopes.md) |
 
-These figures use clearly marked illustrative settings and synthetic waveform envelopes. They are not recording measurements, model results, GUI screenshots or listening-quality evidence. The existing README visuals remain unchanged. Gain-layer composition and an interactive companion remain deferred.
+These figures use clearly marked illustrative settings and synthetic waveform envelopes. They are not recording measurements, model results, GUI screenshots or listening-quality evidence. The existing README visuals remain unchanged. The static composition figure completes the gain-layer explanation; an interactive companion is deferred because the aligned timelines and text equivalent teach this fixed contract without another delivery system.
 
 The fade figure uses three aligned line plots with identical time and linear-gain scales. The label figure uses three waveform panels with explicit speaker selections. The bleed figure combines a small acoustic-path diagram with two aligned waveform strips. Continuous curves are sampled densely to preserve their shape, rather than reduced to the milestone points used for ordinary trend charts.
 
@@ -37,6 +38,8 @@ The fade figure uses three aligned line plots with identical time and linear-gai
 A local validation probe sampled `AutomaticEnvelope::from_ownership` and `gain_at_time` for long, short and ignored automatic gaps. It sampled 48 kHz source-time envelopes every 4 ms, checked exact preserved gain and attenuation endpoints, and checked the smootherstep midpoint and quarter point. The figure plots the first 2400 ms of each case. Every one of its 1803 points was compared with this output after coordinate rounding. The probe is not part of this documentation-only change.
 
 The synthetic ownership evidence checks gain mechanics; it does not test real-recording detection. The explicit-room-tone exception is additionally covered by the existing effective-envelope test. When the evaluator contract changes, resample it using the settings in the figure's text equivalent, update the HTML polyline coordinates, then regenerate the SVG with the export helper below.
+
+The composition figure uses the exact 48 kHz/32 ms-frame scenario in `tests/effective_envelopes.rs::touching_manual_constraints_have_explicit_right_endpoint_ownership_and_exact_bounds`: automatic gain 0.125, manual spans [56,60) and [60,64) frames, then protection [64,68). The first manual span is linear 0.5 toward 0.25, the next is constant 0.75, and protection is 1.00. The production evaluator returns 0.75, 1.00 and 0.125 at frames 60, 64 and 68. The separate manual-point persistence/reanalysis regression verifies the linear midpoint and retained edits. Both existing regressions passed again on 2026-10-20; the diagram introduces no application behavior.
 
 ## Design
 
@@ -70,6 +73,10 @@ python "<diagram-design-skill>/scripts/export_svg.py" docs/diagrams/workflow.htm
 Replace the skill path and diagram filename as needed. The export helper preserves styles, namespaces marker IDs and writes standalone XML. Keep the SVG alongside its HTML.
 
 ## Validation
+
+2026-10-20 implementation pass: all eleven HTML diagrams were loaded in the in-app browser through a loopback-only documentation server. Computed SVG text used `"Segoe UI", Arial, sans-serif`; all accessible title/description references and text equivalents resolved, and browser-measured text stayed within each canvas. Embedded 320 px and 1000 px viewport tests confirmed readable fixed-width canvases with working horizontal scrolling for every diagram. Standalone SVG image embeds were checked on light and dark surrounds; their opaque backgrounds preserve the diagram palette. The new composition figure was visually inspected at full size and as an image embed, passed the diagram self-check and SVG export, and matched both passing evaluator regressions. This review covers local browser rendering and image embedding, not every external Markdown renderer or fallback font on other operating systems. GUI screenshot refresh remains deferred until the editor appearance settles under ticket 23.
+
+2026-10-20 tracker reconciliation: the remaining browser/viewer checks for all ten diagrams are consolidated in [ticket 20](../../.scratch/offline-supervised-editor/issues/20-editor-first-documentation-visuals.md#current-remaining-work--2026-10-20). Ticket 27 is superseded into that queue; no browser checks are newly claimed as passed.
 
 On 2026-10-11, all seven HTML self-checks and SVG XML checks passed. Source-to-output comparison verified every node label and directed connection. All 21 diagram links in the five edited Markdown files resolve. Route checks found no diagonal segments or lines passing through unrelated nodes. All seven SVGs were rasterized locally with ImageMagick and visually inspected; section headings that crossed connectors were repositioned. The final Markdown scan found no Mermaid fences.
 

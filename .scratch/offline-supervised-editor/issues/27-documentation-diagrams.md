@@ -1,9 +1,14 @@
 # Replace Mermaid documentation diagrams
 
-Status: claimed
+Status: superseded
+Consolidated into: 20
 Assignee: Codex
 Type: task
 Blocked by: none
+
+## Consolidation — 2026-10-20
+
+All seven replacement diagrams are implemented; static checks and raster inspection are recorded below. Browser rendering, responsive scrolling and computed-font checks were not performed and are transferred to [20](20-editor-first-documentation-visuals.md#current-remaining-work--2026-10-20), alongside the shared viewer review. This closes a duplicate documentation acceptance queue, not a claim that browser checks passed. Preserve these diagram specifications and results.
 Spec: ../../offline-supervised-migration/spec.md
 
 ## Scope

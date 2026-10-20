@@ -1,5 +1,9 @@
 # CleanSlate feature ideas
 
+Latest owner decision, 2026-10-20: waveform-overlay gain editing (35) is deferred as unnecessary for current use because the owner is satisfied with automatic detection. Preserve its interview below as optional future reference; no specification/build handoff is active. The earlier specification-ready summary is historical. Training-panel proposal 17 also remains deferred.
+
+2026-10-20 current automation-design status: [35](../.scratch/offline-supervised-editor/issues/35-waveform-automation-editor-design.md#current-frontier--2026-10-20) is ready for technical specification after the complete Q40–Q63 owner interview. Earlier open-question lists below are historical; the remaining work is technical synthesis and accepted specification/build-ticket handoff, not another product interview or implementation. The [current active queue](../.scratch/offline-supervised-migration/implementation.md#current-queue--reconciled-2026-10-20) governs consolidated work; the advanced-training proposal (17) is deferred.
+
 Captured from owner feedback on 2026-10-11. This inventory and interview record is linked from the [public roadmap](../ROADMAP.md). I05–I14 have accepted scoped specifications and build tickets linked below; the remaining ideas are proposals. The [active map](../.scratch/offline-supervised-migration/map.md), [accepted specification](../.scratch/offline-supervised-migration/spec.md) and [implementation tracker](../.scratch/offline-supervised-migration/implementation.md) govern implementation. No delivery date has been agreed for these additions.
 
 The two attached screenshots show a purple gain curve and a lower green/teal line that appears to follow the same attenuation changes. They are visual evidence for idea I09; the purpose of the lower line has not been verified in code.
@@ -139,7 +143,7 @@ The owner confirmed shared understanding and authorized specifications and ticke
 | [32](../.scratch/offline-supervised-editor/issues/32-sound-value-entry.md) | Typed sound values, Mute and reset | [Accepted spec](../.scratch/offline-supervised-migration/specs/sound-value-entry.md) |
 | [33](../.scratch/offline-supervised-editor/issues/33-focused-import-waveform.md) | Centered import and interim gain-strip cleanup | [Accepted spec](../.scratch/offline-supervised-migration/specs/focused-import-waveform.md) |
 | [34](../.scratch/offline-supervised-editor/issues/34-shortcut-help-zoom.md) | Shortcut reference, fit zoom and Escape selection clearing | [Accepted spec](../.scratch/offline-supervised-migration/specs/shortcut-help-zoom.md) |
-| [35](../.scratch/offline-supervised-editor/issues/35-waveform-automation-editor-design.md) | Waveform-overlay automation editor | Open design ticket; no accepted build spec |
+| [35](../.scratch/offline-supervised-editor/issues/35-waveform-automation-editor-design.md) | Waveform-overlay automation editor | Product interview complete; technical specification and build handoff pending |
 
 ### Proposed specification groups
 

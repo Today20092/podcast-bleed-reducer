@@ -3,9 +3,13 @@
 Status: ready-for-agent
 Type: task
 Assignee: unassigned
-Blocked by: 31, 34, 37, 39
-Target branch: codex/editor-workflow-31-37
+Blocked by: 31, 34, 37
+Target branch: development
 Spec: #accepted-design
+
+## Dependency reconciliation — 2026-10-20
+
+Unimplemented and unclaimed; all remaining implementation dependencies are done. Ticket 39's reference layout/tooltip removal is already integrated into development, so it no longer blocks this build. Its manual acceptance is retained in 23; do not recreate or discard that work. Use development under the current repository policy. Ticket 42 remains unchanged and retains precedence for its locked middle-pan behavior. This reconciliation authorizes no implementation in this audit.
 
 ## Scope
 

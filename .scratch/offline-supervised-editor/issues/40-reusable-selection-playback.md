@@ -1,11 +1,16 @@
 # Make ready-session playback and selection audition start promptly
 
-Status: claimed
+Status: superseded
+Consolidated into: 23
 Type: task
 Assignee: Codex
 Blocked by: 04, 31, 38
 Target branch: codex/editor-workflow-31-37
 Spec: #accepted-design
+
+## Consolidation — 2026-10-20
+
+Retained ready-session playback and recorded software verification are integrated into development. Remaining GUI/listening/device scenarios and unresolved timing/measurement obligations now live in [23](23-gui-frontend-polish.md#current-remaining-work--2026-10-20). Preserve the original specification, measurement record and limitations below; first-valid-PCM timing is not hardware onset or whole-buffer qualification. This closes a duplicate queue entry without claiming physical acceptance. The historical dependency on 38 is retained as provenance, not an active execution dependency for this closed record.
 
 ## Scope
 

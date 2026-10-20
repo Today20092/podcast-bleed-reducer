@@ -124,7 +124,7 @@ Four-second, two-track float32 fixtures use exact synthetic solo/room truth and 
 | Finite samples scaled by 1e20 | Finite normalized features; samples remain unclipped |
 | Same-length finite payload tamper | Reuse rejected; previous fit retained |
 
-These ideal fixtures establish mechanics and a limited useful candidate. Two taps/fixed lag cannot cover arbitrary reverberation, nonlinear processing or large microphone changes. The large ideal residual improvement is not real-speech quality. Long-session performance and independent speech/bleed/listening acceptance remain ticket 14. These measurements describe the acoustic development fixtures, not the current GUI's quality.
+These ideal fixtures establish mechanics and a limited useful candidate. Two taps/fixed lag cannot cover arbitrary reverberation, nonlinear processing or large microphone changes. The large ideal residual improvement is not real-speech quality. The owner accepted current sound and performance and closed ticket 14; unperformed formal comparisons and benchmarks are not passing measurements. These fixture results describe acoustic development mechanics, not a numerical quality claim for the current GUI.
 
 Primary solver references: [Nalgebra decompositions](https://github.com/dimforge/nalgebra/blob/main/_autodocs/api-reference/03-linear-algebra-decompositions.md), [error handling](https://github.com/dimforge/nalgebra/blob/main/_autodocs/errors.md), [pinned package](https://crates.io/crates/nalgebra/0.35.0).
 
