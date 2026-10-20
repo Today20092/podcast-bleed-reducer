@@ -10,13 +10,13 @@ pwsh -NoProfile -File scripts/gui-dev.ps1
 
 Save and close the development window before running it again. The script refuses to rebuild over a running development executable. It builds only `rust-app`, uses one Cargo job, locked/offline dependencies and incremental local compilation, then opens a separate saved-project copy. The window title is `CleanSlate - GUI development`.
 
-The default input is `test-audio/quick-test-10min/261005-quick-test.cleanslate`. On first launch, the script copies it and available analysis/waveform sidecars to `261005-quick-test.gui-dev.cleanslate` beside it. Later launches keep that development copy and its edits. The original saved project and source audio are untouched. Ordinary source validation, cache compatibility checks and playback preparation still run; automatic opening does not bypass them. Analysis is not forced. If the saved result is stale, use Analyze explicitly.
+The default input is `test-audio/quick-test-10min/261005-quick-test.cleanslate`. On first launch, the script copies the small project into `%LOCALAPPDATA%/CleanSlate/Projects/GUI-development/<source-project-path-hash>/261005-quick-test.gui-dev.cleanslate`. Later launches keep that development copy and its edits. Original audio is referenced in place; the original saved project and its directory are untouched. Analysis/intermediate files use local application working storage, and waveform caches remain shared. Ordinary source validation, cache compatibility checks and playback preparation still run; automatic opening does not bypass them. Analysis is not forced. If the saved result is stale, use Analyze explicitly.
 
 ```powershell
 # Build without launching or copying a project.
 pwsh -NoProfile -File scripts/gui-dev.ps1 -BuildOnly
 
-# Use another saved project; a separate sibling copy is created.
+# Use another saved project; a separate local development copy is created.
 pwsh -NoProfile -File scripts/gui-dev.ps1 -Project 'C:/path/session.cleanslate'
 ```
 

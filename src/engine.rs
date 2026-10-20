@@ -799,7 +799,10 @@ impl From<io::Error> for RenderBlocker {
 }
 impl From<bwavfile::Error> for RenderBlocker {
     fn from(value: bwavfile::Error) -> Self {
-        Self(value.to_string())
+        match value {
+            bwavfile::Error::IOError(error) => Self(error.to_string()),
+            error => Self(error.to_string()),
+        }
     }
 }
 
@@ -1058,12 +1061,14 @@ pub fn run_with_ownership(
                 serde_json::to_string(ownership).map_err(|e| RenderBlocker(e.to_string()))?
             ),
         );
+        output.write_report(&report)?;
+        output.sync_all()?;
         if source_stamps(&request.stems)? != sources {
             return Err(RenderBlocker(
                 "source changed during rendering; retry".into(),
             ));
         }
-        output.write_report(&report)?;
+        check_cancelled(&request)?;
         output.commit()?;
         Ok(RunResult {
             stems: names

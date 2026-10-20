@@ -28,9 +28,7 @@ pub fn prepare_export(
 ) -> Result<PreparedExport, RenderBlocker> {
     project.validate_sources_cancellable(cancelled)?;
     let plan = delivery_plan(project, cancelled, crate::ExportLayout::SeparateMono)?;
-    if destination.exists() && fs::read_dir(destination)?.next().is_some() {
-        return Err(RenderBlocker("export destination is not empty".into()));
-    }
+    check_destination(destination)?;
     let output = AtomicOutput::new(destination)?;
     let mut files = Vec::new();
     let mut inputs = Vec::new();
@@ -47,11 +45,14 @@ pub fn prepare_export(
         let metadata = crate::SourceMetadata::read_cancellable(&rendered, cancelled)?;
         {
             use std::io::{Read, Write};
-            let mut input = fs::File::open(&rendered)?;
+            let mut input = crate::storage_io::SourceReader::open(&rendered)?;
             let mut destination = fs::OpenOptions::new()
                 .write(true)
                 .create_new(true)
-                .open(output.path(&name))?;
+                .open(output.path(&name))
+                .map_err(|e| {
+                    crate::storage_io::context("create exported WAV", &output.path(&name), e)
+                })?;
             let mut block = [0; 65_536];
             loop {
                 crate::prepared_analysis::check_cancelled(cancelled)?;
@@ -59,9 +60,13 @@ pub fn prepare_export(
                 if count == 0 {
                     break;
                 }
-                destination.write_all(&block[..count])?;
+                destination.write_all(&block[..count]).map_err(|e| {
+                    crate::storage_io::context("write exported WAV", &output.path(&name), e)
+                })?;
             }
-            destination.sync_all()?;
+            destination.sync_all().map_err(|e| {
+                crate::storage_io::context("flush exported WAV", &output.path(&name), e)
+            })?;
         }
         if crate::project::fingerprint_cancellable(&output.path(&name), cancelled)? != hash
             || crate::SourceMetadata::read_cancellable(&output.path(&name), cancelled)? != metadata
@@ -111,6 +116,7 @@ impl PreparedExport {
                 ));
             }
         }
+        self.output.sync_all()?;
         let guard = generation
             .0
             .lock()
@@ -169,9 +175,7 @@ pub fn prepare_export_in_order(
         .iter()
         .map(|index| plan[*index].clone())
         .collect();
-    if destination.exists() && fs::read_dir(destination)?.next().is_some() {
-        return Err(RenderBlocker("export destination is not empty".into()));
-    }
+    check_destination(destination)?;
     let output = AtomicOutput::new(destination)?;
     let inputs = plan
         .iter()
@@ -215,7 +219,11 @@ pub fn prepare_export_in_order(
         {
             return Err(RenderBlocker("Delivery grid or timing changed.".into()));
         }
-        fs::OpenOptions::new().write(true).open(&path)?.sync_all()?;
+        fs::OpenOptions::new()
+            .write(true)
+            .open(&path)
+            .and_then(|f| f.sync_all())
+            .map_err(|e| crate::storage_io::context("flush exported WAV", &path, e))?;
         files.push((
             name,
             crate::project::fingerprint_cancellable(&path, cancelled)?,
@@ -231,6 +239,23 @@ pub fn prepare_export_in_order(
         inputs,
         layout: settings.layout,
     })
+}
+
+fn check_destination(destination: &Path) -> Result<(), RenderBlocker> {
+    if destination.exists()
+        && fs::read_dir(destination)
+            .map_err(|e| crate::storage_io::context("inspect export folder", destination, e))?
+            .next()
+            .transpose()
+            .map_err(|e| crate::storage_io::context("inspect export folder", destination, e))?
+            .is_some()
+    {
+        return Err(RenderBlocker(format!(
+            "Export destination '{}' is not empty. Choose a new export folder; existing files were retained.",
+            destination.display()
+        )));
+    }
+    Ok(())
 }
 
 pub fn export(

@@ -108,13 +108,13 @@ fn dialog_start_directory() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("."))
 }
 
-fn available_project_path(directory: &std::path::Path) -> PathBuf {
-    let mut path = directory.join("CleanSlate.cleanslate");
+fn available_export_path(directory: &std::path::Path) -> PathBuf {
+    let mut path = directory.join("CleanSlate export");
     for suffix in 2.. {
         if !path.exists() {
             return path;
         }
-        path = directory.join(format!("CleanSlate-{suffix}.cleanslate"));
+        path = directory.join(format!("CleanSlate export {suffix}"));
     }
     unreachable!()
 }
@@ -351,6 +351,131 @@ mod tests {
         ));
         assert!(app.export_dialog.is_none());
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn read_only_originals_and_saved_project_survive_local_analysis_and_destination_retry() {
+        let (media, mut project, _audio) = export_fixture::session();
+        let destination = crate::audio_io::multichannel_tests::root();
+        let project_folder = media.join("projects");
+        std::fs::create_dir(&project_folder).unwrap();
+        let original_project = project_folder.join("episode.cleanslate");
+        std::fs::copy(project.path(), &original_project).unwrap();
+        project = crate::Project::open(&original_project).unwrap();
+        let saved = std::fs::read(&original_project).unwrap();
+        let sources: Vec<_> = project
+            .sources
+            .iter()
+            .map(|s| (s.path.clone(), std::fs::read(&s.path).unwrap()))
+            .collect();
+        let original_permissions: Vec<_> = sources
+            .iter()
+            .map(|(path, _)| std::fs::metadata(path).unwrap().permissions())
+            .collect();
+        for (path, _) in &sources {
+            let mut permissions = std::fs::metadata(path).unwrap().permissions();
+            permissions.set_readonly(true);
+            std::fs::set_permissions(path, permissions).unwrap();
+        }
+        let entries: std::collections::BTreeSet<_> = std::fs::read_dir(&media)
+            .unwrap()
+            .map(|e| e.unwrap().file_name())
+            .collect();
+        assert!(project.localize_for_editing().unwrap());
+        let local = project.path().to_owned();
+        assert!(
+            !project.localize_for_editing().unwrap(),
+            "reopening a local project must retain its location"
+        );
+        let working = crate::storage::working_directory(&local).unwrap();
+        assert!(!working.starts_with(&media));
+        let progress = std::sync::atomic::AtomicU8::new(0);
+        let cancel = std::sync::atomic::AtomicBool::new(false);
+        let analysis = crate::EditorAnalysisWorker::default()
+            .analyze(
+                &project,
+                &working.join("analysis-cache"),
+                &progress,
+                &cancel,
+            )
+            .unwrap();
+        assert!(working.join("analysis-cache/audio").is_dir());
+        let effective = analysis
+            .install(
+                &mut project,
+                &mut crate::EffectiveEnvelopeCache::default(),
+                None,
+            )
+            .unwrap();
+        let mut app = super::CleanSlateApp {
+            preview_parameters: project.parameters(),
+            supervised_result: Some(analysis),
+            effective_result: Some(effective),
+            project: Some(project),
+            ..Default::default()
+        };
+        let blocked = destination.join("blocked");
+        std::fs::write(&blocked, b"retain existing file").unwrap();
+        app.export_current();
+        app.export_dialog.as_mut().unwrap().destination = Some(blocked.join("delivery"));
+        app.submit_export();
+        let finish = |app: &mut super::CleanSlateApp| {
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+            while app.processing.is_some() || app.exporting.is_some() {
+                app.poll_processing();
+                app.poll_exporting();
+                assert!(std::time::Instant::now() < deadline);
+                std::thread::sleep(std::time::Duration::from_millis(2));
+            }
+        };
+        finish(&mut app);
+        assert!(
+            app.messages[0].contains("Could not create export parent folder"),
+            "{:?}",
+            app.messages
+        );
+        assert!(
+            app.project
+                .as_ref()
+                .unwrap()
+                .render_record()
+                .unwrap()
+                .report
+                .starts_with(working.join("renders"))
+        );
+        assert_eq!(std::fs::read(&blocked).unwrap(), b"retain existing file");
+        app.export_current();
+        let delivery = super::available_export_path(&destination);
+        app.export_dialog.as_mut().unwrap().destination = Some(delivery.clone());
+        app.submit_export();
+        finish(&mut app);
+        assert!(
+            app.messages[0].starts_with("WAV files saved"),
+            "{:?}",
+            app.messages
+        );
+        assert!(delivery.join("speaker-0-clean.wav").is_file());
+        assert_eq!(std::fs::read(&original_project).unwrap(), saved);
+        assert_eq!(
+            std::fs::read_dir(&media)
+                .unwrap()
+                .map(|e| e.unwrap().file_name())
+                .collect::<std::collections::BTreeSet<_>>(),
+            entries
+        );
+        for ((path, bytes), permissions) in sources.into_iter().zip(original_permissions) {
+            assert_eq!(std::fs::read(&path).unwrap(), bytes);
+            std::fs::set_permissions(path, permissions).unwrap();
+        }
+        assert_eq!(
+            crate::Project::open(local)
+                .unwrap()
+                .reference_labels()
+                .len(),
+            3
+        );
+        std::fs::remove_dir_all(media).unwrap();
+        std::fs::remove_dir_all(destination).unwrap();
     }
 
     #[test]
@@ -1925,6 +2050,29 @@ mod tests {
     }
 
     #[test]
+    fn imported_media_directory_is_untouched_and_project_is_local() {
+        let root = crate::audio_io::multichannel_tests::root();
+        let source = root.join("read-only.wav");
+        write_wav(&source, &[0.125; 4800]);
+        let original = std::fs::read(&source).unwrap();
+        let original_permissions = std::fs::metadata(&source).unwrap().permissions();
+        let mut permissions = original_permissions.clone();
+        permissions.set_readonly(true);
+        std::fs::set_permissions(&source, permissions.clone()).unwrap();
+        let mut app = super::CleanSlateApp::default();
+        app.add_stems([source.clone()]);
+        finish_import(&mut app);
+        let project = app.project.as_ref().expect("read-only media must import");
+        assert_eq!(project.sources[0].path, source);
+        assert_ne!(project.path().parent(), Some(root.as_path()));
+        assert_eq!(std::fs::read_dir(&root).unwrap().count(), 1);
+        assert_eq!(std::fs::read(&source).unwrap(), original);
+        app.audition_preparation.cancel();
+        std::fs::set_permissions(&source, original_permissions).unwrap();
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn direct_import_is_deterministic_incremental_and_preserves_valid_session_on_error() {
         let directory =
             std::env::temp_dir().join(format!("cleanslate-import-test-{}", std::process::id()));
@@ -2843,14 +2991,18 @@ mod tests {
     }
 
     #[test]
-    fn dropped_stems_never_overwrite_an_existing_project() {
+    fn export_folders_never_overwrite_existing_downloads() {
         let directory =
             std::env::temp_dir().join(format!("cleanslate-path-test-{}", std::process::id()));
         std::fs::create_dir_all(&directory).unwrap();
-        std::fs::write(directory.join("CleanSlate.cleanslate"), b"existing").unwrap();
+        std::fs::write(directory.join("CleanSlate export"), b"existing").unwrap();
         assert_eq!(
-            super::available_project_path(&directory),
-            directory.join("CleanSlate-2.cleanslate")
+            super::available_export_path(&directory),
+            directory.join("CleanSlate export 2")
+        );
+        assert_eq!(
+            std::fs::read(directory.join("CleanSlate export")).unwrap(),
+            b"existing"
         );
         std::fs::remove_dir_all(directory).unwrap();
     }
@@ -3476,8 +3628,19 @@ fn load_sources(
     } else {
         false
     };
+    let mut local_project_notice = None;
     if let SourceRequest::Open(path) = &request {
-        project = Some(Project::open(path).map_err(|error| error.to_string())?);
+        let mut opened = Project::open(path).map_err(|error| error.to_string())?;
+        if opened
+            .localize_for_editing()
+            .map_err(|error| error.to_string())?
+        {
+            local_project_notice = Some(format!(
+                "Working project saved locally at {}. Original media and project were left untouched.",
+                opened.path().display()
+            ));
+        }
+        project = Some(opened);
     }
     let mut inputs = project
         .as_ref()
@@ -3500,21 +3663,17 @@ fn load_sources(
     if inputs.len() > 8 {
         return Err("Import blocked: session requires one to eight speaker tracks.".into());
     }
-    let project_path = project.as_ref().map_or_else(
-        || {
-            available_project_path(
-                paths[0]
-                    .parent()
-                    .unwrap_or_else(|| std::path::Path::new(".")),
-            )
-        },
-        |project| project.path().to_owned(),
-    );
+    let project_path = project
+        .as_ref()
+        .map_or_else(crate::storage::new_project, |project| {
+            Ok(project.path().to_owned())
+        })
+        .map_err(|error| error.to_string())?;
     let _ = sender.send(SourceEvent::Stage("Loading waveforms"));
     let waveform_result = waveform::load_source_waveforms(&inputs, |index, waveform| {
         let _ = sender.send(SourceEvent::Waveform(index, waveform.clone()));
     });
-    let mut warnings = Vec::new();
+    let mut warnings: Vec<_> = local_project_notice.into_iter().collect();
     // A saved session with missing sources must still open so it can be relinked.
     if opening || partial_relink {
         if let Err(error) = waveform_result {
@@ -3645,6 +3804,7 @@ enum Message {
     OpenLink(AppLink),
     LinkOpened(AppLink, Result<(), String>),
     CopyVersion,
+    CopyProjectPath,
     VersionCopied(bool),
     Help,
     KeyboardShortcuts,
@@ -4111,25 +4271,20 @@ impl CleanSlateApp {
                     };
                 }
                 Ok(crate::import::Event::Ready(identities, waveforms)) => {
-                    let path = self.project.as_ref().map_or_else(
-                        || {
-                            available_project_path(
-                                self.import_jobs[index].sources[0]
-                                    .path
-                                    .parent()
-                                    .unwrap_or_else(|| std::path::Path::new(".")),
-                            )
-                        },
-                        |p| p.path().to_owned(),
-                    );
+                    let path = self
+                        .project
+                        .as_ref()
+                        .map_or_else(crate::storage::new_project, |p| Ok(p.path().to_owned()));
                     self.import_jobs[index].status = "Finishing · atomic project save".into();
                     let first = self.project.as_ref().map_or(0, |p| p.sources.len());
-                    match Project::accept_recording(
-                        self.project.as_ref(),
-                        path,
-                        identities,
-                        self.preview_parameters,
-                    ) {
+                    match path.and_then(|path| {
+                        Project::accept_recording(
+                            self.project.as_ref(),
+                            path,
+                            identities,
+                            self.preview_parameters,
+                        )
+                    }) {
                         Ok(project) => {
                             self.import_jobs[index].track_ids = project.sources[first..]
                                 .iter()
@@ -4601,9 +4756,15 @@ impl CleanSlateApp {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_nanos();
-        let destination = project
-            .path()
-            .with_extension("renders")
+        let working = match crate::storage::working_directory(project.path()) {
+            Ok(path) => path,
+            Err(error) => {
+                self.messages = vec![error.to_string()];
+                return;
+            }
+        };
+        let destination = working
+            .join("renders")
             .join(format!("{}-{generation}-{nonce}", std::process::id()));
         let cancelled = Arc::new(AtomicBool::new(false));
         let progress = Arc::new(AtomicU8::new(0));
@@ -4822,7 +4983,13 @@ impl CleanSlateApp {
             }
         };
         let source_project = project.clone();
-        let cache_directory = project.path().with_extension("analysis-cache");
+        let cache_directory = match crate::storage::working_directory(project.path()) {
+            Ok(path) => path.join("analysis-cache"),
+            Err(error) => {
+                self.preview_error = Some(error.to_string());
+                return;
+            }
+        };
         let progress = Arc::new(AtomicU8::new(0));
         let worker_progress = progress.clone();
         let cancelled = Arc::new(AtomicBool::new(false));
@@ -4842,7 +5009,12 @@ impl CleanSlateApp {
                         *worker_feedback.lock().unwrap_or_else(|e| e.into_inner()) = message.into();
                     },
                 )
-                .map_err(|e| e.to_string());
+                .map_err(|e| {
+                    format!(
+                        "Analysis failed (working folder '{}'): {e}",
+                        cache_directory.display()
+                    )
+                });
             let _ = sender.send((completed, worker));
         });
         self.preview_processing = Some(PreviewProcessing {
@@ -6738,13 +6910,9 @@ impl CleanSlateApp {
             }
             Message::ExportDestination => {
                 let destination = rfd::FileDialog::new()
-                    .set_directory(
-                        self.project
-                            .as_ref()
-                            .and_then(|p| p.path().parent())
-                            .unwrap_or_else(|| std::path::Path::new(".")),
-                    )
-                    .pick_folder();
+                    .set_directory(dialog_start_directory())
+                    .pick_folder()
+                    .map(|path| available_export_path(&path));
                 if let Some(dialog) = &mut self.export_dialog {
                     dialog.destination = destination;
                 }
@@ -6825,6 +6993,11 @@ impl CleanSlateApp {
                             Message::VersionCopied(actual.as_deref() == Some(expected.as_str()))
                         }),
                     );
+                }
+            }
+            Message::CopyProjectPath => {
+                if let Some(project) = &self.project {
+                    return iced::clipboard::write::<Message>(project.path().display().to_string());
                 }
             }
             Message::VersionCopied(_) => {}
@@ -7799,6 +7972,9 @@ impl CleanSlateApp {
         };
         let mut controls = column![
             text("Sources").size(16),
+            text(format!("Project autosaved to {}", project.path().display())).size(12),
+            button("Copy project path").style(secondary_button).on_press(Message::CopyProjectPath),
+            text("Original audio is read only. Keep its card or drive connected until processing finishes.").size(12),
             button("Recheck source files")
                 .style(secondary_button)
                 .on_press(Message::Validate),
@@ -7966,7 +8142,10 @@ impl CleanSlateApp {
         );
         content = content.push(
             text(dialog.destination.as_ref().map_or_else(
-                || "Choose a new or empty folder for this export.".into(),
+                || {
+                    "Choose a location. A new CleanSlate export folder will be created inside it."
+                        .into()
+                },
                 |p| p.display().to_string(),
             ))
             .size(14),

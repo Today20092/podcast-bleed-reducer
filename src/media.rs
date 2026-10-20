@@ -1,7 +1,6 @@
 //! Strict native decoding. Decoder errors never become skipped packets or silence.
 use crate::{RenderBlocker, SourceMetadata, SourceTimebase};
 use std::{
-    fs::File,
     io::{Read, Seek, SeekFrom},
     path::Path,
     sync::atomic::AtomicBool,
@@ -41,7 +40,10 @@ pub(crate) fn decode_channels(
 ) -> Result<SourceMetadata, RenderBlocker> {
     crate::prepared_analysis::check_cancelled(cancelled)?;
     let aiff_frames = aiff_frame_count(path)?;
-    let source = MediaSourceStream::new(Box::new(File::open(path)?), Default::default());
+    let source = MediaSourceStream::new(
+        Box::new(crate::storage_io::SourceReader::open(path)?),
+        Default::default(),
+    );
     let mut hint = Hint::new();
     if let Some(extension) = path.extension().and_then(|extension| extension.to_str()) {
         hint.with_extension(extension);
@@ -193,6 +195,9 @@ pub(crate) fn decode_channels(
 }
 
 fn failure(path: &Path, error: Error) -> RenderBlocker {
+    if let Error::IoError(error) = error {
+        return crate::storage_io::context("read encoded audio", path, error).into();
+    }
     RenderBlocker(format!(
         "{}: unsupported, corrupt or truncated audio: {error}",
         path.display()
@@ -200,7 +205,7 @@ fn failure(path: &Path, error: Error) -> RenderBlocker {
 }
 
 fn aiff_frame_count(path: &Path) -> Result<Option<u64>, RenderBlocker> {
-    let mut file = File::open(path)?;
+    let mut file = crate::storage_io::SourceReader::open(path)?;
     let mut header = [0_u8; 12];
     file.read_exact(&mut header)?;
     if &header[..4] != b"FORM" {
@@ -267,4 +272,22 @@ fn aiff_frame_count(path: &Path) -> Result<Option<u64>, RenderBlocker> {
         ));
     }
     Ok(Some(frames))
+}
+
+#[cfg(test)]
+mod storage_failure_tests {
+    #[test]
+    fn io_errors_are_not_reported_as_corrupt_audio() {
+        let error = super::failure(
+            std::path::Path::new("recording.flac"),
+            symphonia::core::errors::Error::IoError(std::io::ErrorKind::TimedOut.into()),
+        )
+        .to_string();
+        assert!(
+            error.contains("read encoded audio")
+                && error.contains("recording.flac")
+                && error.contains("retry")
+        );
+        assert!(!error.contains("corrupt"));
+    }
 }

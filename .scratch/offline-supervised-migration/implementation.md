@@ -1,5 +1,7 @@
 # Offline supervised editor implementation sequence
 
+2026-10-20: [51 — Removable media and export](../offline-supervised-editor/issues/51-removable-media-export.md) is done for the owner-approved direct SD-card workflow: local working storage, read-only originals, independent destination folders, contextual I/O errors and bounded read recovery. Full and final publication checks, strict Clippy, GUI build and native self-check passed. Physical SD interruption/write-lock and listening checks remain unclaimed; independent release qualification is unchanged.
+
 Status: accepted implementation plan, 2026-10-08
 
 2026-10-20 owner follow-up: [50 — Analysis progress feedback](../offline-supervised-editor/issues/50-analysis-progress-feedback.md) is done after the separate GUI build, 144 relevant tests, formatting/diff checks and strict all-target/all-feature Clippy passed. The supervised job reports preparation/speech-detection work and completed-stage timings. Full-recording speed and native visual/listening checks remain unmeasured; performance qualification in tickets 14/15 remains open.

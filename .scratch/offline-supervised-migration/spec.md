@@ -1,5 +1,7 @@
 # Offline supervised CleanSlate architecture
 
+2026-10-20 accepted storage refinement: [ticket 51](../offline-supervised-editor/issues/51-removable-media-export.md#accepted-design) separates read-only original media, local working storage and the chosen export destination. No original-media copy is required. GUI import never creates files beside recordings; old adjacent/read-only projects are opened as local editing copies. Analysis and private processed renders are local. Folder selection creates a new named export folder inside the chosen location, retaining atomic directory publication and existing files. Transient reads may reopen with bounded retries at confirmed offsets; changed media, permanent errors and cancellation cannot be accepted as successful output.
+
 Status: accepted architecture, 2026-10-08
 
 2026-10-09 portable-alpha owner override: Nemotron is removed entirely from the
