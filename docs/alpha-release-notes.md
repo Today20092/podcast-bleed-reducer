@@ -53,11 +53,14 @@ Changes since the last published desktop release, v0.1.0-alpha.2:
 
 ## Verification and limits
 
-Release packages are built from the immutable v0.1.0-alpha.6 tag. Their included
-build manifests identify the exact source commit. The release workflow runs tests,
-strict Clippy, formatting and native package self-checks on all four platforms.
-The previous alpha.5 candidate passed all four platform checks in
-[its native verification run](https://github.com/Today20092/podcast-bleed-reducer/actions/runs/38366852428).
+All four native platform test suites, strict Clippy, formatting and packaged
+offline self-checks passed in
+[the alpha.6 release run](https://github.com/Today20092/podcast-bleed-reducer/actions/runs/39447930397).
+Packages were built from the immutable v0.1.0-alpha.6 tag at commit
+9b2fa9dd8886aed07cc57d4d105ca9fb1bf2fd65, with clean build manifests.
+The downloaded Windows package passed checksum, inventory and offline self-checks.
+Its executable icon exactly matches the approved source icon; its embedded window
+icon pixels, keyboard-shortcut reference and compiled alpha.6 version were verified.
 The owner tested repeated playback, selections, labeling loops, seeking, import during
 playback and import feedback and reported that everything was working well.
 On the owner's Focusrite device, warm software first-sample readiness measured
