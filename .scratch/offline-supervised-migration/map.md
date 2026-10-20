@@ -3,6 +3,8 @@
 Labels: wayfinder:map
 Status: complete
 
+2026-10-20 owner-requested analysis feedback: [ticket 50](../offline-supervised-editor/issues/50-analysis-progress-feedback.md) connects whole-recording preparation and speech-detection feedback to the GUI, with per-track recording time and completed-stage timings. Source validation, cancellation and sound behavior remain unchanged; processing-speed qualification remains open.
+
 2026-10-17 owner requested adding the newer YouTube walkthrough to the README after transcript review. [Ticket 49](../offline-supervised-editor/issues/49-readme-walkthrough-video.md) covers this documentation-only addition and preserves the original alpha demo link.
 
 2026-10-17 owner approved the Open channel identity (mint/charcoal C with audio bars) and authorized application/GitHub integration. [Build ticket 48](../offline-supervised-editor/issues/48-application-icon-branding.md) tracks native icons, packaging and the README logo independently of audio/release gates.

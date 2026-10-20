@@ -225,6 +225,16 @@ pub(crate) fn prepare_analysis_tracks(
     progress: &AtomicU8,
     cancelled: Option<&AtomicBool>,
 ) -> Result<DetectorFacts, RenderBlocker> {
+    prepare_analysis_tracks_with_feedback(tracks, sample_count, progress, cancelled, &|_| {})
+}
+
+pub(crate) fn prepare_analysis_tracks_with_feedback(
+    tracks: &[crate::PreparedAnalysisAudio],
+    sample_count: usize,
+    progress: &AtomicU8,
+    cancelled: Option<&AtomicBool>,
+    feedback: &dyn Fn(&str),
+) -> Result<DetectorFacts, RenderBlocker> {
     use std::io::Read;
     let frame_count = sample_count.div_ceil(SOURCE_FRAME);
     let mut probabilities = Vec::with_capacity(tracks.len());
@@ -236,6 +246,19 @@ pub(crate) fn prepare_analysis_tracks(
         let mut energy = Vec::with_capacity(frame_count);
         probabilities.push(silero_frames(frame_count, |frame| {
             check_cancelled(cancelled)?;
+            if frame % 32 == 0 {
+                let seconds = frame as u64 * MODEL_FRAME as u64 / 16_000;
+                let total = source.identity.frame_count / 16_000;
+                feedback(&format!(
+                    "Detecting speech · track {} of {} · {:02}:{:02} / {:02}:{:02}",
+                    track + 1,
+                    tracks.len(),
+                    seconds / 60,
+                    seconds % 60,
+                    total / 60,
+                    total % 60,
+                ));
+            }
             progress.store(
                 (20 + 50 * (track * frame_count + frame) / (tracks.len() * frame_count)) as u8,
                 Ordering::Relaxed,

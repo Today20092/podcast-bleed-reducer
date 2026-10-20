@@ -55,6 +55,12 @@ The top-bar Menu offers Settings, Keyboard shortcuts, Help, GitHub, Report a bug
 
 Settings offers Dark and Light. Tab or Up/Down selects an appearance or Close; Enter applies the choice immediately. Dark is the default. Appearance is stored independently of projects in the user's local configuration directory. Invalid preferences fall back to Dark with visible feedback; a failed save keeps the selected appearance usable and reports the failure. Changing appearance redraws the interface without rebuilding audio or changing the project.
 
+## Analysis feedback
+
+Analyze reports source integrity checks, the current track during audio preparation, decoded recording position while making a new analysis copy, and track/recording position during speech detection. Cached copies are checked without displaying invented decoding progress. Later stages identify example checking, acoustic measurement, learning, timeline processing and preview construction. Elapsed wall time and Cancel analysis remain available throughout the job.
+
+After successful result installation, the message area reports total elapsed time and measured source-check, audio-preparation, example-check, speaker-analysis and timeline times. Recording position describes audio already processed, not estimated time remaining. This feedback does not establish a processing speedup or long-session qualification.
+
 ## Hot reload assessment
 
 Iced 0.14 supports experimental hot reload through `iced/hot` and `cargo-hot`. Its documented limitation is patching the root crate. Our executable delegates to `rust_app::app::run()` and the GUI lives in the library target. The current cargo-hot source selects the binary/example target and reruns its rustc invocation for patches. That makes ordinary library GUI edits a poor fit for the documented path. No runtime hot-reload trial or new dependency was added; a separate executable UI boundary would need investigation before adoption.

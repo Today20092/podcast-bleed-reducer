@@ -186,7 +186,20 @@ impl EditorAnalysisWorker {
         progress: &AtomicU8,
         cancel: &AtomicBool,
     ) -> Result<Arc<EditorAnalysisResult>, RenderBlocker> {
+        self.analyze_with_feedback(project, cache, progress, cancel, &|_| {})
+    }
+
+    /// Reports observed work; recording-time progress is not a wall-clock ETA.
+    pub fn analyze_with_feedback(
+        &mut self,
+        project: &Project,
+        cache: &Path,
+        progress: &AtomicU8,
+        cancel: &AtomicBool,
+        feedback: &dyn Fn(&str),
+    ) -> Result<Arc<EditorAnalysisResult>, RenderBlocker> {
         crate::prepared_analysis::check_cancelled(Some(cancel))?;
+        feedback("Checking source audio integrity");
         let mut timings = EditorAnalysisTimings::default();
         let stage = std::time::Instant::now();
         let snapshot = EditorAnalysisIdentity::capture(project)?;
@@ -199,12 +212,41 @@ impl EditorAnalysisWorker {
         let audio = project
             .audio_sources()
             .iter()
-            .map(|source| {
-                crate::prepare_source_analysis_audio_in(source, &cache.join("audio"), Some(cancel))
+            .enumerate()
+            .map(|(track, source)| {
+                let label = format!(
+                    "Preparing/checking analysis audio · track {} of {}",
+                    track + 1,
+                    project.sources.len()
+                );
+                feedback(&label);
+                let grid = project.sources[track].metadata.grid;
+                let total = grid.frame_count / u64::from(grid.sample_rate);
+                let mut last_second = None;
+                crate::analysis_audio::prepare_source_at_rate_with_feedback_in(
+                    source,
+                    &cache.join("audio"),
+                    crate::ANALYSIS_SAMPLE_RATE,
+                    Some(cancel),
+                    &mut |frames| {
+                        let seconds = frames / u64::from(grid.sample_rate);
+                        if last_second != Some(seconds) {
+                            feedback(&format!(
+                                "{label} · decoded {:02}:{:02} / {:02}:{:02}",
+                                seconds / 60,
+                                seconds % 60,
+                                total / 60,
+                                total % 60
+                            ));
+                            last_second = Some(seconds);
+                        }
+                    },
+                )
             })
             .collect::<Result<Vec<_>, _>>()?;
         timings.audio_preparation_ms = stage.elapsed().as_secs_f64() * 1000.0;
         let stage = std::time::Instant::now();
+        feedback("Checking speaker and room-tone examples");
         let readiness = crate::reference_readiness(project, &audio, Some(cancel))?;
         timings.reference_readiness_ms = stage.elapsed().as_secs_f64() * 1000.0;
         if !readiness.ready() {
@@ -215,7 +257,14 @@ impl EditorAnalysisWorker {
                 readiness.issues.join("; ")
             )));
         }
-        self.analyze_evidence(project, &audio, (snapshot, timings), progress, cancel)
+        self.analyze_evidence(
+            project,
+            &audio,
+            (snapshot, timings),
+            progress,
+            cancel,
+            feedback,
+        )
     }
     pub fn analyze_acoustic_evidence(
         &mut self,
@@ -231,6 +280,7 @@ impl EditorAnalysisWorker {
             (snapshot, EditorAnalysisTimings::default()),
             progress,
             cancel,
+            &|_| {},
         )
     }
     fn analyze_evidence(
@@ -240,19 +290,22 @@ impl EditorAnalysisWorker {
         observed: (EditorAnalysisIdentity, EditorAnalysisTimings),
         progress: &AtomicU8,
         cancel: &AtomicBool,
+        feedback: &dyn Fn(&str),
     ) -> Result<Arc<EditorAnalysisResult>, RenderBlocker> {
         let (snapshot, mut timings) = observed;
         progress.store(55, Ordering::Relaxed);
         let stage = std::time::Instant::now();
-        let ownership = self.ownership.analyze_acoustic(
+        let ownership = self.ownership.analyze_acoustic_with_feedback(
             project,
             audio,
             crate::OwnershipTrainingSettings::default(),
             Some(cancel),
+            feedback,
         )?;
         timings.ownership_ms = stage.elapsed().as_secs_f64() * 1000.0;
         progress.store(80, Ordering::Relaxed);
         let stage = std::time::Instant::now();
+        feedback("Checking whole-recording speaker activity");
         let settings = crate::TemporalSettings {
             preserved_gap_frames: 0,
             ..crate::TemporalSettings::default()
@@ -279,6 +332,7 @@ impl EditorAnalysisWorker {
             ));
         }
         let stage = std::time::Instant::now();
+        feedback("Building the gain preview");
         let overview = crate::OwnershipOverview::new_cancellable(&temporal, Some(cancel))?;
         timings.overview_ms = stage.elapsed().as_secs_f64() * 1000.0;
         if !snapshot.matches(project) {
