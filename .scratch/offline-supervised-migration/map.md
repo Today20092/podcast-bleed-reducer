@@ -5,7 +5,11 @@
 Labels: wayfinder:map
 Status: complete
 
-2026-10-20 owner-requested analysis feedback: [ticket 50](../offline-supervised-editor/issues/50-analysis-progress-feedback.md) connects whole-recording preparation and speech-detection feedback to the GUI, with per-track recording time and completed-stage timings. Source validation, cancellation and sound behavior remain unchanged; processing-speed qualification remains open.
+2026-10-20 backlog reconciliation: accepted specifications [41 — Adjustable shortcuts](../offline-supervised-editor/issues/41-adjustable-keyboard-shortcuts.md) and [42 — Catch-up scrolling](../offline-supervised-editor/issues/42-playhead-catch-up-scroll.md) are retained on development for future implementation. Ticket 42 also refines locked middle-pan reanchoring and supersedes the conflicting old pan instruction in 41. Neither feature is implemented by the branch integration.
+
+2026-10-20 owner-requested development integration: [ticket 53](../offline-supervised-editor/issues/53-development-integration.md) combines completed work on `development`, verifies the combined app and establishes feature PRs to development followed by tested batch promotion to main and deliberate release tags. See the [inventory and workflow](../../docs/branch-workflow.md). Existing release/listening gates remain unchanged.
+
+2026-10-20 owner-requested analysis feedback: [ticket 52](../offline-supervised-editor/issues/52-analysis-progress-feedback.md) connects whole-recording preparation and speech-detection feedback to the GUI, with per-track recording time and completed-stage timings. Source validation, cancellation and sound behavior remain unchanged; processing-speed qualification remains open.
 
 2026-10-17 owner requested adding the newer YouTube walkthrough to the README after transcript review. [Ticket 49](../offline-supervised-editor/issues/49-readme-walkthrough-video.md) covers this documentation-only addition and preserves the original alpha demo link.
 

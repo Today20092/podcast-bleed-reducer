@@ -1,6 +1,8 @@
 # Show useful feedback during whole-recording analysis
 
 Status: done
+
+Integration note, 2026-10-20: renumbered from 50 to 52 because main already uses 50 for the alpha.6 publication ticket. Implementation and acceptance evidence are unchanged.
 Assignee: codex/analysis-progress
 Blocked by: none
 Spec: owner request, 2026-10-20; active migration specification cache/jobs contract

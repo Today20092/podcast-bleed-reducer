@@ -4,7 +4,11 @@
 
 Status: accepted implementation plan, 2026-10-08
 
-2026-10-20 owner follow-up: [50 — Analysis progress feedback](../offline-supervised-editor/issues/50-analysis-progress-feedback.md) is done after the separate GUI build, 144 relevant tests, formatting/diff checks and strict all-target/all-feature Clippy passed. The supervised job reports preparation/speech-detection work and completed-stage timings. Full-recording speed and native visual/listening checks remain unmeasured; performance qualification in tickets 14/15 remains open.
+2026-10-20 backlog reconciliation: [41 — Adjustable shortcuts](../offline-supervised-editor/issues/41-adjustable-keyboard-shortcuts.md) and [42 — Catch-up scrolling](../offline-supervised-editor/issues/42-playhead-catch-up-scroll.md) are accepted, unclaimed build specifications retained during development integration. Check each dependency before claiming; coordinate shared viewport changes, with ticket 42 taking precedence for locked middle-pan behavior. No implementation is claimed.
+
+2026-10-20 owner follow-up: [53 — Development integration](../offline-supervised-editor/issues/53-development-integration.md) combines completed feature branches and records the shared development/release policy. Feature work starts from development; batch promotion to main and release publication remain separate steps.
+
+2026-10-20 owner follow-up: [52 — Analysis progress feedback](../offline-supervised-editor/issues/52-analysis-progress-feedback.md) is done after the separate GUI build, 144 relevant tests, formatting/diff checks and strict all-target/all-feature Clippy passed. The supervised job reports preparation/speech-detection work and completed-stage timings. Full-recording speed and native visual/listening checks remain unmeasured; performance qualification in tickets 14/15 remains open.
 
 2026-10-17 owner-requested documentation: [49 — README walkthrough video](../offline-supervised-editor/issues/49-readme-walkthrough-video.md) adds the newer transcript-reviewed video as the primary demo while retaining the alpha demo link. Documentation only; no application or release change.
 

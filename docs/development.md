@@ -6,7 +6,7 @@ New contributors should start with [contributing](../CONTRIBUTING.md) for propos
 
 ## Build from source
 
-Start from `main`. Read [repository instructions](../AGENTS.md) and the [active implementation tracker](../.scratch/offline-supervised-migration/implementation.md) before choosing work.
+Start feature work from `development`. Read [repository instructions](../AGENTS.md), the [branch and release workflow](branch-workflow.md), and the [active implementation tracker](../.scratch/offline-supervised-migration/implementation.md) before choosing work. Use `main` for the current release-ready source; release tags identify published packages.
 
 The Rust package uses edition 2024. Install a compatible Rust toolchain and the Windows MSVC build prerequisites, then run these commands from the repository root:
 
