@@ -1,0 +1,71 @@
+name: Bug report
+description: Report a crash, incorrect result or broken operation.
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Search existing issues first. Issues are public. Remove private paths, recording names and personal information from logs and screenshots. Do not upload recordings without everyone's permission. No diagnostic export is currently available; written steps are enough to start.
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: What did you do, and how often does it happen? If startup fails, describe how you launched the app.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Include the error text if available, with private information removed.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: App version or commit
+      description: Use the release tag or source commit. Write unknown if you cannot find it.
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Operating system and architecture
+      placeholder: Windows 11 x64, macOS 14 Apple Silicon, or Ubuntu 24.04 x64
+    validations:
+      required: true
+  - type: dropdown
+    id: installation
+    attributes:
+      label: Installation method
+      options:
+        - Release package
+        - Built from source
+        - Other or unknown
+    validations:
+      required: true
+  - type: dropdown
+    id: stage
+    attributes:
+      label: Where does the problem occur?
+      options:
+        - Installation or startup
+        - Import or project loading
+        - Playback
+        - Speaker examples or analysis
+        - Gain editing or other UI
+        - Project saving
+        - Export
+        - Other or unknown
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Recording context and optional evidence
+      description: If relevant, include format, sample rate, track count, duration, settings, approximate timestamps and listening mode. Redacted screenshots or short error excerpts help; private audio and full project files are not required.

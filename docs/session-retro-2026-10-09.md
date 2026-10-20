@@ -1,5 +1,7 @@
 # Session retrospective — 2026-10-09
 
+Historical record of that session's checkout and candidates. Its CI, GUI and tooling observations are not current architecture requirements. Use the [developer guide](development.md) and [current architecture decision](adr/0006-offline-supervised-editable-envelopes.md) for current behavior.
+
 Scope: ticket inventory, faster GUI iteration, and uniform red attenuation shading. These are environment improvement candidates, not additional implementation tickets or changes to the accepted roadmap.
 
 | Priority | Finding and evidence | Smallest useful improvement |

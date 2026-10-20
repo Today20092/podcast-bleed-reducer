@@ -10,7 +10,7 @@ Open Speaker examples to browse saved clips with readable times. Play auditions 
 
 Import tracks and file drops also accept multichannel WAV/BWF recordings. Choose speaker channels shows the channels initially selected; deselect recorder mixes or unused inputs and edit the names before importing. Names come from iXML interleave metadata when present, with Channel N as the fallback. Each selected channel becomes an editable track backed by the original WAV, with its native sample rate, frame count and timing intact. Import does not create separate source WAVs.
 
-Channels in one WAV are internally synchronized. Separate mono files may be included in the same project, subject to the usual physical-duration and timing checks. Missing timing between files still requires a supplied-synchronization declaration. The project accepts at most eight speaker tracks. Rename in a track header changes its saved name; Analyze again before final rendering after a rename. Final export writes one processed mono WAV per track and preserves BEXT timing where present.
+Channels in one WAV are internally synchronized. Separate mono files may be included in the same project, subject to the usual physical-duration and timing checks. Missing timing between files still requires a supplied-synchronization declaration. The project accepts at most eight speaker tracks. Rename in a track header changes its saved name; Analyze again before final rendering after a rename. Export can deliver separate processed mono WAVs or one compatible multichannel WAV, preserving BEXT timing where present. See [export settings](#export-settings).
 
 ## Analysis and editing
 
@@ -18,9 +18,11 @@ Channels in one WAV are internally synchronized. Separate mono files may be incl
 
 Drag a range to open **Who is talking?** Select everyone you hear: one person for solo speech, several for overlap, or nobody for room tone. The selected microphone does not decide the label. This capture shows an unsaved selection; the checked speaker is an example of the control, not a verified annotation. Enter saves; Escape closes without saving.
 
+Compare the [solo, overlap and room-tone examples](ownership-explained.md#1-you-supply-examples) before labeling a range.
+
 Analyze is explicit. Several label changes can be collected before one job. Progress identifies the current stage and elapsed time. Preparation, acoustic ownership fitting and temporal decisions use your examples to estimate ownership throughout the timeline. Cancellation, source changes or obsolete label generations prevent installation. Completed fixed evidence can be reused. A failed project save cannot advance the accepted effective-envelope cache.
 
-The previous preview remains visible when stale. Gain-only changes compose immediately and do not run the neural extractor or ownership classifier. A gain edit made during Analyze is composed from the latest project when the result installs. The displayed estimates are inspectable model probabilities; they do not promise calibrated certainty.
+The previous preview remains visible when stale. Gain-only changes compose immediately and do not rerun Silero, acoustic fitting or ownership training. A gain edit made during Analyze is composed from the latest project when the result installs. The displayed estimates are inspectable model probabilities; they do not promise calibrated certainty. The [model recipe](supervised-ownership-models.md) and [temporal policy](temporal-ownership.md) describe the current acoustic branch.
 
 The waveform displays source peaks and conservative processed bounds. In the compact overview, blue marks human references, gray marks automatic gain, teal marks effective gain, pink marks manual points, and gold marks unity protection. Overview pixels summarize their entire time interval, so a brief owned or uncertain region remains visible. Gain drawing includes per-pixel extrema, including excursions shorter than one pixel.
 
@@ -34,6 +36,8 @@ The curve shows when volume falls and returns to full level. At the white playhe
 
 **Attenuation** sets the reduced level. The two fade sliders set the maximum transition durations. **Ignore gaps shorter than** keeps brief automatic gaps open. These are the captured session's settings, not recommended defaults. Enable **Edit gain points** for manual corrections, or select a range and use **Preserve** to keep it at full volume.
 
+See the [fade-and-gap plots](effective-envelopes.md) for the difference between shortening fades to fit a gap and keeping a short automatic gap at full volume.
+
 Switch the envelope tool on to drag manual points horizontally for fade duration or vertically for gain. A drag uses a transient draft; release commits one undo command and cancellation restores the saved curve and markers. Arrow keys move a selected point, Delete removes its whole override, and Ctrl+Z/Ctrl+Y undo/redo. Text inputs retain their captured keys. Preserve and Attenuate create region edits. Conflicts require the explicit **Replace entire overlapping overrides and protections** option; it removes the conflicting records as whole records, including the other bindings of a global protection.
 
 Open/close settings specify finite S-shaped fade durations with exact endpoints and zero endpoint slope and curvature. Shared evaluation keeps automatic fades outside preserved speech. Manual gain remains authoritative until removed and retains linear interpolation. All source-time curves stay sparse; native-rate playback and rendering use the same evaluator. Transparent attenuation remains a listening requirement, not a guarantee from the curve alone.
@@ -46,7 +50,23 @@ Compare **Original** with **Processed**, then listen to **Removed** for wanted s
 
 Save project persists labels, gain overrides, protections, review states and recipe identities. Opening a project validates sources; Analyze reconstructs its preview using reusable fixed evidence.
 
-Create final WAV render publishes the accepted effective envelopes directly at each source's native sample rate. Export copies only that accepted render after verifying its report, WAV hashes, source identities and saved project identity. Monitoring gain and comparison mode never enter exported audio. Label/model/source changes require current analysis; gain edits require a fresh render without repeating inference. Both final render and delivery can be cancelled. Incomplete or obsolete private attempts never replace prior deliverables. A published attempt that cannot be accepted remains beside the project as recovery material; deleting it is an explicit file operation.
+Final rendering applies the accepted effective envelopes at each source's native sample rate. Export verifies that accepted render's report, WAV hashes, source identities and saved project identity before encoding the selected delivery. Monitoring gain, Solo controls and comparison mode never enter exported audio. Label/model/source changes require current analysis; gain edits require a fresh render without repeating inference. Both final render and delivery can be cancelled. Incomplete or obsolete private attempts never replace prior deliverables. A published attempt that cannot be accepted remains beside the project as recovery material; deleting it is an explicit file operation.
+
+## Export settings
+
+Open Export after checking the current result. The dialog lists track/channel order and original sample rates, offers payload-size estimates, and requires a new or empty destination folder.
+
+| Setting | Behavior |
+| --- | --- |
+| Separate mono WAV files | One processed file per track, keeping each native sample rate and timing. This is the default layout. |
+| One WAV with separate channels | One processed multichannel file in the displayed track order. It keeps channels separate rather than summing them. |
+| Preserve source encoding | The default encoding. Supported WAV encodings are retained; non-WAV and float64 sources use float32. |
+| 24-bit PCM | A common integer encoding for delivery. |
+| 32-bit float | Floating-point delivery without integer quantization. |
+
+Multichannel output requires matching sample rates, frame counts and timing, compatible BWF metadata, and a common output encoding. For mixed source encodings, select PCM24 or float32 explicitly when preservation cannot produce a common format. Mixed native rates remain separate files; Export does not resample, trim or pad them to fit one WAV.
+
+The encoding preference is saved per project. Layout and destination are dialog choices. Integer delivery applies final dither once and preserves exact silence. Integer overload blocks export; choose float32 or deliberately correct gain instead of silently clipping. Oversized RIFF delivery is rejected. Payload estimates do not include every header byte. See [the export contract](../src/export_settings.rs) and [delivery validation](../src/export.rs) for exact limits.
 
 ## Historical validation and remaining checks
 

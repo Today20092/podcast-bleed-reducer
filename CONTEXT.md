@@ -1,8 +1,8 @@
 # CleanSlate
 
-CleanSlate is a local, non-destructive automixer for synchronized mono podcast stems. Its language favors preservation when evidence is ambiguous.
+CleanSlate is a local, non-destructive microphone bleed-reduction tool for synchronized podcast tracks.
 
-These terms describe the accepted migration target. Historical code may still follow earlier contracts; see [ADR-0006](docs/adr/0006-offline-supervised-editable-envelopes.md) and the [decision map](.scratch/offline-supervised-migration/map.md).
+These terms describe the current acoustic editor unless marked historical. See [How it works](docs/ownership-explained.md) for the operation order and [ADR-0006](docs/adr/0006-offline-supervised-editable-envelopes.md) for the current architecture and superseded decisions.
 
 ## Language
 
@@ -17,7 +17,7 @@ The durable record of a session's source identities, speaker assignments, refere
 _Avoid_: Render report, audio source
 
 **Release acceptance gate**:
-The combined independent automated and listening evidence required before release: wanted speech and overlap remain at unity absent intentional edits, bleed improves measurably, outputs preserve integrity, transitions pass listening review and full-session operation completes safely.
+The combined independent automated and listening evidence required for stable release qualification: wanted speech and overlap remain at unity absent intentional edits, bleed improves measurably, outputs preserve integrity, transitions pass listening review and full-session operation completes safely. Experimental alpha publication does not establish this qualification.
 _Avoid_: Python parity, detector benchmark
 
 **Ownership decision**:
@@ -27,6 +27,14 @@ _Avoid_: Single winner, VAD probability
 **Speaker activity**:
 Evidence about which person is speaking at a time, regardless of which microphones hear their voice.
 _Avoid_: Microphone ownership, gain target
+
+**Speech detection**:
+An estimate that a microphone contains speech, including speech from another person arriving as bleed. It does not establish local ownership.
+_Avoid_: Speaker identity, ownership decision
+
+**Microphone bleed**:
+Another person's voice entering a microphone whose assigned person is not the source of that voice. Several tracks can contain the same speech without all owning it.
+_Avoid_: Local ownership, isolated voice
 
 **Local ownership**:
 The presence of a track's assigned person speaking directly into that track's microphone. That person's voice on another track as bleed does not make the other track an owner.
@@ -49,15 +57,15 @@ A contiguous span sharing one applied attenuation decision, presented as the pri
 _Avoid_: Frame, envelope segment
 
 **Preserved region**:
-A timeline span that CleanSlate will keep at unity because the track owns speech. Its editor overlay is green.
+A timeline span kept at unity in automatic gain because the track owns speech. Manual gain edits can intentionally change it.
 _Avoid_: Active microphone, microphone on
 
 **Attenuated region**:
-A timeline span whose gain CleanSlate will reduce because another track owns speech or the ownership decision is `NoSpeech`. Its editor overlay is red.
+A timeline span whose effective gain is below unity. It can result from automatic absence decisions or intentional manual edits. The current editor shades applied reduction red, including fades; this is not proof that nobody is speaking.
 _Avoid_: Inactive microphone, microphone off
 
 **Uncertain region**:
-A timeline span kept at unity because ownership evidence is ambiguous. Its editor overlay is amber and it remains eligible for review.
+A timeline span kept at unity in automatic gain because evidence is missing, invalid or explicitly requests preservation. Intermediate acoustic ownership estimates alone keep the previous decision. The current editor has no separate uncertainty overlay or review queue.
 _Avoid_: Low-confidence region
 
 **Review warning**:
@@ -65,7 +73,7 @@ A suspicious but safe result that renders conservatively and is promoted for ins
 _Avoid_: Error
 
 **Review list**:
-The region-grouped collection of review warnings. Selecting an item seeks playback to its region and highlights the affected tracks.
+Historical interface: the region-grouped collection of review warnings with seek navigation. The current GUI uses direct waveform inspection and audition instead; internal warnings and preservation remain.
 _Avoid_: Error list
 
 **Render blocker**:
@@ -133,15 +141,15 @@ A persisted summary used to draw a source stem quickly without changing or repla
 _Avoid_: Rendered audio, proxy audio
 
 **Speech sensitivity**:
-The user-facing control for how readily model evidence counts as speech. Higher sensitivity admits weaker speech evidence.
+Historical detector control for how readily model evidence counts as speech. It is not a current acoustic ownership training control.
 _Avoid_: Speech-probability threshold
 
 **Bleed discrimination**:
-The user-facing control for how strongly a track must rise above its own noise floor before it can own speech.
+Historical detector control for how strongly a track must rise above its own noise floor. Current ownership uses learned acoustic inputs instead.
 _Avoid_: Energy margin, gate threshold
 
 **Speech padding**:
-The preserved time before and after detected speech that prevents word boundaries from being attenuated.
+Historical detector setting for preserved time before and after detected speech. Current automatic fades fit outside preserved regions, and the live gap control handles brief bounded automatic pauses.
 _Avoid_: Preservation frames, preroll
 
 **Fade-in duration**:
@@ -157,5 +165,5 @@ An automatic gain transition with an explicit start, end and exact target. Gain 
 _Avoid_: Exponential-shaped fade, one-pole time constant
 
 **Review state**:
-The persisted reviewed or unreviewed status of a review warning; reviewed warnings remain visible and reopenable.
+Historical review-interface metadata recording reviewed or unreviewed warnings. Retained project metadata does not imply a current GUI review queue.
 _Avoid_: Dismissed warning

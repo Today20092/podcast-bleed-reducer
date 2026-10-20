@@ -3,7 +3,7 @@
 Status: claimed
 Assignee: Codex
 Type: task
-Deferred: wider diagrams remain pending; current development-build screenshots authorized
+Deferred: gain-layer composition, interactive companion and remaining GUI captures
 Blocked by: 16
 Spec: ../../offline-supervised-migration/spec.md
 
@@ -36,6 +36,42 @@ Ticket 16 must be done and the owner must confirm the GUI is settled enough to d
 - Verify rendering, legibility, links and light/dark presentation in the intended documentation viewer. Record checks and remaining limitations here.
 
 ## Comments
+
+2026-10-11 scoped completion: added fades-and-gaps, speaker-label-examples and
+microphone-bleed as editable HTML and inline SVG figures. Embedded them in the
+effective-envelope, ownership and acoustic guides, with cross-links from the
+editor workflow. The README's workflow and editor screenshot are unchanged.
+Synthetic waveform envelopes are explicitly illustrative; no private audio,
+new screenshots, model accuracy or listening-quality claims were introduced.
+
+The gain figure contains three plots sampled from the current AutomaticEnvelope
+evaluator. A local sampling probe verified endpoint, unity,
+bounded-gain, midpoint and quarter-point assertions. It covers long-gap plateaus,
+proportionally compressed short fades and minimum-gap preservation. All 1803
+plotted coordinates match those samples after display rounding.
+
+Passed: the example run and its assertions; example rustfmt and strict Clippy;
+the existing live_gap_setting_persists_and_human_absence_and_manual_gain_remain_authoritative
+regression test; three diagram-design HTML self-checks; three SVG XML parses;
+72 local guide/inventory/proposal links; scoped git diff --check. Rasterized
+and visually inspected all three SVGs using ImageMagick. The regression test's
+first parallel compilation hit Windows paging-file error 1455; retrying with
+one build job passed. Code-graph discovery was unavailable due to a closed
+transport, so the evaluator and existing tests were inspected through text search.
+
+Remaining: browser/Markdown-viewer checks, the deferred gain-layer comparison,
+interactive companion and prior GUI capture tasks. Ticket remains claimed for
+that wider scope. Publication includes documentation only; the sampling probe
+remains local. Unrelated export implementation work was left untouched.
+
+2026-10-11: Owner accepted the recommended first pass after reviewing diagram
+opportunities: three static figures for fades/gap fitting, solo/overlap/room-tone
+labels and two-microphone bleed. Claimed by Codex for this scoped pass. Use clearly
+marked illustrative signals and gain curves sampled from the verified current
+evaluator. Keep the existing README visuals; add figures in the relevant guides
+with captions and text equivalents. Gain-layer composition and an interactive
+companion remain deferred. Ticket 16 is done. No new GUI captures or changes to
+audio behavior are part of this pass.
 
 2026-10-09 owner-requested recapture: replaced the README overview with the current zoomed analyzed development window, including New project, visible automatic gain fades/reduction and speaker estimates at the playhead. Added `docs/images/gain-and-speaker-estimates.png` and a workflow caption explaining Active/Inactive percentages as model estimates rather than volume or guaranteed accuracy. Redacted project/source filenames, retained actual plotted data and UI. Visually inspected the new crop; diff whitespace check passed. Captured without modifying playback, labels, gains or project files. Light/dark viewer checks and the wider visual scope remain pending.
 

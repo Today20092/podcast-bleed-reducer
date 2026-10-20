@@ -14,6 +14,10 @@ Suppose you label a section "Speaker 3 only."
 
 You do not need a separate "bleed" label. Your solo label identifies where the other microphones can provide bleed examples.
 
+[![Speaker 3 reaches microphone 3 directly and microphone 1 as bleed. Both aligned illustrative recordings contain the voice, but only track 3 belongs to the active speaker.](diagrams/microphone-bleed.svg)](diagrams/microphone-bleed.svg)
+
+This simplified example shows two of the microphones on one time and amplitude scale. The signal sizes are illustrative, not measured leakage ratios or decision thresholds. The desired action is to preserve Speaker 3's track and attenuate the track whose assigned person is silent. Attenuation lowers the whole track during selected intervals; it does not subtract or separate a voice. [Text equivalent](diagrams/microphone-bleed.html).
+
 A room-tone label identifies a section where nobody speaks. It supplies the background-noise level for each microphone.
 
 ## What the tool learns
@@ -99,9 +103,9 @@ The API returns a row per stable track at its covering 32 ms common-time frame.
 | Fit reliability | Qualified development fit score | [0, 1] |
 | Coefficient-present mask | Identified coefficient versus missing evidence | 0 or 1 |
 
-Scalar excess compares current source-relative unexplained band power with its trusted median. FIR excess compares raw residual/target-power dB with its held-out baseline. Both measure deviation above their own model, never delivered gain. An independent voice or changed relationship raises unexplained residual. A bad fit cannot call that voice bleed. Missing values normalize to zero with coefficient/reliability masks; below-floor evidence remains distinct through its public status and reliability.
+Scalar excess compares current source-relative unexplained band power with its trusted median. FIR excess compares raw residual/target-power dB with its held-out baseline. Both measure deviation above their own model, never delivered gain. An independent voice or changed relationship can raise unexplained residual. A bad fit supplies unavailable evidence; the ownership model can still make a wrong decision from the remaining inputs. Missing values normalize to zero with coefficient/reliability masks; below-floor evidence remains distinct through its public status and reliability.
 
-Order is local energy, dominance, then five incoming features for each other source in project order (two features for one track; 37 for eight). Actual prepared-payload hashes, source identities, labels, assignments and recipe key fits. SHA is checked cancellably before warm reuse and again before new fits install. Cancellation, I/O failure or source changes retain the accepted cache. Label edits rebuild fits but preserve compatible fixed facts. Final learned-model keys must additionally include ticket 07 mapping and ticket 06 neural provenance.
+Acoustic feature order is local energy, dominance, then five incoming features for each other source in project order: two acoustic features for one track and 37 for eight. The current ownership model prepends raw Silero, giving three total inputs for one track and 38 for eight before constant-feature removal. Actual prepared-payload hashes, source identities, labels, assignments and recipe key the fits. SHA is checked cancellably before warm reuse and again before new fits install. Cancellation, I/O failure or source changes retain the accepted cache. Label edits rebuild fits but preserve compatible fixed facts. Final learned-model identity additionally binds human references, fixed Silero identity and training settings; it has no Nemotron provenance requirement. See the [current model recipe](supervised-ownership-models.md).
 
 ### Historical development measurements
 
