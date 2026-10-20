@@ -263,7 +263,19 @@ impl SessionOwnershipCache {
         settings: OwnershipTrainingSettings,
         cancelled: Option<&AtomicBool>,
     ) -> Result<Arc<SessionOwnership>, RenderBlocker> {
+        self.analyze_acoustic_with_feedback(project, audio, settings, cancelled, &|_| {})
+    }
+
+    pub(crate) fn analyze_acoustic_with_feedback(
+        &mut self,
+        project: &Project,
+        audio: &[PreparedAnalysisAudio],
+        settings: OwnershipTrainingSettings,
+        cancelled: Option<&AtomicBool>,
+        feedback: &dyn Fn(&str),
+    ) -> Result<Arc<SessionOwnership>, RenderBlocker> {
         crate::prepared_analysis::check_cancelled(cancelled)?;
+        feedback("Measuring acoustic relationships between tracks");
         let acoustics = self.acoustics.analyze(project, audio, cancelled)?;
         let mapping = SpeakerMapping {
             channels: project
@@ -315,8 +327,13 @@ impl SessionOwnershipCache {
                 .checked_mul(3)
                 .and_then(|count| usize::try_from(count).ok())
                 .ok_or_else(|| RenderBlocker("VAD time coordinate overflow.".into()))?;
-            let facts =
-                crate::vad::prepare_analysis_tracks(audio, count, &AtomicU8::new(0), cancelled)?;
+            let facts = crate::vad::prepare_analysis_tracks_with_feedback(
+                audio,
+                count,
+                &AtomicU8::new(0),
+                cancelled,
+                feedback,
+            )?;
             if facts
                 .probabilities
                 .iter()
@@ -335,6 +352,7 @@ impl SessionOwnershipCache {
             self.stats.fixed_vad_preparations += 1;
             vad
         };
+        feedback("Learning speaker activity from your examples");
         let (truth, anchors) = truth_frames(project)?;
         let selected: Vec<_> = project
             .sources
@@ -443,6 +461,7 @@ impl SessionOwnershipCache {
             global_activity: Vec::with_capacity(frames),
             acoustic_only: true,
         };
+        feedback("Applying learned speaker activity across the recording");
         for start in (0..frames).step_by(BLOCK) {
             crate::prepared_analysis::check_cancelled(cancelled)?;
             let end = (start + BLOCK).min(frames);
@@ -479,6 +498,7 @@ impl SessionOwnershipCache {
             }
         }
         // Validate mutable disk boundaries once more before installing a completed derivation.
+        feedback("Verifying analysis audio before accepting speaker activity");
         self.acoustics.analyze(project, audio, cancelled)?;
         crate::prepared_analysis::check_cancelled(cancelled)?;
         self.stats.model_fits += new_fits;

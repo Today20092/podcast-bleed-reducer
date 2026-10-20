@@ -21,7 +21,7 @@ use iced::{
 use std::{
     path::PathBuf,
     sync::{
-        Arc,
+        Arc, Mutex,
         atomic::{AtomicBool, AtomicU8, Ordering},
         mpsc::{self, Receiver},
     },
@@ -402,7 +402,7 @@ mod tests {
                 key: String::new(),
                 project: Default::default(),
             },
-            progress: Default::default(),
+            feedback: Default::default(),
             cancelled: cancelled.clone(),
             generation: 0,
             source_generation: 0,
@@ -1901,7 +1901,7 @@ mod tests {
                 key: String::new(),
                 project: Default::default(),
             },
-            progress: Default::default(),
+            feedback: Default::default(),
             cancelled: cancelled.clone(),
             generation: 0,
             source_generation: 0,
@@ -3618,7 +3618,7 @@ impl Drop for ExportProcessing {
 
 struct PreviewProcessing {
     started_at: Instant,
-    progress: Arc<AtomicU8>,
+    feedback: Arc<Mutex<String>>,
     cancelled: Arc<AtomicBool>,
     generation: u64,
     source_generation: u64,
@@ -4828,21 +4828,26 @@ impl CleanSlateApp {
         let cancelled = Arc::new(AtomicBool::new(false));
         let worker_cancelled = cancelled.clone();
         let mut worker = std::mem::take(&mut self.supervised_worker);
+        let feedback = Arc::new(Mutex::new("Starting analysis".into()));
+        let worker_feedback = feedback.clone();
         let (sender, result) = mpsc::channel();
         std::thread::spawn(move || {
             let completed = worker
-                .analyze(
+                .analyze_with_feedback(
                     &source_project,
                     &cache_directory,
                     &worker_progress,
                     &worker_cancelled,
+                    &|message| {
+                        *worker_feedback.lock().unwrap_or_else(|e| e.into_inner()) = message.into();
+                    },
                 )
                 .map_err(|e| e.to_string());
             let _ = sender.send((completed, worker));
         });
         self.preview_processing = Some(PreviewProcessing {
             started_at: Instant::now(),
-            progress,
+            feedback,
             cancelled,
             result,
             sources,
@@ -5291,6 +5296,16 @@ impl CleanSlateApp {
                             let project = self.project.as_mut().unwrap();
                             match analysis.install(project, &mut self.effective_cache, None) {
                                 Ok(effective) => {
+                                    let timings = &analysis.timings;
+                                    self.messages = vec![format!(
+                                        "Analysis completed in {:.1}s · source checks {:.1}s · audio preparation {:.1}s · examples {:.1}s · speaker analysis {:.1}s · timeline {:.1}s",
+                                        processing.started_at.elapsed().as_secs_f64(),
+                                        timings.source_validation_ms / 1000.0,
+                                        timings.audio_preparation_ms / 1000.0,
+                                        timings.reference_readiness_ms / 1000.0,
+                                        timings.ownership_ms / 1000.0,
+                                        (timings.temporal_ms + timings.overview_ms) / 1000.0,
+                                    )];
                                     let preview = analysis.preview(project, &effective);
                                     if let Some(audition) = &self.audition {
                                         audition.replace_envelopes(preview.envelopes.clone());
@@ -8423,17 +8438,15 @@ impl CleanSlateApp {
         .height(Fill);
         let preview_state: Element<'_, Message> = if let Some(processing) = &self.preview_processing
         {
-            let stage = match processing.progress.load(Ordering::Relaxed) {
-                0..=19 => "Preparing audio and checking examples",
-                20..=54 => "Analyzing optional speaker-activity evidence on CPU",
-                55..=79 => "Learning speaker activity from your examples",
-                80..=94 => "Checking speaker activity and uncertain sections",
-                _ => "Composing the current gain preview",
-            };
+            let stage = processing
+                .feedback
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .clone();
             column![
                 text(stage),
                 text(format!(
-                    "Working · elapsed {:02}:{:02}",
+                    "Elapsed {:02}:{:02}",
                     processing.started_at.elapsed().as_secs() / 60,
                     processing.started_at.elapsed().as_secs() % 60
                 ))
