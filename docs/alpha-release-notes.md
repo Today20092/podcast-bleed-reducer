@@ -1,4 +1,8 @@
-CleanSlate v0.1.0-alpha.5 — editor workflow, progressive imports and faster playback.
+CleanSlate v0.1.0-alpha.6 — application logo, editor workflow and keyboard shortcuts.
+
+This release brings the approved CleanSlate logo into the Windows executable and
+window/taskbar icon, macOS application bundle and Linux desktop package. It also
+publishes the newer editor workflow that was absent from the public alpha.2 download.
 
 The alpha.3 candidate did not publish because its Windows headless tests crashed
 in audio-device enumeration. Alpha.4 corrects that test/preparation path while
@@ -13,6 +17,7 @@ Changes since the last published desktop release, v0.1.0-alpha.2:
 
 ## Added
 
+- Approved CleanSlate application icons and theme-aware README branding.
 - Original-audio selection loops while labeling speakers, with pause/resume, Stop,
   and restoration of the previous audition state after labeling.
 - Typed sound-setting values, exact mute, and value reset gestures.
@@ -48,10 +53,11 @@ Changes since the last published desktop release, v0.1.0-alpha.2:
 
 ## Verification and limits
 
-The Windows build passed 264 automated tests (18 ignored), strict Clippy and formatting.
-All four platform test suites and packaged application checks passed in
-[the native verification run](https://github.com/Today20092/podcast-bleed-reducer/actions/runs/38366852428).
-Packages were built from commit d5fe272f82c06d43c7121c23a3c13fe1a574cb57.
+Release packages are built from the immutable v0.1.0-alpha.6 tag. Their included
+build manifests identify the exact source commit. The release workflow runs tests,
+strict Clippy, formatting and native package self-checks on all four platforms.
+The previous alpha.5 candidate passed all four platform checks in
+[its native verification run](https://github.com/Today20092/podcast-bleed-reducer/actions/runs/38366852428).
 The owner tested repeated playback, selections, labeling loops, seeking, import during
 playback and import feedback and reported that everything was working well.
 On the owner's Focusrite device, warm software first-sample readiness measured
