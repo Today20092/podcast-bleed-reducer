@@ -20,7 +20,7 @@ pwsh -NoProfile -File scripts/gui-dev.ps1 -BuildOnly
 pwsh -NoProfile -File scripts/gui-dev.ps1 -Project 'C:/path/session.cleanslate'
 ```
 
-The script reuses the retained `~/.codex/worktrees/offline-timebase/podcast-automix-rust-gui/target/owner-ui` cache when present. Otherwise it uses `target/owner-ui`. `-TargetDir` overrides that location. Keep the same cache and `scripts/gui-dev.toml` settings between iterations. Switching profiles, target directories or compiler versions can rebuild dependencies. A fresh cache needs dependencies downloaded before offline builds work. Optional Nemotron still requires its normal verified runtime installation.
+The script and `scripts/check.ps1 -Local` share `%LOCALAPPDATA%/CleanSlate/BuildCache` on Windows, outside all worktrees. `scripts/local-build-settings.ps1` owns the target and locked/offline, single-job Cargo flags; GUI `-TargetDir` remains an explicit override. Keep `rust-toolchain.toml`, Cargo.lock and `scripts/gui-dev.toml` consistent between builds. Incremental compilation stays enabled; dependency debug information is disabled to reduce disk use, so detailed dependency debugging needs a deliberate separate configuration. Cargo locks the shared target while compiling; coordinate builds and close the development executable before rebuilding. A fresh cache requires the dependencies to be available locally. Nemotron has been removed.
 
 ## Measurements on 2026-10-09
 

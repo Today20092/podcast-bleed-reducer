@@ -1,142 +1,68 @@
-# CleanSlate branches, worktrees and releases
+# Local development, builds and releases
 
-Inventory date: 2026-10-20, America/New_York. This is a snapshot; the workflow below is the ongoing policy. [Ticket 53](../.scratch/offline-supervised-editor/issues/53-development-integration.md) records integration and validation results.
+Current policy: 2026-10-20. [Ticket 54](../.scratch/offline-supervised-editor/issues/54-local-build-consolidation.md) records consolidation, storage measurements and checks. The earlier inventory remains available in Git history at commit f69b1e6.
 
-## The everyday process
+## One place to work
 
-**One worktree per feature being edited in parallel; one development worktree for testing the combined application.** Sequential features can reuse a clean worktree. You do not need a new worktree for each commit or a new release to test something.
+The primary checkout is `C:/Users/User/Documents/Codex/2026-08-14/podcast-automix-rust-gui`, on `development`. Keep only development and main as ongoing branch names. Main remains the reviewed release branch and GitHub's default branch. The detached `ticket14-frozen-baseline` checkout is intentional comparison evidence, not another development branch.
 
-For example, one Codex chat builds feature A on `codex/feature-a` in worktree A, while another builds feature B on `codex/feature-b` in worktree B. Both start from development. Each finishes its ticket, runs its checks, pushes its branch and opens a **GitHub PR whose base is development**. After the PRs merge, your integration worktree pulls development and builds it. That executable now contains A and B together.
+All completed application branches and the primary checkout's pending documentation are integrated into development. Accepted future work, including adjustable shortcuts and catch-up scrolling, is retained as specifications; merging those tickets does not implement them. Generated diagnostics and experimental/private scratch material are preserved in the local recovery snapshot rather than published as source.
 
-The PR is a review and merge request on GitHub; it is not a package download. Pulling updates your existing local files with the merged commits. You then build those files locally. You do not clone the project again, download a release ZIP or repeat this in every feature worktree just to test the combined app.
+## Everyday work
 
-For an earlier local experiment, create a temporary `codex/try-features` branch/worktree from development, merge the local feature branches into it and build there. Worktrees in this repository share those commits, so this test needs no upload/download. It does not merge the PRs on GitHub. Keep the normal development worktree following the remote PR merges; mixing independent local development merges with GitHub merges can leave divergent histories.
+1. For one task at a time, claim its ticket and work on development in the primary checkout. Commit useful checkpoints, build, try the application and revise locally.
+2. When the owner explicitly requests parallel work, give each concurrent feature a temporary scoped `codex/` branch/worktree from development. Source editing can happen in parallel; use the shared build target for compilation.
+3. Merge a runnable feature into local development and rebuild there to test the combined app. Further feature-branch revisions need another merge before they appear in that build. A local merge already updates your files; no GitHub round trip is needed.
+4. Push development regularly as a backup. Solo local feature integration does not require a feature PR. External contributors use PRs targeting development.
+5. Once a batch passes its checks and the required desktop/audio review, open one development → main GitHub PR. Preserve ancestry with a merge commit. Bring main-only fixes and version metadata back to development.
+6. Remove integrated temporary branches/worktrees after preserving their needed files and executable. Keep the frozen baseline intact.
 
-Once the combined app passes checks and your desktop/audio review, open one development → main PR. Prepare a version deliberately, tag the tested source, inspect all four packages in the draft release and publish it. Repeat feature/test cycles as often as needed before that release step.
+Pull with `git pull --ff-only` when GitHub has commits absent locally. A PR is a review/merge request, not an application download. Changing branches or merging source does not update an existing executable until you build again.
 
-## Exactly when GitHub makes packages
+## One local build cache
 
-| Action | Result in the current repository |
-| --- | --- |
-| Edit files or build locally | Local executable only. |
-| Push an ordinary feature/development commit | No release packages from that push alone. |
-| Open/update a PR to development or main | Four-platform checks; no downloadable application release. |
-| Merge a PR to development or main | Source history changes; no release packages from that merge alone. |
-| Manually run **Desktop draft release** on development with `build_only: true` | Builds/checks four native packages, saved under that Actions run's Artifacts. It does not create/update a release. Set release_tag to the current Cargo version with a leading v; it labels this build without publishing a tag. |
-| Push a deliberate `v*` version tag | Runs native checks, builds all four packages, then creates/updates one draft prerelease after every package job succeeds. |
-| Publish the checked draft release | Makes the release downloadable publicly and triggers the README-download update workflow. |
+On Windows, local builds share `%LOCALAPPDATA%/CleanSlate/BuildCache`, outside every worktree. The canonical GUI executable is `%LOCALAPPDATA%/CleanSlate/BuildCache/debug/rust-app.exe`.
 
-Check **GitHub → Actions → Desktop draft release** for build progress and artifact downloads. Check **GitHub → Releases** for the draft/public release. Windows gets a ZIP, macOS gets separate Apple Silicon and Intel DMGs, and Linux gets an AppImage; each has a checksum. A failed platform job prevents the combined draft-release step from completing.
+```powershell
+# Build the GUI without launching it.
+pwsh -NoProfile -File scripts/gui-dev.ps1 -BuildOnly
 
-## This integration's result
+# Build and launch a separate local copy of the default test project.
+pwsh -NoProfile -File scripts/gui-dev.ps1
 
-`development` combines the completed progress-feedback and SD/export fixes with current main. The combined Windows run passed **278 tests, 0 failures, 18 ignored**, strict Clippy, formatting, CI/packaging/release fixtures, GUI compilation and an offline self-check of the separately named executable. Desktop visual/listening, physical SD interruption/write-lock and fresh Mac/Linux qualification remain unchecked. Main and published alpha.6 were not changed.
-
-## What happened
-
-Today's work was completed in separate checkouts, while you were opening executables from a retained build directory. Some changes reached GitHub and the published package; others existed only on local branches. A checkout folder, branch, compiled executable and published release can therefore represent four different versions.
-
-`main` was at `0b9622a` when integration began. Published [alpha.6](https://github.com/Today20092/podcast-bleed-reducer/releases/tag/v0.1.0-alpha.6) identifies `9b2fa9d`, an ancestor of main. Later main commits update download links and verification records. Alpha.6 includes the logo, keyboard-shortcut reference and preceding editor improvements. It does **not** include today's analysis-progress or removable-media export fixes.
-
-The new `development` branch starts from main and merges the completed work listed below. Main and release tags stay unchanged during this integration. This gives you one combined candidate to test before promoting another batch.
-
-## Today's chats
-
-| Chat | Result before this integration | Included in development |
-| --- | --- | --- |
-| [Update GitHub release logo](codex://threads/01a159d8-46e6-7202-bb53-55982ad65f9a) | PRs 14 and 15 merged; alpha.6 published; README downloads updated. | Already inherited from main. |
-| [Diagnose slow analysis feedback](codex://threads/01a159e2-6a4b-7fd1-82f4-5df20793023d) | `codex/analysis-progress`, `9bc551b`: current track/time, truthful analysis stages, elapsed time and completed-stage timings. Its history also carries the newer README walkthrough. | Yes. This improves feedback; a full-recording speedup has not been measured or claimed. |
-| [Diagnose export error](codex://threads/01a159ef-43d2-7353-a14a-91e5bc3f1eec) | `codex/removable-media-export`, `508e58f`: read SD originals directly, keep working files locally, contextual errors, bounded read recovery, choose export location and preserve safe publication. | Yes. Physical SD interruption/write-lock testing remains. |
-| [Clarify maintainability guidance](codex://threads/01a159f5-7023-7b41-8790-9b66ed13c566) | Uncommitted maintainability section in primary-checkout AGENTS.md. | That exact section is carried into development; the primary copy is preserved. |
-| [Add catch-up playhead scrolling](codex://threads/01a159eb-ed00-7212-a377-daf3c141c22e) | Ticket 42 and roadmap edits in the primary working copy; specification only. | The accepted ticket and its related shortcut specification, ticket 41, are copied into development as future work. No scrolling or shortcut-remapping implementation is claimed. |
-
-The analysis ticket was renumbered from 50 to [52](../.scratch/offline-supervised-editor/issues/52-analysis-progress-feedback.md), because main already uses 50 for alpha.6 publication. The application changes are unchanged.
-
-The remaining primary-checkout documentation is preserved for its own reconciliation. It includes contributor/algorithm documentation, visuals, examples and other backlog notes; it is not treated as finished application behavior or swept into this integration. At the owner's explicit follow-up request, the primary checkout also receives the same AGENTS.md branch policy and a pointer to this workflow guide so existing chats can discover the new process.
-
-## The terms
-
-| Term | What it means here |
-| --- | --- |
-| Branch | A name pointing to a commit history, such as `development`. Moving it does not update every executable. |
-| Worktree | A separate folder checked out at a branch or commit. It shares Git history with the other worktrees, but has its own files and uncommitted edits. |
-| Commit | A saved snapshot that Git can merge. Uncommitted files are absent from branch merges. |
-| Build | An executable compiled from one checkout at one moment. It can live outside that checkout and survive branch changes. |
-| Release | A deliberately tagged source snapshot plus downloadable packages. It does not follow later branch edits. |
-
-The primary folder is still on `codex/editor-workflow-31-37` at `c183305`, 43 commits behind main at inventory time. It has 20 modified tracked paths plus untracked documentation, tickets, diagrams, examples and diagnostic artifacts. Its committed application history is already in main. Its unsaved-to-Git documentation is not automatically included by merging that branch.
-
-## Worktree inventory
-
-All short folder names below are under `C:/Users/User/.codex/worktrees/`; most contain a `podcast-automix-rust-gui` subfolder. The primary folder is `C:/Users/User/Documents/Codex/2026-08-14/podcast-automix-rust-gui`.
-
-| Folder / branch | Meaning and disposition |
-| --- | --- |
-| `development-integration` / `development` | The new combined candidate and current integration checkout. |
-| Primary folder / `codex/editor-workflow-31-37` | Old committed application history plus substantial uncommitted documentation. Preserve and reconcile documentation separately. |
-| `analysis-progress` / `codex/analysis-progress` | Today's feedback fix; merged into development. Clean at inventory time. |
-| `removable-media-export` / `codex/removable-media-export` | Today's SD/export fix; merged into development. Untracked verification logs retained. |
-| `application-icon` / `codex/readme-second-video` | Folder name reflects earlier work. Current branch contains walkthrough documentation, included through analysis-progress history. Untracked scratch material retained. |
-| `alpha-3-release` / `codex/github-repository-protection` | Protection setup already implemented in main; one outstanding verification-record commit is now merged into development. Scratch records retained. |
-| `app-menu-36` / `codex/app-menu-36` | Application-menu/shortcut-reference work already in main; scratch result retained. |
-| `appearance-37` / `codex/appearance-37` | Appearance work already in main; scratch result retained. |
-| `focused-import-33` / `codex/focused-import-33` | Import UI work already in main; scratch result retained. |
-| `label-loop-31` / `codex/label-loop-31` | Speaker-label/playback-loop work already in main; scratch result retained. |
-| `shortcut-34` / `codex/shortcut-34` | Shortcut-reference/navigation work already in main; scratch result retained. |
-| `sound-entry-32` / `codex/sound-entry-32` | Typed sound settings and exact mute already in main; scratch result retained. |
-| `offline-timebase` / `codex/offline-release-evaluation` | Older source history already in main. Retained targets contain newer executables built from other checkouts. Keep the cache and evaluation material. |
-| `progressive-import-38` / detached `fc13073` | Completed history already in main. A detached checkout is a commit without a local branch attached. |
-| `shortcut-readability-39` / detached `063bc72` | Completed history already in main. |
-| `offline-model-runtime` / detached `3542c17` | Older history already in main. |
-| `ticket14-frozen-baseline` / detached `6a60cc2` | Intentionally frozen detector comparison baseline; preserve. |
-
-No worktrees are deleted in this integration. Several could later be archived after preserving needed ignored builds and diagnostic material; having an ancestor commit alone does not prove a folder is disposable.
-
-## The workflow from now on
-
-```mermaid
-flowchart LR
-  D[development] --> F[Scoped feature branch]
-  F --> P[Feature PR and checks]
-  P --> D
-  D --> T[Test combined batch]
-  T --> M[Promotion PR to main]
-  M --> V[Deliberate version tag]
-  V --> R[Draft packages and verification]
-  R --> U[Publish release]
+# Formatting, fixtures, strict Clippy and tests with the same cache/profile.
+pwsh -NoProfile -File scripts/check.ps1 -Local
 ```
 
-1. Start each feature from current `development`, on a scoped `codex/<feature>` branch. Use a separate worktree when another task needs its own files. Claim its ticket before implementation.
-2. Finish and check that feature, then open a PR targeting `development`. GitHub's existing PR workflow has no base-branch filter, so it also runs for these PRs. A feature PR does not publish a release.
-3. Test the combined development batch. Fix integration regressions there or through another scoped feature PR. Keep the batch small enough to diagnose; two related finished fixes are a useful batch, while weeks of unrelated work make failures harder to locate.
-4. Open one promotion PR from `development` to `main` after automated checks and the required desktop/audio review. Prefer a merge commit for this long-lived branch, preserving ancestry. Keep GitHub's default branch as main.
-5. Deliberately choose the next version, update its metadata/notes, and tag the tested source. Verify the draft packages, then publish. Features can be merged several times between releases; there is no need for a release per PR.
-6. Bring any main-only release metadata or urgent fixes back into development before the next feature starts. For an urgent production fix, branch from main, check it, merge it to main, then merge main into development.
+For a targeted local Cargo check, obtain the same settings rather than creating a new target/profile:
 
-The roles you proposed are appropriate: development collects the next batch, while main holds reviewed, release-ready source. **Calling a branch stable does not qualify the audio engine as stable.** The current published app remains experimental; independent listening, quality and long-session gates still govern a stable release.
+```powershell
+$settings = & ./scripts/local-build-settings.ps1
+$cargoArguments = $settings.CargoArguments
+cargo test @cargoArguments --test export
+```
 
-Require the same four platform check statuses and PR review policy on development before treating it as a protected shared branch. This integration does not change repository protection settings. Existing main protection remains in place. When creating a PR, explicitly select development as the base because GitHub's default branch remains main.
+`rust-toolchain.toml` pins Rust 1.99.0. Keep Cargo.lock and `scripts/gui-dev.toml` consistent. The shared settings retain locked/offline dependencies, one Cargo job and incremental compilation. Dependency debug information is disabled to reduce disk use; detailed dependency debugging needs an intentional separate configuration. Source changes still need compilation and sometimes linking, but unchanged compatible dependencies can be reused. Cargo locks the shared target while building, so coordinate compilation and close the development executable before rebuilding.
 
-For the next chat, this is enough context: “Start from current development, create a scoped codex branch/worktree, implement ticket N, run its checks, and target the PR at development. Record the source commit and executable path. Leave promotion and release tagging to the batch step.”
+CI and release jobs retain their hosted check mode, `scripts/check.ps1`. The local cache is not a release package. Keep needed executables/receipts before cleaning caches; frozen comparison artifacts, original recordings and editable projects are not disposable build outputs.
 
-## Why merging does not release every time
+See [Cargo's build-cache documentation](https://doc.rust-lang.org/cargo/reference/build-cache.html) and [debug-information guidance](https://doc.rust-lang.org/cargo/guide/build-performance.html) for the storage/rebuild tradeoffs.
 
-The actual repository workflow, [.github/workflows/portable-release.yml](../.github/workflows/portable-release.yml), listens for pushed `v*` tags and manual dispatch. It creates draft release packages when publication is requested; manual `build_only` can check a branch without making a release. Merging to main does not by itself match that tag trigger. This matches [GitHub's documented tag filters and manual triggers](https://github.com/github/docs/blob/main/content/actions/reference/workflows-and-actions/events-that-trigger-workflows.md).
+## When GitHub makes packages
 
-[pr-checks.yml](../.github/workflows/pr-checks.yml) checks pull requests and manual dispatches. [release-downloads.yml](../.github/workflows/release-downloads.yml) updates README downloads after release events; it is not an application-release trigger. Alpha.5 remains an existing draft; alpha.6 is the published experimental package. Neither is changed here.
+| Action | Current result |
+| --- | --- |
+| Edit, merge or build locally | Source changes or a local executable only. |
+| Push development or merge an ordinary PR | No application release packages from that action alone. |
+| Open/update a PR | Four-platform checks; no application release. |
+| Manually run **Desktop draft release** on development with `build_only: true` | Checked native packages under the Actions run's Artifacts; no release is created or updated. Set release_tag to the current Cargo version with a leading v. |
+| Deliberately push a `v*` version tag | Checks and packages four platforms, then prepares one draft prerelease after all package jobs succeed. |
+| Publish the verified draft | Public release assets and the README-download update workflow. |
 
-## Which executable to use
+Use GitHub → Actions → Desktop draft release for build progress/artifacts and GitHub → Releases for draft/public releases. Windows packages are ZIPs, Apple Silicon and Intel Mac packages are separate DMGs, and Linux packages are AppImages; each has a checksum. The workflow is [portable-release.yml](../.github/workflows/portable-release.yml), using [GitHub's documented triggers](https://github.com/github/docs/blob/main/content/actions/reference/workflows-and-actions/events-that-trigger-workflows.md).
 
-The published alpha.6 download is `C:/Users/User/Downloads/CleanSlate-0.1.0-alpha.6-windows-x64/CleanSlate.exe`. Use it when checking the shipped package. It lacks today's two fixes.
+There is no automatic release after a particular number of features. Choose a version when the tested batch is ready, tag the reviewed source, verify every native package, then publish. Main and published alpha.6 stay unchanged during this consolidation.
 
-The combined development executable is `C:/Users/User/.codex/worktrees/development-integration/podcast-automix-rust-gui/target/development/CleanSlate-development.exe`. Its adjacent `build-receipt.json` records source identity and SHA-256. The build command ran from the development-integration checkout through `scripts/gui-dev.ps1 -BuildOnly`. It reused the retained `offline-timebase/.../target/owner-ui` cache for compilation; that cache path identifies neither the source branch nor the published version. The separately named copy under the development checkout's ignored `target/development` folder identifies this tested candidate without depending on a future rebuild in the shared cache. Its own offline self-check passed.
+## What still needs human evidence
 
-The package version remains alpha.6 until the next deliberate release preparation. For development builds, use the source commit and build receipt to distinguish the candidate from the published alpha.6 package.
-
-## Before promoting this batch
-
-Use ticket 53's actual test results, rather than adding the two branches' previous test counts together. Then exercise your normal workflow: import the read-only SD source, label/analyze with visible track/time feedback, audition Original/Processed/Removed, cancel and retry safely, save/reopen the local project, and export to Downloads. Verify originals and existing destination files remain intact. Test genuine card removal/write-lock behavior deliberately on noncritical test material.
-
-The automated suite and offline self-check cannot establish desktop usability, uninterrupted long-session behavior, measured analysis speed or listening quality. These limitations remain explicit before a main promotion or another release.
-
-The 18 ignored tests include owner-recording/device measurements, external frozen-baseline evidence and the known quiet-overlap acoustic quality gate in ticket 14. They are not counted as passing acceptance evidence.
+The earlier combined Windows candidate passed 278 tests with 18 ignored, strict Clippy, GUI compilation, workflow fixtures and its offline self-check. Ticket 54 records the fresh checks with the smaller shared profile. Ignored tests include owner-recording/device measurements, external frozen-baseline evidence and the known quiet-overlap quality gate in ticket 14. Native visual/listening, physical SD interruption/write-lock and independent quality/long-session qualification remain outstanding. The application remains experimental.

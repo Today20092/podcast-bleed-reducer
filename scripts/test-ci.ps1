@@ -11,9 +11,10 @@ $releaseMatrix = [regex]::Matches($release, '- platform: ([\w-]+)\s+runner: ([\w
 if ($prMatrix.Count -ne 4 -or (Compare-Object $prMatrix $releaseMatrix)) { throw 'PR checks must cover all native release runners' }
 if ($pr -notmatch '(?m)^  pull_request:$' -or $pr -match 'pull_request_target|contents: write|secrets\.|actions/cache(?:/save)?@|upload-artifact|package.ps1|gh release' -or $pr -notmatch 'persist-credentials: false') { throw 'PR workflow must remain read-only and check-only' }
 $check = Get-Content -LiteralPath "$PSScriptRoot/check.ps1" -Raw
-foreach ($command in @('cargo fmt --all -- --check', 'cargo clippy --all-targets --all-features --locked -- -D warnings', 'cargo test --all-targets --locked -- --nocapture')) {
+foreach ($command in @('cargo fmt --all -- --check', 'cargo clippy --all-targets --all-features @cargoArguments -- -D warnings', 'cargo test --all-targets @cargoArguments -- --nocapture')) {
     if (-not $check.Contains($command)) { throw "Missing required check: $command" }
 }
+if (-not $check.Contains('$cargoArguments = @(''--locked'')')) { throw 'Hosted checks must retain locked dependency resolution' }
 if ([regex]::Matches($check, 'if \(\$LASTEXITCODE -ne 0\)').Count -ne 3) { throw 'Every Cargo check must propagate failure' }
 Write-Output 'Native PR workflow regression checks: pass'
 

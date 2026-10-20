@@ -30,9 +30,9 @@ When discovering tools, retrieve only the metadata needed for the task. Before s
 
 ## Repository
 
-Start feature work from current `development` on scoped `codex/` branches. Use a separate worktree for each concurrently edited feature; sequential features may reuse a clean checkout. Push each finished feature and open a GitHub PR with `development` as its base. Merge after its scoped acceptance checks and required PR checks pass.
+Use `development` as the ordinary local working branch and retain `main` as the release branch. For owner-requested parallel work, use temporary scoped `codex/` branches/worktrees from development; integrate their tested commits locally and remove them after preserving their files. Sequential work can stay on development. Push development as a backup; feature PRs are optional for solo local integration. External contributions still use PRs targeting development.
 
-Test combined features from one integration worktree checked out on `development`. After a GitHub merge, pull that worktree with `git pull --ff-only` before building. For testing features together before their PRs merge, use a temporary integration branch based on development and merge the local feature branches there; this needs no GitHub round trip. Keep shared development aligned with its remote PR merges. Build the combined GUI through `scripts/gui-dev.ps1` and record the source commit and executable path.
+Test combined features in the primary checkout on development. A local feature merge already updates its files; merge subsequent feature revisions again before rebuilding. Pull with `git pull --ff-only` when GitHub has commits absent locally. Use `scripts/gui-dev.ps1` for GUI builds and `scripts/check.ps1 -Local` for local checks; both share the application-data Cargo target, pinned toolchain and development profile. Keep incremental compilation and coordinate builds through Cargo's target lock. Record the source commit and executable path; preserve the tested executable before retiring a cache or worktree.
 
 Promote a tested batch through a `development` → `main` PR, preserving ancestry with a merge commit. Keep the GitHub default branch as `main`. Merge main-only fixes and release metadata back into development before subsequent feature work.
 
