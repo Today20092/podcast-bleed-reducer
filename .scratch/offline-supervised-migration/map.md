@@ -1,5 +1,7 @@
 # Plan the offline supervised CleanSlate migration
 
+2026-10-20 architecture follow-up: owner approved the one-suggestion review and both testing seams for [55 — Shared streaming waveform construction](../offline-supervised-editor/issues/55-streaming-waveform-construction.md). Implement only this new ticket in an integration branch, verify the combined application and merge into development. This preserves the accepted architecture and does not authorize unrelated backlog work or main/release promotion.
+
 2026-10-20 cleanup follow-up: owner-manual Git-temp deletion is verified complete (zero remaining files; full Git integrity passed). Ticket 22 remains open for the separate retired recovery build target, not the already removed Git temporaries. Earlier automatic deletion rejections below remain historical.
 
 Latest owner decisions, 2026-10-20: close 14 on acceptance of current sound/performance; no benchmark ticket requested. Retire 15/25 into the [per-release checklist](../../docs/branch-workflow.md#release-checklist), preserving package checks without an ongoing release ticket. Defer 35 as unnecessary for current use; preserve existing manual edits. The [current queue](implementation.md#current-queue--reconciled-2026-10-20) now has five active tickets and deferred proposals 17/35. The owner requested implementation work on documentation 20 and renewed Git-temp cleanup 22; automatic approval again rejected Git deletion, so 22 stays open. No statistical/hardware test is claimed as passing by owner acceptance. Ticket 42 remains unchanged.

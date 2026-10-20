@@ -66,6 +66,51 @@ struct WaveformLevel {
     peaks: Vec<(f32, f32)>,
 }
 
+pub(crate) struct WaveformBuilder {
+    peaks: Vec<(f32, f32)>,
+    current: (f32, f32),
+    used: usize,
+    sample_count: usize,
+}
+
+impl Default for WaveformBuilder {
+    fn default() -> Self {
+        Self {
+            peaks: Vec::new(),
+            current: (f32::INFINITY, f32::NEG_INFINITY),
+            used: 0,
+            sample_count: 0,
+        }
+    }
+}
+
+impl WaveformBuilder {
+    pub(crate) fn push(&mut self, samples: &[f32]) {
+        self.sample_count += samples.len();
+        for &sample in samples {
+            self.current.0 = self.current.0.min(sample);
+            self.current.1 = self.current.1.max(sample);
+            self.used += 1;
+            if self.used == BASE_BUCKET {
+                self.peaks.push(self.current);
+                self.current = (f32::INFINITY, f32::NEG_INFINITY);
+                self.used = 0;
+            }
+        }
+    }
+
+    pub(crate) fn refine_preview(&self, preview: &mut WaveformCache) {
+        preview.refine_prefix(&self.peaks);
+    }
+
+    pub(crate) fn finish(mut self, sample_rate: u32) -> WaveformCache {
+        if self.used != 0 {
+            self.peaks.push(self.current);
+        }
+        WaveformCache::from_peaks(self.peaks, self.sample_count, sample_rate)
+    }
+}
+
 #[derive(Deserialize, Serialize)]
 struct PersistedWaveform {
     version: u32,
@@ -107,7 +152,7 @@ impl SourceStamp {
 }
 
 impl WaveformCache {
-    pub(crate) fn refine_prefix(&mut self, detailed: &[(f32, f32)]) {
+    fn refine_prefix(&mut self, detailed: &[(f32, f32)]) {
         let level = &mut self.levels[0];
         let complete = detailed.len() * BASE_BUCKET / level.samples_per_bucket;
         for (index, peak) in level.peaks.iter_mut().take(complete).enumerate() {
@@ -148,14 +193,12 @@ impl WaveformCache {
     }
     #[cfg(test)]
     fn from_samples(samples: &[f32], sample_rate: u32) -> Self {
-        Self::from_peaks(summarize(samples, BASE_BUCKET), samples.len(), sample_rate)
+        let mut builder = WaveformBuilder::default();
+        builder.push(samples);
+        builder.finish(sample_rate)
     }
 
-    pub(crate) fn from_peaks(
-        mut peaks: Vec<(f32, f32)>,
-        sample_count: usize,
-        sample_rate: u32,
-    ) -> Self {
+    fn from_peaks(mut peaks: Vec<(f32, f32)>, sample_count: usize, sample_rate: u32) -> Self {
         let mut samples_per_bucket = BASE_BUCKET;
         let mut levels = vec![WaveformLevel {
             samples_per_bucket,
@@ -272,20 +315,6 @@ pub(crate) fn save_import_cache(
 }
 
 #[cfg(test)]
-fn summarize(samples: &[f32], bucket: usize) -> Vec<(f32, f32)> {
-    samples
-        .chunks(bucket)
-        .map(|chunk| {
-            chunk
-                .iter()
-                .fold((1.0_f32, -1.0_f32), |(min, max), sample| {
-                    (min.min(*sample), max.max(*sample))
-                })
-        })
-        .collect()
-}
-
-#[cfg(test)]
 pub(crate) fn load_or_build(
     project_path: &Path,
     sources: &[PathBuf],
@@ -367,30 +396,12 @@ fn load_source_waveforms_in(
                 ready(index, &cache.waveform);
                 return Ok(cache.waveform);
             }
-            let mut peaks = Vec::new();
-            let mut current = (f32::INFINITY, f32::NEG_INFINITY);
-            let mut used = 0;
+            let mut builder = WaveformBuilder::default();
             let decoded = crate::audio_io::decode_source_chunks(path, None, |_, samples| {
-                for &sample in samples {
-                    current.0 = current.0.min(sample);
-                    current.1 = current.1.max(sample);
-                    used += 1;
-                    if used == BASE_BUCKET {
-                        peaks.push(current);
-                        current = (f32::INFINITY, f32::NEG_INFINITY);
-                        used = 0;
-                    }
-                }
+                builder.push(samples);
                 Ok(())
             })?;
-            if used != 0 {
-                peaks.push(current);
-            }
-            let waveform = WaveformCache::from_peaks(
-                peaks,
-                decoded.metadata.grid.frame_count as usize,
-                decoded.metadata.grid.sample_rate,
-            );
+            let waveform = builder.finish(decoded.metadata.grid.sample_rate);
             if decoded.metadata != source || SourceStamp::read_source(path)? != stamps[index] {
                 return Err(RenderBlocker(
                     "Source changed while loading waveforms; import again.".into(),
@@ -1640,6 +1651,60 @@ mod tests {
         let mut frames = writer.audio_frame_writer().unwrap();
         frames.write_frames(samples).unwrap();
         frames.end().unwrap();
+    }
+
+    #[test]
+    fn streaming_waveform_preserves_chunk_boundaries_and_only_refines_complete_buckets() {
+        let mut samples = vec![2.0; 256];
+        samples[255] = 3.0;
+        samples.extend(vec![-2.0; 256]);
+        samples[511] = -3.0;
+        samples.extend([4.0; 3]);
+        let mut builder = WaveformBuilder::default();
+        let mut preview = WaveformCache::from_peaks(vec![(0.0, 0.0); 3], 515, 48_000);
+        let mut start = 0;
+        for end in [255, 256, 257, 511, 515] {
+            builder.push(&samples[start..end]);
+            builder.refine_preview(&mut preview);
+            assert_eq!(
+                preview.levels[0].peaks[0],
+                if end < 256 { (0.0, 0.0) } else { (2.0, 3.0) }
+            );
+            assert_eq!(
+                preview.levels[0].peaks[1],
+                if end < 512 { (0.0, 0.0) } else { (-3.0, -2.0) }
+            );
+            assert_eq!(preview.levels[0].peaks[2], (0.0, 0.0));
+            start = end;
+        }
+        let cache = builder.finish(48_000);
+        assert_eq!(cache.sample_count, 515);
+        assert_eq!(cache.sample_rate, 48_000);
+        assert_eq!(
+            cache.levels[0].peaks,
+            [(2.0, 3.0), (-3.0, -2.0), (4.0, 4.0)]
+        );
+    }
+
+    #[test]
+    fn streaming_waveform_finishes_empty_and_exact_buckets_without_an_extra_tail() {
+        for count in [0, 256, 512] {
+            let mut builder = WaveformBuilder::default();
+            builder.push(&[]);
+            builder.push(&vec![0.25; count]);
+            let cache = builder.finish(44_100);
+            assert_eq!(cache.sample_count, count);
+            assert_eq!(cache.sample_rate, 44_100);
+            assert_eq!(cache.levels[0].peaks, vec![(0.25, 0.25); count / 256]);
+            assert_eq!(
+                cache.levels.last().unwrap().peaks,
+                if count == 0 {
+                    vec![]
+                } else {
+                    vec![(0.25, 0.25)]
+                }
+            );
+        }
     }
 
     #[test]

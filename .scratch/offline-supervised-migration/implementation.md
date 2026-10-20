@@ -2,10 +2,11 @@
 
 ## Current queue — reconciled 2026-10-20
 
-Owner follow-up accepts current sound/performance, closes 14, retires standing release ticket 15 into the per-release procedure and defers unnecessary waveform-overlay editor 35. There are now **5 active tickets and 2 deferred proposals**. The earlier three-agent audit consolidated duplicate implementation records while retaining unmet checks; owner-waived formal benchmarks are now optional future work, with no new ticket created. Original specifications and results remain in place. This section governs current routing; dated entries below preserve history.
+Owner follow-up accepts current sound/performance, closes 14, retires standing release ticket 15 into the per-release procedure and defers unnecessary waveform-overlay editor 35. There are now **6 active tickets and 2 deferred proposals**, including owner-approved architecture ticket 55. The earlier three-agent audit consolidated duplicate implementation records while retaining unmet checks; owner-waived formal benchmarks are now optional future work, with no new ticket created. Original specifications and results remain in place. This section governs current routing; dated entries below preserve history.
 
 | Ticket | Current work | State |
 | --- | --- | --- |
+| [55](../offline-supervised-editor/issues/55-streaming-waveform-construction.md) | Share streaming waveform construction between progressive import and cache rebuilding | Claimed; owner approved scope and testing seams |
 | [20](../offline-supervised-editor/issues/20-editor-first-documentation-visuals.md) | Gain composition and eleven-diagram browser pass completed; only screenshot refresh remains | Claimed; remaining captures wait for 23 |
 | [22](../offline-supervised-editor/issues/22-local-storage-cleanup.md) | Git temporary files removed and integrity verified; only retired recovery-target cleanup remains | Claimed; separate old build target still exists |
 | [23](../offline-supervised-editor/issues/23-gui-frontend-polish.md) | Integrated editor GUI/import/playback verification and remaining polish; absorbs 38/39/40 | Claimed; software integrated, acceptance incomplete |
