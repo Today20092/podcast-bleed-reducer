@@ -1,5 +1,5 @@
-use crate::{RenderBlocker, export_settings::check_riff_size};
-use bwavfile::{Bext, CommonFormat, WaveFmt, WaveReader, WaveWriter};
+use crate::{RenderBlocker, audio_io::wav_error, export_settings::check_riff_size};
+use bwavfile::{Bext, CommonFormat, WaveFmt, WaveWriter};
 use std::{
     path::{Path, PathBuf},
     sync::atomic::AtomicBool,
@@ -50,7 +50,8 @@ pub(crate) fn encode_delivery(
         .ok_or_else(|| RenderBlocker("WAV format overflow.".into()))?;
     check_riff_size(frames, format, bext)?;
     let readers = inputs.iter().map(|path| {
-        let mut reader = WaveReader::open(path)?;
+        let mut reader = crate::audio_io::open_wave(path)
+            .map_err(|e| wav_error("read prepared WAV", path, e))?;
         let input_format = reader.format()?;
         if input_format.channel_count != 1 || input_format.sample_rate != format.sample_rate
             || reader.frame_length()? != frames || input_format.common_format() != CommonFormat::IeeeFloatPCM
@@ -63,11 +64,16 @@ pub(crate) fn encode_delivery(
         .into_iter()
         .map(|r| r.audio_frame_reader())
         .collect::<Result<Vec<_>, _>>()?;
-    let mut writer = WaveWriter::create(destination, format)?;
+    let mut writer = WaveWriter::create(destination, format)
+        .map_err(|e| wav_error("create exported WAV", destination, e))?;
     if let Some(bext) = bext {
-        writer.write_broadcast_metadata(bext)?;
+        writer
+            .write_broadcast_metadata(bext)
+            .map_err(|e| wav_error("write export timing metadata", destination, e))?;
     }
-    let mut writer = writer.audio_frame_writer()?;
+    let mut writer = writer
+        .audio_frame_writer()
+        .map_err(|e| wav_error("prepare WAV output", destination, e))?;
     let channels = inputs.len();
     let block_frames = 8192;
     let mut mono = vec![0.0_f32; block_frames];
@@ -93,7 +99,10 @@ pub(crate) fn encode_delivery(
         for (channel, reader) in readers.iter_mut().enumerate() {
             let mut read = 0;
             while read < count {
-                let n = reader.read_frames(&mut mono[read..count])? as usize;
+                let n = reader
+                    .read_frames(&mut mono[read..count])
+                    .map_err(|e| wav_error("read prepared WAV", &inputs[channel], e))?
+                    as usize;
                 if n == 0 {
                     return Err(RenderBlocker("Truncated accepted render.".into()));
                 }
@@ -109,15 +118,21 @@ pub(crate) fn encode_delivery(
             for (i, &sample) in samples.iter().enumerate() {
                 integers.push(quantizers[i % channels].sample(sample, format.bits_per_sample)?);
             }
-            writer.write_frames(&integers)?;
+            writer
+                .write_frames(&integers)
+                .map_err(|e| wav_error("write exported WAV", destination, e))?;
         } else {
             if samples.iter().any(|s| !s.is_finite()) {
                 return Err(RenderBlocker("Invalid rendered samples.".into()));
             }
-            writer.write_frames(samples)?;
+            writer
+                .write_frames(samples)
+                .map_err(|e| wav_error("write exported WAV", destination, e))?;
         }
         remaining -= count as u64;
     }
-    writer.end()?;
+    writer
+        .end()
+        .map_err(|e| wav_error("finish exported WAV", destination, e))?;
     Ok(())
 }

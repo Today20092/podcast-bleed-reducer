@@ -1,5 +1,7 @@
 # Plan the offline supervised CleanSlate migration
 
+2026-10-20 owner-authorized storage hardening: [51 — Removable media and export](../offline-supervised-editor/issues/51-removable-media-export.md) supports direct read-only SD-card sources, local projects/analysis/intermediate renders, user-chosen export locations, actionable storage errors and bounded read recovery without bypassing identity/cancellation/publication safeguards.
+
 Labels: wayfinder:map
 Status: complete
 

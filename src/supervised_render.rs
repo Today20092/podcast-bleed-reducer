@@ -289,6 +289,7 @@ impl PreparedSupervisedRender {
                 "Private render provenance changed before publication.".into(),
             ));
         }
+        self.output.sync_all()?;
         let _guard = generation.0.lock().unwrap_or_else(|e| e.into_inner());
         crate::prepared_analysis::check_cancelled(cancelled)?;
         if *_guard != expected_generation

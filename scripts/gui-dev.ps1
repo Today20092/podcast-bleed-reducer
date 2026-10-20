@@ -16,19 +16,24 @@ if (Get-Process -Name rust-app -ErrorAction SilentlyContinue | Where-Object { $_
     throw 'Save your edits and close the development window before rebuilding.'
 }
 
-# Keep edits in a separate project; source audio and the saved owner session stay intact.
+# Keep the development project local; source audio and the saved owner session stay intact.
 if (-not $BuildOnly) {
     if (-not $Project) { $Project = Join-Path $root 'test-audio/quick-test-10min/261005-quick-test.cleanslate' }
     $Project = (Resolve-Path -LiteralPath $Project).Path
-    $devProject = Join-Path ([IO.Path]::GetDirectoryName($Project)) (([IO.Path]::GetFileNameWithoutExtension($Project)) + '.gui-dev.cleanslate')
+    if (-not $env:LOCALAPPDATA -or -not [IO.Path]::IsPathRooted($env:LOCALAPPDATA)) {
+        throw 'A valid LOCALAPPDATA directory is required for the local development project.'
+    }
+    $hasher = [Security.Cryptography.SHA256]::Create()
+    try {
+        $identity = [BitConverter]::ToString($hasher.ComputeHash([Text.Encoding]::UTF8.GetBytes($Project))).Replace('-', '').ToLowerInvariant()
+    } finally {
+        $hasher.Dispose()
+    }
+    $developmentDirectory = Join-Path $env:LOCALAPPDATA "CleanSlate/Projects/GUI-development/$identity"
+    New-Item -ItemType Directory -Path $developmentDirectory -Force | Out-Null
+    $devProject = Join-Path $developmentDirectory (([IO.Path]::GetFileNameWithoutExtension($Project)) + '.gui-dev.cleanslate')
     if (-not (Test-Path -LiteralPath $devProject)) {
         Copy-Item -LiteralPath $Project -Destination $devProject
-        foreach ($extension in @('analysis-cache', 'waveforms.json')) {
-            $cache = [IO.Path]::ChangeExtension($Project, $extension)
-            if (Test-Path -LiteralPath $cache) {
-                Copy-Item -LiteralPath $cache -Destination ([IO.Path]::ChangeExtension($devProject, $extension)) -Recurse
-            }
-        }
     }
 }
 

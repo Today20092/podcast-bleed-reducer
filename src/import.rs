@@ -274,8 +274,10 @@ fn coarse_preview(
     metadata: &[SourceMetadata],
     cancelled: &AtomicBool,
 ) -> Result<Option<Vec<WaveformCache>>, RenderBlocker> {
-    let Ok(mut reader) = bwavfile::WaveReader::open(&sources[0].path) else {
-        return Ok(None);
+    let mut reader = match crate::audio_io::open_wave(&sources[0].path) {
+        Ok(reader) => reader,
+        Err(bwavfile::Error::IOError(error)) => return Err(error.into()),
+        Err(_) => return Ok(None),
     };
     let format = reader.format()?;
     let channels = usize::from(format.channel_count);
