@@ -74,6 +74,14 @@ The architecture is [specified here](spec.md). The six wayfinder child tickets r
 
 17. [Add an advanced training panel](../offline-supervised-editor/issues/17-advanced-training-panel.md). Requested on 2026-10-09 for future work only. Needs triage and explicit implementation authorization; it is not part of current GUI work or a new release requirement.
 
+## Adjustable shortcut follow-up
+
+The owner extended ticket 41 with Center playhead and Lock / Unlock keyboard access and delayed shortcut tooltips on command controls. Include these in the same binding definitions, Settings, reference and acceptance checks.
+
+Ticket 41 also preserves lock across user zoom/fit actions by default and adds an off-by-default `Unlock playhead when zooming` local preference. Cover every distinct zoom entry point and both lock states in acceptance checks.
+
+2026-10-12 follow-up: [ticket 41 — Adjustable keyboard shortcuts](../offline-supervised-editor/issues/41-adjustable-keyboard-shortcuts.md) is specification-ready and blocked by 31, 34, 37 and 39. Add S as the default for saving examples, local remapping with context-aware conflicts and matching shortcut hints on `codex/editor-workflow-31-37`. This ticket is not implemented; dependency completion and scoped acceptance checks still govern execution.
+
 ## Existing work reconciliation
 
 Ownership `6a60cc2` contains the responsive editor plus later calibration/cache/safety work. Prior ticket statuses are inconsistent with implemented code: six MVP implementation tickets are marked done, while responsive and guided-ownership tickets include ready/triage states despite existing implementation/evidence. Establish-baseline work reconciles their records and carries acceptance gaps forward; do not rebuild imports, transport, waveform caching, safe output handling or protection mechanics merely because an old issue is open.
