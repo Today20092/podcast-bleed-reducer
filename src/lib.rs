@@ -24,6 +24,7 @@ mod media;
 mod ownership_model;
 mod package_check;
 mod parameter_dial;
+pub mod performance;
 mod prepared_analysis;
 mod project;
 mod references;

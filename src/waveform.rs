@@ -999,6 +999,7 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
         bounds: Rectangle,
         cursor: mouse::Cursor,
     ) -> Vec<canvas::Geometry> {
+        let _draw = crate::performance::measure(crate::performance::Metric::WaveformDraw);
         let appearance = crate::appearance::Appearance::from_theme(theme);
         let colors = appearance.colors();
         let revision_changed = state.revision.replace(Some(self.revision)) != Some(self.revision);
@@ -1007,6 +1008,7 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
             state.geometry.clear();
         }
         let geometry = state.geometry.draw(renderer, bounds.size(), |frame| {
+            let _build = crate::performance::measure(crate::performance::Metric::WaveformRebuild);
             let center = bounds.height / 2.0;
             if !self.ruler
                 && let Some((preview, track)) = self.preview
