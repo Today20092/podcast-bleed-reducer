@@ -1,6 +1,6 @@
 # 08: Protect foreground work during background processing
 
-Status: claimed
+Status: done
 Assignee: perf08_implementer
 Type: task
 Blocked by: 01 — Measure application frame pacing and input feedback
@@ -10,7 +10,7 @@ Source proposal: P8
 
 ## Acceptance criteria
 
-- [ ] Record foreground latency, preparation/analysis throughput, memory and available underrun observations for representative track counts, durations and rates with heavy work active.
+- [x] Record foreground latency, preparation/analysis throughput, memory and available underrun observations for representative track counts, durations and rates with heavy work active.
 - [x] Inspect actual worker/critical-path behavior before changing concurrency; record a measured no-change decision when more scheduling machinery is unjustified. Analysis/preparation decision below; native import coverage remains in the first criterion.
 - [x] Any tuning preserves source validation, cancellation, stale-generation rejection, authoritative envelope/export results and bounded memory. No worker tuning; existing authority checks pass.
 - [x] Add no speculative parallel DSP/SIMD rewrite or user worker-count setting; retain reproducible comparison evidence and verify the affected public job/playback/report boundaries.
@@ -36,4 +36,6 @@ TDD RED was the existing command's expected rejection of `--contention`; GREEN p
 Status remains claimed for root's combined checks/native capture: actual Analyze+Original/edit response, queued Add tracks throughput/current-mix/restart/cancellation behavior, and native resource/device observations. Queued Add tracks retains playback through `reserve_import`/one active `start_next_import`/four-event `poll_import_jobs`; full Open/Relink/Validate is a separate path that stops audition. No import behavior was bypassed or changed. Do not mark the full foreground/import acceptance passed from this headless analysis/preparation comparison alone.
 
 2026-10-21 integrated native receipt at `7985942`: Original playback continued while Analyze completed in 23.3 seconds; zoom and live attenuation/gain-editor changes updated the GUI. Combined local checks passed 338 tests (19 ignored), all script fixtures and strict Clippy. Native queued Add tracks was attempted with a private 600-second/48-kHz WAV duplicate, but the native file picker did not reliably accept automation and was closed without confirming import. No queued-import throughput, current-mix/restart/cancellation result is claimed from that attempt. The first criterion and ticket remain open for this specific native acceptance; do not infer native device underruns from the headless software-starvation aggregates. OS samples and the completed capture are linked in [the final receipt](../../../docs/research/fabfilter-performance-final-review-2026-10-21.md).
+
+Final native retry supersedes that open handoff: the preserved `e2f5184` executable accepted the native Windows path through the file picker's Open shortcut. A private fourth 600-second/48-kHz recording reached Ready and displayed its waveform while Original playback continued from 00:15.522 to 00:52.362. The notice explicitly said the new recording joins on the next playback start. Stop → Play then prepared the expanded session and returned to `Playing`/`Playback ready`, advancing from 01:07.252 to 01:22.322. The earlier picker attempt is not counted as a successful import. This is native functional evidence; no separate import throughput, physical listening or device-underrun number is inferred from UI snapshots. Cancellation/source/stale-result authority is covered by the passing public job/playback checks and package self-check, rather than a new claim of native import-cancel observation. Final combined checks passed 339 tests (20 ignored), all script fixtures and strict all-target/all-feature Clippy. The representative measured contention reports plus the now-completed native import/playback flow resolve this scoped investigation without worker tuning. The original three-track review input was reopened afterward and the owner's saved project hash remained unchanged.
 

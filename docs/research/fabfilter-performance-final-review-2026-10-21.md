@@ -8,6 +8,8 @@ At integrated source `798594260a19c30e2824f197c70c757177d3c6a1`, `scripts/check.
 
 Restart fix `de5a0a9e12c47ac1268d87c8237520fb1b761a61` was integrated at `cd2a0d92aa472bc61dacfbdbecb4b888b1aa07ef`. Its scoped validation passed 11 audition unit tests, three native-playback integration tests and one public reclamation integration test, plus strict Clippy, formatting and whitespace checks. The earlier native measurements remain labeled with their actual source.
 
+Final combined source `e2f51846527b256ce32835c173d326f004e82196` passed `scripts/check.ps1 -Local`: **339 passed, 0 failed, 20 ignored** across 38 test targets, all script fixtures, formatting and strict all-target/all-feature Clippy. This includes the new real-canvas theme/size check and the restart fix. The ignored native restart probe was also executed explicitly in its real-device RED/GREEN check described below; the default suite does not imply hardware qualification.
+
 ## Standards review
 
 An independent review of `7be3fe319689fe7bb7a5fdb46025f7a2ae9264d0...7985942` found **0 actionable Standards findings**. It examined the documented architecture, bounded optional observation, diagnostics privacy, shared-envelope authority, selective drawing, visibility scheduling and audio ownership. Graph transport was unavailable to the reviewers; they used the documented source fallback.
@@ -29,7 +31,7 @@ An independent follow-up review found **0 actionable findings** in the fix and t
 | 05: edits | Reuses unchanged effective track preparation. [Warm-edit evidence](fabfilter-warm-edit-measurements-2026-10-21.md) includes ordinary and dense logical long-session workloads and their limits. |
 | 06: minimized work | Suspends optional visual work only after actual minimized-state observation; audio and job processing remain independent. Native restore/end checks passed. |
 | 07: follow | Exact-flat curve vertex pruning, bounded by the existing allocation. [Follow evidence](fabfilter-follow-measurements-2026-10-21.md) shows modest median gains, variable tails and the remaining wide-canvas budget miss. The final real-canvas check passed across both themes and 1x/2x logical bounds: waveform/gain retained and fresh geometry agree, unchanged draws reuse geometry, theme/size changes rebuild it, and gain clipping/source endpoints remain correct. This is software geometry evidence, not a physical DPI or raster comparison. |
-| 08: contention | Reproducible opt-in benchmark and [two real analysis comparisons](fabfilter-background-contention-2026-10-21.md). No speculative worker/DSP rewrite was justified. Native queued-import acceptance is still unverified. |
+| 08: contention | Reproducible opt-in benchmark and [two real analysis comparisons](fabfilter-background-contention-2026-10-21.md). No speculative worker/DSP rewrite was justified. The final native Add tracks/playback-restart retry succeeded; its limits are below. |
 
 ## Native observations
 
@@ -47,13 +49,23 @@ These are short sequential samples on a machine with 32 logical processors, not 
 
 The [native capture](fabfilter-final-native-capture-2026-10-21.json) and [OS samples](fabfilter-final-native-os-2026-10-21.json) preserve identity and statistics. The native report covers a mixed 650-second session, retaining the latest 4096 observations per metric. Its long input/redraw gaps include minimization and a modal file picker; they are not active-frame tails or presented FPS, and independent canvas percentiles cannot be summed into a frame percentile. Source project SHA-256 remained `20BB912825964A2BA9B717525477F6AF365ABB3E434084CF7836E6B5725CBD98`.
 
-## Limits and outstanding acceptance
+## Limits and unmeasured behavior
 
-- Native queued Add tracks was attempted during Original playback using a private WAV copy. The native file picker did not reliably accept automation; it was closed without confirming an import. Do not close ticket08's full import/current-mix/restart/cancellation acceptance from the headless analysis comparison alone.
+- The first native file-picker attempt was inconclusive and not counted. In the preserved final executable, a retry using the native Windows path and Open shortcut accepted a private fourth 600-second/48-kHz WAV while Original playback continued (00:15.522 before the picker, 00:52.362 with the fourth waveform ready). The GUI stated the recording joins on the next start. Stop → Play then prepared the expanded session and returned to Playing/Playback ready, advancing from 01:07.252 to 01:22.322. This completes native functional import/restart evidence; no separate import throughput or native import-cancel timing is inferred from snapshots. Public source/cancellation/stale-result checks and the package self-check cover their confirmed software boundaries.
 - Physical DPI transitions, middle-button release gestures, listening quality, audio-device deadlines, GPU presentation and other platforms were not measured by these native checks. Public application/canvas/playback tests cover their stated software boundaries only.
 - The 4096-column follow probe still exceeds the inherited 16.7-ms geometry budget. The accepted small pruning improvement does not resolve all wide-canvas performance costs.
 - The end-position time label displayed `09:60.000` for the 600-second recording while the cursor and stopped state were correct. This formatting observation is recorded separately from performance acceptance; no unrelated time-format change is included here.
 
 ## Preserved build and cleanup
 
-Final artifact identity, self-check, fix-review disposition and worktree cleanup receipt will be appended after the restart regression passes and its commit is integrated.
+The final local review executable is preserved outside the shared build cache and temporary worktrees:
+
+- Source: `e2f51846527b256ce32835c173d326f004e82196` (subsequent changes are validation receipts only).
+- File: `C:/Users/User/Documents/Codex/Builds/CleanSlate/fabfilter-performance-e2f5184/CleanSlate.exe`.
+- SHA-256: `de509502bc0ec40921c7c8c5d119fe2ee141338644015a0f4ace5c89dc84d3f6`, identical to the canonical build.
+- Built through `scripts/gui-dev.ps1 -BuildOnly`, 88.08 seconds. Both canonical and preserved executables passed `--package-self-check`: offline model inference, analysis, project save/reopen, render and cancellation.
+- The preserved executable itself launched the GUI and passed Stop → Play plus the native fourth-source import/restart smoke check. `Open-GUI.ps1` beside it opens the owned `Review.cleanslate` three-track input; originals remain separate. This is a local development review build, not release publication or cross-platform packaging qualification.
+
+Cleanup completed after executable preservation: exactly `C:/Users/User/Documents/Codex/Worktrees/cleanslate-perf-01` through `cleanslate-perf-08` were checked for resolved path boundaries, cleanliness including ignored artifacts and merged ancestry, then removed with non-force `git worktree remove`. Their eight `codex/perf-0N-*` branch names were removed with `git branch -d`; every delivery remains reachable from the performance integration history. No other branch or artifact was removed. Only the primary worktree remains, still on `codex/fabfilter-performance`. Development remains `91fa021efe84450e332f598bc8358ff4bfbda204`; main remains `0b9622a88643093fc4496cd4729be1d441b3a27c`. Nothing was pushed or published.
+
+All eight ticket records now close their scoped software/report acceptance. The preserved build reopened the original three-track input, completed Analyze in 22.5 seconds, played Processed and switched to Removed without a playback error, and is left open/stopped in Processed mode for owner review. These are functional checks, not listening-quality qualification or a new controlled timing comparison.

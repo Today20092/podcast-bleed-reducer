@@ -1,7 +1,7 @@
 # FabFilter-inspired performance follow-up
 
-Status: implementation authorized; owner confirmed all proposed test boundaries on 2026-10-21.
-Completion receipt: [integrated validation and final review](../../docs/research/fabfilter-performance-final-review-2026-10-21.md). All eight scoped code deliveries are integrated on the performance branch. Ticket07's final theme/size software-canvas check passed; physical-input/display timing remains outside that software proof. Ticket08 retains explicitly unverified native queued-import acceptance; it is not reported as passed.
+Status: eight scoped tickets complete at the owner-confirmed software/report boundaries; native checks and remaining physical-measurement limits recorded on 2026-10-21.
+Completion receipt: [integrated validation and final review](../../docs/research/fabfilter-performance-final-review-2026-10-21.md). All eight scoped deliveries are integrated on the performance branch. Ticket07's final theme/size software-canvas check passed, and ticket08's native Add tracks/playback restart retry succeeded. Physical-input/display timing and listening quality remain outside those software/functional proofs. Measurement-dependent no-change decisions and the remaining wide-canvas budget miss are explicit.
 Integration branch: `codex/fabfilter-performance`.
 Base: `7be3fe319689fe7bb7a5fdb46025f7a2ae9264d0` on the existing isolated GUI review branch. Development/main and preserved GUI builds remain separate.
 
