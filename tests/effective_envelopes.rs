@@ -958,6 +958,26 @@ fn manual_points_win_and_shared_evaluation_survives_reload_and_new_automatic_res
         1.0,
         "half-open override restores automatic at its end"
     );
+    let viewport = rust_app::timeline::TimelineViewport::new(envelope.duration());
+    let curve = rust_app::visible_gain_curve(&viewport, 1000.0, envelope);
+    for (time, gain) in [(start, 0.5), ((start + end) / 2, 0.375)] {
+        assert!(
+            curve
+                .iter()
+                .any(|point| point.time.abs_diff(time) <= 1 && (point.gain - gain).abs() < 1e-5)
+        );
+    }
+    assert_eq!(
+        curve.iter().find(|point| point.time >= end).unwrap().gain,
+        1.0
+    );
+    assert_eq!(curve.first().unwrap().time, 0);
+    assert_eq!(curve.last().unwrap().time, envelope.duration());
+    assert!(
+        curve
+            .windows(3)
+            .all(|points| { points[0].gain != points[1].gain || points[1].gain != points[2].gain })
+    );
     assert_ne!(after.cache_key, before.cache_key);
     assert!(after.analysis_current);
     assert_eq!(
