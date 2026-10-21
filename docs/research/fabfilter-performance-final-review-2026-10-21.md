@@ -6,7 +6,7 @@ Integration branch: `codex/fabfilter-performance`. The owner requested that thes
 
 At integrated source `798594260a19c30e2824f197c70c757177d3c6a1`, `scripts/check.ps1 -Local` passed all script fixtures, strict Clippy across all targets/features and the complete suite: **338 passed, 0 failed, 19 ignored**. Ignored tests retain their explicit recording/device requirements. The GUI was built through `scripts/gui-dev.ps1` by the profiling wrapper with the shared pinned development settings. The native executable SHA-256 was `feffb695e346bc303cedc713b3f7ed2b516b3ddfa271445f7606f53331060c7d`.
 
-Final restart-fix validation and preserved executable identity are recorded below when available; the earlier native measurements remain labeled with their actual source.
+Restart fix `de5a0a9e12c47ac1268d87c8237520fb1b761a61` was integrated at `cd2a0d92aa472bc61dacfbdbecb4b888b1aa07ef`. Its scoped validation passed 11 audition unit tests, three native-playback integration tests and one public reclamation integration test, plus strict Clippy, formatting and whitespace checks. The earlier native measurements remain labeled with their actual source.
 
 ## Standards review
 
@@ -14,7 +14,9 @@ An independent review of `7be3fe319689fe7bb7a5fdb46025f7a2ae9264d0...7985942` fo
 
 ## Spec review
 
-The independent Spec review found **1 P2 issue**: `LiveAudition::restart` replaced its envelope Arc directly, bypassing writer-side retirement and allowing the old snapshot's final free inside the device iterator after Stop → Play. The existing regular edit path already used the retirement helper. One implementer owns all review fixes; the real-device regression and resolution receipt follow below. No other actionable mismatch was reported.
+The independent Spec review found **1 P2 issue**, now resolved: `LiveAudition::restart` replaced its envelope Arc directly, bypassing writer-side retirement and allowing the old snapshot's final free inside the device iterator after Stop → Play. The existing regular edit path already used the retirement helper. One implementer made the minimal helper-call fix and inspected the other writer assignments. On the actual default ZOOM F8n Pro device at 48 kHz, the same nonempty-envelope Stop → restart → next-edit test observed `freed_in_sample=true` before the fix and `false` afterward, with eventual freeing still confirmed. The observer is test-only; no production API or audio setting was added. The public consumer probe retained 0 allocations/reallocations/frees for steady playback, edits and rapid seeks; its explicitly separate teardown still recorded 11 frees.
+
+An independent follow-up review found **0 actionable findings** in the fix and the new theme/size canvas acceptance check. It confirmed the actual app restart call reaches the helper and that the check compares real production drawing geometry. Geometry equality is not raster, physical DPI or presentation proof; native deadlines remain unqualified.
 
 ## Eight deliveries
 
