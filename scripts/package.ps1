@@ -55,6 +55,8 @@ try {
     $resolved = @($metadata.resolve.nodes.id)
     $notices = [Collections.Generic.List[string]]::new()
     $notices.Add('CleanSlate third-party dependency notices. See licenses/ for license texts and embedded model/runtime notices.')
+    Copy-Item -LiteralPath (Join-Path $root 'assets/lucide/LICENSE') -Destination (Join-Path $resources 'licenses/lucide.txt')
+    $notices.Add('Lucide outline icons: ISC; Feather-derived icons also carry MIT. License text: licenses/lucide.txt. Upstream revision: 20aef31db93fe4d9f398dbb15b120d99c48eef95.')
     $bundled = Join-Path $root 'docs/licenses/bundled-dependencies.txt'
     $covered = @(Get-Content -LiteralPath $bundled | Where-Object { $_ -like 'Applies to:*' } | ForEach-Object { $_.Substring(11).Split(',').Trim() })
     foreach ($dependency in ($metadata.packages | Where-Object { $_.id -in $resolved -and $_.source } | Sort-Object name, version)) {

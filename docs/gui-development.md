@@ -87,6 +87,10 @@ Hover and selected-state feedback run for 90 ms; disclosures change height over 
 
 The rendering audit found existing geometry caches keyed by revision/theme/size, uncached moving overlays, display-frame playback updates and conditional job polling. No measured defect justified changing the renderer. This pass adds original vector controls/shared styles, with no copied FabFilter code or artwork. See the investigation report recorded in ticket 56 and the primary [Pro-Q display](https://www.fabfilter.com/help/pro-q/using/eqdisplay) and [Pro-R active display](https://www.fabfilter.com/help/pro-r/using/decayrateEQ) references.
 
+## Lucide outline review
+
+On `codex/fabfilter-controls`, ticket 58 replaces the timeline toolbar artwork with bundled Lucide outlines and adds matching Previous/Play/Stop transport icons. An active reference-loop button uses Pause because its existing command pauses/resumes that loop; ordinary playback retains its existing Play behavior. Labels, effective-binding tooltips, keyboard focus, persistent Lock selection and the separate meter-placement marker are retained. The SVGs use the native Iced SVG renderer and theme/state tint, including disabled and primary-button foregrounds. Assets and full upstream license text are pinned under `assets/lucide/`; About and packaged notices retain the credits. The owner clarified that shadcn was only a question; no web UI or shadcn integration is included.
+
 ## Analysis feedback
 
 Analyze reports source integrity checks, the current track during audio preparation, decoded recording position while making a new analysis copy, and track/recording position during speech detection. Cached copies are checked without displaying invented decoding progress. Later stages identify example checking, acoustic measurement, learning, timeline processing and preview construction. Elapsed wall time and Cancel analysis remain available throughout the job.

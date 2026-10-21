@@ -5033,13 +5033,25 @@ fn flat_button(theme: &Theme, status: button::Status, selected: bool) -> button:
 }
 
 fn toolbar_label(icon: ToolbarIcon, label: &str) -> Element<'_, Message> {
-    row![canvas(icon).width(20).height(20), text(label).size(13)]
+    row![icon.view(None), text(label).size(13)]
         .spacing(6)
         .align_y(iced::Center)
         .into()
 }
 
 impl CleanSlateApp {
+    fn transport_label<'a>(
+        &self,
+        icon: ToolbarIcon,
+        label: &'a str,
+        tint: iced::Color,
+    ) -> Element<'a, Message> {
+        row![icon.view(Some(tint)), text(label)]
+            .spacing(6)
+            .align_y(iced::Center)
+            .into()
+    }
+
     fn commit_sound(&mut self) {
         let Some((parameter, draft)) = &self.sound_draft else {
             return;
@@ -8772,6 +8784,8 @@ impl CleanSlateApp {
                             .push(text("Interface: Iced. Audio playback: Rodio. Decoding: Symphonia and bwavfile. Resampling: Rubato. Ownership models: Linfa, nalgebra and ndarray. Serialization: Serde. Integrity: SHA-2."))
                             .push(text("Speech detection: embedded Silero VAD, used through ONNX Runtime (ort). Silero VAD and ONNX Runtime carry MIT licenses. Bundled runtime notices and each component's licenses remain authoritative; CleanSlate's MIT license does not relicense dependencies."))
                             .push(text("See the distribution's THIRD-PARTY-NOTICES.txt and licenses directory. Model references and runtime notices are recorded in docs/licenses/embedded-model-runtime.txt in the repository."))
+                            .push(text("Outline icons: Lucide Icons and Contributors; ISC, with MIT notices for Feather-derived icons."))
+                            .push(text(include_str!("../assets/lucide/LICENSE")).size(12))
                             .push(text(include_str!("../LICENSE")).size(12));
                     } else {
                         body = body.push(text("Appearance").size(18));
@@ -10313,6 +10327,37 @@ impl CleanSlateApp {
         } else {
             inspector.into()
         };
+        let can_audition = self.preview.is_some()
+            || self.audition_mode == AuditionMode::Original
+                && self
+                    .project
+                    .as_ref()
+                    .is_some_and(|project| crate::original_envelopes(project).is_ok());
+        let can_stop = self.audition.is_some()
+            || self.audition_range.is_some()
+            || self.audition_preparation.is_busy();
+        let playback_label = if let Some(status) = self.audition_status() {
+            status
+        } else if self
+            .reference_audition
+            .as_ref()
+            .is_some_and(|snapshot| snapshot.paused)
+        {
+            "Paused · Resume"
+        } else if self.audition.is_some() {
+            "Playing"
+        } else {
+            "Play"
+        };
+        let playback_icon = if self
+            .reference_audition
+            .as_ref()
+            .is_some_and(|snapshot| !snapshot.paused)
+        {
+            ToolbarIcon::Pause
+        } else {
+            ToolbarIcon::Play
+        };
         let playback = row![
             text(format!(
                 "{:02}:{:06.3}",
@@ -10323,9 +10368,13 @@ impl CleanSlateApp {
             Space::new().width(Fill),
             self.shortcut_control(
                 Command::Start,
-                button("Previous")
-                    .style(secondary_button)
-                    .on_press(Message::Previous)
+                button(self.transport_label(
+                    ToolbarIcon::Previous,
+                    "Previous",
+                    self.appearance.colors().text
+                ))
+                .style(secondary_button)
+                .on_press(Message::Previous)
             ),
             self.shortcut_control(
                 if self.reference_menu.is_some() {
@@ -10333,38 +10382,31 @@ impl CleanSlateApp {
                 } else {
                     Command::Play
                 },
-                button(if let Some(status) = self.audition_status() {
-                    status
-                } else if self
-                    .reference_audition
-                    .as_ref()
-                    .is_some_and(|snapshot| snapshot.paused)
-                {
-                    "Paused · Resume"
-                } else if self.audition.is_some() {
-                    "Playing"
-                } else {
-                    "Play"
-                })
+                button(self.transport_label(
+                    playback_icon,
+                    playback_label,
+                    if can_audition {
+                        self.appearance.colors().action_text
+                    } else {
+                        self.appearance.colors().disabled
+                    }
+                ))
                 .style(primary_button)
-                .on_press_maybe(
-                    (self.preview.is_some()
-                        || self.audition_mode == AuditionMode::Original
-                            && self
-                                .project
-                                .as_ref()
-                                .is_some_and(|project| crate::original_envelopes(project).is_ok()))
-                    .then_some(Message::Audition)
-                )
+                .on_press_maybe(can_audition.then_some(Message::Audition))
             ),
             self.shortcut_control(
                 Command::Play,
-                button("Stop").style(secondary_button).on_press_maybe(
-                    (self.audition.is_some()
-                        || self.audition_range.is_some()
-                        || self.audition_preparation.is_busy())
-                    .then_some(Message::Stop)
-                )
+                button(self.transport_label(
+                    ToolbarIcon::Stop,
+                    "Stop",
+                    if can_stop {
+                        self.appearance.colors().text
+                    } else {
+                        self.appearance.colors().disabled
+                    }
+                ))
+                .style(secondary_button)
+                .on_press_maybe(can_stop.then_some(Message::Stop))
             ),
             text(if self.audition_preparation.is_busy() {
                 "Preparing playback…"
