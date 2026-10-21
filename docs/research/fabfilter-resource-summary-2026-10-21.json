@@ -1,0 +1,156 @@
+{
+  "observed_on": "2026-10-21",
+  "method": "REA inspect_pe_resources followed by PNG signature verification at payload offsets and matching named payload hashes across installed VST3/CLAP files. Resource type 10 is RCDATA, not a declared PNG type. Metadata only, not runtime cost. Complete canonical REA evidence is outside the repo in C:/Users/User/Documents/Codex/Investigations/fabfilter-performance-2026-10-21/performance-evidence.json. Evidence IDs use the preserved record with the same target SHA-256; path separator variants may have distinct IDs.",
+  "summary": [
+    {
+      "product": "Micro",
+      "pngs": 56,
+      "high_dpi_named_2x": 54,
+      "png_payload_bytes": 260121,
+      "clap_named_pngs": 56,
+      "byte_identical_named_pngs": 56,
+      "vst3_evidence_id": "ev_f0fe9ab6f85ac06d6127b8754f1ea3fb0a22ff391013ea535e95d8084207723f",
+      "clap_evidence_id": "ev_e6556f6acce124f3ebe5f6a2f040c99b0a14fc37926decb3a16cfc7dac289a20"
+    },
+    {
+      "product": "One",
+      "pngs": 54,
+      "high_dpi_named_2x": 53,
+      "png_payload_bytes": 478087,
+      "clap_named_pngs": 54,
+      "byte_identical_named_pngs": 54,
+      "vst3_evidence_id": "ev_109667b74347eee6a1a1e6194e0189711c63d334ad0b758dce4ad74b297dd265",
+      "clap_evidence_id": "ev_90783fe2fda84cffff2c76c4a5fc03cf469b470a222a4f5c845430483fa777f1"
+    },
+    {
+      "product": "Pro-C 2",
+      "pngs": 122,
+      "high_dpi_named_2x": 117,
+      "png_payload_bytes": 614927,
+      "clap_named_pngs": 122,
+      "byte_identical_named_pngs": 122,
+      "vst3_evidence_id": "ev_406ed8945fe758825ae484bb9db4d7af167ec046e33d4b5313162de45a03670a",
+      "clap_evidence_id": "ev_69af94dc4b574bc53c49f3cfe9a2bf8736dcefd7545fb1cbfa781a07934e1234"
+    },
+    {
+      "product": "Pro-C 3",
+      "pngs": 276,
+      "high_dpi_named_2x": 274,
+      "png_payload_bytes": 1095449,
+      "clap_named_pngs": 276,
+      "byte_identical_named_pngs": 276,
+      "vst3_evidence_id": "ev_0a16ae3831e13dce16280ae237f32d74ac01bd1093c44d43e386ba25b23f8563",
+      "clap_evidence_id": "ev_563a152c4e07ec0fbc05c6642c63fcc7c82f18cd4278bd817e67d128f33f1ef1"
+    },
+    {
+      "product": "Pro-DS",
+      "pngs": 199,
+      "high_dpi_named_2x": 198,
+      "png_payload_bytes": 921301,
+      "clap_named_pngs": 199,
+      "byte_identical_named_pngs": 199,
+      "vst3_evidence_id": "ev_c1072ac25019b3709261355a45e670f367774a516d62b3f1f7d5dfad7316b1a1",
+      "clap_evidence_id": "ev_38ab36fdb26983d6792911566fbceba699ba92b1b872e18ea8375bf17024e388"
+    },
+    {
+      "product": "Pro-G",
+      "pngs": 170,
+      "high_dpi_named_2x": 169,
+      "png_payload_bytes": 894535,
+      "clap_named_pngs": 170,
+      "byte_identical_named_pngs": 170,
+      "vst3_evidence_id": "ev_8378164d90f29984a20914fbdc0bc88589be60d6e66b348f51be11ee60cf318c",
+      "clap_evidence_id": "ev_3e227e23b2426eebc828954fb364ba1b70dbc53154551c36cc9b672f543f5ce3"
+    },
+    {
+      "product": "Pro-L 2",
+      "pngs": 124,
+      "high_dpi_named_2x": 122,
+      "png_payload_bytes": 588088,
+      "clap_named_pngs": 124,
+      "byte_identical_named_pngs": 124,
+      "vst3_evidence_id": "ev_3c973b5a09152783e702c7ddda4c524e2dd66644e045cb02b16c4b23bec99d8c",
+      "clap_evidence_id": "ev_6606482ec54871474123ad5f26cc3f5e29e58c30490a66737ba668c8f7a3dade"
+    },
+    {
+      "product": "Pro-MB",
+      "pngs": 128,
+      "high_dpi_named_2x": 120,
+      "png_payload_bytes": 488928,
+      "clap_named_pngs": 128,
+      "byte_identical_named_pngs": 128,
+      "vst3_evidence_id": "ev_f1abc9d9318aca62f8a9870e66e250323f81447bca5c4fb1e1827e5c58aa2757",
+      "clap_evidence_id": "ev_df81c2c098dc20062f79abf3b6eafc30427435ca78dd4d27d8459c9927ba9aa7"
+    },
+    {
+      "product": "Pro-Q 4",
+      "pngs": 354,
+      "high_dpi_named_2x": 347,
+      "png_payload_bytes": 1187784,
+      "clap_named_pngs": 354,
+      "byte_identical_named_pngs": 354,
+      "vst3_evidence_id": "ev_ffb4025dc39cc9993f4bf7bad2a79fb628b1279735866983118f8b519930d3d2",
+      "clap_evidence_id": "ev_f5ca3592485428a2483effce2c851ab55c08f0fa95b8a972fc3d9f79c1299ceb"
+    },
+    {
+      "product": "Pro-R 2",
+      "pngs": 171,
+      "high_dpi_named_2x": 167,
+      "png_payload_bytes": 872576,
+      "clap_named_pngs": 171,
+      "byte_identical_named_pngs": 171,
+      "vst3_evidence_id": "ev_691dbbda2c6ac6ffd23e1a2f986a0821796acd0ed8249a143fb065b4f0d8f53a",
+      "clap_evidence_id": "ev_4983809f2a8c954872a423fa5aef5db08600b38956bd52292e4bc730fc127a34"
+    },
+    {
+      "product": "Saturn 2",
+      "pngs": 224,
+      "high_dpi_named_2x": 221,
+      "png_payload_bytes": 778449,
+      "clap_named_pngs": 224,
+      "byte_identical_named_pngs": 224,
+      "vst3_evidence_id": "ev_2b8413509cb5d25a9d8108bb365bffa4650a6ee5e3abce4a4474485711de11c7",
+      "clap_evidence_id": "ev_fb21255536d4e089ba3320ef5e2a9dcbd9b2d2a65110944b882842d2e5a644b4"
+    },
+    {
+      "product": "Simplon",
+      "pngs": 76,
+      "high_dpi_named_2x": 74,
+      "png_payload_bytes": 390079,
+      "clap_named_pngs": 76,
+      "byte_identical_named_pngs": 76,
+      "vst3_evidence_id": "ev_bc175a5f83c47f142a96aedaaf2ca61c4ae727436a59fc45c54dc42f59dceece",
+      "clap_evidence_id": "ev_7fc1d240a1b498e2062efd9298e0e5b417eaa6943b5032647faa830f97282b09"
+    },
+    {
+      "product": "Timeless 3",
+      "pngs": 244,
+      "high_dpi_named_2x": 241,
+      "png_payload_bytes": 900381,
+      "clap_named_pngs": 244,
+      "byte_identical_named_pngs": 244,
+      "vst3_evidence_id": "ev_e4582db6a69cebacafc3f99765f8a37df1d5c781bf7402873cc12aa5f29fcfaf",
+      "clap_evidence_id": "ev_5b95b74c6d7ee2f8f810413555ec0614ce2fe4bda1fc59ad1442dfa10e8fe855"
+    },
+    {
+      "product": "Twin 3",
+      "pngs": 315,
+      "high_dpi_named_2x": 310,
+      "png_payload_bytes": 1062234,
+      "clap_named_pngs": 315,
+      "byte_identical_named_pngs": 315,
+      "vst3_evidence_id": "ev_f2fae7e1159f77d3a7f44d09fcde6c7fd72213c60ab20ee35aee71994acf3cfa",
+      "clap_evidence_id": "ev_20548bf8dd9247f47500d1a4c40e33db4483c98a6031372a8e2a313f86df54ab"
+    },
+    {
+      "product": "Volcano 3",
+      "pngs": 245,
+      "high_dpi_named_2x": 240,
+      "png_payload_bytes": 954246,
+      "clap_named_pngs": 245,
+      "byte_identical_named_pngs": 245,
+      "vst3_evidence_id": "ev_4a5886647a1c8abeac8d716c2fec24e6b02d1dceff9d8630483dbde5d13ae1f2",
+      "clap_evidence_id": "ev_1ca5e8c737c453a0f13a0d1447a8ac2bda4064a2bf351e0bd8d0a6833e89851c"
+    }
+  ]
+}
