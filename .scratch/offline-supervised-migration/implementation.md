@@ -2,11 +2,10 @@
 
 ## Current queue — reconciled 2026-10-20
 
-Owner follow-up accepts current sound/performance, closes 14, retires standing release ticket 15 into the per-release procedure and defers unnecessary waveform-overlay editor 35. There are now **6 active tickets and 2 deferred proposals**, including owner-approved architecture ticket 55. The earlier three-agent audit consolidated duplicate implementation records while retaining unmet checks; owner-waived formal benchmarks are now optional future work, with no new ticket created. Original specifications and results remain in place. This section governs current routing; dated entries below preserve history.
+Owner follow-up accepts current sound/performance, closes 14, retires standing release ticket 15 into the per-release procedure and defers unnecessary waveform-overlay editor 35. There are now **5 active tickets and 2 deferred proposals**. Owner-approved architecture ticket 55 is done and integrated. The earlier three-agent audit consolidated duplicate implementation records while retaining unmet checks; owner-waived formal benchmarks are now optional future work, with no new ticket created. Original specifications and results remain in place. This section governs current routing; dated entries below preserve history.
 
 | Ticket | Current work | State |
 | --- | --- | --- |
-| [55](../offline-supervised-editor/issues/55-streaming-waveform-construction.md) | Share streaming waveform construction between progressive import and cache rebuilding | Claimed; owner approved scope and testing seams |
 | [20](../offline-supervised-editor/issues/20-editor-first-documentation-visuals.md) | Gain composition and eleven-diagram browser pass completed; only screenshot refresh remains | Claimed; remaining captures wait for 23 |
 | [22](../offline-supervised-editor/issues/22-local-storage-cleanup.md) | Git temporary files removed and integrity verified; only retired recovery-target cleanup remains | Claimed; separate old build target still exists |
 | [23](../offline-supervised-editor/issues/23-gui-frontend-polish.md) | Integrated editor GUI/import/playback verification and remaining polish; absorbs 38/39/40 | Claimed; software integrated, acceptance incomplete |
@@ -18,6 +17,8 @@ Owner follow-up accepts current sound/performance, closes 14, retires standing r
 Earlier audit validation: three read-only agent audits covered all 14 formerly open records; a separate review found no actionable issues. That earlier eight-ticket snapshot passed dependency/link/whitespace assertions; the owner decisions above supersede its count. Ticket 42's unchanged SHA-256 is `cd9e048a9cf97d0048271f793bd556fd24a0e00cf925741436c2739d2aa4bf31`. Application tests/builds and hardware acceptance were not rerun for these tracker decisions. Separate documentation implementation/browser checks are recorded in 20; cleanup integrity checks and rejections are recorded in 22.
 
 ## Historical implementation record
+
+2026-10-20: [55 — Shared streaming waveform construction](../offline-supervised-editor/issues/55-streaming-waveform-construction.md) is done and merged into development at `102fee9`. The waveform module owns chunk ingestion, prefix refinement and cache completion for import and reopening. Two-axis review found no actionable issues. Workflow/packaging fixtures, formatting, strict Clippy, 280 tests (18 ignored), GUI build and native self-check passed. Test compilation required a command-only four-codegen-unit override after rustc memory failures; no project configuration changed. The tested executable/receipt are preserved outside the checkout, and temporary branches/worktree are removed. No unrelated ticket or release/main promotion is included.
 
 2026-10-20: [54 — Shared local builds and development cleanup](../offline-supervised-editor/issues/54-local-build-consolidation.md) is done after shared-settings/workflow checks, strict Clippy, 278 passing tests (18 ignored), GUI build and native self-checks. Primary development is consolidated, old feature branches retired and the frozen baseline preserved. Use scripts/check.ps1 -Local and scripts/gui-dev.ps1 for the shared cache/profile. Local integration and batch PRs to main supersede the earlier mandatory per-feature-PR policy; one unused recovery cache remains a documented manual-cleanup exception.
 

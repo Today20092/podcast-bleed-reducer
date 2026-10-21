@@ -1,6 +1,6 @@
 # Plan the offline supervised CleanSlate migration
 
-2026-10-20 architecture follow-up: owner approved the one-suggestion review and both testing seams for [55 — Shared streaming waveform construction](../offline-supervised-editor/issues/55-streaming-waveform-construction.md). Implement only this new ticket in an integration branch, verify the combined application and merge into development. This preserves the accepted architecture and does not authorize unrelated backlog work or main/release promotion.
+2026-10-20 architecture follow-up: [55 — Shared streaming waveform construction](../offline-supervised-editor/issues/55-streaming-waveform-construction.md) is done and merged into development at `102fee9`. The owner approved the one-suggestion review and both testing seams. Two-axis review found no issues; combined checks passed with 280 tests and 18 ignored, using a command-only lower-codegen override after compiler memory failures. The unchanged-profile GUI build and native self-check passed, and the tested executable was preserved before temporary worktree/branch cleanup. This was the only architecture-review ticket implemented; unrelated backlog work and main/release promotion remain separate.
 
 2026-10-20 cleanup follow-up: owner-manual Git-temp deletion is verified complete (zero remaining files; full Git integrity passed). Ticket 22 remains open for the separate retired recovery build target, not the already removed Git temporaries. Earlier automatic deletion rejections below remain historical.
 
