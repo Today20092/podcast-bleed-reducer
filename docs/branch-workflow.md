@@ -6,7 +6,7 @@ Current policy: 2026-10-20. [Ticket 54](../.scratch/offline-supervised-editor/is
 
 The primary checkout is `C:/Users/User/Documents/Codex/2026-08-14/podcast-automix-rust-gui`, on `development`. Keep only development and main as ongoing branch names. Main remains the reviewed release branch and GitHub's default branch. The detached `ticket14-frozen-baseline` checkout is intentional comparison evidence, not another development branch.
 
-All completed application branches and the primary checkout's pending documentation are integrated into development. Accepted future work, including adjustable shortcuts and catch-up scrolling, is retained as specifications; merging those tickets does not implement them. Generated diagnostics and experimental/private scratch material are preserved in the local recovery snapshot rather than published as source.
+All completed application branches and the primary checkout's pending documentation are integrated into development, including adjustable shortcuts and the owner-approved FabFilter-inspired GUI pass (merge `6b99a9a`, 2026-10-21). Only development/main remain as ongoing local branches. Catch-up scrolling remains a future specification; merging that ticket does not implement it. Generated diagnostics and experimental/private scratch material are preserved locally rather than published as source. The disposable inspector mockups and their Git history are archived beside the original `ticket-56-24b812a` build receipt in local application data.
 
 ## Everyday work
 
