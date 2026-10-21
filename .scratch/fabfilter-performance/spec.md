@@ -1,5 +1,7 @@
 # FabFilter-inspired performance follow-up
 
+2026-10-21 owner integration amendment: the owner subsequently authorized merging the complete reviewed GUI/icon/performance batch into development for testing. Merge `1235ca1` preserves the reviewed history; [ticket09](issues/09-development-integration.md) and [the development receipt](../../docs/research/development-integration-2026-10-21.md) record combined checks, the preserved build and launch. This supersedes the initial branch-only restriction below. Main/release promotion remains unauthorized pending the owner's development-build test.
+
 Status: eight scoped tickets complete at the owner-confirmed software/report boundaries; native checks and remaining physical-measurement limits recorded on 2026-10-21.
 Completion receipt: [integrated validation and final review](../../docs/research/fabfilter-performance-final-review-2026-10-21.md). All eight scoped deliveries are integrated on the performance branch. Ticket07's final theme/size software-canvas check passed, and ticket08's native Add tracks/playback restart retry succeeded. Physical-input/display timing and listening quality remain outside those software/functional proofs. Measurement-dependent no-change decisions and the remaining wide-canvas budget miss are explicit.
 Integration branch: `codex/fabfilter-performance`.
