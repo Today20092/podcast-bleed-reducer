@@ -3492,6 +3492,7 @@ version = "0.1.0-alpha.6"
 dependencies = [
  "bwavfile",
  "iced",
+ "iced_tiny_skia",
  "linfa",
  "linfa-logistic",
  "nalgebra",
