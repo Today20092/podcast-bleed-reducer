@@ -10270,7 +10270,11 @@ impl CleanSlateApp {
             setup,
         ]
         .spacing(18)
-        .padding([0, 2]);
+        .padding(iced::Padding {
+            left: 2.0,
+            right: 14.0,
+            ..iced::Padding::default()
+        });
         let inspector_content: Element<'_, Message> = if compact {
             column![
                 row![
