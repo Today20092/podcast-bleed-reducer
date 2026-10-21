@@ -18,6 +18,7 @@ use std::{
 };
 
 const CONTROL_BLOCK: usize = 256;
+const PLAYBACK_BLOCKS: usize = 4;
 
 #[cfg(test)]
 thread_local! {
@@ -430,6 +431,26 @@ struct Settings {
     monitor: f32,
     seek: Option<usize>,
     envelopes: Arc<Vec<GainEnvelope>>,
+    retired_envelopes: Option<Arc<Vec<GainEnvelope>>>,
+}
+
+impl Settings {
+    fn replace_envelopes(&mut self, envelopes: Vec<GainEnvelope>) {
+        // The sole source switches snapshots under this same write lock. Keep
+        // its old snapshot alive until a later control-side write can free it.
+        if self
+            .retired_envelopes
+            .as_ref()
+            .is_some_and(|old| Arc::strong_count(old) == 1)
+        {
+            self.retired_envelopes = None;
+        }
+        let old = std::mem::replace(&mut self.envelopes, Arc::new(envelopes));
+        if Arc::strong_count(&old) > 1 {
+            debug_assert!(self.retired_envelopes.is_none());
+            self.retired_envelopes = Some(old);
+        }
+    }
 }
 
 impl Controls {
@@ -477,6 +498,7 @@ impl Controls {
                 monitor,
                 seek: None,
                 envelopes: Arc::new(envelopes),
+                retired_envelopes: None,
             }),
         }
     }
@@ -488,6 +510,39 @@ struct PlaybackBlock {
     tracks: Vec<Vec<f32>>,
 }
 
+struct BlockRetirement {
+    sender: mpsc::SyncSender<Result<PlaybackBlock, RenderBlocker>>,
+    pending: Option<Result<PlaybackBlock, RenderBlocker>>,
+    disconnected: bool,
+}
+
+impl BlockRetirement {
+    fn flush(&mut self) -> bool {
+        let Some(value) = self.pending.take() else {
+            return true;
+        };
+        match self.sender.try_send(value) {
+            Ok(()) => true,
+            Err(mpsc::TrySendError::Full(value)) => {
+                self.pending = Some(value);
+                false
+            }
+            Err(mpsc::TrySendError::Disconnected(value)) => {
+                self.pending = Some(value);
+                self.disconnected = true;
+                false
+            }
+        }
+    }
+
+    fn retire(&mut self, value: Result<PlaybackBlock, RenderBlocker>) -> bool {
+        // Callers stop consuming as soon as the single pending slot is occupied.
+        debug_assert!(self.pending.is_none());
+        self.pending = Some(value);
+        self.flush()
+    }
+}
+
 /// Device iterator: bounded worker-fed PCM, with silence and a frozen playhead
 /// on underrun. Decoding, hashing, resampling and file reads stay on workers.
 struct AuditionSource {
@@ -497,6 +552,7 @@ struct AuditionSource {
     sample_rate: u32,
     blocks: Receiver<(usize, Result<PlaybackBlock, RenderBlocker>)>,
     block: Option<PlaybackBlock>,
+    retirement: BlockRetirement,
     cancelled: Arc<AtomicBool>,
     controls: Arc<Controls>,
     end: usize,
@@ -507,6 +563,7 @@ struct AuditionSource {
     monitor: f32,
     envelopes: Arc<Vec<GainEnvelope>>,
     failure: Option<RenderBlocker>,
+    worker_stopped_error: Option<RenderBlocker>,
 }
 
 struct PlaybackWorker {
@@ -574,7 +631,12 @@ impl AuditionPlayback {
         Ok(())
     }
     pub fn replace_envelopes(&self, envelopes: Vec<GainEnvelope>) {
-        self.source.controls.settings.write().unwrap().envelopes = Arc::new(envelopes);
+        self.source
+            .controls
+            .settings
+            .write()
+            .unwrap()
+            .replace_envelopes(envelopes);
     }
     pub fn error(&self) -> Option<&RenderBlocker> {
         self.source.error()
@@ -598,17 +660,27 @@ impl AuditionSource {
             .expect("validated playback grid");
         controls.end.store(end, Ordering::Release);
         let position = controls.position.load(Ordering::Relaxed);
-        let (sender, blocks) = mpsc::sync_channel(4);
+        let (sender, blocks) = mpsc::sync_channel(PLAYBACK_BLOCKS);
+        let (retire_sender, retired) = mpsc::sync_channel(PLAYBACK_BLOCKS);
         let cancelled = Arc::new(AtomicBool::new(false));
         let worker_cancelled = Arc::clone(&cancelled);
         let worker_controls = Arc::clone(&controls);
         #[cfg(test)]
         count_playback_work(2);
         let worker = std::thread::spawn(move || {
+            let reclaim = || {
+                for _ in 0..PLAYBACK_BLOCKS {
+                    match retired.try_recv() {
+                        Ok(value) => drop(value),
+                        Err(_) => break,
+                    }
+                }
+            };
             let mut generation = usize::MAX;
             let mut position = 0;
             let mut end = end;
             while !worker_cancelled.load(Ordering::Relaxed) {
+                reclaim();
                 if !worker_controls.running.load(Ordering::Acquire) {
                     std::thread::sleep(Duration::from_millis(1));
                     continue;
@@ -633,6 +705,7 @@ impl AuditionSource {
                     });
                 let failed = result.is_err();
                 loop {
+                    reclaim();
                     if worker_cancelled.load(Ordering::Relaxed) {
                         return;
                     }
@@ -653,7 +726,10 @@ impl AuditionSource {
                 }
             }
         });
-        let loop_start = controls.settings.read().unwrap().loop_start;
+        let (loop_start, envelopes) = {
+            let settings = controls.settings.read().unwrap();
+            (settings.loop_start, Arc::clone(&settings.envelopes))
+        };
         let source = Self {
             persistent: false,
             command_generation: 0,
@@ -661,6 +737,11 @@ impl AuditionSource {
             sample_rate,
             blocks,
             block: None,
+            retirement: BlockRetirement {
+                sender: retire_sender,
+                pending: None,
+                disconnected: false,
+            },
             cancelled: Arc::clone(&cancelled),
             controls,
             end,
@@ -669,8 +750,9 @@ impl AuditionSource {
             mode: AuditionMode::Original,
             solo: 0,
             monitor: 1.0,
-            envelopes: Arc::new(vec![]),
+            envelopes,
             failure: None,
+            worker_stopped_error: Some(RenderBlocker("playback worker stopped".into())),
         };
         AuditionPlayback {
             grid,
@@ -702,6 +784,16 @@ impl Iterator for AuditionSource {
     type Item = f32;
 
     fn next(&mut self) -> Option<Self::Item> {
+        if !self.retirement.flush() {
+            if self.retirement.disconnected {
+                if self.failure.is_none() {
+                    self.failure = self.worker_stopped_error.take();
+                }
+                return None;
+            }
+            self.controls.underruns.fetch_add(1, Ordering::Relaxed);
+            return Some(0.0);
+        }
         let command = self.controls.commands.load(Ordering::Acquire);
         if self.command_generation != command {
             self.remaining = 0;
@@ -719,7 +811,6 @@ impl Iterator for AuditionSource {
                 }
                 if let Some(position) = settings.seek.take() {
                     self.position = position.min(self.end);
-                    self.block = None;
                     self.controls
                         .requested
                         .store(self.position, Ordering::Release);
@@ -727,6 +818,12 @@ impl Iterator for AuditionSource {
                     self.controls
                         .position
                         .store(self.position, Ordering::Relaxed);
+                    if let Some(block) = self.block.take()
+                        && !self.retirement.retire(Ok(block))
+                    {
+                        self.controls.underruns.fetch_add(1, Ordering::Relaxed);
+                        return Some(0.0);
+                    }
                 }
                 self.command_generation = command;
                 self.controls
@@ -750,11 +847,16 @@ impl Iterator for AuditionSource {
             && let Some(start) = self.loop_start
         {
             self.position = start;
-            self.block = None;
             self.remaining = CONTROL_BLOCK;
             self.controls.requested.store(start, Ordering::Release);
             self.controls.generation.fetch_add(1, Ordering::AcqRel);
             self.controls.position.store(start, Ordering::Relaxed);
+            if let Some(block) = self.block.take()
+                && !self.retirement.retire(Ok(block))
+            {
+                self.controls.underruns.fetch_add(1, Ordering::Relaxed);
+                return Some(0.0);
+            }
         }
         let position = self.position;
         if position >= self.end || self.failure.is_some() {
@@ -766,23 +868,38 @@ impl Iterator for AuditionSource {
                 && block.start <= position
                 && position - block.start < block.tracks.first().map_or(0, Vec::len)
         }) {
-            self.block = None;
+            if let Some(block) = self.block.take()
+                && !self.retirement.retire(Ok(block))
+            {
+                self.controls.underruns.fetch_add(1, Ordering::Relaxed);
+                return Some(0.0);
+            }
             // At most the bounded queue is inspected; a stalled worker never
             // advances any track or performs I/O on the device thread.
-            for _ in 0..4 {
+            for _ in 0..PLAYBACK_BLOCKS {
                 match self.blocks.try_recv() {
-                    Ok((block_generation, _)) if block_generation != generation => continue,
+                    Ok((block_generation, value)) if block_generation != generation => {
+                        if !self.retirement.retire(value) {
+                            self.controls.underruns.fetch_add(1, Ordering::Relaxed);
+                            return Some(0.0);
+                        }
+                    }
                     Ok((_, Ok(block))) if block.start == position => {
                         self.block = Some(block);
                         break;
                     }
-                    Ok((_, Ok(_))) => continue,
+                    Ok((_, Ok(block))) => {
+                        if !self.retirement.retire(Ok(block)) {
+                            self.controls.underruns.fetch_add(1, Ordering::Relaxed);
+                            return Some(0.0);
+                        }
+                    }
                     Ok((_, Err(error))) => {
                         self.failure = Some(error);
                         return None;
                     }
                     Err(TryRecvError::Disconnected) => {
-                        self.failure = Some(RenderBlocker("playback worker stopped".into()));
+                        self.failure = self.worker_stopped_error.take();
                         return None;
                     }
                     Err(TryRecvError::Empty) => break,
@@ -1050,7 +1167,7 @@ impl LiveAudition {
         let mut settings = self.controls.settings.write().unwrap();
         // Added recordings join on the next start; the active stream keeps its source snapshot.
         if settings.envelopes.len() == envelopes.len() {
-            settings.envelopes = Arc::new(envelopes);
+            settings.replace_envelopes(envelopes);
         }
     }
     pub(crate) fn position(&self) -> TimePosition {
