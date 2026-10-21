@@ -4202,10 +4202,18 @@ mod app_menu_tests {
         );
         let mut app = CleanSlateApp::default();
         let _ = app.update(Message::About);
-        let _ = app.update(Message::VersionCopied(false));
+        let _ = app.update(Message::CopyVersion);
+        let request = app.copy_request.as_ref().unwrap().clone();
+        let _ = app.update(Message::VersionInfoReady(
+            request.clone(),
+            "Observed report".into(),
+        ));
+        let _ = app.update(Message::VersionCopied(request, false));
         assert!(app.app_feedback.as_ref().unwrap().contains("manually"));
-        assert!(!app.copy_pending);
-        let _ = app.update(Message::VersionCopied(true));
+        assert!(app.copy_request.is_none());
+        let _ = app.update(Message::CopyVersion);
+        let request = app.copy_request.as_ref().unwrap().clone();
+        let _ = app.update(Message::VersionCopied(request, true));
         assert_eq!(
             app.app_feedback.as_deref(),
             Some("Version information copied.")
@@ -4229,11 +4237,11 @@ mod app_menu_tests {
         let mut app = CleanSlateApp::default();
         let _ = app.update(Message::About);
         let _ = app.update(Message::CopyVersion);
-        assert!(app.copy_pending);
+        let request = app.copy_request.as_ref().unwrap().clone();
         let _ = app.update(Message::CloseHelp);
         let _ = app.update(Message::KeyboardShortcuts);
-        let _ = app.update(Message::VersionCopied(false));
-        assert!(!app.copy_pending);
+        let _ = app.update(Message::VersionCopied(request, false));
+        assert!(app.copy_request.is_none());
         assert!(app.shortcuts_open);
     }
 
@@ -4260,6 +4268,65 @@ mod app_menu_tests {
         assert!(unavailable.contains("Window scale: unavailable"));
         assert!(!unavailable.contains("private"));
         assert!(!unavailable.contains("session.wav"));
+    }
+
+    #[test]
+    fn late_clipboard_reply_cannot_finish_a_reopened_about_copy() {
+        let mut app = CleanSlateApp::default();
+        let _ = app.update(Message::About);
+        let _ = app.update(Message::CopyVersion);
+        let first = app.copy_request.as_ref().unwrap().clone();
+        let _ = app.update(Message::CloseHelp);
+        let _ = app.update(Message::About);
+        let _ = app.update(Message::CopyVersion);
+        let second = app.copy_request.as_ref().unwrap().clone();
+        let stale = app.update(Message::VersionInfoReady(
+            first.clone(),
+            "Old report".into(),
+        ));
+        assert_eq!(
+            stale.units(),
+            0,
+            "a stale report attempted a clipboard write"
+        );
+        let _ = app.update(Message::VersionCopied(first, true));
+        assert!(
+            app.copy_request
+                .as_ref()
+                .is_some_and(|request| Arc::ptr_eq(request, &second))
+        );
+        assert!(app.version_details.is_none());
+        let _ = app.update(Message::VersionInfoReady(
+            second.clone(),
+            "Current observed report".into(),
+        ));
+        assert_eq!(
+            app.version_details.as_deref(),
+            Some("Current observed report")
+        );
+        let _ = app.update(Message::VersionCopied(second, true));
+        assert!(app.copy_request.is_none());
+        assert_eq!(
+            app.app_feedback.as_deref(),
+            Some("Version information copied.")
+        );
+    }
+
+    #[test]
+    fn copied_hardware_fields_cannot_hide_paths_or_exceed_the_report_bound() {
+        let report = version_info_with_graphics(
+            "CleanSlate test".into(),
+            "C:\u{0}/Users/private/session.wav",
+            &"δ".repeat(400),
+            None,
+        );
+        assert_eq!(
+            report,
+            format!(
+                "CleanSlate test\nGraphics backend: unavailable\nGraphics adapter: {}\nWindow scale: unavailable\nDisplay refresh: unavailable (current GUI API)",
+                "δ".repeat(160),
+            ),
+        );
     }
 
     #[test]
@@ -4372,6 +4439,40 @@ fn version_info(version: &str, build: Option<&str>, os: &str, arch: &str) -> Str
     info
 }
 
+fn version_info_with_graphics(
+    mut info: String,
+    backend: &str,
+    adapter: &str,
+    scale: Option<f32>,
+) -> String {
+    fn hardware_field(value: &str) -> String {
+        let value: String = value
+            .chars()
+            .filter(|c| !c.is_control())
+            .take(160)
+            .collect();
+        let value = value.trim();
+        if value.is_empty()
+            || value.contains(":\\")
+            || value.contains(":/")
+            || value.starts_with('/')
+            || value.starts_with("\\\\")
+        {
+            return "unavailable".into();
+        }
+        value.to_owned()
+    }
+    let scale = scale
+        .filter(|scale| scale.is_finite() && *scale > 0.0)
+        .map_or_else(|| "unavailable".into(), |scale| format!("{scale:.2}x"));
+    info.push_str(&format!(
+        "\nGraphics backend: {}\nGraphics adapter: {}\nWindow scale: {scale}\nDisplay refresh: unavailable (current GUI API)",
+        hardware_field(backend),
+        hardware_field(adapter),
+    ));
+    info
+}
+
 fn open_app_link(link: AppLink) -> Result<(), String> {
     use std::process::{Command, Stdio};
     #[cfg(target_os = "windows")]
@@ -4437,7 +4538,8 @@ pub struct CleanSlateApp {
     menu_selected: usize,
     app_dialog: Option<AppDialog>,
     about_copy_selected: bool,
-    copy_pending: bool,
+    copy_request: Option<Arc<()>>,
+    version_details: Option<String>,
     app_feedback: Option<String>,
     help_open: bool,
     shortcuts_open: bool,
@@ -4594,7 +4696,8 @@ impl Default for CleanSlateApp {
             menu_selected: 0,
             app_dialog: None,
             about_copy_selected: true,
-            copy_pending: false,
+            copy_request: None,
+            version_details: None,
             app_feedback: None,
             shortcuts_open: false,
             help_close_selected: false,
@@ -4941,7 +5044,8 @@ enum Message {
     LinkOpened(AppLink, Result<(), String>),
     CopyVersion,
     CopyProjectPath,
-    VersionCopied(bool),
+    VersionInfoReady(Arc<()>, String),
+    VersionCopied(Arc<()>, bool),
     Help,
     KeyboardShortcuts,
     CloseHelp,
@@ -7420,11 +7524,38 @@ impl CleanSlateApp {
                 .map(|error| format!("Appearance changed, but could not be saved. {error}"));
             return Task::none();
         }
-        if let Message::VersionCopied(copied) = &message {
-            self.copy_pending = false;
-            if self.app_dialog == Some(AppDialog::About) {
-                self.app_feedback = Some(if *copied { "Version information copied." } else { "Could not confirm the copy. Try again or copy the displayed version information manually." }.into());
+        let copy_reply = match &message {
+            Message::VersionInfoReady(request, _) | Message::VersionCopied(request, _) => {
+                Some(request)
             }
+            _ => None,
+        };
+        if let Some(request) = copy_reply
+            && (self.app_dialog != Some(AppDialog::About)
+                || !self
+                    .copy_request
+                    .as_ref()
+                    .is_some_and(|current| Arc::ptr_eq(current, request)))
+        {
+            return Task::none();
+        }
+        if let Message::VersionInfoReady(request, expected) = &message {
+            self.version_details = Some(expected.clone());
+            self.app_feedback = Some("Copying version information…".into());
+            let expected = expected.clone();
+            let request = request.clone();
+            return iced::clipboard::write::<Message>(expected.clone()).chain(
+                iced::clipboard::read().map(move |actual| {
+                    Message::VersionCopied(
+                        request.clone(),
+                        actual.as_deref() == Some(expected.as_str()),
+                    )
+                }),
+            );
+        }
+        if let Message::VersionCopied(_, copied) = &message {
+            self.copy_request = None;
+            self.app_feedback = Some(if *copied { "Version information copied." } else { "Could not confirm the copy. Try again or copy the displayed version information manually." }.into());
             return Task::none();
         }
         if self.menu_open || self.app_dialog.is_some() {
@@ -7433,6 +7564,7 @@ impl CleanSlateApp {
                 | Message::KeyPressed(keyboard::Key::Named(keyboard::key::Named::Escape), _) => {
                     self.menu_open = false;
                     self.app_dialog = None;
+                    self.copy_request = None;
                     self.shortcut_capture = None;
                     return Task::none();
                 }
@@ -7521,7 +7653,8 @@ impl CleanSlateApp {
                 | Message::OpenLink(_)
                 | Message::LinkOpened(_, _)
                 | Message::CopyVersion
-                | Message::VersionCopied(_)
+                | Message::VersionInfoReady(..)
+                | Message::VersionCopied(..)
                 | Message::Tick
                 | Message::PlaybackFrame => {}
                 _ => return Task::none(),
@@ -8498,6 +8631,7 @@ impl CleanSlateApp {
                 self.shortcut_capture = None;
                 self.menu_open = false;
                 self.app_dialog = None;
+                self.copy_request = None;
                 self.help_open = false;
                 self.shortcuts_open = false;
             }
@@ -8507,6 +8641,8 @@ impl CleanSlateApp {
                 self.app_feedback = None;
             }
             Message::Settings | Message::About => {
+                self.copy_request = None;
+                self.version_details = None;
                 self.settings_selected = if self.appearance == Appearance::Dark {
                     0
                 } else {
@@ -8546,20 +8682,41 @@ impl CleanSlateApp {
                 })
             }
             Message::CopyVersion => {
-                if self.app_dialog == Some(AppDialog::About) && !self.copy_pending {
-                    self.copy_pending = true;
-                    self.app_feedback = Some("Copying version information…".into());
-                    let expected = version_info(
-                        env!("CARGO_PKG_VERSION"),
-                        None,
-                        std::env::consts::OS,
-                        std::env::consts::ARCH,
-                    );
-                    return iced::clipboard::write::<Message>(expected.clone()).chain(
-                        iced::clipboard::read().map(move |actual| {
-                            Message::VersionCopied(actual.as_deref() == Some(expected.as_str()))
-                        }),
-                    );
+                if self.app_dialog == Some(AppDialog::About) && self.copy_request.is_none() {
+                    // A retained token cannot be reused by a reopened dialog's newer request.
+                    let request = Arc::new(());
+                    self.copy_request = Some(request.clone());
+                    self.app_feedback = Some("Collecting graphics information…".into());
+                    return iced::system::information().then(move |information| {
+                        let request = request.clone();
+                        window::latest().then(move |id| {
+                            let backend = information.graphics_backend.clone();
+                            let adapter = information.graphics_adapter.clone();
+                            let request = request.clone();
+                            let complete = move |scale| {
+                                Message::VersionInfoReady(
+                                    request.clone(),
+                                    version_info_with_graphics(
+                                        version_info(
+                                            env!("CARGO_PKG_VERSION"),
+                                            None,
+                                            std::env::consts::OS,
+                                            std::env::consts::ARCH,
+                                        ),
+                                        &backend,
+                                        &adapter,
+                                        scale,
+                                    ),
+                                )
+                            };
+                            match id {
+                                Some(id) => {
+                                    window::scale_factor(id).map(move |scale| complete(Some(scale)))
+                                }
+                                None => Task::done(complete(None)),
+                            }
+                        })
+                    });
                 }
             }
             Message::CopyProjectPath => {
@@ -8567,7 +8724,7 @@ impl CleanSlateApp {
                     return iced::clipboard::write::<Message>(project.path().display().to_string());
                 }
             }
-            Message::VersionCopied(_) => {}
+            Message::VersionInfoReady(..) | Message::VersionCopied(..) => {}
             Message::SubmitExport => self.submit_export(),
             Message::Timeline(event) => match event {
                 TimelineEvent::FitRange(start, end) => {
@@ -8974,7 +9131,7 @@ impl CleanSlateApp {
                     let about = self.app_dialog == Some(AppDialog::About);
                     let mut body = column![text(if about { "About CleanSlate" } else { "Settings" }).size(24)].spacing(14).width(Fill).padding([0, 12]);
                     if about {
-                        body = body.push(text(version_info(env!("CARGO_PKG_VERSION"), None, std::env::consts::OS, std::env::consts::ARCH)))
+                        body = body.push(text(self.version_details.clone().unwrap_or_else(|| version_info(env!("CARGO_PKG_VERSION"), None, std::env::consts::OS, std::env::consts::ARCH))))
                             .push(text("License: MIT · Copyright © 2026 CleanSlate contributors"))
                             .push(text("CleanSlate is a local, non-destructive podcast automixer."))
                             .push(text("Credits & references").size(18))
@@ -9018,7 +9175,7 @@ impl CleanSlateApp {
                         }
                     }
                     let mut actions = row![].spacing(12);
-                    if about { actions = actions.push(button(if self.about_copy_selected { "› Copy version info" } else { "Copy version info" }).on_press_maybe((!self.copy_pending).then_some(Message::CopyVersion))); }
+                    if about { actions = actions.push(button(if self.about_copy_selected { "› Copy version info" } else { "Copy version info" }).on_press_maybe(self.copy_request.is_none().then_some(Message::CopyVersion))); }
                     actions = actions.push(button(if (about && !self.about_copy_selected) || (!about && self.settings_selected == 4 + DEFINITIONS.len() * 3) { "› Close    Esc" } else { "Close    Esc" }).on_press(Message::CloseHelp));
                     let mut panel = column![scrollable(body).id("app-dialog").width(Fill).height((size.height - 220.0).clamp(140.0, 560.0)), actions].spacing(16).width(Fill);
                     if let Some(feedback) = &self.app_feedback { panel = panel.push(text(feedback).size(14)); }
