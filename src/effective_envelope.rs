@@ -359,17 +359,19 @@ impl AutomaticEnvelope {
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct EffectiveTrackEnvelope {
     automatic: Arc<AutomaticEnvelope>,
+    grid: SourceTimebase,
     manual: Vec<crate::ManualGainEdit>,
     protections: Vec<(u64, u64)>,
     edges: Vec<u64>,
 }
 impl EffectiveTrackEnvelope {
-    fn new(
+    fn prepare(
         automatic: Arc<AutomaticEnvelope>,
         track: TrackId,
         grid: SourceTimebase,
         constraints: &crate::GainConstraints,
-    ) -> Result<Self, RenderBlocker> {
+        previous: Option<&Arc<Self>>,
+    ) -> Result<Arc<Self>, RenderBlocker> {
         let mut manual: Vec<_> = constraints
             .manual_edits
             .iter()
@@ -395,6 +397,16 @@ impl EffectiveTrackEnvelope {
                 united.push((start, end));
             }
         }
+        // A draft on another track cannot change this track's dense edge list.
+        // Compare all source-grid, automatic and constraint inputs before reuse.
+        if let Some(previous) = previous
+            && previous.grid == grid
+            && Arc::ptr_eq(&previous.automatic, &automatic)
+            && previous.manual == manual
+            && previous.protections == united
+        {
+            return Ok(previous.clone());
+        }
         let mut edges: Vec<_> = automatic
             .segments
             .iter()
@@ -408,12 +420,13 @@ impl EffectiveTrackEnvelope {
             .collect();
         edges.sort_unstable();
         edges.dedup();
-        Ok(Self {
+        Ok(Arc::new(Self {
             automatic,
+            grid,
             manual,
             protections: united,
             edges,
-        })
+        }))
     }
     fn manual_gain(&self, time: u64) -> Option<f32> {
         let index = self
@@ -518,6 +531,8 @@ pub struct EffectiveEnvelopes {
     pub analysis_current: bool,
     pub envelopes: Vec<crate::GainEnvelope>,
     pub automatic: Vec<Arc<AutomaticEnvelope>>,
+    /// Tracks whose complete effective preparation was retained from the preceding result.
+    pub reused_tracks: usize,
 }
 #[derive(Clone, Default)]
 pub struct EffectiveEnvelopeCache {
@@ -525,6 +540,7 @@ pub struct EffectiveEnvelopeCache {
     builds: u64,
     automatic: Option<(String, Vec<Arc<AutomaticEnvelope>>)>,
     automatic_builds: u64,
+    effective: Vec<Arc<EffectiveTrackEnvelope>>,
 }
 impl EffectiveEnvelopeCache {
     pub fn last_completed(&self) -> Option<&Arc<EffectiveEnvelopes>> {
@@ -565,6 +581,7 @@ impl EffectiveEnvelopeCache {
             .map_err(|e| RenderBlocker(e.to_string()))?;
         Self {
             automatic: self.automatic.clone(),
+            effective: self.effective.clone(),
             ..Self::default()
         }
         .build(
@@ -657,18 +674,26 @@ impl EffectiveEnvelopeCache {
         };
         let new_automatic = reused_automatic.is_none();
         let mut envelopes = vec![];
-        for (source, auto) in project.sources.iter().zip(&automatic) {
+        let mut effective_tracks = vec![];
+        let mut reused_tracks = 0;
+        for (index, (source, auto)) in project.sources.iter().zip(&automatic).enumerate() {
             crate::prepared_analysis::check_cancelled(cancelled)?;
-            let effective = EffectiveTrackEnvelope::new(
+            let previous = self.effective.get(index);
+            let effective = EffectiveTrackEnvelope::prepare(
                 auto.clone(),
                 source.track_id,
                 source.metadata.grid,
                 constraints,
+                previous,
             )?;
+            if previous.is_some_and(|old| Arc::ptr_eq(old, &effective)) {
+                reused_tracks += 1;
+            }
             envelopes.push(crate::GainEnvelope::from_effective(
                 source.metadata.grid,
-                Arc::new(effective),
+                effective.clone(),
             )?);
+            effective_tracks.push(effective);
         }
         project
             .validate_interactive_sources()
@@ -679,12 +704,14 @@ impl EffectiveEnvelopeCache {
             analysis_current,
             envelopes,
             automatic,
+            reused_tracks,
         });
         if install {
             if new_automatic {
                 self.automatic_builds += 1;
             }
             self.automatic = Some((automatic_key, result.automatic.clone()));
+            self.effective = effective_tracks;
             self.builds += 1;
             self.accepted = Some(result.clone());
         }
