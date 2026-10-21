@@ -43,7 +43,7 @@ Tickets01–04 are the initial frontier. Ticket02 has a direct repeatable invali
 
 8. **Protect foreground work during background processing.** Blocked by: 01 — Measure application frame pacing and input feedback. Delivers: Measure playback/edit responsiveness during representative imports and analysis, then tune only demonstrated contention using bounded independent work while retaining processing correctness and useful throughput.
 
-The owner's request specifies one ticket per proposal, so the granularity is eight corresponding vertical slices. Review questions from to-tickets: are these boundaries the desired granularity, do the listed blockers genuinely gate the dependent work, and should any slices be merged or split? The pending TDD confirmation separately concerns the observable test boundaries below.
+The owner's request specifies one ticket per proposal, so the granularity is eight corresponding vertical slices. The task graph retains only the measurement dependencies that genuinely gate conditional work. The owner confirmed the observable TDD boundaries below; no further planning confirmation is required.
 
 ## Implementation and completion rules
 
