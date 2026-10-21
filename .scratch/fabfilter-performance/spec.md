@@ -1,6 +1,7 @@
 # FabFilter-inspired performance follow-up
 
 Status: implementation authorized; owner confirmed all proposed test boundaries on 2026-10-21.
+Completion receipt: [integrated validation and final review](../../docs/research/fabfilter-performance-final-review-2026-10-21.md). All eight scoped code deliveries are integrated on the performance branch. Tickets07/08 retain explicitly unverified drawing/physical-input and native queued-import acceptance; these are not reported as passes.
 Integration branch: `codex/fabfilter-performance`.
 Base: `7be3fe319689fe7bb7a5fdb46025f7a2ae9264d0` on the existing isolated GUI review branch. Development/main and preserved GUI builds remain separate.
 
