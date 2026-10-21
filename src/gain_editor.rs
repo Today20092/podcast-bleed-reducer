@@ -197,6 +197,7 @@ impl<Message: 'static> canvas::Program<Message> for GainCanvas<'_, Message> {
         bounds: Rectangle,
         cursor: mouse::Cursor,
     ) -> Vec<canvas::Geometry> {
+        let _draw = crate::performance::measure(crate::performance::Metric::GainDraw);
         let appearance = crate::appearance::Appearance::from_theme(theme);
         let colors = appearance.colors();
         let revision_changed = state.revision.replace(Some(self.revision)) != Some(self.revision);
@@ -205,6 +206,7 @@ impl<Message: 'static> canvas::Program<Message> for GainCanvas<'_, Message> {
             state.geometry.clear();
         }
         let geometry = state.geometry.draw(renderer, bounds.size(), |frame| {
+            let _build = crate::performance::measure(crate::performance::Metric::GainRebuild);
             let start = self.viewport.start().max(0.0) as u64;
             let end = (self.viewport.start() + self.viewport.visible_samples()).ceil() as u64;
             for (automatic, color, width) in [

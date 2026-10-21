@@ -1625,9 +1625,148 @@ mod tests {
         let _ = app.update(super::Message::Attenuation(-12.0));
         assert_eq!(app.drawing_revision, 2);
         let _ = app.update(super::Message::Tick);
-        assert_eq!(app.drawing_revision, 3);
+        assert_eq!(app.drawing_revision, 2);
         let _ = app.update(super::Message::PlaybackFrame);
-        assert_eq!(app.drawing_revision, 3);
+        assert_eq!(app.drawing_revision, 2);
+    }
+
+    fn drawn_waveform(
+        app: &super::CleanSlateApp,
+        state: &crate::waveform::TimelineCanvasState,
+        renderer: &iced::Renderer,
+        theme: &iced::Theme,
+        bounds: iced::Rectangle,
+    ) -> std::sync::Arc<[iced_tiny_skia::Primitive]> {
+        use iced::widget::canvas::{Geometry, Program};
+        let (waveform, viewport) = app
+            .source_loading
+            .as_ref()
+            .map_or((&app.waveforms[0], &app.timeline), |loading| {
+                (&loading.waveforms[0], &loading.timeline)
+            });
+        let canvas = super::TimelineCanvas::waveform(
+            waveform,
+            viewport,
+            super::Message::Timeline,
+            app.preview.as_ref().map(|preview| (preview, 0)),
+            false,
+        )
+        .with_revision(app.drawing_revision);
+        let geometry = canvas.draw(
+            state,
+            renderer,
+            theme,
+            bounds,
+            iced::mouse::Cursor::Unavailable,
+        );
+        let Geometry::<iced::Renderer>::Secondary(iced_tiny_skia::geometry::Geometry::Cache(
+            cached,
+        )) = &geometry[0]
+        else {
+            panic!("expected cached software waveform geometry");
+        };
+        assert!(!cached.primitives.is_empty());
+        cached.primitives.clone()
+    }
+
+    #[test]
+    fn unchanged_worker_polls_retain_the_drawn_waveform() {
+        let mut app = super::CleanSlateApp::default();
+        let mut builder = crate::waveform::WaveformBuilder::default();
+        builder.push(&[0.25; 4096]);
+        app.waveforms.push(builder.finish(48_000));
+        app.timeline.set_total_samples(app.waveforms[0].duration());
+        let (_sender, result) = std::sync::mpsc::channel();
+        app.source_inspection = Some(super::SourceInspection {
+            paths: vec![],
+            result,
+            cancelled: Default::default(),
+        });
+        let renderer = iced::Renderer::Secondary(iced_tiny_skia::Renderer::new(
+            iced::Font::DEFAULT,
+            iced::Pixels(16.0),
+        ));
+        let state = crate::waveform::TimelineCanvasState::default();
+        let bounds = iced::Rectangle::with_size(iced::Size::new(640.0, 120.0));
+        let mut previous = drawn_waveform(&app, &state, &renderer, &super::editor_theme(), bounds);
+        let started = std::time::Instant::now();
+        let mut rebuilds = 0;
+        for _ in 0..100 {
+            let _ = app.update(super::Message::Tick);
+            let current = drawn_waveform(&app, &state, &renderer, &super::editor_theme(), bounds);
+            rebuilds += usize::from(!std::sync::Arc::ptr_eq(&previous, &current));
+            previous = current;
+        }
+        eprintln!(
+            "NOOP_POLL iterations=100 geometry_rebuilds={rebuilds} elapsed_us={}",
+            started.elapsed().as_micros()
+        );
+        assert_eq!(
+            rebuilds, 0,
+            "unchanged worker polls must retain static drawing"
+        );
+        assert!(app.source_inspection.is_some());
+    }
+
+    #[test]
+    fn polled_source_waveforms_replace_cached_drawing_and_failure_restores_it() {
+        let mut app = super::CleanSlateApp::default();
+        let mut builder = crate::waveform::WaveformBuilder::default();
+        builder.push(&[0.25; 4096]);
+        app.waveforms.push(builder.finish(48_000));
+        app.timeline.set_total_samples(app.waveforms[0].duration());
+        let renderer = iced::Renderer::Secondary(iced_tiny_skia::Renderer::new(
+            iced::Font::DEFAULT,
+            iced::Pixels(16.0),
+        ));
+        let state = crate::waveform::TimelineCanvasState::default();
+        let bounds = iced::Rectangle::with_size(iced::Size::new(640.0, 120.0));
+        let previous = drawn_waveform(&app, &state, &renderer, &super::editor_theme(), bounds);
+        let (sender, events) = std::sync::mpsc::channel();
+        app.source_loading = Some(super::SourceLoading {
+            paths: vec![],
+            waveforms: vec![],
+            timeline: app.timeline.clone(),
+            stage: "Loading waveforms",
+            events,
+            publish: None,
+            committing: false,
+        });
+        let mut builder = crate::waveform::WaveformBuilder::default();
+        builder.push(&[-0.5; 4096]);
+        sender
+            .send(super::SourceEvent::Waveform(0, builder.finish(48_000)))
+            .unwrap();
+        let _ = app.update(super::Message::Tick);
+        let loading = drawn_waveform(&app, &state, &renderer, &super::editor_theme(), bounds);
+        assert!(!std::sync::Arc::ptr_eq(&previous, &loading));
+        let fresh = drawn_waveform(
+            &app,
+            &Default::default(),
+            &renderer,
+            &super::editor_theme(),
+            bounds,
+        );
+        assert_eq!(format!("{loading:?}"), format!("{fresh:?}"));
+        assert_ne!(format!("{previous:?}"), format!("{loading:?}"));
+
+        sender
+            .send(super::SourceEvent::Stage("Checking sources"))
+            .unwrap();
+        let _ = app.update(super::Message::Tick);
+        let status_only = drawn_waveform(&app, &state, &renderer, &super::editor_theme(), bounds);
+        assert!(std::sync::Arc::ptr_eq(&loading, &status_only));
+
+        sender
+            .send(super::SourceEvent::Finished(Err(
+                "fixture source failure".into()
+            )))
+            .unwrap();
+        let _ = app.update(super::Message::Tick);
+        assert!(app.source_loading.is_none());
+        let restored = drawn_waveform(&app, &state, &renderer, &super::editor_theme(), bounds);
+        assert!(!std::sync::Arc::ptr_eq(&loading, &restored));
+        assert_eq!(format!("{previous:?}"), format!("{restored:?}"));
     }
 
     #[test]
@@ -4912,7 +5051,8 @@ enum Message {
 }
 
 pub fn run() -> iced::Result {
-    iced::application(
+    crate::performance::start_from_environment();
+    let result = iced::application(
         || {
             #[cfg(debug_assertions)]
             let project = std::env::var_os("CLEANSLATE_DEV_PROJECT").map(PathBuf::from);
@@ -4920,7 +5060,12 @@ pub fn run() -> iced::Result {
             let project = None;
             startup(project)
         },
-        CleanSlateApp::update,
+        |app: &mut CleanSlateApp, message| {
+            let _update = crate::performance::measure(crate::performance::Metric::AppUpdate);
+            let _poll = matches!(message, Message::Tick)
+                .then(|| crate::performance::measure(crate::performance::Metric::WorkerPoll));
+            app.update(message)
+        },
         CleanSlateApp::view,
     )
     .title(
@@ -4932,7 +5077,17 @@ pub fn run() -> iced::Result {
     )
     .theme(CleanSlateApp::theme)
     .default_font(iced::Font::with_name("Segoe UI"))
-    .subscription(CleanSlateApp::subscription)
+    .subscription(|app: &CleanSlateApp| {
+        let observations = if crate::performance::is_active() {
+            iced::event::listen_raw(|event, _, _| {
+                crate::performance::observe_event(&event);
+                None::<Message>
+            })
+        } else {
+            Subscription::none()
+        };
+        Subscription::batch([app.subscription(), observations])
+    })
     .window(window::Settings {
         icon: Some(
             window::icon::from_rgba(include_bytes!("../assets/cleanslate.rgba").to_vec(), 64, 64)
@@ -4942,7 +5097,9 @@ pub fn run() -> iced::Result {
         min_size: Some(iced::Size::new(960.0, 900.0)),
         ..window::Settings::default()
     })
-    .run()
+    .run();
+    crate::performance::finish();
+    result
 }
 
 fn startup(project: Option<PathBuf>) -> CleanSlateApp {
@@ -5404,6 +5561,14 @@ impl CleanSlateApp {
                 break;
             };
             let event = self.import_jobs[index].events.as_ref().unwrap().try_recv();
+            if matches!(
+                &event,
+                Ok(crate::import::Event::Metadata(_)
+                    | crate::import::Event::Preview(_)
+                    | crate::import::Event::Ready(_, _))
+            ) {
+                self.drawing_revision = self.drawing_revision.wrapping_add(1);
+            }
             match event {
                 Ok(crate::import::Event::Metadata(waveforms)) => {
                     if let Some(waveform) = waveforms.first() {
@@ -5624,6 +5789,7 @@ impl CleanSlateApp {
                 }
             };
             if let Some(result) = result {
+                self.drawing_revision = self.drawing_revision.wrapping_add(1);
                 self.source_inspection = None;
                 let result = result.map(|inputs| {
                     inputs
@@ -5680,6 +5846,7 @@ impl CleanSlateApp {
                             loading.timeline.set_total_samples(waveform.duration());
                         }
                         loading.waveforms.push(waveform);
+                        self.drawing_revision = self.drawing_revision.wrapping_add(1);
                     }
                 }
                 result => {
@@ -5691,6 +5858,7 @@ impl CleanSlateApp {
                         }
                         _ => unreachable!(),
                     };
+                    self.drawing_revision = self.drawing_revision.wrapping_add(1);
                     let loading = self.source_loading.take().unwrap();
                     match result {
                         Ok(loaded) => {
@@ -6209,6 +6377,7 @@ impl CleanSlateApp {
                     self.preview = Some(analysis.preview(project, &effective));
                 }
                 self.effective_result = Some(effective);
+                self.drawing_revision = self.drawing_revision.wrapping_add(1);
             }
             Err(error) => self.preview_error = Some(error.to_string()),
         }
@@ -6682,6 +6851,7 @@ impl CleanSlateApp {
                                     self.reference_stale = false;
                                     self.gain_constraints = project.gain_constraints();
                                     self.preview_error = None;
+                                    self.drawing_revision = self.drawing_revision.wrapping_add(1);
                                 }
                                 Err(error) => self.preview_error = Some(error.to_string()),
                             }
@@ -7461,8 +7631,10 @@ impl CleanSlateApp {
             self.update_playback_position();
             return Task::none();
         }
-        // Playback changes only the cursor; controller/job updates can change cached geometry.
-        self.drawing_revision = self.drawing_revision.wrapping_add(1);
+        // Polls invalidate geometry only when they install changed timeline data.
+        if !matches!(message, Message::Tick) {
+            self.drawing_revision = self.drawing_revision.wrapping_add(1);
+        }
         if (self.reference_menu.is_some() || self.gain_menu.is_some())
             && matches!(
                 message,
