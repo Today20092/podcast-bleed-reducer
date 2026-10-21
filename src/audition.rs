@@ -784,6 +784,8 @@ impl Iterator for AuditionSource {
     type Item = f32;
 
     fn next(&mut self) -> Option<Self::Item> {
+        #[cfg(test)]
+        let _sample_call = tests::SampleCall::enter();
         if !self.retirement.flush() {
             if self.retirement.disconnected {
                 if self.failure.is_none() {
@@ -1134,7 +1136,7 @@ impl LiveAudition {
             settings.mode = mode;
             settings.monitor = monitor;
             settings.solo = solo;
-            settings.envelopes = Arc::new(envelopes);
+            settings.replace_envelopes(envelopes);
             settings.seek = None;
         }
         restart_controls(&self.controls, self.grid, range, repeating)?;
@@ -1206,6 +1208,137 @@ impl LiveAudition {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::Instant;
+
+    // Track one live envelope allocation, including frees on the device thread.
+    // All allocator operations still use System; the marker never allocates.
+    struct ObservedAllocator;
+    #[global_allocator]
+    static ALLOCATOR: ObservedAllocator = ObservedAllocator;
+    static WATCHED_ENVELOPE: std::sync::atomic::AtomicUsize =
+        std::sync::atomic::AtomicUsize::new(0);
+    static ENVELOPE_FREED: AtomicBool = AtomicBool::new(false);
+    static FREED_IN_SAMPLE: AtomicBool = AtomicBool::new(false);
+    thread_local! {
+        static IN_SAMPLE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    }
+
+    pub(super) struct SampleCall(bool);
+    impl SampleCall {
+        pub(super) fn enter() -> Self {
+            Self(IN_SAMPLE.with(|inside| inside.replace(true)))
+        }
+    }
+    impl Drop for SampleCall {
+        fn drop(&mut self) {
+            IN_SAMPLE.with(|inside| inside.set(self.0));
+        }
+    }
+
+    // SAFETY: pointers and layouts are forwarded unchanged to System. Observation
+    // uses only atomics and a const-initialized, destructor-free thread local.
+    unsafe impl std::alloc::GlobalAlloc for ObservedAllocator {
+        unsafe fn alloc(&self, layout: std::alloc::Layout) -> *mut u8 {
+            unsafe { std::alloc::GlobalAlloc::alloc(&std::alloc::System, layout) }
+        }
+        unsafe fn alloc_zeroed(&self, layout: std::alloc::Layout) -> *mut u8 {
+            unsafe { std::alloc::GlobalAlloc::alloc_zeroed(&std::alloc::System, layout) }
+        }
+        unsafe fn realloc(&self, ptr: *mut u8, layout: std::alloc::Layout, size: usize) -> *mut u8 {
+            unsafe { std::alloc::GlobalAlloc::realloc(&std::alloc::System, ptr, layout, size) }
+        }
+        unsafe fn dealloc(&self, ptr: *mut u8, layout: std::alloc::Layout) {
+            let watched = WATCHED_ENVELOPE
+                .compare_exchange(ptr as usize, 0, Ordering::Relaxed, Ordering::Relaxed)
+                .is_ok();
+            let inside = watched && IN_SAMPLE.try_with(|inside| inside.get()).unwrap_or(false);
+            unsafe { std::alloc::GlobalAlloc::dealloc(&std::alloc::System, ptr, layout) }
+            if watched {
+                FREED_IN_SAMPLE.store(inside, Ordering::Relaxed);
+                ENVELOPE_FREED.store(true, Ordering::Release);
+            }
+        }
+    }
+
+    #[test]
+    #[ignore = "requires a real default audio output"]
+    fn native_restart_reclaims_envelopes_outside_sample_production() {
+        use rodio::cpal::traits::{DeviceTrait, HostTrait};
+        let device = rodio::cpal::default_host().default_output_device().unwrap();
+        let rate = device.default_output_config().unwrap().sample_rate().0;
+        let path =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/import/mono96000.wav");
+        let prepared =
+            PreparedAudio::prepare_for_rate(&[path], rate, &AtomicBool::new(false)).unwrap();
+        let envelope =
+            || vec![GainEnvelope::constant_at_rate(prepared.frame_count(), rate, 0.5).unwrap()];
+        let range = TimeRange {
+            start: 0,
+            end: prepared.duration(),
+        };
+        let mut output = None;
+        let live = LiveAudition::start_on_output(
+            &mut output,
+            prepared.clone(),
+            envelope(),
+            AuditionMode::Processed,
+            0.0,
+            range,
+            0,
+            true,
+        )
+        .unwrap();
+        let wait_for_buffer = || {
+            let command = live.controls.commands.load(Ordering::Acquire);
+            let started = Instant::now();
+            while live.controls.first_buffer_command.load(Ordering::Acquire) != command {
+                assert!(
+                    started.elapsed() < Duration::from_secs(5),
+                    "native buffer timeout"
+                );
+                std::thread::sleep(Duration::from_millis(1));
+            }
+        };
+        wait_for_buffer();
+        live.stop();
+        let pointer = live.controls.settings.read().unwrap().envelopes.as_ptr() as usize;
+        ENVELOPE_FREED.store(false, Ordering::Relaxed);
+        FREED_IN_SAMPLE.store(false, Ordering::Relaxed);
+        WATCHED_ENVELOPE.store(pointer, Ordering::Relaxed);
+        assert!(
+            live.restart(
+                &prepared,
+                envelope(),
+                AuditionMode::Processed,
+                0.0,
+                range,
+                0,
+                true
+            )
+            .unwrap()
+        );
+        wait_for_buffer();
+        // A subsequent ordinary control edit also releases a retained snapshot.
+        live.replace_envelopes(envelope());
+        let started = Instant::now();
+        while !ENVELOPE_FREED.load(Ordering::Acquire) {
+            assert!(
+                started.elapsed() < Duration::from_secs(5),
+                "envelope reclamation timeout"
+            );
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        live.stop();
+        let inside = FREED_IN_SAMPLE.load(Ordering::Relaxed);
+        println!(
+            "NATIVE_RESTART device={:?} rate={rate} freed=true freed_in_sample={inside}",
+            device.name()
+        );
+        assert!(
+            !inside,
+            "restart freed the previous envelope inside sample production"
+        );
+    }
 
     #[test]
     #[ignore = "owner-device timing; set CLEANSLATE_PLAYBACK_BENCH_SOURCE"]
@@ -1639,8 +1772,11 @@ mod tests {
         );
         assert!((0..CONTROL_BLOCK).all(|frame| next_at(&mut source, frame) == Some(0.5)));
         let position = controls.position.load(Ordering::Relaxed);
-        controls.settings.write().unwrap().envelopes =
-            Arc::new(vec![GainEnvelope::constant(1024, 0.25)]);
+        controls
+            .settings
+            .write()
+            .unwrap()
+            .replace_envelopes(vec![GainEnvelope::constant(1024, 0.25)]);
         assert_eq!(controls.position.load(Ordering::Relaxed), position);
         assert!(
             (CONTROL_BLOCK..CONTROL_BLOCK * 2)
