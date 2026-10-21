@@ -340,6 +340,8 @@ mod tests {
         let revision = app.drawing_revision;
         for import in [false, true] {
             app.import_dialog = import;
+            app.sound_draft = import.then_some((super::SoundParameter::Open, "42".into()));
+            assert!(!app.sound_input_owns_keyboard());
             let _ = app.update(super::Message::KeyPressed(
                 Key::Named(Named::Tab),
                 Modifiers::empty(),
@@ -355,6 +357,112 @@ mod tests {
             Modifiers::empty(),
         ));
         assert_ne!(app.menu_selected, selected);
+    }
+
+    #[test]
+    fn sound_navigation_is_routed_once_using_subscription_ownership() {
+        use iced::keyboard::{
+            Event, Key, Location, Modifiers,
+            key::{Code, Named, Physical},
+        };
+        for key in [Named::Tab, Named::Escape] {
+            let event = iced::Event::Keyboard(Event::KeyPressed {
+                key: Key::Named(key),
+                modified_key: Key::Named(key),
+                physical_key: Physical::Code(if key == Named::Tab {
+                    Code::Tab
+                } else {
+                    Code::Escape
+                }),
+                location: Location::Standard,
+                modifiers: Modifiers::empty(),
+                text: None,
+                repeat: false,
+            });
+            let mut app = super::CleanSlateApp::default();
+            let _ = app.update(super::Message::EditSound(super::SoundParameter::Open));
+            let deferred_global = super::application_input_event(
+                event.clone(),
+                iced::event::Status::Ignored,
+                app.sound_input_owns_keyboard(),
+            );
+            let _ = app.update(if key == Named::Tab {
+                super::Message::SoundTab(false)
+            } else {
+                super::Message::CancelSound
+            });
+            assert!(app.sound_draft.is_none());
+            assert!(
+                deferred_global.is_none(),
+                "sound subscription already owns this event"
+            );
+            assert!(matches!(
+                super::application_input_event(
+                    event,
+                    iced::event::Status::Ignored,
+                    app.sound_input_owns_keyboard()
+                ),
+                Some(super::Message::KeyPressed(_, _))
+            ));
+        }
+    }
+
+    #[test]
+    fn editing_target_tracks_active_tool_range_and_escape_without_reassigning_time() {
+        use super::Message;
+        let (root, project, _) = export_fixture::session();
+        let t = crate::TICKS_PER_SECOND;
+        let mut app = super::CleanSlateApp {
+            project: Some(project),
+            gain_tool: true,
+            timeline: super::TimelineViewport::new(3 * t),
+            ..Default::default()
+        };
+        app.timeline.set_selection(Some((t / 10, t / 5)));
+        app.selection_track = Some(0);
+        let _ = app.update(Message::GainAction(1, false));
+        let edit = app
+            .project
+            .as_ref()
+            .unwrap()
+            .manual_gain_edits()
+            .last()
+            .unwrap()
+            .id;
+        let _ = app.update(Message::GainEvent(
+            1,
+            crate::GainEditorEvent::Begin(edit, 0),
+        ));
+        let _ = app.update(Message::GainEvent(1, crate::GainEditorEvent::End));
+        assert_eq!(app.editing_track(), Some(1));
+        let range = app.timeline.selection();
+        let _ = app.update(Message::GainTool(false));
+        assert_eq!(app.editing_track(), Some(0));
+        assert_eq!(app.timeline.selection(), range);
+        let _ = app.update(Message::GainTool(true));
+        assert_eq!(app.editing_track(), Some(1));
+        let _ = app.update(Message::TrackTimeline(
+            0,
+            super::TimelineEvent::Select(t / 3, t / 2),
+        ));
+        assert_eq!(app.editing_track(), Some(0));
+        assert!(app.selected_gain_point.is_none());
+        let _ = app.update(Message::KeyPressed(
+            iced::keyboard::Key::Named(iced::keyboard::key::Named::Escape),
+            iced::keyboard::Modifiers::empty(),
+        ));
+        assert_eq!(app.editing_track(), None);
+        let label = app.project.as_ref().unwrap().reference_labels()[0].id;
+        app.selected_gain_point = Some((1, edit, 0));
+        app.select_example(label);
+        assert!(app.selected_gain_point.is_none());
+        assert_eq!(
+            app.editing_track(),
+            None,
+            "examples describe a session-wide range"
+        );
+        drop(app);
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
@@ -4701,6 +4809,27 @@ fn application_keyboard_event(
     }
 }
 
+fn application_input_event(
+    event: iced::Event,
+    status: iced::event::Status,
+    sound_owns_keys: bool,
+) -> Option<Message> {
+    match event {
+        iced::Event::Window(window::Event::FileDropped(path)) => Some(Message::FileDropped(path)),
+        iced::Event::Keyboard(keyboard::Event::KeyPressed {
+            key: keyboard::Key::Named(keyboard::key::Named::Tab | keyboard::key::Named::Escape),
+            ..
+        }) if sound_owns_keys => None,
+        iced::Event::Keyboard(event @ keyboard::Event::KeyPressed { .. }) => {
+            application_keyboard_event(event, status)
+        }
+        iced::Event::Keyboard(keyboard::Event::ModifiersChanged(modifiers)) => {
+            Some(Message::SoundModifiers(modifiers))
+        }
+        _ => None,
+    }
+}
+
 fn compact_workspace(width: f32) -> bool {
     width < 1100.0
 }
@@ -5988,6 +6117,8 @@ impl CleanSlateApp {
                     match crate::GainPointDrag::begin(project, source.track_id, id, point) {
                         Ok(drag) => {
                             self.gain_drag = Some(drag);
+                            self.selected_example = None;
+                            self.example_draft = None;
                             self.selected_gain_point = Some((track, id, point));
                         }
                         Err(error) => self.preview_error = Some(error.to_string()),
@@ -6514,6 +6645,7 @@ impl CleanSlateApp {
     fn select_example(&mut self, id: u64) {
         self.close_reference_menu();
         self.example_draft = None;
+        self.selected_gain_point = None;
         let Some(project) = &self.project else {
             return;
         };
@@ -6625,6 +6757,30 @@ impl CleanSlateApp {
 impl CleanSlateApp {
     fn app_support_open(&self) -> bool {
         self.help_open || self.shortcuts_open || self.menu_open || self.app_dialog.is_some()
+    }
+
+    fn workspace_input_active(&self) -> bool {
+        !self.app_support_open()
+            && !self.import_dialog
+            && self.export_dialog.is_none()
+            && self.reference_menu.is_none()
+            && self.gain_menu.is_none()
+    }
+
+    fn sound_input_owns_keyboard(&self) -> bool {
+        self.sound_draft.is_some() && self.workspace_input_active()
+    }
+
+    fn editing_track(&self) -> Option<usize> {
+        if self.gain_tool
+            && let Some((track, _, _)) = self.selected_gain_point
+        {
+            Some(track)
+        } else if self.selected_example.is_some() {
+            None
+        } else {
+            self.selection_track
+        }
     }
 
     fn command_name(&self, command: Command) -> &'static str {
@@ -6985,8 +7141,10 @@ impl CleanSlateApp {
             && !self.app_support_open()
             && self.reference_menu.is_none()
             && self.gain_menu.is_none()
-            && self.sound_draft.is_none()
-            && self.track_name_draft.is_none()
+            && !self.sound_input_owns_keyboard()
+            && (self.track_name_draft.is_none()
+                || self.import_dialog
+                || self.export_dialog.is_some())
         {
             return crate::gui_controls::focus_next(modifiers.shift());
         }
@@ -7272,6 +7430,7 @@ impl CleanSlateApp {
                 let selecting = matches!(event, TimelineEvent::Select(_, _));
                 let task = self.update(Message::Timeline(event));
                 if selecting {
+                    self.selected_gain_point = None;
                     self.selection_track = Some(track);
                 }
                 return task;
@@ -7531,13 +7690,11 @@ impl CleanSlateApp {
                 let _ = self.update(Message::CommitSound);
                 self.sound_typing = false;
                 let next = crate::gui_controls::focus_next(reverse);
-                return if let Some(parameter) = origin {
-                    iced::widget::operation::focus(if self.sound_draft.is_none() {
-                        parameter.control_id()
-                    } else {
-                        "sound-value"
-                    })
-                    .chain(next)
+                // Only restore a disappearing input; invalid drafts keep their focus tree.
+                return if let Some(parameter) = origin
+                    && self.sound_draft.is_none()
+                {
+                    iced::widget::operation::focus(parameter.control_id()).chain(next)
                 } else {
                     next
                 };
@@ -7629,6 +7786,7 @@ impl CleanSlateApp {
                     return Task::none();
                 }
                 if key == keyboard::Key::Named(keyboard::key::Named::Escape) {
+                    self.selected_gain_point = None;
                     self.timeline.set_selection(None);
                     self.selection_track = None;
                     self.calibration_selection = None;
@@ -8016,17 +8174,10 @@ impl CleanSlateApp {
             | iced::Event::Window(window::Event::Unfocused) => Some(Message::ShortcutHintInput),
             _ => None,
         });
-        let drops = iced::event::listen_with(|event, status, _window| match event {
-            iced::Event::Window(iced::window::Event::FileDropped(path)) => {
-                Some(Message::FileDropped(path))
-            }
-            iced::Event::Keyboard(event @ keyboard::Event::KeyPressed { .. }) => {
-                application_keyboard_event(event, status)
-            }
-            iced::Event::Keyboard(keyboard::Event::ModifiersChanged(modifiers)) => {
-                Some(Message::SoundModifiers(modifiers))
-            }
-            _ => None,
+        let drops = iced::event::listen_with(if self.sound_input_owns_keyboard() {
+            |event, status, _| application_input_event(event, status, true)
+        } else {
+            |event, status, _| application_input_event(event, status, false)
         });
         let processing = if self.processing.is_some()
             || self.exporting.is_some()
@@ -8052,7 +8203,7 @@ impl CleanSlateApp {
         } else {
             Subscription::none()
         };
-        let rename_keys = if self.track_name_draft.is_some() && !self.app_support_open() {
+        let rename_keys = if self.track_name_draft.is_some() && self.workspace_input_active() {
             // Text inputs capture Escape, so cancellation must also see captured events.
             iced::event::listen_with(|event, _, _| match event {
                 iced::Event::Keyboard(keyboard::Event::KeyPressed {
@@ -8064,7 +8215,7 @@ impl CleanSlateApp {
         } else {
             Subscription::none()
         };
-        let sound_keys = if self.sound_draft.is_some() && !self.app_support_open() {
+        let sound_keys = if self.sound_input_owns_keyboard() {
             iced::event::listen_with(|event, _, _| match event {
                 iced::Event::Keyboard(keyboard::Event::KeyPressed {
                     key: keyboard::Key::Named(keyboard::key::Named::Escape),
@@ -8867,21 +9018,42 @@ impl CleanSlateApp {
                 .on_toggle(Message::GainTool),
         ]
         .spacing(8);
-        let target = self
-            .selected_gain_point
-            .map(|(track, _, _)| track)
-            .or(self.selection_track);
-        if let Some(source) = target.and_then(|track| self.project.as_ref()?.sources.get(track)) {
-            let range = self
-                .timeline
-                .selection()
-                .map_or_else(String::new, |(start, end)| {
-                    format!(" · {}–{}", example_time(start), example_time(end))
-                });
+        if let Some(label) = self.selected_example.and_then(|id| {
+            self.project
+                .as_ref()?
+                .reference_labels()
+                .iter()
+                .find(|label| label.id == id)
+        }) {
             controls = controls.push(
-                text(format!("Editing Speaker {}{range}", source.speaker_id.0))
+                text(format!("Example · {}", example_speakers(label)))
                     .size(13)
                     .color(self.appearance.colors().muted),
+            );
+        }
+        let target = self.editing_track();
+        if let Some(source) = target.and_then(|track| self.project.as_ref()?.sources.get(track)) {
+            let range = if self.gain_tool && self.selected_gain_point.is_some() {
+                String::new()
+            } else {
+                self.timeline
+                    .selection()
+                    .map_or_else(String::new, |(start, end)| {
+                        format!(" · {}–{}", example_time(start), example_time(end))
+                    })
+            };
+            controls = controls.push(
+                text(format!(
+                    "{} · Speaker {}{range}",
+                    if self.gain_tool && self.selected_gain_point.is_some() {
+                        "Gain point"
+                    } else {
+                        "Selected range"
+                    },
+                    source.speaker_id.0
+                ))
+                .size(13)
+                .color(self.appearance.colors().muted),
             );
         }
         if self.gain_tool {
@@ -9401,17 +9573,11 @@ impl CleanSlateApp {
                     .selected(self.solo_tracks & (1u64 << index) != 0)
                     .on_press(Message::SoloTrack(index)),
                     title,
-                    text(
-                        if self.selection_track == Some(index)
-                            || self
-                                .selected_gain_point
-                                .is_some_and(|(track, _, _)| track == index)
-                        {
-                            "Editing"
-                        } else {
-                            ""
-                        }
-                    )
+                    text(if self.editing_track() == Some(index) {
+                        "Editing"
+                    } else {
+                        ""
+                    })
                     .size(12)
                     .color(self.appearance.colors().muted),
                     Space::new().width(Fill),
@@ -9518,12 +9684,7 @@ impl CleanSlateApp {
                                 self.selecting_range || self.calibrating,
                             )
                             .with_revision(self.drawing_revision)
-                            .with_editing_target(
-                                self.selection_track == Some(index)
-                                    || self
-                                        .selected_gain_point
-                                        .is_some_and(|(track, _, _)| track == index),
-                            )
+                            .with_editing_target(self.editing_track() == Some(index))
                             .with_context(move |point, time| {
                                 Message::OpenTimelineMenu(index, time, point)
                             })
@@ -9586,11 +9747,7 @@ impl CleanSlateApp {
                         .width(Fill)
                         .style(move |theme| {
                             let mut style = editor_panel(theme);
-                            if self.selection_track == Some(index)
-                                || self
-                                    .selected_gain_point
-                                    .is_some_and(|(track, _, _)| track == index)
-                            {
+                            if self.editing_track() == Some(index) {
                                 style.border.color = colors(theme).focus;
                                 style.border.width = 2.0;
                             }
@@ -9782,7 +9939,27 @@ impl CleanSlateApp {
                 .color(self.appearance.colors().muted)
         ]
         .spacing(6);
-        let mut body = column![
+        let mut inspector_status = column![
+            container(scrollable(inspector_header))
+                .max_height(if compact { 110 } else { 150 })
+                .width(Fill)
+        ]
+        .spacing(6);
+        if !self.messages.is_empty() {
+            let updates = self
+                .messages
+                .iter()
+                .rev()
+                .fold(column![].spacing(6), |updates, message| {
+                    updates.push(text(message).size(13))
+                });
+            inspector_status = inspector_status.push(
+                container(scrollable(updates).id("inspector-feedback"))
+                    .max_height(if compact { 52 } else { 72 })
+                    .width(Fill),
+            );
+        }
+        let body = column![
             self.calibration_controls(),
             iced::widget::rule::horizontal(1),
             attenuation,
@@ -9793,16 +9970,10 @@ impl CleanSlateApp {
         ]
         .spacing(18)
         .padding([0, 2]);
-        // General job feedback belongs in the scrollable body, keeping Export reachable.
-        for message in &self.messages {
-            body = body.push(text(message).size(14));
-        }
         let inspector_content: Element<'_, Message> = if compact {
             column![
                 row![
-                    container(scrollable(inspector_header))
-                        .max_height(110)
-                        .width(Fill),
+                    inspector_status.width(Fill),
                     container(self.export_controls()).width(220),
                 ]
                 .spacing(12)
@@ -9815,7 +9986,7 @@ impl CleanSlateApp {
             .into()
         } else {
             column![
-                container(scrollable(inspector_header)).max_height(180),
+                inspector_status,
                 iced::widget::rule::horizontal(1),
                 scrollable(body).height(Fill),
                 iced::widget::rule::horizontal(1),
@@ -9997,14 +10168,7 @@ impl CleanSlateApp {
                 .width(Fill)
                 .height(Fill)
                 .into();
-        let base = crate::gui_controls::focus_scope(
-            base,
-            !self.app_support_open()
-                && !self.import_dialog
-                && self.export_dialog.is_none()
-                && self.reference_menu.is_none()
-                && self.gain_menu.is_none(),
-        );
+        let base = crate::gui_controls::focus_scope(base, self.workspace_input_active());
         let Some(point) = self
             .gain_menu
             .map(|(_, _, point)| point)
