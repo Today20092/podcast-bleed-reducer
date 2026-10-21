@@ -25,3 +25,7 @@ winresource = "0.1"
 
 [dev-dependencies]
 iced_tiny_skia = "=0.14.0"
+
+[[example]]
+name = "pan-drawing-probe"
+path = ".scratch/offline-supervised-editor/pan-drawing-probe.rs"

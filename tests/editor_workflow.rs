@@ -506,10 +506,16 @@ fn two_hour_overview_retains_brief_activity_and_bounds_visible_work() {
         let envelope =
             rust_app::GainEnvelope::constant_at_rate(7200 * rate as usize, rate, 0.25).unwrap();
         let curve = rust_app::visible_gain_curve(&viewport, 1000.0, &envelope);
-        assert_eq!(curve.len(), 1001);
+        assert_eq!(
+            curve.len(),
+            3,
+            "flat drawing keeps endpoints and the outside-source unity boundary"
+        );
         assert_eq!(curve[0].time, 0);
-        assert_eq!(curve[1000].time, duration);
-        assert_eq!(curve[500].gain, 0.25);
+        assert_eq!(curve[2].time, duration);
+        assert_eq!(curve[0].gain, 0.25);
+        assert_eq!(curve[1].gain, 0.25);
+        assert_eq!(curve[2].gain, 1.0);
         let mut navigated = viewport.clone();
         navigated.zoom_at(500.0, 1000.0, 5.0);
         navigated.pan_by_pixels(-100.0, 1000.0);
