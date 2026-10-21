@@ -1670,6 +1670,44 @@ mod tests {
     }
 
     #[test]
+    fn visibility_observations_preserve_canvas_and_background_job_delivery() {
+        let mut app = super::CleanSlateApp::default();
+        let mut builder = crate::waveform::WaveformBuilder::default();
+        builder.push(&[0.25; 4096]);
+        app.waveforms.push(builder.finish(48_000));
+        app.timeline.set_total_samples(app.waveforms[0].duration());
+        let renderer = iced::Renderer::Secondary(iced_tiny_skia::Renderer::new(
+            iced::Font::DEFAULT,
+            iced::Pixels(16.0),
+        ));
+        let state = crate::waveform::TimelineCanvasState::default();
+        let bounds = iced::Rectangle::with_size(iced::Size::new(640.0, 120.0));
+        let before = drawn_waveform(&app, &state, &renderer, &super::editor_theme(), bounds);
+        let (sender, result) = std::sync::mpsc::channel();
+        app.source_inspection = Some(super::SourceInspection {
+            paths: vec![],
+            result,
+            cancelled: Default::default(),
+        });
+        // Unsupported state and real minimize/restore observations do not change source geometry.
+        for minimized in [None, Some(true), Some(false)] {
+            let _ = app.update(super::Message::WindowVisibilityChecked(0, minimized));
+            let _ = app.update(super::Message::PlaybackFrame);
+            let after = drawn_waveform(&app, &state, &renderer, &super::editor_theme(), bounds);
+            assert!(std::sync::Arc::ptr_eq(&before, &after));
+        }
+        let _ = app.update(super::Message::WindowVisibilityChecked(0, Some(true)));
+        sender.send(Err("hidden source failure".into())).unwrap();
+        let _ = app.update(super::Message::Tick);
+        assert!(app.source_inspection.is_none());
+        assert!(
+            app.messages
+                .iter()
+                .any(|message| message.contains("hidden source failure"))
+        );
+    }
+
+    #[test]
     fn unchanged_worker_polls_retain_the_drawn_waveform() {
         let mut app = super::CleanSlateApp::default();
         let mut builder = crate::waveform::WaveformBuilder::default();
@@ -4598,6 +4636,8 @@ pub struct CleanSlateApp {
     meters_at_playhead: bool,
     solo_tracks: u64,
     drawing_revision: u64,
+    window_minimized: bool,
+    window_visibility_generation: u64,
     preview_parameters: AutomixParameters,
     preview: Option<AnalysisPreview>,
     preview_sources: Vec<waveform::SourceStamp>,
@@ -4749,6 +4789,8 @@ impl Default for CleanSlateApp {
             meters_at_playhead: true,
             solo_tracks: 0,
             drawing_revision: 0,
+            window_minimized: false,
+            window_visibility_generation: 0,
             preview_parameters: AutomixParameters::default(),
             preview: None,
             preview_sources: vec![],
@@ -5083,6 +5125,8 @@ enum Message {
     Cancel,
     Tick,
     PlaybackFrame,
+    CheckWindowVisibility,
+    WindowVisibilityChecked(u64, Option<bool>),
     LockPlayhead,
     CenterPlayhead,
     ToggleMeterPlacement,
@@ -6326,6 +6370,7 @@ impl CleanSlateApp {
             preferences_path: self.preferences_path.clone(),
             appearance_error: self.appearance_error.clone(),
             drawing_revision: self.drawing_revision.wrapping_add(1),
+            window_visibility_generation: self.window_visibility_generation.wrapping_add(1),
             messages: vec!["New project. Import tracks to begin.".into()],
             ..Self::default()
         };
@@ -7090,6 +7135,10 @@ impl CleanSlateApp {
             self.audition_ready = false;
             return;
         }
+        // Audio and completion checks continue while optional playhead/meter drawing sleeps.
+        if self.window_minimized && !audition.is_finished() {
+            return;
+        }
         self.timeline.seek(audition.position());
         if self.timeline.follow_playhead(self.playback_scroll) {
             self.drawing_revision = self.drawing_revision.wrapping_add(1);
@@ -7118,6 +7167,8 @@ impl CleanSlateApp {
     }
 
     fn stop_audition(&mut self) {
+        self.window_visibility_generation = self.window_visibility_generation.wrapping_add(1);
+        self.window_minimized = false;
         if self.timeline.is_middle_panning() {
             self.update_playback_position();
         }
@@ -7409,6 +7460,25 @@ impl CleanSlateApp {
     }
 
     fn update(&mut self, message: Message) -> Task<Message> {
+        match message {
+            Message::CheckWindowVisibility => {
+                self.update_playback_position();
+                self.window_visibility_generation =
+                    self.window_visibility_generation.wrapping_add(1);
+                let generation = self.window_visibility_generation;
+                return window::latest()
+                    .and_then(window::is_minimized)
+                    .map(move |minimized| Message::WindowVisibilityChecked(generation, minimized));
+            }
+            Message::WindowVisibilityChecked(generation, minimized) => {
+                if generation == self.window_visibility_generation {
+                    self.window_minimized = minimized.unwrap_or(false);
+                    self.update_playback_position();
+                }
+                return Task::none();
+            }
+            _ => {}
+        }
         let pan_end = match &message {
             Message::Timeline(TimelineEvent::PanEnd)
             | Message::TrackTimeline(_, TimelineEvent::PanEnd) => Some(false),
@@ -8232,6 +8302,8 @@ impl CleanSlateApp {
                 self.poll_exporting();
             }
             Message::PlaybackFrame
+            | Message::CheckWindowVisibility
+            | Message::WindowVisibilityChecked(_, _)
             | Message::Appearance(_)
             | Message::ShortcutHintInput
             | Message::UnlockOnZoom(_) => unreachable!(),
@@ -8847,11 +8919,23 @@ impl CleanSlateApp {
         } else {
             Subscription::none()
         };
-        let playback = if self.audition.is_some() {
+        let playback = if self.audition.is_some() && !self.window_minimized {
             window::frames().map(|_| Message::PlaybackFrame)
         } else {
             Subscription::none()
         };
+        // Iced has no minimized event. Query only during playback, at two checks per second.
+        let visibility = if self.audition.is_some() {
+            iced::time::every(Duration::from_millis(500)).map(|_| Message::CheckWindowVisibility)
+        } else {
+            Subscription::none()
+        };
+        let window_changes = iced::event::listen_with(|event, _, _| match event {
+            iced::Event::Window(
+                window::Event::Focused | window::Event::Unfocused | window::Event::Resized(_),
+            ) => Some(Message::CheckWindowVisibility),
+            _ => None,
+        });
         let rename_keys = if self.track_name_draft.is_some() && self.workspace_input_active() {
             // Text inputs capture Escape, so cancellation must also see captured events.
             iced::event::listen_with(|event, _, _| match event {
@@ -8914,6 +8998,8 @@ impl CleanSlateApp {
             drops,
             processing,
             playback,
+            visibility,
+            window_changes,
             rename_keys,
             sound_keys,
             import_keys,

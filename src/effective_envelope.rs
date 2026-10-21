@@ -40,15 +40,14 @@ mod zoom_tests {
                 let grid = SourceTimebase::new(rate, u64::from(rate) * 600).unwrap();
                 crate::GainEnvelope::from_effective(
                     grid,
-                    Arc::new(
-                        EffectiveTrackEnvelope::new(
-                            automatic.clone(),
-                            TrackId(1),
-                            grid,
-                            &constraints,
-                        )
-                        .unwrap(),
-                    ),
+                    EffectiveTrackEnvelope::prepare(
+                        automatic.clone(),
+                        TrackId(1),
+                        grid,
+                        &constraints,
+                        None,
+                    )
+                    .unwrap(),
                 )
                 .unwrap()
             })
