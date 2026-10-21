@@ -206,6 +206,7 @@ fn main() {
                 automatic: Some(&automatic[i]),
                 effective: Some(&effective[i]),
                 editing: false,
+                selected_point: None,
                 on_event: Box::new(|_| ()),
             };
             std::hint::black_box(canvas.draw(

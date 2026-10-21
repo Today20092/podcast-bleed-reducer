@@ -7,6 +7,8 @@ Blocked by: 16, 21
 
 ## Selected inspector B — 2026-10-21
 
+Owner subsequently authorized all fourteen earlier FabFilter-inspired suggestions and applicable report lessons, with subagents on the same GUI branch. [Ticket 56](56-fabfilter-inspired-gui.md) records that expanded implementation and review checklist. This ticket retains the integrated owner-acceptance queue.
+
 Owner selected B after comparing the interactive A/B sketches. Codex claims this native implementation on `codex/gui-inspector`, from development `e668e60`; the throwaway sketches remain on `codex/gui-inspector-sketches` at `b28c841` and will not be merged into development. Dependencies 16 and 21 are done.
 
 Scope: a compact status header, existing speaker-example/Undo/Redo/Analyze controls, featured attenuation dial with numeric editing/reset/mute, a separate transitions-and-gaps group, existing gain-point controls and Sources disclosure, and an export footer outside the desktop body scroll. Preserve Dark/Light, narrow layouts, typed validation, control ranges/defaults, commit boundaries, source checks, analysis cancellation and safe export. No waveform-editor or audio redesign; tickets 35/41/42 retain their scope/status.

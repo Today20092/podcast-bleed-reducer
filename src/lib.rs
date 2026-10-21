@@ -16,6 +16,8 @@ mod engine;
 mod export;
 mod export_settings;
 mod gain_editor;
+mod gui_controls;
+mod gui_disclosure;
 mod import;
 mod joint_detector;
 mod media;

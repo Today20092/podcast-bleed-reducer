@@ -69,11 +69,23 @@ Missing entries use defaults. Invalid, conflicting or obsolete overrides produce
 
 ## Inspector B development pass
 
-The selected B layout is implemented on `codex/gui-inspector`. The desktop inspector separates a compact status header, a scrolling controls body and a persistent Export WAV files footer. Compact windows retain a single scrolling inspector below the tracks. Speaker examples retain Undo/Redo/Analyze and the expandable list; source blockers still expand Sources automatically. Analysis stage, elapsed time and Cancel remain in the status header. General job messages remain in the scrolling body; export errors stay beside Export in a bounded scrolling area.
+The selected B layout is implemented on `codex/gui-inspector`. The desktop inspector separates a compact status header, a scrolling controls body and a persistent Export WAV files footer. Compact windows place status and Export beside each other above the scrolling controls below the tracks, keeping Export reachable without increasing the panel height. Speaker examples retain Undo/Redo/Analyze and the expandable list; source blockers still expand Sources automatically. Analysis stage, elapsed time and Cancel remain in the status header. General job messages remain in the scrolling body; export errors stay beside Export in a bounded scrolling area.
 
 Attenuation uses a vector dial beside the existing numeric editor, explicit Mute state and Reset. Drag vertically (4 pixels per dB), or use Up/Down while hovering, for the former slider's −30 to −3 dB quick-adjustment range. Clicking without dragging leaves the value and Mute unchanged. Numeric editing retains the full −120 to 0 dB range, validation, Enter/blur commit, Escape cancel, Ctrl-click reset and right-click reset menu. The timing sliders, typed ranges and audio update paths are unchanged. Arrow adjustment does not intercept active sound or track-name typing. No FabFilter code/artwork, dependency or audio algorithm was added.
 
 The browser sketches remain separately preserved on `codex/gui-inspector-sketches` (`b28c841`); they are not part of this native implementation. Native visual and physical input acceptance must be recorded in ticket 23 before treating this as accepted appearance.
+
+### Full FabFilter-inspired review pass
+
+[Ticket 56](../.scratch/offline-supervised-editor/issues/56-fabfilter-inspired-gui.md) extends B to the owner's complete fourteen-item proposal. Commands use filled action styling, persistent modes use selected outlines/tints and a brief accent, values use inset monospace fields, and disclosures use quiet arrow labels. Analyze gains emphasis when valid examples need analysis; Export gains emphasis when the current result can be exported. Source review is explicit in the pinned status header. The expanded examples list has its own bounded scroll area.
+
+Original / Processed / Removed form one segmented listening selector. Lock, Solo and Mute retain visible state independently of command emphasis. Selected tracks have an editing badge/border and waveform rail; real selection boundaries align across waveform/gain displays, and existing gain points and example handles have clearer hover/selection cues. Project actions remain visible with quieter styling after import. The waveform/example/gain gestures and all audio processing remain unchanged.
+
+Tab / Shift+Tab navigate enabled workspace/dialog buttons and value fields; Enter or Space activates a button reached by keyboard. Pointer clicks clear keyboard button focus, preserving the existing playback Space command after clicking controls. Settings, About, Menu, shortcut capture and labeling retain their existing keyboard owners; inactive background workspaces do not receive focus or keyboard actions. Numeric editing retains its existing Enter/blur/Escape/Tab ownership.
+
+Hover and selected-state feedback run for 90 ms; disclosures change height over 120 ms. Actions and audio changes apply immediately. These are widget-local redraws, with finite transitions and no new application Tick timer. Hidden/collapsing disclosure content cannot capture input/focus; offscreen disclosure animation does not request continuous frames. Window resizing, native UI scaling and timeline zoom remain independent.
+
+The rendering audit found existing geometry caches keyed by revision/theme/size, uncached moving overlays, display-frame playback updates and conditional job polling. No measured defect justified changing the renderer. This pass adds original vector controls/shared styles, with no copied FabFilter code or artwork. See the investigation report recorded in ticket 56 and the primary [Pro-Q display](https://www.fabfilter.com/help/pro-q/using/eqdisplay) and [Pro-R active display](https://www.fabfilter.com/help/pro-r/using/decayrateEQ) references.
 
 ## Analysis feedback
 
