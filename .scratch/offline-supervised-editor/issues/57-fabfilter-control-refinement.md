@@ -48,6 +48,8 @@ Validation on the final source:
 - Native Windows Computer Use checked wide 2560×1392 and compact 1028×930 layouts, the compact scrollbar fix, Dark/Light control contrast, dial wheel adjustment/restoration, double-click numeric focus, a typed draft/Escape cancellation, selected Lock state, meter placement toggle, visible keyboard focus and the flat listening row. Theme restored to Dark; review GUI left open on the isolated development project copy.
 - Physical held-modifier mouse gestures and middle-button dragging are unsupported by the available native automation API; their event/state regressions pass, but physical acceptance remains unclaimed. Enlarged OS text, audio-device/listening and cross-platform checks were not performed.
 
+Native follow-up prepared analysis on the isolated three-track review project successfully (22.2 seconds displayed, not a benchmark). Original, Processed and Removed each showed the expected flat selected state without nested borders. The window is left stopped, analyzed, in Dark appearance with Processed selected and Lock enabled for owner review; no hardware playback or export was triggered.
+
 Preserved build and complete receipt: `C:/Users/User/Documents/Codex/Builds/CleanSlate-fabfilter-controls-a77a60b/` (`CleanSlate.exe`, `receipt.md`, both self-check reports and check/build logs). Executable SHA-256: `593534077E56FD4D9240532F94F17C3F642ED6B74D5356D2FDAB337E76A16790`.
 
 Fresh REA inventories exported to `C:/Users/User/Documents/Codex/Investigations/fabfilter-gui-2026-10-21/gui-controls-followup-evidence.json`. Static resource findings and primary documented knob behavior informed the original implementation; exact proprietary runtime/easing behavior is not claimed.
