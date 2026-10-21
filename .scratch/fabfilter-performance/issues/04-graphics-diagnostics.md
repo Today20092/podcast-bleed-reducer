@@ -1,6 +1,6 @@
 # 04: Report the actual graphics environment safely
 
-Status: claimed
+Status: done
 Assignee: perf04_implementer
 Type: task
 Blocked by: None (can start immediately)
@@ -13,7 +13,7 @@ Source proposal: P7
 - [x] Fetch current documentation for the installed GUI stack and report observed active backend/adapter rather than assuming the configured default is active.
 - [x] Reuse the established diagnostic flow; add no new renderer, fallback setting, dependency upgrade, network collection or automatic publication.
 - [x] Handle unsupported/unavailable graphics/display fields explicitly and keep copied reports free of project/audio paths and recording contents.
-- [ ] Verify the public diagnostic/report boundary and perform a current-machine native capture when available; document which fields cannot be obtained.
+- [x] Verify the public diagnostic/report boundary and perform a current-machine native capture when available; document which fields cannot be obtained.
 
 ## Context
 
@@ -34,4 +34,6 @@ TDD evidence at the confirmed application/report boundary: the observed-report t
 Strict scoped validation also passed: `cargo clippy --lib --all-features -- -D warnings` using the locked/offline shared-target settings. The exclusive Cargo lease was then released.
 
 Remaining acceptance: the parent will capture this machine's actual About report from the combined native build and run the combined checks. No actual adapter/backend/scale or physical timing measurement is claimed by these controlled tests. This ticket remains claimed until that native capture is recorded; the GUI API does not expose monitor refresh or physical presentation latency.
+
+2026-10-21 integrated native acceptance supersedes that pending handoff: at source `7985942`, About → Copy version info displayed Vulkan, NVIDIA GeForce RTX 3070 Ti, window scale 1.00x and `Display refresh: unavailable (current GUI API)`, then confirmed `Version information copied.` No project/audio path appeared in the copied-report display. The integrated local checks passed (338 tests, 19 ignored; strict Clippy and script fixtures). Physical display timing and other-machine adapters remain unmeasured, rather than inferred from the software observations.
 

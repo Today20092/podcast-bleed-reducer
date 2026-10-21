@@ -1,6 +1,6 @@
 # 06: Avoid optional visual work in a minimized editor
 
-Status: claimed
+Status: done
 Assignee: perf06_implementer
 Type: task
 Blocked by: 01 — Measure application frame pacing and input feedback
@@ -10,10 +10,10 @@ Source proposal: P5
 
 ## Acceptance criteria
 
-- [ ] Confirm the installed GUI stack's real visibility/minimization behavior; unfocused but visible windows retain normal updates.
-- [ ] Compare visible/minimized/resumed observations; if the framework already suppresses the work, record evidence instead of adding duplicate polling or state.
-- [ ] Where needed, gate optional drawing/meter updates and restore the current playhead/meters on resume without stale screens.
-- [ ] Playback, accumulating measurements, analysis/export progress, cancellation and result acceptance remain correct through visibility transitions; verify through confirmed application/playback seams and native observation where possible.
+- [x] Confirm the installed GUI stack's real visibility/minimization behavior; unfocused but visible windows retain normal updates.
+- [x] Compare visible/minimized/resumed observations; if the framework already suppresses the work, record evidence instead of adding duplicate polling or state.
+- [x] Where needed, gate optional drawing/meter updates and restore the current playhead/meters on resume without stale screens.
+- [x] Playback, accumulating measurements, analysis/export progress, cancellation and result acceptance remain correct through visibility transitions; verify through confirmed application/playback seams and native observation where possible.
 
 ## Context
 
@@ -36,3 +36,5 @@ TDD RED: the new application-update/real-canvas test failed on the missing Windo
 Scoped GREEN after merging integration dd8df122:69 application tests passed,4 existing owner-recording tests ignored;3 performance report integration tests and the deterministic playback reclamation/output test passed. Strict Clippy --lib --tests with warnings denied, formatting and diff checks passed. All Cargo commands used scripts/local-build-settings.ps1, pinned1.99.0, locked/offline dependencies, one job and the shared application-data target under an exclusive build lease. No GUI executable was built in this worktree; root owns the integrated scripts/gui-dev.ps1 build, executable preservation and native acceptance.
 
 The integration merge exposed one stale cfg(test) caller in the existing three-track zoom benchmark: ticket05 changed EffectiveTrackEnvelope::new into prepare returning Arc. The helper now calls prepare with previous=None and otherwise identical inputs, as authorized by root. This caller repair restores library-test compilation without changing production envelope behavior. Source implementation commit cc769d1 and its integration merge are retained on codex/perf-06-visibility; native minimized/resumed playback, stop/end and concurrent-job observations remain unclaimed here.
+
+2026-10-21 root native acceptance at `7985942`: real Original playback continued during a 23.3-second Analyze and live attenuation/zoom/gain-editor changes. At 2560x1392 with three 600-second/48-kHz tracks, 480-second viewport and gain editor + Lock enabled, one 5.18-second visible sample used 106.14% of one logical core; a separately confirmed minimized 5.22-second sample used 5.39%. Restore showed the current position (02:35.092 after 02:11.962 before minimization) and current curves/meters. A second minimization near 09:51 completed playback while hidden; restore showed Play available and the cursor at the recording end. Native restored layout also exercised 1026x932 and maximized sizes. The first title-index attempts did not confirm minimization and are explicitly excluded from minimized comparisons. Raw `final-os.json` and the gracefully written mixed-session `final-native.json` are retained in the external investigation folder; see the final receipt for limitations. App/playback boundary checks cover job delivery, cancellation and failures; no live export, listening quality or device deadline claim is made. Integrated checks passed 338 tests with 19 ignored and strict Clippy. Short sequential samples demonstrate suspension in this scenario, not a universal CPU/presentation guarantee.
