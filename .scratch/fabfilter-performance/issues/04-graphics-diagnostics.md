@@ -1,6 +1,7 @@
 # 04: Report the actual graphics environment safely
 
-Status: ready-for-agent
+Status: claimed
+Assignee: perf04_implementer
 Type: task
 Blocked by: None (can start immediately)
 Source proposal: P7

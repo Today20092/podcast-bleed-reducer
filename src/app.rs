@@ -4099,6 +4099,31 @@ mod app_menu_tests {
     }
 
     #[test]
+    fn copied_version_report_includes_observed_graphics_and_explicit_unavailable_fields() {
+        let report = version_info_with_graphics(
+            version_info("1.2.3", None, "windows", "x86_64"),
+            "Direct3D12\r\n",
+            "Example Adapter",
+            Some(1.25),
+        );
+        assert_eq!(
+            report,
+            "CleanSlate 1.2.3\nPlatform: windows (x86_64)\nGraphics backend: Direct3D12\nGraphics adapter: Example Adapter\nWindow scale: 1.25x\nDisplay refresh: unavailable (current GUI API)"
+        );
+        let unavailable = version_info_with_graphics(
+            version_info("1.2.3", None, "windows", "x86_64"),
+            "",
+            "C:/Users/private/session.wav",
+            Some(f32::NAN),
+        );
+        assert!(unavailable.contains("Graphics backend: unavailable"));
+        assert!(unavailable.contains("Graphics adapter: unavailable"));
+        assert!(unavailable.contains("Window scale: unavailable"));
+        assert!(!unavailable.contains("private"));
+        assert!(!unavailable.contains("session.wav"));
+    }
+
+    #[test]
     fn menu_reuses_reference_and_about_keyboard_owns_navigation() {
         let mut app = CleanSlateApp::default();
         let _ = app.update(Message::KeyPressed(
