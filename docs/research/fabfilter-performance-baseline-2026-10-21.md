@@ -67,4 +67,3 @@ Use `scripts/profile-gui.ps1 -Project <absolute-project> -Scenario <one-scenario
 The raw `baseline-native.json`, `baseline-os.json`, private `native-baseline.cleanslate` and preserved software-probe executable/PDB remain outside the repo under the shared investigation directory recorded in the feature specification. The hashes and portable summaries above allow their identity and meaning to be checked without publishing private recordings or relying on absolute local links.
 
 Ticket01's instrumentation, representative baseline and source-preservation receipt are complete. Full scenario matrices, repeated causal comparisons, physical middle-drag, processed-audio listening/onset, GPU presentation and cross-platform/hardware acceptance remain outside this baseline. Existing GUI acceptance records retain their separate physical-input scope.
-
