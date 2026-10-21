@@ -474,6 +474,38 @@ pub(crate) enum ExampleEvent {
     CancelResize,
 }
 
+fn visible_selection_edges(viewport: &TimelineViewport, width: f32) -> [Option<f32>; 2] {
+    let Some((start, end)) = viewport.selection().filter(|(start, end)| start < end) else {
+        return [None, None];
+    };
+    if !width.is_finite() || width <= 0.0 {
+        return [None, None];
+    }
+    [start, end].map(|time| {
+        let x = viewport.x_for_sample(time, width);
+        (0.0..=width).contains(&x).then_some(x)
+    })
+}
+
+pub(crate) fn draw_selection_edges(
+    frame: &mut canvas::Frame,
+    viewport: &TimelineViewport,
+    color: iced::Color,
+    emphasized: bool,
+) {
+    for x in visible_selection_edges(viewport, frame.width())
+        .into_iter()
+        .flatten()
+    {
+        frame.stroke(
+            &canvas::Path::line(Point::new(x, 0.0), Point::new(x, frame.height())),
+            canvas::Stroke::default()
+                .with_color(color)
+                .with_width(if emphasized { 2.0 } else { 1.0 }),
+        );
+    }
+}
+
 pub(crate) struct TimelineCanvas<'a, Message> {
     revision: u64,
     cache: Option<&'a WaveformCache>,
@@ -481,6 +513,7 @@ pub(crate) struct TimelineCanvas<'a, Message> {
     ruler: bool,
     preview: Option<(&'a AnalysisPreview, usize)>,
     selecting: bool,
+    editing_target: bool,
     on_event: Box<dyn Fn(TimelineEvent) -> Message + 'a>,
     on_context: Option<Box<dyn Fn(Point, u64) -> Message + 'a>>,
     on_selection: Option<Box<SelectionCallback<'a, Message>>>,
@@ -505,6 +538,7 @@ impl<'a, Message: 'a> TimelineCanvas<'a, Message> {
             ruler: false,
             preview,
             selecting,
+            editing_target: false,
             on_event: Box::new(on_event),
             on_context: None,
             on_selection: None,
@@ -527,6 +561,7 @@ impl<'a, Message: 'a> TimelineCanvas<'a, Message> {
             ruler: true,
             preview: None,
             selecting,
+            editing_target: false,
             on_event: Box::new(on_event),
             on_context: None,
             on_selection: None,
@@ -539,6 +574,11 @@ impl<'a, Message: 'a> TimelineCanvas<'a, Message> {
 }
 
 impl<'a, Message> TimelineCanvas<'a, Message> {
+    pub fn with_editing_target(mut self, editing_target: bool) -> Self {
+        self.editing_target = editing_target;
+        self
+    }
+
     pub fn with_examples(
         mut self,
         examples: &'a [crate::ReferenceLabel],
@@ -600,6 +640,7 @@ pub(crate) struct TimelineCanvasState {
     pan_x: Option<f32>,
     modifiers: keyboard::Modifiers,
     example_drag: Option<(u64, crate::TimeRange, bool)>,
+    hovered_example_handle: Option<(u64, bool)>,
     zoom_drag: Option<ZoomDrag>,
 }
 
@@ -890,11 +931,25 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
                 state.pan_x = None;
                 Some(Action::capture())
             }
+            canvas::Event::Mouse(mouse::Event::CursorMoved { .. }) => {
+                let handle = position
+                    .and_then(|point| self.example_handle(point, bounds.width))
+                    .map(|(id, _, left)| (id, left));
+                if handle != state.hovered_example_handle {
+                    state.hovered_example_handle = handle;
+                    Some(Action::request_redraw())
+                } else {
+                    None
+                }
+            }
             canvas::Event::Mouse(mouse::Event::CursorLeft) => {
                 state.dragging = false;
                 state.selection_anchor = None;
                 state.pan_x = None;
-                None
+                state
+                    .hovered_example_handle
+                    .take()
+                    .map(|_| Action::request_redraw())
             }
             canvas::Event::Mouse(mouse::Event::WheelScrolled { delta }) => {
                 let position = position?;
@@ -920,7 +975,7 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
         renderer: &Renderer,
         theme: &Theme,
         bounds: Rectangle,
-        _cursor: mouse::Cursor,
+        cursor: mouse::Cursor,
     ) -> Vec<canvas::Geometry> {
         let appearance = crate::appearance::Appearance::from_theme(theme);
         let colors = appearance.colors();
@@ -1077,6 +1132,23 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
             }
         });
         let mut frame = canvas::Frame::new(renderer, bounds.size());
+        draw_selection_edges(
+            &mut frame,
+            self.viewport,
+            colors.active_label,
+            self.editing_target || self.ruler,
+        );
+        if self.editing_target && !self.ruler {
+            frame.fill_rectangle(
+                Point::ORIGIN,
+                Size::new(3.0, bounds.height),
+                colors.active_label,
+            );
+        }
+        let hovered_handle = cursor
+            .position_in(bounds)
+            .and_then(|point| self.example_handle(point, bounds.width))
+            .map(|(id, _, left)| (id, left));
         for label in self
             .examples
             .iter()
@@ -1144,12 +1216,31 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
                 });
             }
             if selected {
-                for x in [left, right] {
+                for (x, is_left) in [(left, true), (right, false)] {
                     if (0.0..=bounds.width).contains(&x) {
+                        let hovered = hovered_handle == Some((label.id, is_left));
+                        frame.stroke(
+                            &canvas::Path::line(Point::new(x, 0.0), Point::new(x, bounds.height)),
+                            canvas::Stroke::default()
+                                .with_color(color)
+                                .with_width(if hovered { 2.5 } else { 1.5 }),
+                        );
                         frame.fill_rectangle(
-                            Point::new((x - 3.0).max(0.0), 0.0),
-                            Size::new(6.0, bounds.height),
+                            Point::new((x - 3.0).clamp(0.0, (bounds.width - 6.0).max(0.0)), 2.0),
+                            Size::new(6.0, 18.0_f32.min(bounds.height - 2.0).max(0.0)),
                             color,
+                        );
+                        frame.stroke(
+                            &canvas::Path::line(
+                                Point::new(x.clamp(3.0, (bounds.width - 3.0).max(3.0)), 7.0),
+                                Point::new(
+                                    x.clamp(3.0, (bounds.width - 3.0).max(3.0)),
+                                    15.0_f32.min(bounds.height),
+                                ),
+                            ),
+                            canvas::Stroke::default()
+                                .with_color(colors.label_text)
+                                .with_width(1.0),
                         );
                     }
                 }
@@ -1203,6 +1294,85 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
 mod tests {
     use super::*;
     use bwavfile::{WaveFmt, WaveWriter};
+
+    #[test]
+    fn selection_edges_only_mark_real_boundaries_inside_the_viewport() {
+        let mut viewport = TimelineViewport::new(100 * TICKS_PER_SECOND);
+        viewport.fit_range(40 * TICKS_PER_SECOND, 60 * TICKS_PER_SECOND);
+        assert_eq!(visible_selection_edges(&viewport, 240.0), [None, None]);
+        for (range, expected) in [
+            ((10, 50), [None, Some(120.0)]),
+            ((50, 90), [Some(120.0), None]),
+            ((10, 90), [None, None]),
+            ((38, 62), [Some(0.0), Some(240.0)]),
+            ((50, 50), [None, None]),
+        ] {
+            viewport.set_selection(Some((
+                range.0 * TICKS_PER_SECOND,
+                range.1 * TICKS_PER_SECOND,
+            )));
+            assert_eq!(visible_selection_edges(&viewport, 240.0), expected);
+        }
+        viewport.set_selection(Some((40 * TICKS_PER_SECOND, 60 * TICKS_PER_SECOND)));
+        for width in [0.0, -1.0, f32::NAN, f32::INFINITY] {
+            assert_eq!(visible_selection_edges(&viewport, width), [None, None]);
+        }
+    }
+
+    #[test]
+    fn example_handle_hover_redraws_without_editing_or_continuous_frames() {
+        use canvas::Program;
+        let viewport = TimelineViewport::new(TICKS_PER_SECOND);
+        let labels = [crate::ReferenceLabel {
+            id: 7,
+            range: crate::TimeRange::new(TICKS_PER_SECOND / 4, TICKS_PER_SECOND * 3 / 4).unwrap(),
+            active_speakers: vec![],
+            sources: vec![],
+            reference_track: None,
+        }];
+        let waveform = TimelineCanvas::ruler(&viewport, false, |event| event).with_examples(
+            &labels,
+            Some(7),
+            None,
+            |_| unreachable!(),
+        );
+        let mut state = TimelineCanvasState::default();
+        let bounds = Rectangle::with_size(Size::new(400.0, 80.0));
+        let point = Point::new(100.0, 10.0);
+        let event = canvas::Event::Mouse(mouse::Event::CursorMoved { position: point });
+        let cursor = mouse::Cursor::Available(point);
+        let (message, redraw, capture) = waveform
+            .update(&mut state, &event, bounds, cursor)
+            .unwrap()
+            .into_inner();
+        assert!(message.is_none());
+        assert_eq!(redraw, iced::window::RedrawRequest::NextFrame);
+        assert_eq!(capture, iced::event::Status::Ignored);
+        assert_eq!(
+            waveform.mouse_interaction(&state, bounds, cursor),
+            mouse::Interaction::ResizingHorizontally
+        );
+        assert!(
+            waveform
+                .update(&mut state, &event, bounds, cursor)
+                .is_none()
+        );
+        assert!(
+            waveform
+                .update(
+                    &mut state,
+                    &canvas::Event::Mouse(mouse::Event::CursorLeft),
+                    bounds,
+                    mouse::Cursor::Unavailable
+                )
+                .unwrap()
+                .into_inner()
+                .0
+                .is_none()
+        );
+        assert!(state.example_drag.is_none());
+        assert!(state.selection_anchor.is_none());
+    }
 
     #[test]
     fn alt_drag_fits_without_seek_or_label_and_control_wheel_zooms() {

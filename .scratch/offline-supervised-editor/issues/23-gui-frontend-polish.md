@@ -5,6 +5,24 @@ Type: task
 Assignee: Codex
 Blocked by: 16, 21
 
+## Selected inspector B — 2026-10-21
+
+Owner subsequently authorized all fourteen earlier FabFilter-inspired suggestions and applicable report lessons, with subagents on the same GUI branch. [Ticket 56](56-fabfilter-inspired-gui.md) records that expanded implementation and review checklist. This ticket retains the integrated owner-acceptance queue.
+
+Owner selected B after comparing the interactive A/B sketches. Codex claims this native implementation on `codex/gui-inspector`, from development `e668e60`; the throwaway sketches remain on `codex/gui-inspector-sketches` at `b28c841` and will not be merged into development. Dependencies 16 and 21 are done.
+
+Scope: a compact status header, existing speaker-example/Undo/Redo/Analyze controls, featured attenuation dial with numeric editing/reset/mute, a separate transitions-and-gaps group, existing gain-point controls and Sources disclosure, and an export footer outside the desktop body scroll. Preserve Dark/Light, narrow layouts, typed validation, control ranges/defaults, commit boundaries, source checks, analysis cancellation and safe export. No waveform-editor or audio redesign; tickets 35/41/42 retain their scope/status.
+
+Checks: dial interaction/range/release regression, existing sound and input-ownership tests, theme contrast, formatting, strict Clippy and local checks; build using `scripts/gui-dev.ps1`, preserve a source/build receipt. Record native visual checks that are unavailable separately from browser prototype checks. This selected pass does not close the broader acceptance queue below.
+
+Native implementation: 340 px desktop inspector with bounded status header, scrolling controls and fixed Export WAV files footer; compact windows pair status and Export above the scrolling controls. Speaker examples retain the existing Undo/Redo/Analyze row and a bounded animated disclosure. Attenuation has a vector dial, numeric editor, explicit Mute state and Reset; transitions/gaps form a separate group. Existing gain controls and automatically expanded source blockers remain. Export errors have a bounded footer area; general feedback is separately pinned, newest first. Cancel is at the top of the analysis header. The complete pass adds shared button focus/states, segmented listening and clearer existing waveform/gain/example selection cues. No audio/domain algorithms or dependency versions were changed; the existing Iced dependency enables its advanced widget API.
+
+The dial retains −30…−3 dB quick adjustment (four pixels per dB, or Up/Down while hovered); typed attenuation remains −120…0 dB. A click does not unmute or change extended typed values; a real adjustment uses the existing attenuation update. Release outside the control or loss of window focus ends a changed drag once. Active sound/name drafts keep arrow input. All existing numeric commit/cancel/reset validation and timing ranges remain.
+
+Full implementation pass 56 is done at executable source `24b812a640c5f8e83110035cb053835773e5a2b4`: all fourteen proposals, two-axis review corrections, 311 passing all-target tests (18 existing opt-in checks ignored), strict Clippy, GUI build and canonical/preserved executable self-checks. The preserved [build receipt](C:/Users/User/AppData/Local/CleanSlate/VerifiedBuilds/ticket-56-24b812a/receipt.md) records the exact source/hash. A separate development project copy was launched for owner review; the original saved project hash is unchanged. No integration or release occurred.
+
+Native rendered appearance, enlarged OS text, physical keyboard/mouse interaction, listening and cross-platform checks are pending. No native UI automation is available in this session; browser-sketch checks are not native acceptance. Keep this ticket claimed.
+
 ## Current remaining work — 2026-10-20
 
 Owner follow-up, 2026-10-20: confirmed that GUI work is continuing. Keep this consolidated editor-verification/polish ticket open; this is not a request to close the remaining GUI work or implement additional unrelated features.

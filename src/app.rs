@@ -5,6 +5,7 @@ use crate::{
     SpeakerId, TimeRange,
     appearance::{self, Appearance, colors},
     audition::{AuditionMode, AuditionPreparation, LiveAudition},
+    gui_controls::button,
     shortcuts::{Binding, Command, Context, DEFINITIONS, Shortcuts},
     timebase::{TICKS_PER_SECOND, TimePosition},
     timeline::{PlaybackScroll, TimelineEvent, TimelineViewport},
@@ -14,11 +15,14 @@ use crate::{
 use iced::{
     Element, Fill, Length, Subscription, Task, Theme, keyboard,
     widget::{
-        Space, button, canvas, column, container, mouse_area, opaque, progress_bar, responsive,
-        row, scrollable, slider, stack, text, text_input,
+        Space, canvas, column, container, mouse_area, opaque, progress_bar, responsive, row,
+        scrollable, slider, stack, text, text_input,
     },
     window,
 };
+mod button {
+    pub use iced::widget::button::*;
+}
 use std::{
     path::PathBuf,
     sync::{
@@ -50,7 +54,19 @@ fn secondary_button(theme: &Theme, status: button::Status) -> button::Style {
     style.border = iced::Border {
         color: c.border,
         width: 1.0,
-        radius: 4.0.into(),
+        radius: 6.0.into(),
+    };
+    style.shadow = if matches!(status, button::Status::Pressed | button::Status::Disabled) {
+        iced::Shadow::default()
+    } else {
+        iced::Shadow {
+            color: iced::Color {
+                a: 0.12,
+                ..iced::Color::BLACK
+            },
+            offset: iced::Vector::new(0.0, 1.0),
+            blur_radius: 2.0,
+        }
     };
     style
 }
@@ -68,8 +84,20 @@ fn primary_button(theme: &Theme, status: button::Status) -> button::Style {
         })),
         text_color: c.action_text,
         border: iced::Border {
-            radius: 4.0.into(),
+            radius: 6.0.into(),
             ..iced::Border::default()
+        },
+        shadow: if status == button::Status::Pressed {
+            iced::Shadow::default()
+        } else {
+            iced::Shadow {
+                color: iced::Color {
+                    a: 0.16,
+                    ..iced::Color::BLACK
+                },
+                offset: iced::Vector::new(0.0, 1.0),
+                blur_radius: 3.0,
+            }
         },
         ..button::primary(theme, status)
     }
@@ -87,6 +115,28 @@ fn editor_panel(theme: &Theme) -> container::Style {
         },
         ..container::Style::default()
     }
+}
+
+fn inspector_heading(label: &str) -> iced::widget::Text<'_> {
+    text(label).size(16).font(iced::Font {
+        weight: iced::font::Weight::Semibold,
+        ..iced::Font::with_name("Segoe UI")
+    })
+}
+
+fn inspector_button(theme: &Theme, status: button::Status) -> button::Style {
+    let mut style = secondary_button(theme, status);
+    style.border.color = colors(theme).panel_border;
+    style
+}
+
+fn sound_button(theme: &Theme, status: button::Status) -> button::Style {
+    let mut style = secondary_button(theme, status);
+    style.shadow = iced::Shadow::default();
+    if status == button::Status::Active {
+        style.background = Some(colors(theme).surface.into());
+    }
+    style
 }
 
 // Match the detector's rounding of 1536-sample frames at 48 kHz.
@@ -262,6 +312,160 @@ mod tests {
     }
 
     #[test]
+    fn inspector_emphasis_requires_ready_examples_and_safe_sources() {
+        assert!(!super::CleanSlateApp::default().analysis_is_next_action());
+        let (root, project, _) = export_fixture::session();
+        let mut app = super::CleanSlateApp {
+            project: Some(project),
+            ..Default::default()
+        };
+        assert!(app.analysis_is_next_action());
+        app.project.as_mut().unwrap().sources[0].available = false;
+        assert!(!app.analysis_is_next_action());
+        assert_eq!(
+            app.next_action(),
+            "Review source files below before Analyze or Export."
+        );
+        app.project.as_mut().unwrap().sources[0].available = true;
+        assert!(app.analysis_is_next_action());
+        assert!(!app.can_prepare_export());
+        drop(app);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn tab_navigation_preserves_drawing_and_existing_menu_ownership() {
+        use iced::keyboard::{Key, Modifiers, key::Named};
+        let mut app = super::CleanSlateApp::default();
+        let revision = app.drawing_revision;
+        for import in [false, true] {
+            app.import_dialog = import;
+            app.sound_draft = import.then_some((super::SoundParameter::Open, "42".into()));
+            assert!(!app.sound_input_owns_keyboard());
+            let _ = app.update(super::Message::KeyPressed(
+                Key::Named(Named::Tab),
+                Modifiers::empty(),
+            ));
+            assert_eq!(app.drawing_revision, revision);
+            assert_eq!(app.import_dialog, import);
+        }
+        app.import_dialog = false;
+        app.menu_open = true;
+        let selected = app.menu_selected;
+        let _ = app.update(super::Message::KeyPressed(
+            Key::Named(Named::Tab),
+            Modifiers::empty(),
+        ));
+        assert_ne!(app.menu_selected, selected);
+    }
+
+    #[test]
+    fn sound_navigation_is_routed_once_using_subscription_ownership() {
+        use iced::keyboard::{
+            Event, Key, Location, Modifiers,
+            key::{Code, Named, Physical},
+        };
+        for key in [Named::Tab, Named::Escape] {
+            let event = iced::Event::Keyboard(Event::KeyPressed {
+                key: Key::Named(key),
+                modified_key: Key::Named(key),
+                physical_key: Physical::Code(if key == Named::Tab {
+                    Code::Tab
+                } else {
+                    Code::Escape
+                }),
+                location: Location::Standard,
+                modifiers: Modifiers::empty(),
+                text: None,
+                repeat: false,
+            });
+            let mut app = super::CleanSlateApp::default();
+            let _ = app.update(super::Message::EditSound(super::SoundParameter::Open));
+            let deferred_global = super::application_input_event(
+                event.clone(),
+                iced::event::Status::Ignored,
+                app.sound_input_owns_keyboard(),
+            );
+            let _ = app.update(if key == Named::Tab {
+                super::Message::SoundTab(false)
+            } else {
+                super::Message::CancelSound
+            });
+            assert!(app.sound_draft.is_none());
+            assert!(
+                deferred_global.is_none(),
+                "sound subscription already owns this event"
+            );
+            assert!(matches!(
+                super::application_input_event(
+                    event,
+                    iced::event::Status::Ignored,
+                    app.sound_input_owns_keyboard()
+                ),
+                Some(super::Message::KeyPressed(_, _))
+            ));
+        }
+    }
+
+    #[test]
+    fn editing_target_tracks_active_tool_range_and_escape_without_reassigning_time() {
+        use super::Message;
+        let (root, project, _) = export_fixture::session();
+        let t = crate::TICKS_PER_SECOND;
+        let mut app = super::CleanSlateApp {
+            project: Some(project),
+            gain_tool: true,
+            timeline: super::TimelineViewport::new(3 * t),
+            ..Default::default()
+        };
+        app.timeline.set_selection(Some((t / 10, t / 5)));
+        app.selection_track = Some(0);
+        let _ = app.update(Message::GainAction(1, false));
+        let edit = app
+            .project
+            .as_ref()
+            .unwrap()
+            .manual_gain_edits()
+            .last()
+            .unwrap()
+            .id;
+        let _ = app.update(Message::GainEvent(
+            1,
+            crate::GainEditorEvent::Begin(edit, 0),
+        ));
+        let _ = app.update(Message::GainEvent(1, crate::GainEditorEvent::End));
+        assert_eq!(app.editing_track(), Some(1));
+        let range = app.timeline.selection();
+        let _ = app.update(Message::GainTool(false));
+        assert_eq!(app.editing_track(), Some(0));
+        assert_eq!(app.timeline.selection(), range);
+        let _ = app.update(Message::GainTool(true));
+        assert_eq!(app.editing_track(), Some(1));
+        let _ = app.update(Message::TrackTimeline(
+            0,
+            super::TimelineEvent::Select(t / 3, t / 2),
+        ));
+        assert_eq!(app.editing_track(), Some(0));
+        assert!(app.selected_gain_point.is_none());
+        let _ = app.update(Message::KeyPressed(
+            iced::keyboard::Key::Named(iced::keyboard::key::Named::Escape),
+            iced::keyboard::Modifiers::empty(),
+        ));
+        assert_eq!(app.editing_track(), None);
+        let label = app.project.as_ref().unwrap().reference_labels()[0].id;
+        app.selected_gain_point = Some((1, edit, 0));
+        app.select_example(label);
+        assert!(app.selected_gain_point.is_none());
+        assert_eq!(
+            app.editing_track(),
+            None,
+            "examples describe a session-wide range"
+        );
+        drop(app);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn export_dialog_cancel_and_submit_keep_destination_transient_and_solo_out_of_delivery() {
         let (root, mut project, audio) = export_fixture::session();
         project
@@ -287,6 +491,8 @@ mod tests {
             solo_tracks: 1,
             ..Default::default()
         };
+        assert!(app.can_prepare_export());
+        assert!(!app.analysis_is_next_action());
         let _ = app.update(super::Message::Export);
         assert_eq!(
             app.export_dialog.as_ref().unwrap().settings.encoding,
@@ -1167,10 +1373,28 @@ mod tests {
             automatic: None,
             effective: None,
             editing: true,
+            selected_point: None,
             on_event: Box::new(|event| event),
         };
         let bounds = Rectangle::new(Point::ORIGIN, Size::new(100.0, 20.0));
         let mut state = crate::gain_editor::GainCanvasState::default();
+        let point = mouse::Cursor::Available(Point::new(40.0, 11.0));
+        assert_eq!(
+            gain.mouse_interaction(&state, bounds, point),
+            mouse::Interaction::Grab
+        );
+        let hover = gain
+            .update(
+                &mut state,
+                &canvas::Event::Mouse(mouse::Event::CursorMoved {
+                    position: Point::new(40.0, 11.0),
+                }),
+                bounds,
+                point,
+            )
+            .unwrap()
+            .into_inner();
+        assert!(hover.0.is_none());
         gain.update(
             &mut state,
             &canvas::Event::Keyboard(iced::keyboard::Event::ModifiersChanged(Modifiers::ALT)),
@@ -3984,6 +4208,15 @@ enum SoundParameter {
 }
 
 impl SoundParameter {
+    fn control_id(self) -> &'static str {
+        match self {
+            Self::Attenuation => "sound-attenuation",
+            Self::Open => "sound-open",
+            Self::Close => "sound-close",
+            Self::Gap => "sound-gap",
+        }
+    }
+
     fn value(self, p: AutomixParameters) -> f32 {
         match self {
             Self::Attenuation => p.attenuation_db,
@@ -4576,8 +4809,51 @@ fn application_keyboard_event(
     }
 }
 
+fn application_input_event(
+    event: iced::Event,
+    status: iced::event::Status,
+    sound_owns_keys: bool,
+) -> Option<Message> {
+    match event {
+        iced::Event::Window(window::Event::FileDropped(path)) => Some(Message::FileDropped(path)),
+        iced::Event::Keyboard(keyboard::Event::KeyPressed {
+            key: keyboard::Key::Named(keyboard::key::Named::Tab | keyboard::key::Named::Escape),
+            ..
+        }) if sound_owns_keys => None,
+        iced::Event::Keyboard(event @ keyboard::Event::KeyPressed { .. }) => {
+            application_keyboard_event(event, status)
+        }
+        iced::Event::Keyboard(keyboard::Event::ModifiersChanged(modifiers)) => {
+            Some(Message::SoundModifiers(modifiers))
+        }
+        _ => None,
+    }
+}
+
 fn compact_workspace(width: f32) -> bool {
     width < 1100.0
+}
+
+fn selected_button(theme: &Theme, status: button::Status) -> button::Style {
+    let c = colors(theme);
+    let mut style = secondary_button(theme, status);
+    if status != button::Status::Disabled {
+        style.border.color = c.focus;
+        style.border.width = 2.0;
+        if status == button::Status::Active {
+            style.background = Some(c.selection.into());
+        }
+    }
+    style
+}
+
+fn quiet_button(theme: &Theme, status: button::Status) -> button::Style {
+    let mut style = secondary_button(theme, status);
+    if status == button::Status::Active {
+        style.background = None;
+        style.border.width = 0.0;
+    }
+    style
 }
 
 impl CleanSlateApp {
@@ -4612,33 +4888,40 @@ impl CleanSlateApp {
         {
             row![
                 text_input("Value", draft)
+                    .font(iced::Font::MONOSPACE)
                     .id("sound-value")
                     .on_input(Message::SoundText)
                     .on_submit(Message::CommitSound)
-                    .width(110),
-                text(unit)
+                    .width(78),
+                text(unit).size(14)
             ]
             .spacing(6)
             .into()
         } else {
             mouse_area(
-                button(text(value))
-                    .style(secondary_button)
+                button(text(value).size(15).font(iced::Font::MONOSPACE))
+                    .id(parameter.control_id())
+                    .padding([6, 10])
+                    .width(108)
+                    .style(sound_button)
                     .on_press(Message::EditSound(parameter)),
             )
             .on_right_press(Message::SoundMenu(parameter))
             .into()
         };
-        let mut content =
-            column![row![text(label), Space::new().width(Fill), control].align_y(iced::Center)]
-                .spacing(4);
+        let mut content = column![
+            row![text(label).size(14), Space::new().width(Fill), control]
+                .spacing(6)
+                .align_y(iced::Center)
+        ]
+        .spacing(4);
         if self
             .sound_draft
             .as_ref()
             .is_some_and(|(active, _)| *active == parameter)
             && let Some(error) = &self.sound_error
         {
-            content = content.push(text(error).size(12));
+            content = content.push(text(error).size(12).color(self.appearance.colors().error));
         }
         if self.sound_menu == Some(parameter) {
             content = content.push(
@@ -5834,6 +6117,8 @@ impl CleanSlateApp {
                     match crate::GainPointDrag::begin(project, source.track_id, id, point) {
                         Ok(drag) => {
                             self.gain_drag = Some(drag);
+                            self.selected_example = None;
+                            self.example_draft = None;
                             self.selected_gain_point = Some((track, id, point));
                         }
                         Err(error) => self.preview_error = Some(error.to_string()),
@@ -6360,6 +6645,7 @@ impl CleanSlateApp {
     fn select_example(&mut self, id: u64) {
         self.close_reference_menu();
         self.example_draft = None;
+        self.selected_gain_point = None;
         let Some(project) = &self.project else {
             return;
         };
@@ -6473,6 +6759,30 @@ impl CleanSlateApp {
         self.help_open || self.shortcuts_open || self.menu_open || self.app_dialog.is_some()
     }
 
+    fn workspace_input_active(&self) -> bool {
+        !self.app_support_open()
+            && !self.import_dialog
+            && self.export_dialog.is_none()
+            && self.reference_menu.is_none()
+            && self.gain_menu.is_none()
+    }
+
+    fn sound_input_owns_keyboard(&self) -> bool {
+        self.sound_draft.is_some() && self.workspace_input_active()
+    }
+
+    fn editing_track(&self) -> Option<usize> {
+        if self.gain_tool
+            && let Some((track, _, _)) = self.selected_gain_point
+        {
+            Some(track)
+        } else if self.selected_example.is_some() {
+            None
+        } else {
+            self.selection_track
+        }
+    }
+
     fn command_name(&self, command: Command) -> &'static str {
         match command {
             Command::Lock if self.playback_scroll == PlaybackScroll::Locked => "Unlock playhead",
@@ -6534,8 +6844,7 @@ impl CleanSlateApp {
         )
         .delay(Duration::from_millis(600))
         .snap_within_viewport(true);
-        iced::widget::keyed::Column::with_children([(self.shortcut_hint_generation, hint.into())])
-            .into()
+        crate::gui_controls::shortcut_hint(hint, self.shortcut_hint_generation)
     }
 
     fn settings_action(&self) -> Message {
@@ -6826,6 +7135,18 @@ impl CleanSlateApp {
         {
             return self.update(Message::CancelChannels);
         }
+        if let Message::KeyPressed(keyboard::Key::Named(keyboard::key::Named::Tab), modifiers) =
+            &message
+            && !self.app_support_open()
+            && self.reference_menu.is_none()
+            && self.gain_menu.is_none()
+            && !self.sound_input_owns_keyboard()
+            && (self.track_name_draft.is_none()
+                || self.import_dialog
+                || self.export_dialog.is_some())
+        {
+            return crate::gui_controls::focus_next(modifiers.shift());
+        }
         if self.export_dialog.is_some() {
             if matches!(
                 &message,
@@ -7108,6 +7429,7 @@ impl CleanSlateApp {
                 let selecting = matches!(event, TimelineEvent::Select(_, _));
                 let task = self.update(Message::Timeline(event));
                 if selecting {
+                    self.selected_gain_point = None;
                     self.selection_track = Some(track);
                 }
                 return task;
@@ -7363,12 +7685,17 @@ impl CleanSlateApp {
                 }
             }
             Message::SoundTab(reverse) => {
+                let origin = self.sound_draft.as_ref().map(|(parameter, _)| *parameter);
                 let _ = self.update(Message::CommitSound);
                 self.sound_typing = false;
-                return if reverse {
-                    iced::widget::operation::focus_previous()
+                let next = crate::gui_controls::focus_next(reverse);
+                // Only restore a disappearing input; invalid drafts keep their focus tree.
+                return if let Some(parameter) = origin
+                    && self.sound_draft.is_none()
+                {
+                    iced::widget::operation::focus(parameter.control_id()).chain(next)
                 } else {
-                    iced::widget::operation::focus_next()
+                    next
                 };
             }
             Message::SoundModifiers(modifiers) => {
@@ -7458,6 +7785,7 @@ impl CleanSlateApp {
                     return Task::none();
                 }
                 if key == keyboard::Key::Named(keyboard::key::Named::Escape) {
+                    self.selected_gain_point = None;
                     self.timeline.set_selection(None);
                     self.selection_track = None;
                     self.calibration_selection = None;
@@ -7845,17 +8173,10 @@ impl CleanSlateApp {
             | iced::Event::Window(window::Event::Unfocused) => Some(Message::ShortcutHintInput),
             _ => None,
         });
-        let drops = iced::event::listen_with(|event, status, _window| match event {
-            iced::Event::Window(iced::window::Event::FileDropped(path)) => {
-                Some(Message::FileDropped(path))
-            }
-            iced::Event::Keyboard(event @ keyboard::Event::KeyPressed { .. }) => {
-                application_keyboard_event(event, status)
-            }
-            iced::Event::Keyboard(keyboard::Event::ModifiersChanged(modifiers)) => {
-                Some(Message::SoundModifiers(modifiers))
-            }
-            _ => None,
+        let drops = iced::event::listen_with(if self.sound_input_owns_keyboard() {
+            |event, status, _| application_input_event(event, status, true)
+        } else {
+            |event, status, _| application_input_event(event, status, false)
         });
         let processing = if self.processing.is_some()
             || self.exporting.is_some()
@@ -7881,7 +8202,7 @@ impl CleanSlateApp {
         } else {
             Subscription::none()
         };
-        let rename_keys = if self.track_name_draft.is_some() && !self.app_support_open() {
+        let rename_keys = if self.track_name_draft.is_some() && self.workspace_input_active() {
             // Text inputs capture Escape, so cancellation must also see captured events.
             iced::event::listen_with(|event, _, _| match event {
                 iced::Event::Keyboard(keyboard::Event::KeyPressed {
@@ -7893,7 +8214,7 @@ impl CleanSlateApp {
         } else {
             Subscription::none()
         };
-        let sound_keys = if self.sound_draft.is_some() && !self.app_support_open() {
+        let sound_keys = if self.sound_input_owns_keyboard() {
             iced::event::listen_with(|event, _, _| match event {
                 iced::Event::Keyboard(keyboard::Event::KeyPressed {
                     key: keyboard::Key::Named(keyboard::key::Named::Escape),
@@ -8153,7 +8474,7 @@ impl CleanSlateApp {
                         body = body.push(text("Appearance").size(18));
                         for (index, appearance, label) in [(0, Appearance::Dark, "Dark"), (1, Appearance::Light, "Light")] {
                             let label = format!("{}{}{}", if self.settings_selected == index { "› " } else { "" }, label, if self.appearance == appearance { " · Selected" } else { "" });
-                            body = body.push(button(text(label)).style(if self.appearance == appearance { primary_button } else { secondary_button }).on_press(Message::Appearance(appearance)));
+                            body = body.push(button(text(label)).keyboard_enabled(false).selected(self.appearance == appearance).style(if self.appearance == appearance { selected_button } else { secondary_button }).on_press(Message::Appearance(appearance)));
                         }
                         if let Some(error) = &self.appearance_error { body = body.push(text(error).color(self.appearance.colors().error)); }
                         body = body.push(text("Timeline").size(18))
@@ -8189,7 +8510,7 @@ impl CleanSlateApp {
                     if let Some(feedback) = &self.app_feedback { panel = panel.push(text(feedback).size(14)); }
                     panel.into()
                 };
-                stack![self.workspace(compact_workspace(size.width), size.height, size.width), opaque(container(container(content).padding(24).width(Fill).max_width(if self.menu_open { 520 } else { 720 }).style(container::rounded_box)).center_x(Fill).center_y(Fill).style(|theme| container::Style { background: Some(colors(theme).scrim.into()), ..Default::default() }))].into()
+                stack![self.workspace(compact_workspace(size.width), size.height, size.width), opaque(container(container(crate::gui_controls::focus_scope(content, false)).padding(24).width(Fill).max_width(if self.menu_open { 520 } else { 720 }).style(container::rounded_box)).center_x(Fill).center_y(Fill).style(|theme| container::Style { background: Some(colors(theme).scrim.into()), ..Default::default() }))].into()
             }).into();
         }
         if self.help_open || self.shortcuts_open {
@@ -8225,7 +8546,7 @@ impl CleanSlateApp {
                     opaque(
                         container(
                             container(
-                                scrollable(content)
+                                scrollable(crate::gui_controls::focus_scope(content, false))
                                     .id("shortcut-reference")
                                     .width(Fill)
                                     .height(
@@ -8521,9 +8842,17 @@ impl CleanSlateApp {
         if self.preview_processing.is_some() {
             return "Analyzing. Original playback remains available.";
         }
+        if !project.pending_source_reviews().is_empty()
+            || project.sources.iter().any(|source| !source.available)
+        {
+            return "Review source files below before Analyze or Export.";
+        }
         let (missing, room) = self.missing_references();
-        if !missing.is_empty() || !room {
-            return "Listen to the original. Mark solo speech and room tone as examples.";
+        if missing.is_empty() && !room {
+            return "Add a room-tone example.";
+        }
+        if !missing.is_empty() {
+            return "Add a clear speech example for each speaker.";
         }
         if project.require_alignment().is_err() {
             return "Confirm synchronized recording starts below before Analyze.";
@@ -8531,7 +8860,21 @@ impl CleanSlateApp {
         if self.reference_stale || self.supervised_result.is_none() {
             return "Run Analyze to apply your saved examples.";
         }
-        "Listen to the processed and removed audio. Adjust the sound, then export."
+        "Audition Processed or Removed, then export."
+    }
+
+    fn analysis_is_next_action(&self) -> bool {
+        let (missing, room) = self.missing_references();
+        self.preview_processing.is_none()
+            && !self.sources_busy()
+            && (self.reference_stale || self.supervised_result.is_none())
+            && missing.is_empty()
+            && room
+            && self.project.as_ref().is_some_and(|project| {
+                project.require_alignment().is_ok()
+                    && project.pending_source_reviews().is_empty()
+                    && project.sources.iter().all(|source| source.available)
+            })
     }
 
     fn calibration_controls(&self) -> Element<'_, Message> {
@@ -8539,16 +8882,14 @@ impl CleanSlateApp {
             return column![].into();
         };
         let mut controls = column![
-            text("Speaker examples").size(18).font(iced::Font {
-                weight: iced::font::Weight::Semibold,
-                ..iced::Font::with_name("Segoe UI")
-            }),
-            text("Drag a clear example on any track, then choose who is talking.").size(14),
-            text(format!(
-                "{} saved examples",
-                project.reference_labels().len()
-            ))
-            .size(14),
+            row![
+                inspector_heading("Speaker examples"),
+                Space::new().width(Fill),
+                text(format!("{} saved", project.reference_labels().len()))
+                    .size(13)
+                    .color(self.appearance.colors().muted),
+            ]
+            .align_y(iced::Center),
         ]
         .spacing(8);
         controls = controls.push(
@@ -8558,7 +8899,7 @@ impl CleanSlateApp {
                     button(text("Undo").size(14))
                         .padding([7, 10])
                         .width(Fill)
-                        .style(secondary_button)
+                        .style(inspector_button)
                         .on_press(Message::UndoReferences)
                 ),
                 self.shortcut_control(
@@ -8566,45 +8907,41 @@ impl CleanSlateApp {
                     button(text("Redo").size(14))
                         .padding([7, 10])
                         .width(Fill)
-                        .style(secondary_button)
+                        .style(inspector_button)
                         .on_press(Message::RedoReferences)
                 ),
                 button(text("Analyze").size(14))
                     .padding([7, 10])
                     .width(Fill)
-                    .style(primary_button)
+                    .style(if self.analysis_is_next_action() {
+                        primary_button
+                    } else {
+                        inspector_button
+                    })
                     .on_press(Message::AnalyzeReferences),
             ]
             .spacing(6)
-            .width(280),
+            .width(Fill),
         );
-        if self.preview_processing.is_some() {
-            controls = controls.push(
-                button("Cancel analysis")
-                    .style(secondary_button)
-                    .on_press(Message::CancelAnalysis),
-            );
+        let (mut missing, room) = self.missing_references();
+        if !room {
+            missing.push("room tone".into());
         }
-        let (missing, room) = self.missing_references();
         controls = controls.push(
-            text(if missing.is_empty() && room {
-                "Analyze checks your speech and room-tone examples.".into()
+            text(if missing.is_empty() {
+                "Speech and room-tone examples are ready.".into()
             } else {
-                format!(
-                    "Examples needed: {}{}",
-                    missing.join(", "),
-                    if room { "" } else { "; room tone" }
-                )
+                format!("Examples needed: {}", missing.join(", "))
             })
             .size(14),
         );
         controls = controls.push(
             button(if self.calibration_timing {
-                "Hide speaker examples"
+                "Hide examples ▾"
             } else {
-                "Show examples"
+                "Show examples ▸"
             })
-            .style(secondary_button)
+            .style(quiet_button)
             .on_press(Message::CalibrationTiming(!self.calibration_timing)),
         );
         if let Some(notice) = project.calibration_notice()
@@ -8617,18 +8954,24 @@ impl CleanSlateApp {
             controls = controls.push(text(notice));
         }
         if let Some(error) = &self.calibration_error {
-            controls = controls.push(text(format!("Example not saved: {error}")));
+            controls = controls.push(
+                text(format!("Example not saved: {error}")).color(self.appearance.colors().error),
+            );
         }
+        let mut examples = column![].spacing(8);
         if self.calibration_timing {
-            controls = controls.push(text("Click an example on the waveform to drag its ends. Right-click to change speakers or delete it.").size(14));
+            examples = examples.push(
+                text("Drag an example's ends to resize. Right-click to change speakers or delete.")
+                    .size(14),
+            );
             if project.reference_labels().is_empty() {
-                controls = controls.push(
+                examples = examples.push(
                     text("No examples yet. Drag across a waveform and choose who is talking.")
                         .size(14),
                 );
             }
             for label in project.reference_labels() {
-                controls = controls.push(
+                examples = examples.push(
                     container(
                         column![
                             text(example_speakers(label)).size(14),
@@ -8660,6 +9003,10 @@ impl CleanSlateApp {
                 );
             }
         }
+        controls = controls.push(crate::gui_disclosure::reveal(
+            container(scrollable(examples).id("speaker-examples")).max_height(220),
+            self.calibration_timing,
+        ));
         controls.into()
     }
 
@@ -8670,6 +9017,44 @@ impl CleanSlateApp {
                 .on_toggle(Message::GainTool),
         ]
         .spacing(8);
+        if let Some(label) = self.selected_example.and_then(|id| {
+            self.project
+                .as_ref()?
+                .reference_labels()
+                .iter()
+                .find(|label| label.id == id)
+        }) {
+            controls = controls.push(
+                text(format!("Example · {}", example_speakers(label)))
+                    .size(13)
+                    .color(self.appearance.colors().muted),
+            );
+        }
+        let target = self.editing_track();
+        if let Some(source) = target.and_then(|track| self.project.as_ref()?.sources.get(track)) {
+            let range = if self.gain_tool && self.selected_gain_point.is_some() {
+                String::new()
+            } else {
+                self.timeline
+                    .selection()
+                    .map_or_else(String::new, |(start, end)| {
+                        format!(" · {}–{}", example_time(start), example_time(end))
+                    })
+            };
+            controls = controls.push(
+                text(format!(
+                    "{} · Speaker {}{range}",
+                    if self.gain_tool && self.selected_gain_point.is_some() {
+                        "Gain point"
+                    } else {
+                        "Selected range"
+                    },
+                    source.speaker_id.0
+                ))
+                .size(13)
+                .color(self.appearance.colors().muted),
+            );
+        }
         if self.gain_tool {
             controls = controls
                 .push(text(self.gain_key_hint()).size(14))
@@ -8772,11 +9157,7 @@ impl CleanSlateApp {
     }
 
     fn export_controls(&self) -> Element<'_, Message> {
-        let mut controls = column![text("Export").size(18).font(iced::Font {
-            weight: iced::font::Weight::Semibold,
-            ..iced::Font::with_name("Segoe UI")
-        })]
-        .spacing(8);
+        let mut controls = column![].spacing(8);
         if let Some(processing) = &self.processing {
             controls = controls
                 .push(text(format!(
@@ -8790,13 +9171,17 @@ impl CleanSlateApp {
                 );
         } else {
             controls = controls.push(
-                button("Export")
-                    .style(primary_button)
+                button(text("Export WAV files").size(16).center())
+                    .height(40)
+                    .padding([10, 12])
+                    .width(Fill)
+                    .style(if self.can_prepare_export() {
+                        primary_button
+                    } else {
+                        inspector_button
+                    })
                     .on_press_maybe(self.can_prepare_export().then_some(Message::Export)),
             );
-        }
-        if let Some(error) = &self.export_error {
-            controls = controls.push(text(format!("Export blocked: {error}")));
         }
         if self.exporting.is_some() {
             controls = controls.push(text("Checking and saving WAV files…")).push(
@@ -8805,8 +9190,15 @@ impl CleanSlateApp {
                     .on_press(Message::Cancel),
             );
         }
-        for message in &self.messages {
-            controls = controls.push(text(message));
+        if let Some(error) = &self.export_error {
+            controls = controls.push(
+                container(scrollable(
+                    text(format!("Export blocked: {error}"))
+                        .size(14)
+                        .color(self.appearance.colors().error),
+                ))
+                .max_height(100),
+            );
         }
         controls.into()
     }
@@ -8970,13 +9362,20 @@ impl CleanSlateApp {
                 )
                 .size(14)
             ]
-            .spacing(2),
+            .push(
+                text(self.workspace_status())
+                    .size(13)
+                    .color(self.appearance.colors().muted)
+            )
+            .spacing(2)
+            .width(190),
             Space::new().width(Fill),
-            text(self.workspace_status())
-                .size(14)
-                .color(self.appearance.colors().muted),
             button("Import tracks")
-                .style(primary_button)
+                .style(if self.project.is_none() {
+                    primary_button
+                } else {
+                    quiet_button
+                })
                 .on_press(Message::ImportStems),
             self.shortcut_control(
                 Command::Menu,
@@ -8985,22 +9384,17 @@ impl CleanSlateApp {
                     .on_press(Message::Menu)
             ),
             button("New project")
-                .style(secondary_button)
+                .style(quiet_button)
                 .on_press_maybe(self.can_start_new_project().then_some(Message::NewProject)),
-            button("Open project")
-                .style(secondary_button)
-                .on_press_maybe(
-                    (!self.sources_busy() && self.processing.is_none())
-                        .then_some(Message::OpenProject)
-                ),
+            button("Open project").style(quiet_button).on_press_maybe(
+                (!self.sources_busy() && self.processing.is_none()).then_some(Message::OpenProject)
+            ),
             self.shortcut_control(
                 Command::SaveProject,
-                button("Save project")
-                    .style(secondary_button)
-                    .on_press_maybe(
-                        (self.project.is_some() && self.source_loading.is_none())
-                            .then_some(Message::SaveProject)
-                    )
+                button("Save project").style(quiet_button).on_press_maybe(
+                    (self.project.is_some() && self.source_loading.is_none())
+                        .then_some(Message::SaveProject)
+                )
             ),
         ]
         .spacing(12)
@@ -9171,12 +9565,20 @@ impl CleanSlateApp {
                         .size(14)
                     )
                     .style(if self.solo_tracks & (1u64 << index) != 0 {
-                        primary_button
+                        selected_button
                     } else {
                         secondary_button
                     })
+                    .selected(self.solo_tracks & (1u64 << index) != 0)
                     .on_press(Message::SoloTrack(index)),
                     title,
+                    text(if self.editing_track() == Some(index) {
+                        "Editing"
+                    } else {
+                        ""
+                    })
+                    .size(12)
+                    .color(self.appearance.colors().muted),
                     Space::new().width(Fill),
                     button(text("Preserve").size(14))
                         .style(secondary_button)
@@ -9281,6 +9683,7 @@ impl CleanSlateApp {
                                 self.selecting_range || self.calibrating,
                             )
                             .with_revision(self.drawing_revision)
+                            .with_editing_target(self.editing_track() == Some(index))
                             .with_context(move |point, time| {
                                 Message::OpenTimelineMenu(index, time, point)
                             })
@@ -9327,6 +9730,9 @@ impl CleanSlateApp {
                                 .as_ref()
                                 .and_then(|preview| preview.envelopes.get(index)),
                             editing: true,
+                            selected_point: self.selected_gain_point.and_then(
+                                |(track, edit, point)| (track == index).then_some((edit, point)),
+                            ),
                             on_event: Box::new(move |event| Message::GainEvent(index, event)),
                         })
                         .width(Fill)
@@ -9338,7 +9744,14 @@ impl CleanSlateApp {
                         .padding(4)
                         .height(Length::FillPortion(1))
                         .width(Fill)
-                        .style(editor_panel),
+                        .style(move |theme| {
+                            let mut style = editor_panel(theme);
+                            if self.editing_track() == Some(index) {
+                                style.border.color = colors(theme).focus;
+                                style.border.width = 2.0;
+                            }
+                            style
+                        }),
                 );
             }
         }
@@ -9357,7 +9770,7 @@ impl CleanSlateApp {
                 } else {
                     "Lock playhead"
                 }).size(14)).on_press(Message::LockPlayhead)
-                    .style(if self.playback_scroll == PlaybackScroll::Locked { primary_button } else { secondary_button })),
+                    .style(if self.playback_scroll == PlaybackScroll::Locked { selected_button } else { secondary_button }).selected(self.playback_scroll == PlaybackScroll::Locked)),
                 self.shortcut_control(Command::Center, button(text("Center playhead").size(14)).style(secondary_button).on_press(Message::CenterPlayhead)),
                 button(text(if self.meters_at_playhead { "Meters: Playhead" } else { "Meters: Right" }).size(14))
                     .style(secondary_button).on_press(Message::ToggleMeterPlacement),
@@ -9374,6 +9787,11 @@ impl CleanSlateApp {
         .spacing(10)
         .width(Fill)
         .height(Fill);
+        let setup_required = self.project.as_ref().is_some_and(|project| {
+            project.require_alignment().is_err()
+                || !project.pending_source_reviews().is_empty()
+                || project.sources.iter().any(|source| !source.available)
+        });
         let preview_state: Element<'_, Message> = if let Some(processing) = &self.preview_processing
         {
             let stage = processing
@@ -9382,23 +9800,39 @@ impl CleanSlateApp {
                 .unwrap_or_else(|e| e.into_inner())
                 .clone();
             column![
-                text(stage),
+                row![
+                    inspector_heading("Analyzing"),
+                    Space::new().width(Fill),
+                    button(text("Cancel analysis").size(14))
+                        .style(inspector_button)
+                        .on_press(Message::CancelAnalysis),
+                ]
+                .align_y(iced::Center),
                 text(format!(
                     "Elapsed {:02}:{:02}",
                     processing.started_at.elapsed().as_secs() / 60,
                     processing.started_at.elapsed().as_secs() % 60
                 ))
                 .size(14),
+                text(stage).size(14),
                 text(if self.preview.is_some() {
                     "Previous completed preview remains available"
                 } else {
                     "No completed preview yet"
                 })
+                .size(13),
             ]
             .spacing(6)
             .into()
         } else if let Some(error) = &self.preview_error {
-            text(format!("Preview failed: {error}")).into()
+            text(format!("Preview failed: {error}"))
+                .size(14)
+                .color(self.appearance.colors().error)
+                .into()
+        } else if setup_required {
+            inspector_heading("Sources need review")
+                .color(self.appearance.colors().warning)
+                .into()
         } else if self.reference_stale {
             text("Analysis needs updating")
                 .color(self.appearance.colors().warning)
@@ -9408,89 +9842,170 @@ impl CleanSlateApp {
                 })
                 .into()
         } else if self.preview.is_some() {
-            text("Processed audio ready").into()
+            row![
+                text("●").size(12).color(self.appearance.colors().success),
+                inspector_heading("Processed audio ready")
+            ]
+            .spacing(8)
+            .align_y(iced::Center)
+            .into()
         } else {
             text("Ready to add examples").into()
         };
         let parameters = &self.preview_parameters;
-        let setup_required = self.project.as_ref().is_some_and(|project| {
-            project.require_alignment().is_err()
-                || !project.pending_source_reviews().is_empty()
-                || project.sources.iter().any(|source| !source.available)
-        });
         let mut setup = column![
-            button(if self.setup_details || setup_required {
+            button(if setup_required {
+                "Sources · needs review ▾"
+            } else if self.setup_details {
                 "Sources ▾"
             } else {
                 "Sources ▸"
             })
-            .style(secondary_button)
+            .style(quiet_button)
             .on_press(Message::SetupDetails(!self.setup_details))
         ]
         .spacing(12);
-        if self.setup_details || setup_required {
-            setup = setup.push(self.source_controls());
-        }
-        let inspector = container(
+        setup = setup.push(crate::gui_disclosure::reveal(
+            self.source_controls(),
+            self.setup_details || setup_required,
+        ));
+        let attenuation = row![
+            canvas(crate::attenuation_dial::AttenuationDial {
+                value: parameters.attenuation_db,
+                muted: parameters.mute,
+                keyboard_enabled: self.sound_draft.is_none() && self.track_name_draft.is_none(),
+                on_change: Message::Attenuation,
+                on_release: Message::RefreshPreview,
+            })
+            .width(88)
+            .height(88),
             column![
-                preview_state,
-                text(self.next_action()).size(14),
-                container(self.calibration_controls()).width(Fill),
-                container(
-                    column![
-                        text("Sound").size(18).font(iced::Font {
-                            weight: iced::font::Weight::Semibold,
-                            ..iced::Font::with_name("Segoe UI")
-                        }),
-                        self.sound_value(SoundParameter::Attenuation, "Attenuation"),
-                        button(if parameters.mute { "Mute: on" } else { "Mute" })
-                            .style(secondary_button)
-                            .on_press(Message::Mute),
-                        slider(
-                            -30.0..=-3.0,
-                            parameters.attenuation_db,
-                            Message::Attenuation
-                        )
-                        .step(1.0_f32)
-                        .on_release(Message::RefreshPreview),
-                        self.sound_value(SoundParameter::Open, "Fade to full volume"),
-                        slider(1.0..=1000.0, parameters.open_ms, Message::OpenTime)
-                            .step(1.0_f32)
-                            .on_release(Message::RefreshPreview),
-                        self.sound_value(SoundParameter::Close, "Fade to reduced volume"),
-                        slider(1.0..=2000.0, parameters.close_ms, Message::CloseTime)
-                            .step(1.0_f32)
-                            .on_release(Message::RefreshPreview),
-                        self.sound_value(SoundParameter::Gap, "Ignore gaps shorter than"),
-                        slider(
-                            10.0..=5000.0,
-                            parameters.minimum_gap_ms,
-                            Message::MinimumGap
-                        )
-                        .step(1.0_f32)
-                        .on_release(Message::RefreshPreview),
-                        self.gain_controls(),
-                    ]
-                    .spacing(8)
-                )
-                .width(Fill),
-                container(self.export_controls()).width(Fill),
-                setup,
+                inspector_heading("Attenuation"),
+                self.sound_value(SoundParameter::Attenuation, ""),
+                row![
+                    button(text(if parameters.mute { "Mute: on" } else { "Mute" }).size(13))
+                        .style(if parameters.mute {
+                            selected_button
+                        } else {
+                            inspector_button
+                        })
+                        .selected(parameters.mute)
+                        .on_press(Message::Mute),
+                    button(text("Reset").size(13))
+                        .style(inspector_button)
+                        .on_press(Message::ResetSound(SoundParameter::Attenuation)),
+                ]
+                .spacing(6),
             ]
-            .spacing(20),
-        )
-        .padding(18)
-        .width(if compact { Fill } else { Length::Fixed(320.0) })
-        .style(editor_panel);
+            .spacing(6)
+            .width(Fill),
+        ]
+        .spacing(14)
+        .align_y(iced::Center);
+        let transitions = column![
+            inspector_heading("Transitions and gaps"),
+            column![
+                self.sound_value(SoundParameter::Open, "Fade to full volume"),
+                slider(1.0..=1000.0, parameters.open_ms, Message::OpenTime)
+                    .step(1.0_f32)
+                    .on_release(Message::RefreshPreview),
+            ]
+            .spacing(4),
+            column![
+                self.sound_value(SoundParameter::Close, "Fade to reduced volume"),
+                slider(1.0..=2000.0, parameters.close_ms, Message::CloseTime)
+                    .step(1.0_f32)
+                    .on_release(Message::RefreshPreview),
+            ]
+            .spacing(4),
+            column![
+                self.sound_value(SoundParameter::Gap, "Ignore gaps shorter than"),
+                slider(
+                    10.0..=5000.0,
+                    parameters.minimum_gap_ms,
+                    Message::MinimumGap
+                )
+                .step(1.0_f32)
+                .on_release(Message::RefreshPreview),
+            ]
+            .spacing(4),
+        ]
+        .spacing(14);
+        let inspector_header = column![
+            preview_state,
+            text(self.next_action())
+                .size(14)
+                .color(self.appearance.colors().muted)
+        ]
+        .spacing(6);
+        let mut inspector_status = column![
+            container(scrollable(inspector_header))
+                .max_height(if compact { 110 } else { 150 })
+                .width(Fill)
+        ]
+        .spacing(6);
+        if !self.messages.is_empty() {
+            let updates = self
+                .messages
+                .iter()
+                .rev()
+                .fold(column![].spacing(6), |updates, message| {
+                    updates.push(text(message).size(13))
+                });
+            inspector_status = inspector_status.push(
+                container(scrollable(updates).id("inspector-feedback"))
+                    .max_height(if compact { 52 } else { 72 })
+                    .width(Fill),
+            );
+        }
+        let body = column![
+            self.calibration_controls(),
+            iced::widget::rule::horizontal(1),
+            attenuation,
+            transitions,
+            self.gain_controls(),
+            iced::widget::rule::horizontal(1),
+            setup,
+        ]
+        .spacing(18)
+        .padding([0, 2]);
+        let inspector_content: Element<'_, Message> = if compact {
+            column![
+                row![
+                    inspector_status.width(Fill),
+                    container(self.export_controls()).width(220),
+                ]
+                .spacing(12)
+                .align_y(iced::Top),
+                iced::widget::rule::horizontal(1),
+                scrollable(body).height(Fill),
+            ]
+            .spacing(10)
+            .height(240)
+            .into()
+        } else {
+            column![
+                inspector_status,
+                iced::widget::rule::horizontal(1),
+                scrollable(body).height(Fill),
+                iced::widget::rule::horizontal(1),
+                self.export_controls(),
+            ]
+            .spacing(12)
+            .height(Fill)
+            .into()
+        };
+        let inspector = container(inspector_content)
+            .padding(16)
+            .width(if compact { Fill } else { Length::Fixed(340.0) })
+            .style(editor_panel);
         let inspector: Element<'_, Message> = if self.project.is_none() && self.sources_busy() {
             container(column![text("Loading tracks").size(20),
                 text("Waveforms appear as tracks load. Once the source checks finish, add speaker examples and run Analyze."),
-                text("You can scroll the tracks and drop more audio files. Editing becomes available when the import is validated."),
-            ].spacing(12)).padding(18).width(if compact { Fill } else { Length::Fixed(320.0) }).into()
+                  text("You can scroll the tracks and drop more audio files. Editing becomes available when the import is validated."),
+              ].spacing(12)).padding(16).width(if compact { Fill } else { Length::Fixed(340.0) }).into()
         } else {
-            scrollable(inspector)
-                .height(if compact { Length::Fixed(240.0) } else { Fill })
-                .into()
+            inspector.into()
         };
         let playback = row![
             text(format!(
@@ -9556,8 +10071,7 @@ impl CleanSlateApp {
         ]
         .spacing(8)
         .align_y(iced::Center);
-        let listening = row![
-            text("Listen"),
+        let listening_modes = row![
             self.shortcut_control(
                 Command::Original,
                 button(if self.audition_mode == AuditionMode::Original {
@@ -9566,10 +10080,11 @@ impl CleanSlateApp {
                     "Original"
                 })
                 .style(if self.audition_mode == AuditionMode::Original {
-                    primary_button
+                    selected_button
                 } else {
-                    secondary_button
+                    quiet_button
                 })
+                .selected(self.audition_mode == AuditionMode::Original)
                 .on_press(Message::Original)
             ),
             self.shortcut_control(
@@ -9580,10 +10095,11 @@ impl CleanSlateApp {
                     "Processed"
                 })
                 .style(if self.audition_mode == AuditionMode::Processed {
-                    primary_button
+                    selected_button
                 } else {
-                    secondary_button
+                    quiet_button
                 })
+                .selected(self.audition_mode == AuditionMode::Processed)
                 .on_press_maybe(self.preview.as_ref().map(|_| Message::Processed))
             ),
             self.shortcut_control(
@@ -9594,12 +10110,30 @@ impl CleanSlateApp {
                     "Removed"
                 })
                 .style(if self.audition_mode == AuditionMode::Removed {
-                    primary_button
+                    selected_button
                 } else {
-                    secondary_button
+                    quiet_button
                 })
+                .selected(self.audition_mode == AuditionMode::Removed)
                 .on_press_maybe(self.preview.as_ref().map(|_| Message::Removed))
             ),
+        ]
+        .spacing(2)
+        .align_y(iced::Center);
+        let listening = row![
+            text("Listen").size(14),
+            container(listening_modes).padding(3).style(|theme| {
+                let c = colors(theme);
+                container::Style {
+                    background: Some(c.surface.into()),
+                    border: iced::Border {
+                        color: c.panel_border,
+                        width: 1.0,
+                        radius: 6.0.into(),
+                    },
+                    ..container::Style::default()
+                }
+            }),
             text(format!("Monitor {:+.1} dB", self.monitor_db)),
             slider(-24.0..=6.0, self.monitor_db, Message::MonitorGain)
                 .step(1.0_f32)
@@ -9633,6 +10167,7 @@ impl CleanSlateApp {
                 .width(Fill)
                 .height(Fill)
                 .into();
+        let base = crate::gui_controls::focus_scope(base, self.workspace_input_active());
         let Some(point) = self
             .gain_menu
             .map(|(_, _, point)| point)
