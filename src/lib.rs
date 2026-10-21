@@ -3,6 +3,7 @@ mod acoustics;
 mod analysis_audio;
 pub mod app;
 mod appearance;
+mod attenuation_dial;
 mod audio_io;
 mod audition;
 mod calibration;

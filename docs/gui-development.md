@@ -67,6 +67,14 @@ User wheel zoom and all fit routes now preserve lock by default, superseding the
 
 Missing entries use defaults. Invalid, conflicting or obsolete overrides produce actionable feedback while valid unrelated preferences remain usable. Reads never rewrite the file. Preference changes merge into the existing JSON object and save atomically; malformed JSON is preserved and must be repaired or backed up and removed before saving changes. A failed preference save leaves the current in-memory choices usable and reports the failure.
 
+## Inspector B development pass
+
+The selected B layout is implemented on `codex/gui-inspector`. The desktop inspector separates a compact status header, a scrolling controls body and a persistent Export WAV files footer. Compact windows retain a single scrolling inspector below the tracks. Speaker examples retain Undo/Redo/Analyze and the expandable list; source blockers still expand Sources automatically. Analysis stage, elapsed time and Cancel remain in the status header. General job messages remain in the scrolling body; export errors stay beside Export in a bounded scrolling area.
+
+Attenuation uses a vector dial beside the existing numeric editor, explicit Mute state and Reset. Drag vertically (4 pixels per dB), or use Up/Down while hovering, for the former slider's −30 to −3 dB quick-adjustment range. Clicking without dragging leaves the value and Mute unchanged. Numeric editing retains the full −120 to 0 dB range, validation, Enter/blur commit, Escape cancel, Ctrl-click reset and right-click reset menu. The timing sliders, typed ranges and audio update paths are unchanged. Arrow adjustment does not intercept active sound or track-name typing. No FabFilter code/artwork, dependency or audio algorithm was added.
+
+The browser sketches remain separately preserved on `codex/gui-inspector-sketches` (`b28c841`); they are not part of this native implementation. Native visual and physical input acceptance must be recorded in ticket 23 before treating this as accepted appearance.
+
 ## Analysis feedback
 
 Analyze reports source integrity checks, the current track during audio preparation, decoded recording position while making a new analysis copy, and track/recording position during speech detection. Cached copies are checked without displaying invented decoding progress. Later stages identify example checking, acoustic measurement, learning, timeline processing and preview construction. Elapsed wall time and Cancel analysis remain available throughout the job.

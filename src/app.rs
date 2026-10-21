@@ -89,6 +89,27 @@ fn editor_panel(theme: &Theme) -> container::Style {
     }
 }
 
+fn inspector_heading(label: &str) -> iced::widget::Text<'_> {
+    text(label).size(16).font(iced::Font {
+        weight: iced::font::Weight::Semibold,
+        ..iced::Font::with_name("Segoe UI")
+    })
+}
+
+fn inspector_button(theme: &Theme, status: button::Status) -> button::Style {
+    let mut style = secondary_button(theme, status);
+    style.border.color = colors(theme).panel_border;
+    style
+}
+
+fn sound_button(theme: &Theme, status: button::Status) -> button::Style {
+    let mut style = secondary_button(theme, status);
+    if status == button::Status::Active {
+        style.background = Some(colors(theme).surface.into());
+    }
+    style
+}
+
 // Match the detector's rounding of 1536-sample frames at 48 kHz.
 #[cfg(test)]
 fn effective_padding_ms(value: f32) -> f32 {
@@ -4615,30 +4636,35 @@ impl CleanSlateApp {
                     .id("sound-value")
                     .on_input(Message::SoundText)
                     .on_submit(Message::CommitSound)
-                    .width(110),
-                text(unit)
+                    .width(78),
+                text(unit).size(14)
             ]
             .spacing(6)
             .into()
         } else {
             mouse_area(
-                button(text(value))
-                    .style(secondary_button)
+                button(text(value).size(15))
+                    .padding([6, 10])
+                    .width(108)
+                    .style(sound_button)
                     .on_press(Message::EditSound(parameter)),
             )
             .on_right_press(Message::SoundMenu(parameter))
             .into()
         };
-        let mut content =
-            column![row![text(label), Space::new().width(Fill), control].align_y(iced::Center)]
-                .spacing(4);
+        let mut content = column![
+            row![text(label).size(14), Space::new().width(Fill), control]
+                .spacing(6)
+                .align_y(iced::Center)
+        ]
+        .spacing(4);
         if self
             .sound_draft
             .as_ref()
             .is_some_and(|(active, _)| *active == parameter)
             && let Some(error) = &self.sound_error
         {
-            content = content.push(text(error).size(12));
+            content = content.push(text(error).size(12).color(self.appearance.colors().error));
         }
         if self.sound_menu == Some(parameter) {
             content = content.push(
@@ -8539,16 +8565,14 @@ impl CleanSlateApp {
             return column![].into();
         };
         let mut controls = column![
-            text("Speaker examples").size(18).font(iced::Font {
-                weight: iced::font::Weight::Semibold,
-                ..iced::Font::with_name("Segoe UI")
-            }),
-            text("Drag a clear example on any track, then choose who is talking.").size(14),
-            text(format!(
-                "{} saved examples",
-                project.reference_labels().len()
-            ))
-            .size(14),
+            row![
+                inspector_heading("Speaker examples"),
+                Space::new().width(Fill),
+                text(format!("{} saved", project.reference_labels().len()))
+                    .size(13)
+                    .color(self.appearance.colors().muted),
+            ]
+            .align_y(iced::Center),
         ]
         .spacing(8);
         controls = controls.push(
@@ -8558,7 +8582,7 @@ impl CleanSlateApp {
                     button(text("Undo").size(14))
                         .padding([7, 10])
                         .width(Fill)
-                        .style(secondary_button)
+                        .style(inspector_button)
                         .on_press(Message::UndoReferences)
                 ),
                 self.shortcut_control(
@@ -8566,7 +8590,7 @@ impl CleanSlateApp {
                     button(text("Redo").size(14))
                         .padding([7, 10])
                         .width(Fill)
-                        .style(secondary_button)
+                        .style(inspector_button)
                         .on_press(Message::RedoReferences)
                 ),
                 button(text("Analyze").size(14))
@@ -8576,19 +8600,12 @@ impl CleanSlateApp {
                     .on_press(Message::AnalyzeReferences),
             ]
             .spacing(6)
-            .width(280),
+            .width(Fill),
         );
-        if self.preview_processing.is_some() {
-            controls = controls.push(
-                button("Cancel analysis")
-                    .style(secondary_button)
-                    .on_press(Message::CancelAnalysis),
-            );
-        }
         let (missing, room) = self.missing_references();
         controls = controls.push(
             text(if missing.is_empty() && room {
-                "Analyze checks your speech and room-tone examples.".into()
+                "Speech and room-tone examples are ready.".into()
             } else {
                 format!(
                     "Examples needed: {}{}",
@@ -8604,7 +8621,7 @@ impl CleanSlateApp {
             } else {
                 "Show examples"
             })
-            .style(secondary_button)
+            .style(inspector_button)
             .on_press(Message::CalibrationTiming(!self.calibration_timing)),
         );
         if let Some(notice) = project.calibration_notice()
@@ -8772,11 +8789,7 @@ impl CleanSlateApp {
     }
 
     fn export_controls(&self) -> Element<'_, Message> {
-        let mut controls = column![text("Export").size(18).font(iced::Font {
-            weight: iced::font::Weight::Semibold,
-            ..iced::Font::with_name("Segoe UI")
-        })]
-        .spacing(8);
+        let mut controls = column![].spacing(8);
         if let Some(processing) = &self.processing {
             controls = controls
                 .push(text(format!(
@@ -8790,13 +8803,12 @@ impl CleanSlateApp {
                 );
         } else {
             controls = controls.push(
-                button("Export")
+                button(text("Export WAV files").size(16).center())
+                    .padding([10, 12])
+                    .width(Fill)
                     .style(primary_button)
                     .on_press_maybe(self.can_prepare_export().then_some(Message::Export)),
             );
-        }
-        if let Some(error) = &self.export_error {
-            controls = controls.push(text(format!("Export blocked: {error}")));
         }
         if self.exporting.is_some() {
             controls = controls.push(text("Checking and saving WAV files…")).push(
@@ -8805,8 +8817,15 @@ impl CleanSlateApp {
                     .on_press(Message::Cancel),
             );
         }
-        for message in &self.messages {
-            controls = controls.push(text(message));
+        if let Some(error) = &self.export_error {
+            controls = controls.push(
+                container(scrollable(
+                    text(format!("Export blocked: {error}"))
+                        .size(14)
+                        .color(self.appearance.colors().error),
+                ))
+                .max_height(100),
+            );
         }
         controls.into()
     }
@@ -9382,23 +9401,35 @@ impl CleanSlateApp {
                 .unwrap_or_else(|e| e.into_inner())
                 .clone();
             column![
-                text(stage),
+                row![
+                    inspector_heading("Analyzing"),
+                    Space::new().width(Fill),
+                    button(text("Cancel analysis").size(14))
+                        .style(inspector_button)
+                        .on_press(Message::CancelAnalysis),
+                ]
+                .align_y(iced::Center),
                 text(format!(
                     "Elapsed {:02}:{:02}",
                     processing.started_at.elapsed().as_secs() / 60,
                     processing.started_at.elapsed().as_secs() % 60
                 ))
                 .size(14),
+                text(stage).size(14),
                 text(if self.preview.is_some() {
                     "Previous completed preview remains available"
                 } else {
                     "No completed preview yet"
                 })
+                .size(13),
             ]
             .spacing(6)
             .into()
         } else if let Some(error) = &self.preview_error {
-            text(format!("Preview failed: {error}")).into()
+            text(format!("Preview failed: {error}"))
+                .size(14)
+                .color(self.appearance.colors().error)
+                .into()
         } else if self.reference_stale {
             text("Analysis needs updating")
                 .color(self.appearance.colors().warning)
@@ -9408,7 +9439,13 @@ impl CleanSlateApp {
                 })
                 .into()
         } else if self.preview.is_some() {
-            text("Processed audio ready").into()
+            row![
+                text("●").size(12).color(self.appearance.colors().success),
+                inspector_heading("Processed audio ready")
+            ]
+            .spacing(8)
+            .align_y(iced::Center)
+            .into()
         } else {
             text("Ready to add examples").into()
         };
@@ -9424,73 +9461,123 @@ impl CleanSlateApp {
             } else {
                 "Sources ▸"
             })
-            .style(secondary_button)
+            .style(inspector_button)
             .on_press(Message::SetupDetails(!self.setup_details))
         ]
         .spacing(12);
         if self.setup_details || setup_required {
             setup = setup.push(self.source_controls());
         }
-        let inspector = container(
+        let attenuation = row![
+            canvas(crate::attenuation_dial::AttenuationDial {
+                value: parameters.attenuation_db,
+                muted: parameters.mute,
+                keyboard_enabled: self.sound_draft.is_none() && self.track_name_draft.is_none(),
+                on_change: Message::Attenuation,
+                on_release: Message::RefreshPreview,
+            })
+            .width(88)
+            .height(88),
             column![
-                preview_state,
-                text(self.next_action()).size(14),
-                container(self.calibration_controls()).width(Fill),
-                container(
-                    column![
-                        text("Sound").size(18).font(iced::Font {
-                            weight: iced::font::Weight::Semibold,
-                            ..iced::Font::with_name("Segoe UI")
-                        }),
-                        self.sound_value(SoundParameter::Attenuation, "Attenuation"),
-                        button(if parameters.mute { "Mute: on" } else { "Mute" })
-                            .style(secondary_button)
-                            .on_press(Message::Mute),
-                        slider(
-                            -30.0..=-3.0,
-                            parameters.attenuation_db,
-                            Message::Attenuation
-                        )
-                        .step(1.0_f32)
-                        .on_release(Message::RefreshPreview),
-                        self.sound_value(SoundParameter::Open, "Fade to full volume"),
-                        slider(1.0..=1000.0, parameters.open_ms, Message::OpenTime)
-                            .step(1.0_f32)
-                            .on_release(Message::RefreshPreview),
-                        self.sound_value(SoundParameter::Close, "Fade to reduced volume"),
-                        slider(1.0..=2000.0, parameters.close_ms, Message::CloseTime)
-                            .step(1.0_f32)
-                            .on_release(Message::RefreshPreview),
-                        self.sound_value(SoundParameter::Gap, "Ignore gaps shorter than"),
-                        slider(
-                            10.0..=5000.0,
-                            parameters.minimum_gap_ms,
-                            Message::MinimumGap
-                        )
-                        .step(1.0_f32)
-                        .on_release(Message::RefreshPreview),
-                        self.gain_controls(),
-                    ]
-                    .spacing(8)
-                )
-                .width(Fill),
-                container(self.export_controls()).width(Fill),
-                setup,
+                inspector_heading("Attenuation"),
+                self.sound_value(SoundParameter::Attenuation, ""),
+                row![
+                    button(text(if parameters.mute { "Mute: on" } else { "Mute" }).size(13))
+                        .style(if parameters.mute {
+                            primary_button
+                        } else {
+                            inspector_button
+                        })
+                        .on_press(Message::Mute),
+                    button(text("Reset").size(13))
+                        .style(inspector_button)
+                        .on_press(Message::ResetSound(SoundParameter::Attenuation)),
+                ]
+                .spacing(6),
             ]
-            .spacing(20),
-        )
-        .padding(18)
-        .width(if compact { Fill } else { Length::Fixed(320.0) })
-        .style(editor_panel);
+            .spacing(6)
+            .width(Fill),
+        ]
+        .spacing(14)
+        .align_y(iced::Center);
+        let transitions = column![
+            inspector_heading("Transitions and gaps"),
+            column![
+                self.sound_value(SoundParameter::Open, "Fade to full volume"),
+                slider(1.0..=1000.0, parameters.open_ms, Message::OpenTime)
+                    .step(1.0_f32)
+                    .on_release(Message::RefreshPreview),
+            ]
+            .spacing(4),
+            column![
+                self.sound_value(SoundParameter::Close, "Fade to reduced volume"),
+                slider(1.0..=2000.0, parameters.close_ms, Message::CloseTime)
+                    .step(1.0_f32)
+                    .on_release(Message::RefreshPreview),
+            ]
+            .spacing(4),
+            column![
+                self.sound_value(SoundParameter::Gap, "Ignore gaps shorter than"),
+                slider(
+                    10.0..=5000.0,
+                    parameters.minimum_gap_ms,
+                    Message::MinimumGap
+                )
+                .step(1.0_f32)
+                .on_release(Message::RefreshPreview),
+            ]
+            .spacing(4),
+        ]
+        .spacing(14);
+        let inspector_header = column![
+            preview_state,
+            text(self.next_action())
+                .size(14)
+                .color(self.appearance.colors().muted)
+        ]
+        .spacing(6);
+        let mut body = column![
+            self.calibration_controls(),
+            iced::widget::rule::horizontal(1),
+            attenuation,
+            transitions,
+            self.gain_controls(),
+            iced::widget::rule::horizontal(1),
+            setup,
+        ]
+        .spacing(18)
+        .padding([0, 2]);
+        // General job feedback belongs in the scrollable body, keeping Export reachable.
+        for message in &self.messages {
+            body = body.push(text(message).size(14));
+        }
+        let inspector_content: Element<'_, Message> = if compact {
+            scrollable(column![inspector_header, body, self.export_controls()].spacing(18))
+                .height(240)
+                .into()
+        } else {
+            column![
+                container(scrollable(inspector_header)).max_height(180),
+                iced::widget::rule::horizontal(1),
+                scrollable(body).height(Fill),
+                iced::widget::rule::horizontal(1),
+                self.export_controls(),
+            ]
+            .spacing(12)
+            .height(Fill)
+            .into()
+        };
+        let inspector = container(inspector_content)
+            .padding(16)
+            .width(if compact { Fill } else { Length::Fixed(340.0) })
+            .style(editor_panel);
         let inspector: Element<'_, Message> = if self.project.is_none() && self.sources_busy() {
             container(column![text("Loading tracks").size(20),
                 text("Waveforms appear as tracks load. Once the source checks finish, add speaker examples and run Analyze."),
-                text("You can scroll the tracks and drop more audio files. Editing becomes available when the import is validated."),
-            ].spacing(12)).padding(18).width(if compact { Fill } else { Length::Fixed(320.0) }).into()
+                  text("You can scroll the tracks and drop more audio files. Editing becomes available when the import is validated."),
+              ].spacing(12)).padding(16).width(if compact { Fill } else { Length::Fixed(340.0) }).into()
         } else {
-            scrollable(inspector)
-                .height(if compact { Length::Fixed(240.0) } else { Fill })
-                .into()
+            inspector.into()
         };
         let playback = row![
             text(format!(

@@ -8,7 +8,7 @@ Owner follow-up accepts current sound/performance, closes 14, retires standing r
 | --- | --- | --- |
 | [20](../offline-supervised-editor/issues/20-editor-first-documentation-visuals.md) | Gain composition and eleven-diagram browser pass completed; only screenshot refresh remains | Claimed; remaining captures wait for 23 |
 | [22](../offline-supervised-editor/issues/22-local-storage-cleanup.md) | Git temporary files removed and integrity verified; only retired recovery-target cleanup remains | Claimed; separate old build target still exists |
-| [23](../offline-supervised-editor/issues/23-gui-frontend-polish.md) | Integrated editor GUI/import/playback verification and remaining polish; absorbs 38/39/40 | Claimed; software integrated, acceptance incomplete |
+| [23](../offline-supervised-editor/issues/23-gui-frontend-polish.md) | Integrated GUI acceptance plus owner-selected inspector B on `codex/gui-inspector`; absorbs 38/39/40 | Claimed; B implemented, verification/native appearance acceptance pending |
 | [41](../offline-supervised-editor/issues/41-adjustable-keyboard-shortcuts.md) | Adjustable shortcuts and associated playhead commands/tooltips | Claimed; implementation/review/full checks/build passed, owner GUI acceptance pending |
 | [42](../offline-supervised-editor/issues/42-playhead-catch-up-scroll.md) | Catch-up scrolling | Unstarted; ticket unchanged by owner instruction |
 
