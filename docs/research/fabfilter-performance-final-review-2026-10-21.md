@@ -28,7 +28,7 @@ An independent follow-up review found **0 actionable findings** in the fix and t
 | 04: graphics | About → Copy version info reports the actual active backend/adapter/scale; unsupported refresh remains explicit. Native capture confirmed the fields. |
 | 05: edits | Reuses unchanged effective track preparation. [Warm-edit evidence](fabfilter-warm-edit-measurements-2026-10-21.md) includes ordinary and dense logical long-session workloads and their limits. |
 | 06: minimized work | Suspends optional visual work only after actual minimized-state observation; audio and job processing remain independent. Native restore/end checks passed. |
-| 07: follow | Exact-flat curve vertex pruning, bounded by the existing allocation. [Follow evidence](fabfilter-follow-measurements-2026-10-21.md) shows modest median gains, variable tails and the remaining wide-canvas budget miss. |
+| 07: follow | Exact-flat curve vertex pruning, bounded by the existing allocation. [Follow evidence](fabfilter-follow-measurements-2026-10-21.md) shows modest median gains, variable tails and the remaining wide-canvas budget miss. The final real-canvas check passed across both themes and 1x/2x logical bounds: waveform/gain retained and fresh geometry agree, unchanged draws reuse geometry, theme/size changes rebuild it, and gain clipping/source endpoints remain correct. This is software geometry evidence, not a physical DPI or raster comparison. |
 | 08: contention | Reproducible opt-in benchmark and [two real analysis comparisons](fabfilter-background-contention-2026-10-21.md). No speculative worker/DSP rewrite was justified. Native queued-import acceptance is still unverified. |
 
 ## Native observations
