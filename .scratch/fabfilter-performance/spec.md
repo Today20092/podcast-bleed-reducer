@@ -25,6 +25,26 @@ Existing acoustic/source/timebase/editor contracts remain in [the accepted archi
 
 Tickets01–04 are the initial frontier. Ticket02 has a direct repeatable invalidation regression and does not need the broader instrumentation to start. Ticket01 supplies the measured scenarios for05–08. Worktree isolation handles overlapping editor changes; integration must resolve and retest their combined behavior.
 
+### Reviewable ticket breakdown
+
+1. **Measure application frame pacing and input feedback.** Blocked by: None (can start immediately). Delivers: Provide an opt-in, bounded performance capture that exercises the real editor and reports reproducible frame/interaction observations alongside existing processing and playback measurements.
+
+2. **Retain unchanged waveform geometry during worker polling.** Blocked by: None (can start immediately). Delivers: Keep the existing waveform/gain caches valid when a background poll or unrelated interface action cannot change their contents, while every visible data, style, size and viewport change still redraws correctly.
+
+3. **Audit and harden audio-device buffer reclamation.** Blocked by: None (can start immediately). Delivers: Keep the playback device path predictable by measuring heap-owning block/envelope lifetime transitions and moving demonstrated reclamation work off it without compromising bounded, nonblocking streaming.
+
+4. **Report the actual graphics environment safely.** Blocked by: None (can start immediately). Delivers: Expose useful graphics backend/adapter and available display scaling/timing information through the established diagnostic or version-information flow so machine-specific rendering issues can be reproduced.
+
+5. **Keep long-session sound and gain edits responsive.** Blocked by: 01 — Measure application frame pacing and input feedback. Delivers: Measure warm dial/gain edits on long recordings and dense effective envelopes, then eliminate demonstrated synchronous rebuild/copy bottlenecks while preserving immediate, authoritative editing and preview/export parity.
+
+6. **Avoid optional visual work in a minimized editor.** Blocked by: 01 — Measure application frame pacing and input feedback. Delivers: Measure visible versus minimized playback and background work, then suspend optional visuals with no visible consumer where needed and resume truthfully without pausing useful audio or jobs.
+
+7. **Measure and improve continuous-follow drawing reuse.** Blocked by: 01 — Measure application frame pacing and input feedback. Delivers: Use complete-editor and geometry measurements to decide whether continuously following the locked playhead needs additional retained geometry reuse, and implement the smallest justified improvement.
+
+8. **Protect foreground work during background processing.** Blocked by: 01 — Measure application frame pacing and input feedback. Delivers: Measure playback/edit responsiveness during representative imports and analysis, then tune only demonstrated contention using bounded independent work while retaining processing correctness and useful throughput.
+
+The owner's request specifies one ticket per proposal, so the granularity is eight corresponding vertical slices. Review questions from to-tickets: are these boundaries the desired granularity, do the listed blockers genuinely gate the dependent work, and should any slices be merged or split? The pending TDD confirmation separately concerns the observable test boundaries below.
+
 ## Implementation and completion rules
 
 Each ticket is claimed before editing, implemented in a separate worktree/branch based on the current integration tip and merged by a merger agent after its scoped checks. Implementers use TDD at confirmed existing public boundaries, fetch applicable library docs through Context7 and merge the current integration tip before delivery. The integration branch receives combined local checks, two-axis code review, a GUI build and a preserved executable/self-check receipt before temporary worktrees are retired.
