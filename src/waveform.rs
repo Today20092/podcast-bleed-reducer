@@ -638,6 +638,7 @@ pub(crate) struct TimelineCanvasState {
     selection_anchor: Option<TimePosition>,
     anchor_x: f32,
     pan_x: Option<f32>,
+    pan_epoch: u64,
     modifiers: keyboard::Modifiers,
     example_drag: Option<(u64, crate::TimeRange, bool)>,
     hovered_example_handle: Option<(u64, bool)>,
@@ -731,6 +732,10 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
         cursor: mouse::Cursor,
     ) -> Option<Action<Message>> {
         let position = cursor.position_in(bounds);
+        // A modal/global release can finish the gesture without delivering this canvas its release.
+        if state.pan_x.is_some() && state.pan_epoch != self.viewport.middle_pan_epoch() {
+            state.pan_x = None;
+        }
         if let canvas::Event::Keyboard(keyboard::Event::ModifiersChanged(modifiers)) = event {
             state.modifiers = *modifiers;
             return None;
@@ -790,6 +795,16 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
             canvas::Event::Keyboard(keyboard::Event::KeyPressed {
                 key: keyboard::Key::Named(keyboard::key::Named::Escape),
                 ..
+            })
+            | canvas::Event::Window(iced::window::Event::Unfocused)
+                if state.pan_x.is_some() =>
+            {
+                state.pan_x = None;
+                Some(Action::publish((self.on_event)(TimelineEvent::PanCancel)).and_capture())
+            }
+            canvas::Event::Keyboard(keyboard::Event::KeyPressed {
+                key: keyboard::Key::Named(keyboard::key::Named::Escape),
+                ..
             }) if state.dragging || state.pan_x.is_some() => {
                 state.dragging = false;
                 state.selection_anchor = None;
@@ -809,7 +824,8 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
             }
             canvas::Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Middle)) => {
                 state.pan_x = Some(position?.x);
-                Some(Action::capture())
+                state.pan_epoch = self.viewport.middle_pan_epoch();
+                Some(Action::publish((self.on_event)(TimelineEvent::PanStart)).and_capture())
             }
             canvas::Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) => {
                 let position = position?;
@@ -927,9 +943,11 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
                     .and_capture(),
                 )
             }
-            canvas::Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Middle)) => {
+            canvas::Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Middle))
+                if state.pan_x.is_some() =>
+            {
                 state.pan_x = None;
-                Some(Action::capture())
+                Some(Action::publish((self.on_event)(TimelineEvent::PanEnd)).and_capture())
             }
             canvas::Event::Mouse(mouse::Event::CursorMoved { .. }) => {
                 let handle = position
@@ -945,7 +963,11 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
             canvas::Event::Mouse(mouse::Event::CursorLeft) => {
                 state.dragging = false;
                 state.selection_anchor = None;
-                state.pan_x = None;
+                if state.pan_x.take().is_some() {
+                    return Some(
+                        Action::publish((self.on_event)(TimelineEvent::PanCancel)).and_capture(),
+                    );
+                }
                 state
                     .hovered_example_handle
                     .take()
@@ -977,6 +999,7 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
         bounds: Rectangle,
         cursor: mouse::Cursor,
     ) -> Vec<canvas::Geometry> {
+        let _draw = crate::performance::measure(crate::performance::Metric::WaveformDraw);
         let appearance = crate::appearance::Appearance::from_theme(theme);
         let colors = appearance.colors();
         let revision_changed = state.revision.replace(Some(self.revision)) != Some(self.revision);
@@ -985,6 +1008,7 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
             state.geometry.clear();
         }
         let geometry = state.geometry.draw(renderer, bounds.size(), |frame| {
+            let _build = crate::performance::measure(crate::performance::Metric::WaveformRebuild);
             let center = bounds.height / 2.0;
             if !self.ruler
                 && let Some((preview, track)) = self.preview
@@ -1294,6 +1318,117 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
 mod tests {
     use super::*;
     use bwavfile::{WaveFmt, WaveWriter};
+
+    #[test]
+    fn middle_pan_publishes_phases_and_finishes_outside_the_canvas() {
+        use canvas::Program;
+        let viewport = TimelineViewport::new(100 * TICKS_PER_SECOND);
+        let waveform = TimelineCanvas::ruler(&viewport, false, |event| event);
+        let mut state = TimelineCanvasState::default();
+        let bounds = Rectangle::new(Point::new(200.0, 100.0), Size::new(100.0, 80.0));
+        let press = canvas::Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Middle));
+        let release = canvas::Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Middle));
+        let cursor = mouse::Cursor::Available(Point::new(220.0, 140.0));
+        assert!(matches!(
+            waveform
+                .update(&mut state, &press, bounds, cursor)
+                .unwrap()
+                .into_inner()
+                .0,
+            Some(TimelineEvent::PanStart)
+        ));
+        let moved = Point::new(245.0, 140.0);
+        let movement = waveform
+            .update(
+                &mut state,
+                &canvas::Event::Mouse(mouse::Event::CursorMoved { position: moved }),
+                bounds,
+                mouse::Cursor::Available(moved),
+            )
+            .unwrap()
+            .into_inner();
+        assert!(
+            matches!(movement.0, Some(TimelineEvent::Pan { delta_x, width }) if delta_x == 25.0 && width == 100.0)
+        );
+        assert_eq!(movement.2, iced::event::Status::Captured);
+        assert!(matches!(
+            waveform
+                .update(
+                    &mut state,
+                    &release,
+                    bounds,
+                    mouse::Cursor::Available(Point::new(450.0, 300.0))
+                )
+                .unwrap()
+                .into_inner()
+                .0,
+            Some(TimelineEvent::PanEnd)
+        ));
+        assert!(state.pan_x.is_none());
+        assert!(
+            waveform
+                .update(&mut state, &release, bounds, cursor)
+                .is_none()
+        );
+        assert!(state.selection_anchor.is_none());
+
+        let escape = canvas::Event::Keyboard(keyboard::Event::KeyPressed {
+            key: keyboard::Key::Named(keyboard::key::Named::Escape),
+            modified_key: keyboard::Key::Named(keyboard::key::Named::Escape),
+            physical_key: keyboard::key::Physical::Code(keyboard::key::Code::Escape),
+            location: keyboard::Location::Standard,
+            modifiers: keyboard::Modifiers::empty(),
+            text: None,
+            repeat: false,
+        });
+        for cancellation in [
+            escape,
+            canvas::Event::Window(iced::window::Event::Unfocused),
+            canvas::Event::Mouse(mouse::Event::CursorLeft),
+        ] {
+            waveform.update(&mut state, &press, bounds, cursor);
+            assert!(matches!(
+                waveform
+                    .update(&mut state, &cancellation, bounds, cursor)
+                    .unwrap()
+                    .into_inner()
+                    .0,
+                Some(TimelineEvent::PanCancel)
+            ));
+            assert!(state.pan_x.is_none());
+            assert!(
+                waveform
+                    .update(&mut state, &release, bounds, cursor)
+                    .is_none()
+            );
+        }
+    }
+
+    #[test]
+    fn global_middle_pan_cleanup_invalidates_a_canvas_that_missed_release() {
+        use canvas::Program;
+        let mut viewport = TimelineViewport::new(100 * TICKS_PER_SECOND);
+        let mut state = TimelineCanvasState::default();
+        let bounds = Rectangle::with_size(Size::new(100.0, 80.0));
+        let point = Point::new(40.0, 20.0);
+        let cursor = mouse::Cursor::Available(point);
+        TimelineCanvas::ruler(&viewport, false, |event| event).update(
+            &mut state,
+            &canvas::Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Middle)),
+            bounds,
+            cursor,
+        );
+        viewport.begin_middle_pan(crate::timeline::PlaybackScroll::Locked);
+        viewport.cancel_middle_pan(crate::timeline::PlaybackScroll::Locked);
+        let action = TimelineCanvas::ruler(&viewport, false, |event| event).update(
+            &mut state,
+            &canvas::Event::Mouse(mouse::Event::CursorMoved { position: point }),
+            bounds,
+            cursor,
+        );
+        assert!(action.is_none());
+        assert!(state.pan_x.is_none());
+    }
 
     #[test]
     fn selection_edges_only_mark_real_boundaries_inside_the_viewport() {

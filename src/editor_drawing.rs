@@ -254,15 +254,25 @@ pub(crate) fn sample_visible_curve(
         return vec![];
     }
     let columns = (width.ceil() as usize).clamp(1, 4096);
-    (0..=columns)
-        .map(|column| {
-            let time = visible_boundary(viewport, width * column as f32 / columns as f32, width);
-            EnvelopePoint {
-                time,
-                gain: gain(time),
-            }
-        })
-        .collect()
+    let mut samples: Vec<EnvelopePoint> = Vec::with_capacity(columns + 1);
+    for column in 0..=columns {
+        let time = visible_boundary(viewport, width * column as f32 / columns as f32, width);
+        let point = EnvelopePoint {
+            time,
+            gain: gain(time),
+        };
+        let count = samples.len();
+        // Keep both flat-run endpoints; every changing sample retains its exact source time.
+        if count >= 2
+            && samples[count - 2].gain == point.gain
+            && samples[count - 1].gain == point.gain
+        {
+            samples[count - 1] = point;
+        } else {
+            samples.push(point);
+        }
+    }
+    samples
 }
 
 pub(crate) fn visible_boundary(viewport: &TimelineViewport, x: f32, width: f32) -> u64 {

@@ -44,7 +44,7 @@ The curve shows when volume falls and returns to full level. At the white playhe
 
 ![Sound panel with attenuation at minus 8 decibels, fades to full and reduced volume, Ignore gaps shorter than, and Edit gain points.](images/sound-controls.png)
 
-**Attenuation** sets the reduced level. The two fade sliders set the maximum transition durations. **Ignore gaps shorter than** keeps brief automatic gaps open. These are the captured session's settings, not recommended defaults. Enable **Edit gain points** for manual corrections, or select a range and use **Preserve** to keep it at full volume.
+**Attenuation** sets the reduced level. The two fade controls set the maximum transition durations. **Ignore gaps shorter than** keeps brief automatic gaps open. On the `codex/fabfilter-controls` review branch these continuous settings use a large attenuation dial and three smaller timing dials, with precise editable numeric values; the screenshot above predates that refinement. Drag or turn the wheel over a dial, hold Shift for fine adjustment, double-click to type, and Ctrl-click (Command-click on macOS) to reset. These are the captured session's settings, not recommended defaults. Enable **Edit gain points** for manual corrections, or select a range and use **Preserve** to keep it at full volume.
 
 See the [fade-and-gap plots](effective-envelopes.md) for the difference between shortening fades to fit a gap and keeping a short automatic gap at full volume.
 
@@ -57,6 +57,8 @@ Review the waveform and audition directly. There is no uncertainty review queue.
 ![Listening controls with Original selected, Processed and Removed available, and a separate Monitor level slider.](images/listening-controls.png)
 
 Compare **Original** with **Processed**, then listen to **Removed** for wanted speech that should remain. **Monitor** changes listening level only. Track-header **Solo** buttons can monitor several tracks together; they do not change exported gain.
+
+The control-refinement branch uses a flat, stable-width listening selector with a persistent selected accent and keyboard focus indication. Its compact Lock, Center and Meters toolbar retains short labels and command tooltips. While Lock is active, middle-drag pans freely without disabling it; release anchors the then-current playhead position on screen. A click without movement preserves the prior anchor, cancellation restores it, and explicit Unlock/Center takes precedence. Playback time, labels, selection, edits and saved project state are unchanged by navigation.
 
 Save project persists labels, gain overrides, protections, review states and recipe identities. Opening a project validates sources; Analyze reconstructs its preview using reusable fixed evidence.
 

@@ -6,6 +6,7 @@ use crate::{
     appearance::{self, Appearance, colors},
     audition::{AuditionMode, AuditionPreparation, LiveAudition},
     gui_controls::button,
+    gui_icons::ToolbarIcon,
     shortcuts::{Binding, Command, Context, DEFINITIONS, Shortcuts},
     timebase::{TICKS_PER_SECOND, TimePosition},
     timeline::{PlaybackScroll, TimelineEvent, TimelineViewport},
@@ -911,6 +912,40 @@ mod tests {
                 assert!(contrast(style.text_color, background) >= 4.5, "{status:?}");
             }
         }
+        for appearance in [super::Appearance::Dark, super::Appearance::Light] {
+            let theme = appearance.theme();
+            let panel = super::colors(&theme).panel;
+            for status in [
+                iced::widget::button::Status::Active,
+                iced::widget::button::Status::Hovered,
+                iced::widget::button::Status::Pressed,
+                iced::widget::button::Status::Disabled,
+            ] {
+                for selected in [false, true] {
+                    let style = super::flat_button(&theme, status, selected);
+                    assert_eq!(
+                        style.border.width, 0.0,
+                        "Flat controls must not regain outlines"
+                    );
+                    assert_eq!(style.shadow.blur_radius, 0.0);
+                    let background = match style.background {
+                        Some(iced::Background::Color(color)) => iced::Color::from_rgb(
+                            color.r * color.a + panel.r * (1.0 - color.a),
+                            color.g * color.a + panel.g * (1.0 - color.a),
+                            color.b * color.a + panel.b * (1.0 - color.a),
+                        ),
+                        None => panel,
+                        _ => panic!("Unexpected flat-control gradient"),
+                    };
+                    if status != iced::widget::button::Status::Disabled {
+                        assert!(
+                            contrast(style.text_color, background) >= 4.5,
+                            "{appearance:?} {status:?}"
+                        );
+                    }
+                }
+            }
+        }
     }
 
     #[test]
@@ -1138,6 +1173,124 @@ mod tests {
         );
         assert_eq!(std::fs::read(path).unwrap(), saved);
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn locked_middle_pan_preserves_context_and_reanchors_only_once() {
+        use super::{Message, PlaybackScroll, TimelineEvent, TimelineViewport};
+        let root =
+            std::env::temp_dir().join(format!("cleanslate-middle-pan-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let source = root.join("voice.wav");
+        write_wav(&source, &[0.0; 100]);
+        let path = root.join("session.cleanslate");
+        let project = synchronized_project(&path, vec![source]).unwrap();
+        let saved = std::fs::read(&path).unwrap();
+        let mut app = super::CleanSlateApp {
+            project: Some(project),
+            timeline: TimelineViewport::new(100 * crate::TICKS_PER_SECOND),
+            playback_scroll: PlaybackScroll::Locked,
+            selected_example: Some(7),
+            selection_track: Some(0),
+            selected_gain_point: Some((0, 8, 0)),
+            ..Default::default()
+        };
+        app.timeline
+            .fit_range(30 * crate::TICKS_PER_SECOND, 50 * crate::TICKS_PER_SECOND);
+        app.timeline.seek(40 * crate::TICKS_PER_SECOND);
+        app.timeline.lock_playhead();
+        let selection = Some((crate::TICKS_PER_SECOND, 2 * crate::TICKS_PER_SECOND));
+        app.timeline.set_selection(selection);
+        let parameters = app.preview_parameters;
+        let _ = app.update(Message::TrackTimeline(0, TimelineEvent::PanStart));
+        let _ = app.update(Message::TrackTimeline(
+            0,
+            TimelineEvent::Pan {
+                delta_x: -25.0,
+                width: 100.0,
+            },
+        ));
+        assert_eq!(app.playback_scroll, PlaybackScroll::Locked);
+        assert!(app.timeline.is_middle_panning());
+        let panned = app.timeline.start();
+        app.timeline.seek(42 * crate::TICKS_PER_SECOND);
+        assert!(!app.timeline.follow_playhead(app.playback_scroll));
+        assert_eq!(app.timeline.start(), panned);
+        let fraction = app.timeline.x_for_sample(app.timeline.playhead(), 100.0);
+        let _ = app.update(Message::TrackTimeline(0, TimelineEvent::PanEnd));
+        assert!(!app.timeline.is_middle_panning());
+        assert_eq!(app.timeline.start(), panned);
+        let _ = app.update(Message::Timeline(TimelineEvent::PanEnd));
+        assert_eq!(app.timeline.start(), panned);
+        app.timeline.seek(43 * crate::TICKS_PER_SECOND);
+        app.timeline.follow_playhead(app.playback_scroll);
+        assert!(
+            (app.timeline.x_for_sample(app.timeline.playhead(), 100.0) - fraction).abs() < 0.001
+        );
+        assert_eq!(app.selected_example, Some(7));
+        assert_eq!(app.selection_track, Some(0));
+        assert_eq!(app.selected_gain_point, Some((0, 8, 0)));
+        assert_eq!(app.timeline.selection(), selection);
+        assert_eq!(app.preview_parameters, parameters);
+        assert_eq!(std::fs::read(&path).unwrap(), saved);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn middle_pan_cancellation_modes_and_explicit_unlock_are_authoritative() {
+        use super::{Message, PlaybackScroll, TimelineEvent, TimelineViewport};
+        for mode in [
+            PlaybackScroll::Off,
+            PlaybackScroll::Page,
+            PlaybackScroll::Locked,
+        ] {
+            for cancel in [false, true] {
+                let mut app = super::CleanSlateApp {
+                    timeline: TimelineViewport::new(100 * crate::TICKS_PER_SECOND),
+                    playback_scroll: mode,
+                    ..Default::default()
+                };
+                app.timeline
+                    .fit_range(30 * crate::TICKS_PER_SECOND, 50 * crate::TICKS_PER_SECOND);
+                app.timeline.seek(40 * crate::TICKS_PER_SECOND);
+                app.timeline.lock_playhead();
+                let _ = app.update(Message::Timeline(TimelineEvent::PanStart));
+                let _ = app.update(Message::Timeline(TimelineEvent::Pan {
+                    delta_x: -25.0,
+                    width: 100.0,
+                }));
+                let expected = if mode == PlaybackScroll::Locked {
+                    mode
+                } else {
+                    PlaybackScroll::Off
+                };
+                assert_eq!(app.playback_scroll, expected);
+                if mode == PlaybackScroll::Locked && !cancel {
+                    let _ = app.update(Message::LockPlayhead);
+                    assert_eq!(app.playback_scroll, PlaybackScroll::Off);
+                }
+                let panned = app.timeline.start();
+                app.timeline.seek(42 * crate::TICKS_PER_SECOND);
+                app.app_dialog = Some(super::AppDialog::Settings);
+                let event = if cancel {
+                    TimelineEvent::PanCancel
+                } else {
+                    TimelineEvent::PanEnd
+                };
+                let _ = app.update(Message::Timeline(event));
+                assert!(!app.timeline.is_middle_panning());
+                if expected == PlaybackScroll::Locked && cancel {
+                    assert_eq!(
+                        app.timeline.x_for_sample(app.timeline.playhead(), 100.0),
+                        50.0
+                    );
+                } else {
+                    assert_eq!(app.playback_scroll, PlaybackScroll::Off);
+                    assert_eq!(app.timeline.start(), panned);
+                }
+                assert_eq!(app.timeline.playhead(), 42 * crate::TICKS_PER_SECOND);
+            }
+        }
     }
 
     #[test]
@@ -1472,9 +1625,299 @@ mod tests {
         let _ = app.update(super::Message::Attenuation(-12.0));
         assert_eq!(app.drawing_revision, 2);
         let _ = app.update(super::Message::Tick);
-        assert_eq!(app.drawing_revision, 3);
+        assert_eq!(app.drawing_revision, 2);
         let _ = app.update(super::Message::PlaybackFrame);
-        assert_eq!(app.drawing_revision, 3);
+        assert_eq!(app.drawing_revision, 2);
+    }
+
+    fn drawn_waveform(
+        app: &super::CleanSlateApp,
+        state: &crate::waveform::TimelineCanvasState,
+        renderer: &iced::Renderer,
+        theme: &iced::Theme,
+        bounds: iced::Rectangle,
+    ) -> std::sync::Arc<[iced_tiny_skia::Primitive]> {
+        use iced::widget::canvas::{Geometry, Program};
+        let (waveform, viewport) = app
+            .source_loading
+            .as_ref()
+            .map_or((&app.waveforms[0], &app.timeline), |loading| {
+                (&loading.waveforms[0], &loading.timeline)
+            });
+        let canvas = super::TimelineCanvas::waveform(
+            waveform,
+            viewport,
+            super::Message::Timeline,
+            app.preview.as_ref().map(|preview| (preview, 0)),
+            false,
+        )
+        .with_revision(app.drawing_revision);
+        let geometry = canvas.draw(
+            state,
+            renderer,
+            theme,
+            bounds,
+            iced::mouse::Cursor::Unavailable,
+        );
+        let Geometry::<iced::Renderer>::Secondary(iced_tiny_skia::geometry::Geometry::Cache(
+            cached,
+        )) = &geometry[0]
+        else {
+            panic!("expected cached software waveform geometry");
+        };
+        assert!(!cached.primitives.is_empty());
+        cached.primitives.clone()
+    }
+
+    #[test]
+    fn follow_canvases_rebuild_truthfully_across_themes_and_logical_scales() {
+        use iced::widget::canvas::{Geometry, Program};
+        use std::sync::Arc;
+        let root =
+            std::env::temp_dir().join(format!("cleanslate-follow-colors-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let source = root.join("voice.wav");
+        write_wav(&source, &[0.25; 4096]);
+        let project = synchronized_project(root.join("session.cleanslate"), vec![source]).unwrap();
+        let envelope = crate::GainEnvelope::constant_at_rate(4096, 48_000, 0.25).unwrap();
+        let mut builder = crate::waveform::WaveformBuilder::default();
+        builder.push(&[0.25; 4096]);
+        let waveform = builder.finish(48_000);
+        let mut app = super::CleanSlateApp {
+            timeline: crate::timeline::TimelineViewport::new(waveform.duration()),
+            waveforms: vec![waveform],
+            project: Some(project),
+            ..Default::default()
+        };
+        app.preview = Some(crate::AnalysisPreview {
+            stems: app.project.as_ref().unwrap().source_paths(),
+            regions: vec![],
+            envelopes: vec![envelope.clone()],
+            protections: vec![],
+            parameters: app.project.as_ref().unwrap().parameters(),
+        });
+        let project = app.project.as_ref().unwrap();
+        let constraints = project.gain_constraints();
+        let gain = crate::gain_editor::GainCanvas {
+            revision: 0,
+            project,
+            constraints: &constraints,
+            track: project.sources[0].track_id,
+            viewport: &app.timeline,
+            automatic: None,
+            effective: Some(&envelope),
+            editing: true,
+            selected_point: None,
+            on_event: Box::new(|_| ()),
+        };
+        let renderer = iced::Renderer::Secondary(iced_tiny_skia::Renderer::new(
+            iced::Font::DEFAULT,
+            iced::Pixels(16.0),
+        ));
+        let waveform_state = crate::waveform::TimelineCanvasState::default();
+        let gain_state = crate::gain_editor::GainCanvasState::default();
+        let mut previous_waveform = None;
+        let mut previous_gain = None;
+        for (appearance, scale) in [
+            (crate::appearance::Appearance::Dark, 1.0),
+            (crate::appearance::Appearance::Light, 1.0),
+            (crate::appearance::Appearance::Light, 2.0),
+            (crate::appearance::Appearance::Dark, 2.0),
+            (crate::appearance::Appearance::Dark, 1.0),
+        ] {
+            let theme = appearance.theme();
+            let bounds = iced::Rectangle::with_size(iced::Size::new(640.0 * scale, 120.0 * scale));
+            let waveform = drawn_waveform(&app, &waveform_state, &renderer, &theme, bounds);
+            let fresh = drawn_waveform(&app, &Default::default(), &renderer, &theme, bounds);
+            assert_eq!(format!("{waveform:?}"), format!("{fresh:?}"));
+            assert!(Arc::ptr_eq(
+                &waveform,
+                &drawn_waveform(&app, &waveform_state, &renderer, &theme, bounds)
+            ));
+            if let Some(previous) = previous_waveform.replace(waveform.clone()) {
+                assert!(!Arc::ptr_eq(&previous, &waveform));
+                assert_ne!(format!("{previous:?}"), format!("{waveform:?}"));
+            }
+            let bounds = iced::Rectangle::with_size(iced::Size::new(640.0 * scale, 64.0 * scale));
+            let draw = |state| {
+                gain.draw(
+                    state,
+                    &renderer,
+                    &theme,
+                    bounds,
+                    iced::mouse::Cursor::Unavailable,
+                )
+            };
+            let retained = draw(&gain_state);
+            let fresh_state = Default::default();
+            let fresh = draw(&fresh_state);
+            assert_eq!(format!("{retained:?}"), format!("{fresh:?}"));
+            let Geometry::<iced::Renderer>::Secondary(iced_tiny_skia::geometry::Geometry::Cache(
+                cached,
+            )) = &retained[0]
+            else {
+                panic!("expected cached gain canvas");
+            };
+            assert_eq!(cached.clip_bounds.size(), bounds.size());
+            let repeated = draw(&gain_state);
+            let Geometry::<iced::Renderer>::Secondary(iced_tiny_skia::geometry::Geometry::Cache(
+                repeated,
+            )) = &repeated[0]
+            else {
+                panic!("expected repeated gain canvas");
+            };
+            assert!(Arc::ptr_eq(&cached.primitives, &repeated.primitives));
+            if let Some(previous) = previous_gain.replace(cached.primitives.clone()) {
+                assert!(!Arc::ptr_eq(&previous, &cached.primitives));
+                assert_ne!(format!("{previous:?}"), format!("{:?}", cached.primitives));
+            }
+            let curve = crate::visible_gain_curve(&app.timeline, bounds.width, &envelope);
+            assert_eq!((curve[0].time, curve[0].gain), (0, 0.25));
+            assert_eq!(
+                (curve.last().unwrap().time, curve.last().unwrap().gain),
+                (envelope.duration(), 1.0)
+            );
+        }
+        drop(gain);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn visibility_observations_preserve_canvas_and_background_job_delivery() {
+        let mut app = super::CleanSlateApp::default();
+        let mut builder = crate::waveform::WaveformBuilder::default();
+        builder.push(&[0.25; 4096]);
+        app.waveforms.push(builder.finish(48_000));
+        app.timeline.set_total_samples(app.waveforms[0].duration());
+        let renderer = iced::Renderer::Secondary(iced_tiny_skia::Renderer::new(
+            iced::Font::DEFAULT,
+            iced::Pixels(16.0),
+        ));
+        let state = crate::waveform::TimelineCanvasState::default();
+        let bounds = iced::Rectangle::with_size(iced::Size::new(640.0, 120.0));
+        let before = drawn_waveform(&app, &state, &renderer, &super::editor_theme(), bounds);
+        let (sender, result) = std::sync::mpsc::channel();
+        app.source_inspection = Some(super::SourceInspection {
+            paths: vec![],
+            result,
+            cancelled: Default::default(),
+        });
+        // Unsupported state and real minimize/restore observations do not change source geometry.
+        for minimized in [None, Some(true), Some(false)] {
+            let _ = app.update(super::Message::WindowVisibilityChecked(0, minimized));
+            let _ = app.update(super::Message::PlaybackFrame);
+            let after = drawn_waveform(&app, &state, &renderer, &super::editor_theme(), bounds);
+            assert!(std::sync::Arc::ptr_eq(&before, &after));
+        }
+        let _ = app.update(super::Message::WindowVisibilityChecked(0, Some(true)));
+        sender.send(Err("hidden source failure".into())).unwrap();
+        let _ = app.update(super::Message::Tick);
+        assert!(app.source_inspection.is_none());
+        assert!(
+            app.messages
+                .iter()
+                .any(|message| message.contains("hidden source failure"))
+        );
+    }
+
+    #[test]
+    fn unchanged_worker_polls_retain_the_drawn_waveform() {
+        let mut app = super::CleanSlateApp::default();
+        let mut builder = crate::waveform::WaveformBuilder::default();
+        builder.push(&[0.25; 4096]);
+        app.waveforms.push(builder.finish(48_000));
+        app.timeline.set_total_samples(app.waveforms[0].duration());
+        let (_sender, result) = std::sync::mpsc::channel();
+        app.source_inspection = Some(super::SourceInspection {
+            paths: vec![],
+            result,
+            cancelled: Default::default(),
+        });
+        let renderer = iced::Renderer::Secondary(iced_tiny_skia::Renderer::new(
+            iced::Font::DEFAULT,
+            iced::Pixels(16.0),
+        ));
+        let state = crate::waveform::TimelineCanvasState::default();
+        let bounds = iced::Rectangle::with_size(iced::Size::new(640.0, 120.0));
+        let mut previous = drawn_waveform(&app, &state, &renderer, &super::editor_theme(), bounds);
+        let started = std::time::Instant::now();
+        let mut rebuilds = 0;
+        for _ in 0..100 {
+            let _ = app.update(super::Message::Tick);
+            let current = drawn_waveform(&app, &state, &renderer, &super::editor_theme(), bounds);
+            rebuilds += usize::from(!std::sync::Arc::ptr_eq(&previous, &current));
+            previous = current;
+        }
+        eprintln!(
+            "NOOP_POLL iterations=100 geometry_rebuilds={rebuilds} elapsed_us={}",
+            started.elapsed().as_micros()
+        );
+        assert_eq!(
+            rebuilds, 0,
+            "unchanged worker polls must retain static drawing"
+        );
+        assert!(app.source_inspection.is_some());
+    }
+
+    #[test]
+    fn polled_source_waveforms_replace_cached_drawing_and_failure_restores_it() {
+        let mut app = super::CleanSlateApp::default();
+        let mut builder = crate::waveform::WaveformBuilder::default();
+        builder.push(&[0.25; 4096]);
+        app.waveforms.push(builder.finish(48_000));
+        app.timeline.set_total_samples(app.waveforms[0].duration());
+        let renderer = iced::Renderer::Secondary(iced_tiny_skia::Renderer::new(
+            iced::Font::DEFAULT,
+            iced::Pixels(16.0),
+        ));
+        let state = crate::waveform::TimelineCanvasState::default();
+        let bounds = iced::Rectangle::with_size(iced::Size::new(640.0, 120.0));
+        let previous = drawn_waveform(&app, &state, &renderer, &super::editor_theme(), bounds);
+        let (sender, events) = std::sync::mpsc::channel();
+        app.source_loading = Some(super::SourceLoading {
+            paths: vec![],
+            waveforms: vec![],
+            timeline: app.timeline.clone(),
+            stage: "Loading waveforms",
+            events,
+            publish: None,
+            committing: false,
+        });
+        let mut builder = crate::waveform::WaveformBuilder::default();
+        builder.push(&[-0.5; 4096]);
+        sender
+            .send(super::SourceEvent::Waveform(0, builder.finish(48_000)))
+            .unwrap();
+        let _ = app.update(super::Message::Tick);
+        let loading = drawn_waveform(&app, &state, &renderer, &super::editor_theme(), bounds);
+        assert!(!std::sync::Arc::ptr_eq(&previous, &loading));
+        let fresh = drawn_waveform(
+            &app,
+            &Default::default(),
+            &renderer,
+            &super::editor_theme(),
+            bounds,
+        );
+        assert_eq!(format!("{loading:?}"), format!("{fresh:?}"));
+        assert_ne!(format!("{previous:?}"), format!("{loading:?}"));
+
+        sender
+            .send(super::SourceEvent::Stage("Checking sources"))
+            .unwrap();
+        let _ = app.update(super::Message::Tick);
+        let status_only = drawn_waveform(&app, &state, &renderer, &super::editor_theme(), bounds);
+        assert!(std::sync::Arc::ptr_eq(&loading, &status_only));
+
+        sender
+            .send(super::SourceEvent::Finished(Err(
+                "fixture source failure".into()
+            )))
+            .unwrap();
+        let _ = app.update(super::Message::Tick);
+        assert!(app.source_loading.is_none());
+        let restored = drawn_waveform(&app, &state, &renderer, &super::editor_theme(), bounds);
+        assert!(!std::sync::Arc::ptr_eq(&loading, &restored));
+        assert_eq!(format!("{previous:?}"), format!("{restored:?}"));
     }
 
     #[test]
@@ -3910,10 +4353,18 @@ mod app_menu_tests {
         );
         let mut app = CleanSlateApp::default();
         let _ = app.update(Message::About);
-        let _ = app.update(Message::VersionCopied(false));
+        let _ = app.update(Message::CopyVersion);
+        let request = app.copy_request.as_ref().unwrap().clone();
+        let _ = app.update(Message::VersionInfoReady(
+            request.clone(),
+            "Observed report".into(),
+        ));
+        let _ = app.update(Message::VersionCopied(request, false));
         assert!(app.app_feedback.as_ref().unwrap().contains("manually"));
-        assert!(!app.copy_pending);
-        let _ = app.update(Message::VersionCopied(true));
+        assert!(app.copy_request.is_none());
+        let _ = app.update(Message::CopyVersion);
+        let request = app.copy_request.as_ref().unwrap().clone();
+        let _ = app.update(Message::VersionCopied(request, true));
         assert_eq!(
             app.app_feedback.as_deref(),
             Some("Version information copied.")
@@ -3937,12 +4388,96 @@ mod app_menu_tests {
         let mut app = CleanSlateApp::default();
         let _ = app.update(Message::About);
         let _ = app.update(Message::CopyVersion);
-        assert!(app.copy_pending);
+        let request = app.copy_request.as_ref().unwrap().clone();
         let _ = app.update(Message::CloseHelp);
         let _ = app.update(Message::KeyboardShortcuts);
-        let _ = app.update(Message::VersionCopied(false));
-        assert!(!app.copy_pending);
+        let _ = app.update(Message::VersionCopied(request, false));
+        assert!(app.copy_request.is_none());
         assert!(app.shortcuts_open);
+    }
+
+    #[test]
+    fn copied_version_report_includes_observed_graphics_and_explicit_unavailable_fields() {
+        let report = version_info_with_graphics(
+            version_info("1.2.3", None, "windows", "x86_64"),
+            "Direct3D12\r\n",
+            "Example Adapter",
+            Some(1.25),
+        );
+        assert_eq!(
+            report,
+            "CleanSlate 1.2.3\nPlatform: windows (x86_64)\nGraphics backend: Direct3D12\nGraphics adapter: Example Adapter\nWindow scale: 1.25x\nDisplay refresh: unavailable (current GUI API)"
+        );
+        let unavailable = version_info_with_graphics(
+            version_info("1.2.3", None, "windows", "x86_64"),
+            "",
+            "C:/Users/private/session.wav",
+            Some(f32::NAN),
+        );
+        assert!(unavailable.contains("Graphics backend: unavailable"));
+        assert!(unavailable.contains("Graphics adapter: unavailable"));
+        assert!(unavailable.contains("Window scale: unavailable"));
+        assert!(!unavailable.contains("private"));
+        assert!(!unavailable.contains("session.wav"));
+    }
+
+    #[test]
+    fn late_clipboard_reply_cannot_finish_a_reopened_about_copy() {
+        let mut app = CleanSlateApp::default();
+        let _ = app.update(Message::About);
+        let _ = app.update(Message::CopyVersion);
+        let first = app.copy_request.as_ref().unwrap().clone();
+        let _ = app.update(Message::CloseHelp);
+        let _ = app.update(Message::About);
+        let _ = app.update(Message::CopyVersion);
+        let second = app.copy_request.as_ref().unwrap().clone();
+        let stale = app.update(Message::VersionInfoReady(
+            first.clone(),
+            "Old report".into(),
+        ));
+        assert_eq!(
+            stale.units(),
+            0,
+            "a stale report attempted a clipboard write"
+        );
+        let _ = app.update(Message::VersionCopied(first, true));
+        assert!(
+            app.copy_request
+                .as_ref()
+                .is_some_and(|request| Arc::ptr_eq(request, &second))
+        );
+        assert!(app.version_details.is_none());
+        let _ = app.update(Message::VersionInfoReady(
+            second.clone(),
+            "Current observed report".into(),
+        ));
+        assert_eq!(
+            app.version_details.as_deref(),
+            Some("Current observed report")
+        );
+        let _ = app.update(Message::VersionCopied(second, true));
+        assert!(app.copy_request.is_none());
+        assert_eq!(
+            app.app_feedback.as_deref(),
+            Some("Version information copied.")
+        );
+    }
+
+    #[test]
+    fn copied_hardware_fields_cannot_hide_paths_or_exceed_the_report_bound() {
+        let report = version_info_with_graphics(
+            "CleanSlate test".into(),
+            "C:\u{0}/Users/private/session.wav",
+            &"δ".repeat(400),
+            None,
+        );
+        assert_eq!(
+            report,
+            format!(
+                "CleanSlate test\nGraphics backend: unavailable\nGraphics adapter: {}\nWindow scale: unavailable\nDisplay refresh: unavailable (current GUI API)",
+                "δ".repeat(160),
+            ),
+        );
     }
 
     #[test]
@@ -4055,6 +4590,40 @@ fn version_info(version: &str, build: Option<&str>, os: &str, arch: &str) -> Str
     info
 }
 
+fn version_info_with_graphics(
+    mut info: String,
+    backend: &str,
+    adapter: &str,
+    scale: Option<f32>,
+) -> String {
+    fn hardware_field(value: &str) -> String {
+        let value: String = value
+            .chars()
+            .filter(|c| !c.is_control())
+            .take(160)
+            .collect();
+        let value = value.trim();
+        if value.is_empty()
+            || value.contains(":\\")
+            || value.contains(":/")
+            || value.starts_with('/')
+            || value.starts_with("\\\\")
+        {
+            return "unavailable".into();
+        }
+        value.to_owned()
+    }
+    let scale = scale
+        .filter(|scale| scale.is_finite() && *scale > 0.0)
+        .map_or_else(|| "unavailable".into(), |scale| format!("{scale:.2}x"));
+    info.push_str(&format!(
+        "\nGraphics backend: {}\nGraphics adapter: {}\nWindow scale: {scale}\nDisplay refresh: unavailable (current GUI API)",
+        hardware_field(backend),
+        hardware_field(adapter),
+    ));
+    info
+}
+
 fn open_app_link(link: AppLink) -> Result<(), String> {
     use std::process::{Command, Stdio};
     #[cfg(target_os = "windows")]
@@ -4120,7 +4689,8 @@ pub struct CleanSlateApp {
     menu_selected: usize,
     app_dialog: Option<AppDialog>,
     about_copy_selected: bool,
-    copy_pending: bool,
+    copy_request: Option<Arc<()>>,
+    version_details: Option<String>,
     app_feedback: Option<String>,
     help_open: bool,
     shortcuts_open: bool,
@@ -4179,6 +4749,8 @@ pub struct CleanSlateApp {
     meters_at_playhead: bool,
     solo_tracks: u64,
     drawing_revision: u64,
+    window_minimized: bool,
+    window_visibility_generation: u64,
     preview_parameters: AutomixParameters,
     preview: Option<AnalysisPreview>,
     preview_sources: Vec<waveform::SourceStamp>,
@@ -4277,7 +4849,8 @@ impl Default for CleanSlateApp {
             menu_selected: 0,
             app_dialog: None,
             about_copy_selected: true,
-            copy_pending: false,
+            copy_request: None,
+            version_details: None,
             app_feedback: None,
             shortcuts_open: false,
             help_close_selected: false,
@@ -4329,6 +4902,8 @@ impl Default for CleanSlateApp {
             meters_at_playhead: true,
             solo_tracks: 0,
             drawing_revision: 0,
+            window_minimized: false,
+            window_visibility_generation: 0,
             preview_parameters: AutomixParameters::default(),
             preview: None,
             preview_sources: vec![],
@@ -4624,7 +5199,8 @@ enum Message {
     LinkOpened(AppLink, Result<(), String>),
     CopyVersion,
     CopyProjectPath,
-    VersionCopied(bool),
+    VersionInfoReady(Arc<()>, String),
+    VersionCopied(Arc<()>, bool),
     Help,
     KeyboardShortcuts,
     CloseHelp,
@@ -4662,6 +5238,8 @@ enum Message {
     Cancel,
     Tick,
     PlaybackFrame,
+    CheckWindowVisibility,
+    WindowVisibilityChecked(u64, Option<bool>),
     LockPlayhead,
     CenterPlayhead,
     ToggleMeterPlacement,
@@ -4734,7 +5312,8 @@ enum Message {
 }
 
 pub fn run() -> iced::Result {
-    iced::application(
+    crate::performance::start_from_environment();
+    let result = iced::application(
         || {
             #[cfg(debug_assertions)]
             let project = std::env::var_os("CLEANSLATE_DEV_PROJECT").map(PathBuf::from);
@@ -4742,7 +5321,12 @@ pub fn run() -> iced::Result {
             let project = None;
             startup(project)
         },
-        CleanSlateApp::update,
+        |app: &mut CleanSlateApp, message| {
+            let _update = crate::performance::measure(crate::performance::Metric::AppUpdate);
+            let _poll = matches!(message, Message::Tick)
+                .then(|| crate::performance::measure(crate::performance::Metric::WorkerPoll));
+            app.update(message)
+        },
         CleanSlateApp::view,
     )
     .title(
@@ -4754,7 +5338,17 @@ pub fn run() -> iced::Result {
     )
     .theme(CleanSlateApp::theme)
     .default_font(iced::Font::with_name("Segoe UI"))
-    .subscription(CleanSlateApp::subscription)
+    .subscription(|app: &CleanSlateApp| {
+        let observations = if crate::performance::is_active() {
+            iced::event::listen_raw(|event, _, _| {
+                crate::performance::observe_event(&event);
+                None::<Message>
+            })
+        } else {
+            Subscription::none()
+        };
+        Subscription::batch([app.subscription(), observations])
+    })
     .window(window::Settings {
         icon: Some(
             window::icon::from_rgba(include_bytes!("../assets/cleanslate.rgba").to_vec(), 64, 64)
@@ -4764,7 +5358,9 @@ pub fn run() -> iced::Result {
         min_size: Some(iced::Size::new(960.0, 900.0)),
         ..window::Settings::default()
     })
-    .run()
+    .run();
+    crate::performance::finish();
+    result
 }
 
 fn startup(project: Option<PathBuf>) -> CleanSlateApp {
@@ -4856,7 +5452,49 @@ fn quiet_button(theme: &Theme, status: button::Status) -> button::Style {
     style
 }
 
+fn flat_button(theme: &Theme, status: button::Status, selected: bool) -> button::Style {
+    let c = colors(theme);
+    button::Style {
+        background: match status {
+            button::Status::Hovered => Some(c.hover.into()),
+            button::Status::Pressed => Some(c.pressed.into()),
+            button::Status::Active if selected => Some(c.selection.into()),
+            _ => None,
+        },
+        text_color: if status == button::Status::Disabled {
+            c.disabled
+        } else {
+            c.text
+        },
+        border: iced::Border {
+            radius: 5.0.into(),
+            ..iced::Border::default()
+        },
+        shadow: iced::Shadow::default(),
+        ..button::Style::default()
+    }
+}
+
+fn toolbar_label(icon: ToolbarIcon, label: &str) -> Element<'_, Message> {
+    row![icon.view(None), text(label).size(13)]
+        .spacing(6)
+        .align_y(iced::Center)
+        .into()
+}
+
 impl CleanSlateApp {
+    fn transport_label<'a>(
+        &self,
+        icon: ToolbarIcon,
+        label: &'a str,
+        tint: iced::Color,
+    ) -> Element<'a, Message> {
+        row![icon.view(Some(tint)), text(label)]
+            .spacing(6)
+            .align_y(iced::Center)
+            .into()
+    }
+
     fn commit_sound(&mut self) {
         let Some((parameter, draft)) = &self.sound_draft else {
             return;
@@ -4909,11 +5547,15 @@ impl CleanSlateApp {
             .on_right_press(Message::SoundMenu(parameter))
             .into()
         };
-        let mut content = column![
-            row![text(label).size(14), Space::new().width(Fill), control]
-                .spacing(6)
-                .align_y(iced::Center)
-        ]
+        let mut content = if label.is_empty() {
+            column![control]
+        } else {
+            column![
+                row![text(label).size(14), Space::new().width(Fill), control]
+                    .spacing(6)
+                    .align_y(iced::Center)
+            ]
+        }
         .spacing(4);
         if self
             .sound_draft
@@ -4931,6 +5573,46 @@ impl CleanSlateApp {
             );
         }
         content.into()
+    }
+
+    fn sound_dial(&self, parameter: SoundParameter, size: f32) -> Element<'_, Message> {
+        use crate::parameter_dial::{DialKind, ParameterDial};
+        let (kind, on_change): (DialKind, fn(f32) -> Message) = match parameter {
+            SoundParameter::Attenuation => (DialKind::Attenuation, Message::Attenuation),
+            SoundParameter::Open => (DialKind::Open, Message::OpenTime),
+            SoundParameter::Close => (DialKind::Close, Message::CloseTime),
+            SoundParameter::Gap => (DialKind::Gap, Message::MinimumGap),
+        };
+        canvas(ParameterDial {
+            kind,
+            value: parameter.value(self.preview_parameters),
+            muted: parameter == SoundParameter::Attenuation && self.preview_parameters.mute,
+            enabled: self.workspace_input_active(),
+            keyboard_enabled: self.sound_draft.is_none() && self.track_name_draft.is_none(),
+            on_change,
+            on_release: Message::RefreshPreview,
+            on_reset: Message::ResetSound(parameter),
+            on_edit: Message::EditSound(parameter),
+        })
+        .width(size)
+        .height(size)
+        .into()
+    }
+
+    fn timing_control(
+        &self,
+        parameter: SoundParameter,
+        label: &'static str,
+    ) -> Element<'_, Message> {
+        row![
+            self.sound_dial(parameter, 56.0),
+            column![text(label).size(14), self.sound_value(parameter, "")]
+                .spacing(4)
+                .width(Fill),
+        ]
+        .spacing(12)
+        .align_y(iced::Center)
+        .into()
     }
     fn install_waveforms(&mut self, waveforms: Vec<WaveformCache>) {
         self.close_reference_menu();
@@ -5140,6 +5822,14 @@ impl CleanSlateApp {
                 break;
             };
             let event = self.import_jobs[index].events.as_ref().unwrap().try_recv();
+            if matches!(
+                &event,
+                Ok(crate::import::Event::Metadata(_)
+                    | crate::import::Event::Preview(_)
+                    | crate::import::Event::Ready(_, _))
+            ) {
+                self.drawing_revision = self.drawing_revision.wrapping_add(1);
+            }
             match event {
                 Ok(crate::import::Event::Metadata(waveforms)) => {
                     if let Some(waveform) = waveforms.first() {
@@ -5360,6 +6050,7 @@ impl CleanSlateApp {
                 }
             };
             if let Some(result) = result {
+                self.drawing_revision = self.drawing_revision.wrapping_add(1);
                 self.source_inspection = None;
                 let result = result.map(|inputs| {
                     inputs
@@ -5416,6 +6107,7 @@ impl CleanSlateApp {
                             loading.timeline.set_total_samples(waveform.duration());
                         }
                         loading.waveforms.push(waveform);
+                        self.drawing_revision = self.drawing_revision.wrapping_add(1);
                     }
                 }
                 result => {
@@ -5427,6 +6119,7 @@ impl CleanSlateApp {
                         }
                         _ => unreachable!(),
                     };
+                    self.drawing_revision = self.drawing_revision.wrapping_add(1);
                     let loading = self.source_loading.take().unwrap();
                     match result {
                         Ok(loaded) => {
@@ -5790,6 +6483,7 @@ impl CleanSlateApp {
             preferences_path: self.preferences_path.clone(),
             appearance_error: self.appearance_error.clone(),
             drawing_revision: self.drawing_revision.wrapping_add(1),
+            window_visibility_generation: self.window_visibility_generation.wrapping_add(1),
             messages: vec!["New project. Import tracks to begin.".into()],
             ..Self::default()
         };
@@ -5945,6 +6639,7 @@ impl CleanSlateApp {
                     self.preview = Some(analysis.preview(project, &effective));
                 }
                 self.effective_result = Some(effective);
+                self.drawing_revision = self.drawing_revision.wrapping_add(1);
             }
             Err(error) => self.preview_error = Some(error.to_string()),
         }
@@ -6418,6 +7113,7 @@ impl CleanSlateApp {
                                     self.reference_stale = false;
                                     self.gain_constraints = project.gain_constraints();
                                     self.preview_error = None;
+                                    self.drawing_revision = self.drawing_revision.wrapping_add(1);
                                 }
                                 Err(error) => self.preview_error = Some(error.to_string()),
                             }
@@ -6552,6 +7248,10 @@ impl CleanSlateApp {
             self.audition_ready = false;
             return;
         }
+        // Audio and completion checks continue while optional playhead/meter drawing sleeps.
+        if self.window_minimized && !audition.is_finished() {
+            return;
+        }
         self.timeline.seek(audition.position());
         if self.timeline.follow_playhead(self.playback_scroll) {
             self.drawing_revision = self.drawing_revision.wrapping_add(1);
@@ -6580,6 +7280,11 @@ impl CleanSlateApp {
     }
 
     fn stop_audition(&mut self) {
+        self.window_visibility_generation = self.window_visibility_generation.wrapping_add(1);
+        self.window_minimized = false;
+        if self.timeline.is_middle_panning() {
+            self.update_playback_position();
+        }
         if let Some(snapshot) = &mut self.reference_audition {
             snapshot.paused = true;
         }
@@ -6868,6 +7573,47 @@ impl CleanSlateApp {
     }
 
     fn update(&mut self, message: Message) -> Task<Message> {
+        match message {
+            Message::CheckWindowVisibility => {
+                self.update_playback_position();
+                self.window_visibility_generation =
+                    self.window_visibility_generation.wrapping_add(1);
+                let generation = self.window_visibility_generation;
+                return window::latest()
+                    .and_then(window::is_minimized)
+                    .map(move |minimized| Message::WindowVisibilityChecked(generation, minimized));
+            }
+            Message::WindowVisibilityChecked(generation, minimized) => {
+                if generation == self.window_visibility_generation {
+                    self.window_minimized = minimized.unwrap_or(false);
+                    self.update_playback_position();
+                }
+                return Task::none();
+            }
+            _ => {}
+        }
+        let pan_end = match &message {
+            Message::Timeline(TimelineEvent::PanEnd)
+            | Message::TrackTimeline(_, TimelineEvent::PanEnd) => Some(false),
+            Message::Timeline(TimelineEvent::PanCancel)
+            | Message::TrackTimeline(_, TimelineEvent::PanCancel) => Some(true),
+            _ => None,
+        };
+        if let Some(cancel) = pan_end {
+            if self.timeline.is_middle_panning() {
+                // Read the audio position while follow is suspended, before capturing the new anchor.
+                self.update_playback_position();
+                let moved = if cancel {
+                    self.timeline.cancel_middle_pan(self.playback_scroll)
+                } else {
+                    self.timeline.finish_middle_pan(self.playback_scroll)
+                };
+                if moved {
+                    self.drawing_revision = self.drawing_revision.wrapping_add(1);
+                }
+            }
+            return Task::none();
+        }
         if matches!(message, Message::ShortcutHintInput) {
             self.shortcut_hint_generation = self.shortcut_hint_generation.wrapping_add(1);
             return Task::none();
@@ -6961,11 +7707,38 @@ impl CleanSlateApp {
                 .map(|error| format!("Appearance changed, but could not be saved. {error}"));
             return Task::none();
         }
-        if let Message::VersionCopied(copied) = &message {
-            self.copy_pending = false;
-            if self.app_dialog == Some(AppDialog::About) {
-                self.app_feedback = Some(if *copied { "Version information copied." } else { "Could not confirm the copy. Try again or copy the displayed version information manually." }.into());
+        let copy_reply = match &message {
+            Message::VersionInfoReady(request, _) | Message::VersionCopied(request, _) => {
+                Some(request)
             }
+            _ => None,
+        };
+        if let Some(request) = copy_reply
+            && (self.app_dialog != Some(AppDialog::About)
+                || !self
+                    .copy_request
+                    .as_ref()
+                    .is_some_and(|current| Arc::ptr_eq(current, request)))
+        {
+            return Task::none();
+        }
+        if let Message::VersionInfoReady(request, expected) = &message {
+            self.version_details = Some(expected.clone());
+            self.app_feedback = Some("Copying version information…".into());
+            let expected = expected.clone();
+            let request = request.clone();
+            return iced::clipboard::write::<Message>(expected.clone()).chain(
+                iced::clipboard::read().map(move |actual| {
+                    Message::VersionCopied(
+                        request.clone(),
+                        actual.as_deref() == Some(expected.as_str()),
+                    )
+                }),
+            );
+        }
+        if let Message::VersionCopied(_, copied) = &message {
+            self.copy_request = None;
+            self.app_feedback = Some(if *copied { "Version information copied." } else { "Could not confirm the copy. Try again or copy the displayed version information manually." }.into());
             return Task::none();
         }
         if self.menu_open || self.app_dialog.is_some() {
@@ -6974,6 +7747,7 @@ impl CleanSlateApp {
                 | Message::KeyPressed(keyboard::Key::Named(keyboard::key::Named::Escape), _) => {
                     self.menu_open = false;
                     self.app_dialog = None;
+                    self.copy_request = None;
                     self.shortcut_capture = None;
                     return Task::none();
                 }
@@ -7062,7 +7836,8 @@ impl CleanSlateApp {
                 | Message::OpenLink(_)
                 | Message::LinkOpened(_, _)
                 | Message::CopyVersion
-                | Message::VersionCopied(_)
+                | Message::VersionInfoReady(..)
+                | Message::VersionCopied(..)
                 | Message::Tick
                 | Message::PlaybackFrame => {}
                 _ => return Task::none(),
@@ -7172,8 +7947,10 @@ impl CleanSlateApp {
             self.update_playback_position();
             return Task::none();
         }
-        // Playback changes only the cursor; controller/job updates can change cached geometry.
-        self.drawing_revision = self.drawing_revision.wrapping_add(1);
+        // Polls invalidate geometry only when they install changed timeline data.
+        if !matches!(message, Message::Tick) {
+            self.drawing_revision = self.drawing_revision.wrapping_add(1);
+        }
         if (self.reference_menu.is_some() || self.gain_menu.is_some())
             && matches!(
                 message,
@@ -7413,7 +8190,12 @@ impl CleanSlateApp {
                 return self.update(Message::OpenReferenceMenu(track, point));
             }
             Message::TrackTimeline(track, event) => {
-                if matches!(event, TimelineEvent::FitRange(_, _)) {
+                if matches!(
+                    event,
+                    TimelineEvent::FitRange(_, _) | TimelineEvent::PanStart
+                ) || (matches!(event, TimelineEvent::Pan { .. })
+                    && self.timeline.is_middle_panning())
+                {
                     return self.update(Message::Timeline(event));
                 }
                 self.close_reference_menu();
@@ -7515,6 +8297,7 @@ impl CleanSlateApp {
             }
             Message::SetupDetails(show) => self.setup_details = show,
             Message::LockPlayhead => {
+                self.timeline.override_middle_pan_anchor();
                 if self.playback_scroll == PlaybackScroll::Locked {
                     self.playback_scroll = PlaybackScroll::Off;
                 } else {
@@ -7632,6 +8415,8 @@ impl CleanSlateApp {
                 self.poll_exporting();
             }
             Message::PlaybackFrame
+            | Message::CheckWindowVisibility
+            | Message::WindowVisibilityChecked(_, _)
             | Message::Appearance(_)
             | Message::ShortcutHintInput
             | Message::UnlockOnZoom(_) => unreachable!(),
@@ -8031,6 +8816,7 @@ impl CleanSlateApp {
                 self.shortcut_capture = None;
                 self.menu_open = false;
                 self.app_dialog = None;
+                self.copy_request = None;
                 self.help_open = false;
                 self.shortcuts_open = false;
             }
@@ -8040,6 +8826,8 @@ impl CleanSlateApp {
                 self.app_feedback = None;
             }
             Message::Settings | Message::About => {
+                self.copy_request = None;
+                self.version_details = None;
                 self.settings_selected = if self.appearance == Appearance::Dark {
                     0
                 } else {
@@ -8079,20 +8867,41 @@ impl CleanSlateApp {
                 })
             }
             Message::CopyVersion => {
-                if self.app_dialog == Some(AppDialog::About) && !self.copy_pending {
-                    self.copy_pending = true;
-                    self.app_feedback = Some("Copying version information…".into());
-                    let expected = version_info(
-                        env!("CARGO_PKG_VERSION"),
-                        None,
-                        std::env::consts::OS,
-                        std::env::consts::ARCH,
-                    );
-                    return iced::clipboard::write::<Message>(expected.clone()).chain(
-                        iced::clipboard::read().map(move |actual| {
-                            Message::VersionCopied(actual.as_deref() == Some(expected.as_str()))
-                        }),
-                    );
+                if self.app_dialog == Some(AppDialog::About) && self.copy_request.is_none() {
+                    // A retained token cannot be reused by a reopened dialog's newer request.
+                    let request = Arc::new(());
+                    self.copy_request = Some(request.clone());
+                    self.app_feedback = Some("Collecting graphics information…".into());
+                    return iced::system::information().then(move |information| {
+                        let request = request.clone();
+                        window::latest().then(move |id| {
+                            let backend = information.graphics_backend.clone();
+                            let adapter = information.graphics_adapter.clone();
+                            let request = request.clone();
+                            let complete = move |scale| {
+                                Message::VersionInfoReady(
+                                    request.clone(),
+                                    version_info_with_graphics(
+                                        version_info(
+                                            env!("CARGO_PKG_VERSION"),
+                                            None,
+                                            std::env::consts::OS,
+                                            std::env::consts::ARCH,
+                                        ),
+                                        &backend,
+                                        &adapter,
+                                        scale,
+                                    ),
+                                )
+                            };
+                            match id {
+                                Some(id) => {
+                                    window::scale_factor(id).map(move |scale| complete(Some(scale)))
+                                }
+                                None => Task::done(complete(None)),
+                            }
+                        })
+                    });
                 }
             }
             Message::CopyProjectPath => {
@@ -8100,7 +8909,7 @@ impl CleanSlateApp {
                     return iced::clipboard::write::<Message>(project.path().display().to_string());
                 }
             }
-            Message::VersionCopied(_) => {}
+            Message::VersionInfoReady(..) | Message::VersionCopied(..) => {}
             Message::SubmitExport => self.submit_export(),
             Message::Timeline(event) => match event {
                 TimelineEvent::FitRange(start, end) => {
@@ -8135,8 +8944,19 @@ impl CleanSlateApp {
                     }
                 }
                 TimelineEvent::Pan { delta_x, width } => {
-                    self.playback_scroll = PlaybackScroll::Off;
+                    if !self.timeline.is_middle_panning() {
+                        self.playback_scroll = PlaybackScroll::Off;
+                    }
                     self.timeline.pan_by_pixels(delta_x, width)
+                }
+                TimelineEvent::PanStart => {
+                    self.timeline.begin_middle_pan(self.playback_scroll);
+                    if self.playback_scroll == PlaybackScroll::Page {
+                        self.playback_scroll = PlaybackScroll::Off;
+                    }
+                }
+                TimelineEvent::PanEnd | TimelineEvent::PanCancel => {
+                    unreachable!("Pan cleanup runs before modal input guards")
                 }
                 TimelineEvent::Select(start, end) => {
                     self.selected_example = None;
@@ -8166,6 +8986,21 @@ impl CleanSlateApp {
     }
 
     fn subscription(&self) -> Subscription<Message> {
+        let pan_cleanup = if self.timeline.is_middle_panning() {
+            iced::event::listen_with(|event, _, _| match event {
+                iced::Event::Mouse(iced::mouse::Event::ButtonReleased(
+                    iced::mouse::Button::Middle,
+                )) => Some(Message::Timeline(TimelineEvent::PanEnd)),
+                iced::Event::Window(window::Event::Unfocused)
+                | iced::Event::Keyboard(keyboard::Event::KeyPressed {
+                    key: keyboard::Key::Named(keyboard::key::Named::Escape),
+                    ..
+                }) => Some(Message::Timeline(TimelineEvent::PanCancel)),
+                _ => None,
+            })
+        } else {
+            Subscription::none()
+        };
         let shortcut_hints = iced::event::listen_with(|event, _, _| match event {
             // Reset on release so rebuilding the hint never loses a button's pending click.
             iced::Event::Mouse(iced::mouse::Event::ButtonReleased(_))
@@ -8197,11 +9032,23 @@ impl CleanSlateApp {
         } else {
             Subscription::none()
         };
-        let playback = if self.audition.is_some() {
+        let playback = if self.audition.is_some() && !self.window_minimized {
             window::frames().map(|_| Message::PlaybackFrame)
         } else {
             Subscription::none()
         };
+        // Iced has no minimized event. Query only during playback, at two checks per second.
+        let visibility = if self.audition.is_some() {
+            iced::time::every(Duration::from_millis(500)).map(|_| Message::CheckWindowVisibility)
+        } else {
+            Subscription::none()
+        };
+        let window_changes = iced::event::listen_with(|event, _, _| match event {
+            iced::Event::Window(
+                window::Event::Focused | window::Event::Unfocused | window::Event::Resized(_),
+            ) => Some(Message::CheckWindowVisibility),
+            _ => None,
+        });
         let rename_keys = if self.track_name_draft.is_some() && self.workspace_input_active() {
             // Text inputs capture Escape, so cancellation must also see captured events.
             iced::event::listen_with(|event, _, _| match event {
@@ -8259,10 +9106,13 @@ impl CleanSlateApp {
             Subscription::none()
         };
         Subscription::batch([
+            pan_cleanup,
             shortcut_hints,
             drops,
             processing,
             playback,
+            visibility,
+            window_changes,
             rename_keys,
             sound_keys,
             import_keys,
@@ -8312,7 +9162,21 @@ impl CleanSlateApp {
                 "Wheel | Ctrl+wheel",
                 "Preserves lock unless Unlock playhead when zooming is enabled.",
             ),
-            ("Pan", "Middle-button drag", ""),
+            (
+                "Pan",
+                "Middle-button drag",
+                "Repositions an existing playhead lock on release.",
+            ),
+            (
+                "Adjust sound parameter",
+                "Drag dial | Wheel",
+                "Hold Shift for fine adjustment.",
+            ),
+            (
+                "Type exact value",
+                "Double-click dial | Click value",
+                "Enter saves; Escape cancels.",
+            ),
             (
                 "Select or resize example",
                 "Click label strip | Drag selected handles",
@@ -8340,7 +9204,11 @@ impl CleanSlateApp {
             ),
             (
                 "Reset sound parameter",
-                "Ctrl+click | Right-click sound control",
+                if cfg!(target_os = "macos") {
+                    "Command+click | Right-click value"
+                } else {
+                    "Ctrl+click | Right-click value"
+                },
                 "",
             ),
             (
@@ -8462,13 +9330,15 @@ impl CleanSlateApp {
                     let about = self.app_dialog == Some(AppDialog::About);
                     let mut body = column![text(if about { "About CleanSlate" } else { "Settings" }).size(24)].spacing(14).width(Fill).padding([0, 12]);
                     if about {
-                        body = body.push(text(version_info(env!("CARGO_PKG_VERSION"), None, std::env::consts::OS, std::env::consts::ARCH)))
+                        body = body.push(text(self.version_details.clone().unwrap_or_else(|| version_info(env!("CARGO_PKG_VERSION"), None, std::env::consts::OS, std::env::consts::ARCH))))
                             .push(text("License: MIT · Copyright © 2026 CleanSlate contributors"))
                             .push(text("CleanSlate is a local, non-destructive podcast automixer."))
                             .push(text("Credits & references").size(18))
                             .push(text("Interface: Iced. Audio playback: Rodio. Decoding: Symphonia and bwavfile. Resampling: Rubato. Ownership models: Linfa, nalgebra and ndarray. Serialization: Serde. Integrity: SHA-2."))
                             .push(text("Speech detection: embedded Silero VAD, used through ONNX Runtime (ort). Silero VAD and ONNX Runtime carry MIT licenses. Bundled runtime notices and each component's licenses remain authoritative; CleanSlate's MIT license does not relicense dependencies."))
                             .push(text("See the distribution's THIRD-PARTY-NOTICES.txt and licenses directory. Model references and runtime notices are recorded in docs/licenses/embedded-model-runtime.txt in the repository."))
+                            .push(text("Outline icons: Lucide Icons and Contributors; ISC, with MIT notices for Feather-derived icons."))
+                            .push(text(include_str!("../assets/lucide/LICENSE")).size(12))
                             .push(text(include_str!("../LICENSE")).size(12));
                     } else {
                         body = body.push(text("Appearance").size(18));
@@ -8504,7 +9374,7 @@ impl CleanSlateApp {
                         }
                     }
                     let mut actions = row![].spacing(12);
-                    if about { actions = actions.push(button(if self.about_copy_selected { "› Copy version info" } else { "Copy version info" }).on_press_maybe((!self.copy_pending).then_some(Message::CopyVersion))); }
+                    if about { actions = actions.push(button(if self.about_copy_selected { "› Copy version info" } else { "Copy version info" }).on_press_maybe(self.copy_request.is_none().then_some(Message::CopyVersion))); }
                     actions = actions.push(button(if (about && !self.about_copy_selected) || (!about && self.settings_selected == 4 + DEFINITIONS.len() * 3) { "› Close    Esc" } else { "Close    Esc" }).on_press(Message::CloseHelp));
                     let mut panel = column![scrollable(body).id("app-dialog").width(Fill).height((size.height - 220.0).clamp(140.0, 560.0)), actions].spacing(16).width(Fill);
                     if let Some(feedback) = &self.app_feedback { panel = panel.push(text(feedback).size(14)); }
@@ -9761,24 +10631,53 @@ impl CleanSlateApp {
         } else {
             timeline_content.into()
         };
+        let locked = self.playback_scroll == PlaybackScroll::Locked;
+        let meter_control = iced::widget::tooltip(
+            button(toolbar_label(
+                ToolbarIcon::Meters {
+                    at_playhead: self.meters_at_playhead,
+                },
+                "Meters",
+            ))
+            .padding([6, 8])
+            .height(34)
+            .style(|theme, status| flat_button(theme, status, false))
+            .hover_outline(false)
+            .on_press(Message::ToggleMeterPlacement),
+            container(
+                text(if self.meters_at_playhead {
+                    "Speaker meters at the playhead · move to the right"
+                } else {
+                    "Speaker meters on the right · move to the playhead"
+                })
+                .size(14),
+            )
+            .padding(8)
+            .style(editor_panel),
+            iced::widget::tooltip::Position::Bottom,
+        )
+        .delay(Duration::from_millis(600))
+        .snap_within_viewport(true);
         let timeline = column![
             row![
                 text("Timeline").size(16).font(iced::Font { weight: iced::font::Weight::Semibold, ..iced::Font::with_name("Segoe UI") }),
                 Space::new().width(Fill),
-                self.shortcut_control(Command::Lock, button(text(if self.playback_scroll == PlaybackScroll::Locked {
-                    "Unlock playhead"
-                } else {
-                    "Lock playhead"
-                }).size(14)).on_press(Message::LockPlayhead)
-                    .style(if self.playback_scroll == PlaybackScroll::Locked { selected_button } else { secondary_button }).selected(self.playback_scroll == PlaybackScroll::Locked)),
-                self.shortcut_control(Command::Center, button(text("Center playhead").size(14)).style(secondary_button).on_press(Message::CenterPlayhead)),
-                button(text(if self.meters_at_playhead { "Meters: Playhead" } else { "Meters: Right" }).size(14))
-                    .style(secondary_button).on_press(Message::ToggleMeterPlacement),
+                self.shortcut_control(Command::Lock,
+                    button(toolbar_label(ToolbarIcon::Lock { locked }, "Lock"))
+                        .padding([6, 8]).height(34)
+                        .style(move |theme, status| flat_button(theme, status, locked))
+                        .hover_outline(false).selected(locked).on_press(Message::LockPlayhead)),
+                self.shortcut_control(Command::Center,
+                    button(toolbar_label(ToolbarIcon::Center, "Center"))
+                        .padding([6, 8]).height(34)
+                        .style(|theme, status| flat_button(theme, status, false))
+                        .hover_outline(false).on_press(Message::CenterPlayhead)),
+                crate::gui_controls::shortcut_hint(meter_control, self.shortcut_hint_generation),
             ].spacing(8).align_y(iced::Center),
             iced::widget::tooltip(
                 text("Drag to mark a speaker example · red shading shows reduced volume")
                     .size(14).color(self.appearance.colors().muted),
-                container(text("Click to seek. Drag to label speech or room tone.\nWheel to zoom. Ctrl-wheel or middle-drag to pan.").size(14))
+                container(text("Click to seek. Drag to label speech or room tone.\nWheel to zoom. Ctrl-wheel or middle-drag to pan.\nWhile locked, release a middle-drag to set the new lock position.").size(14))
                     .padding(12).style(editor_panel),
                 iced::widget::tooltip::Position::Bottom,
             ),
@@ -9870,15 +10769,7 @@ impl CleanSlateApp {
             self.setup_details || setup_required,
         ));
         let attenuation = row![
-            canvas(crate::attenuation_dial::AttenuationDial {
-                value: parameters.attenuation_db,
-                muted: parameters.mute,
-                keyboard_enabled: self.sound_draft.is_none() && self.track_name_draft.is_none(),
-                on_change: Message::Attenuation,
-                on_release: Message::RefreshPreview,
-            })
-            .width(88)
-            .height(88),
+            self.sound_dial(SoundParameter::Attenuation, 96.0),
             column![
                 inspector_heading("Attenuation"),
                 self.sound_value(SoundParameter::Attenuation, ""),
@@ -9904,33 +10795,11 @@ impl CleanSlateApp {
         .align_y(iced::Center);
         let transitions = column![
             inspector_heading("Transitions and gaps"),
-            column![
-                self.sound_value(SoundParameter::Open, "Fade to full volume"),
-                slider(1.0..=1000.0, parameters.open_ms, Message::OpenTime)
-                    .step(1.0_f32)
-                    .on_release(Message::RefreshPreview),
-            ]
-            .spacing(4),
-            column![
-                self.sound_value(SoundParameter::Close, "Fade to reduced volume"),
-                slider(1.0..=2000.0, parameters.close_ms, Message::CloseTime)
-                    .step(1.0_f32)
-                    .on_release(Message::RefreshPreview),
-            ]
-            .spacing(4),
-            column![
-                self.sound_value(SoundParameter::Gap, "Ignore gaps shorter than"),
-                slider(
-                    10.0..=5000.0,
-                    parameters.minimum_gap_ms,
-                    Message::MinimumGap
-                )
-                .step(1.0_f32)
-                .on_release(Message::RefreshPreview),
-            ]
-            .spacing(4),
+            self.timing_control(SoundParameter::Open, "Fade to full volume"),
+            self.timing_control(SoundParameter::Close, "Fade to reduced volume"),
+            self.timing_control(SoundParameter::Gap, "Ignore gaps shorter than"),
         ]
-        .spacing(14);
+        .spacing(12);
         let inspector_header = column![
             preview_state,
             text(self.next_action())
@@ -9968,7 +10837,11 @@ impl CleanSlateApp {
             setup,
         ]
         .spacing(18)
-        .padding([0, 2]);
+        .padding(iced::Padding {
+            left: 2.0,
+            right: 14.0,
+            ..iced::Padding::default()
+        });
         let inspector_content: Element<'_, Message> = if compact {
             column![
                 row![
@@ -10007,6 +10880,37 @@ impl CleanSlateApp {
         } else {
             inspector.into()
         };
+        let can_audition = self.preview.is_some()
+            || self.audition_mode == AuditionMode::Original
+                && self
+                    .project
+                    .as_ref()
+                    .is_some_and(|project| crate::original_envelopes(project).is_ok());
+        let can_stop = self.audition.is_some()
+            || self.audition_range.is_some()
+            || self.audition_preparation.is_busy();
+        let playback_label = if let Some(status) = self.audition_status() {
+            status
+        } else if self
+            .reference_audition
+            .as_ref()
+            .is_some_and(|snapshot| snapshot.paused)
+        {
+            "Paused · Resume"
+        } else if self.audition.is_some() {
+            "Playing"
+        } else {
+            "Play"
+        };
+        let playback_icon = if self
+            .reference_audition
+            .as_ref()
+            .is_some_and(|snapshot| !snapshot.paused)
+        {
+            ToolbarIcon::Pause
+        } else {
+            ToolbarIcon::Play
+        };
         let playback = row![
             text(format!(
                 "{:02}:{:06.3}",
@@ -10017,9 +10921,13 @@ impl CleanSlateApp {
             Space::new().width(Fill),
             self.shortcut_control(
                 Command::Start,
-                button("Previous")
-                    .style(secondary_button)
-                    .on_press(Message::Previous)
+                button(self.transport_label(
+                    ToolbarIcon::Previous,
+                    "Previous",
+                    self.appearance.colors().text
+                ))
+                .style(secondary_button)
+                .on_press(Message::Previous)
             ),
             self.shortcut_control(
                 if self.reference_menu.is_some() {
@@ -10027,38 +10935,31 @@ impl CleanSlateApp {
                 } else {
                     Command::Play
                 },
-                button(if let Some(status) = self.audition_status() {
-                    status
-                } else if self
-                    .reference_audition
-                    .as_ref()
-                    .is_some_and(|snapshot| snapshot.paused)
-                {
-                    "Paused · Resume"
-                } else if self.audition.is_some() {
-                    "Playing"
-                } else {
-                    "Play"
-                })
+                button(self.transport_label(
+                    playback_icon,
+                    playback_label,
+                    if can_audition {
+                        self.appearance.colors().action_text
+                    } else {
+                        self.appearance.colors().disabled
+                    }
+                ))
                 .style(primary_button)
-                .on_press_maybe(
-                    (self.preview.is_some()
-                        || self.audition_mode == AuditionMode::Original
-                            && self
-                                .project
-                                .as_ref()
-                                .is_some_and(|project| crate::original_envelopes(project).is_ok()))
-                    .then_some(Message::Audition)
-                )
+                .on_press_maybe(can_audition.then_some(Message::Audition))
             ),
             self.shortcut_control(
                 Command::Play,
-                button("Stop").style(secondary_button).on_press_maybe(
-                    (self.audition.is_some()
-                        || self.audition_range.is_some()
-                        || self.audition_preparation.is_busy())
-                    .then_some(Message::Stop)
-                )
+                button(self.transport_label(
+                    ToolbarIcon::Stop,
+                    "Stop",
+                    if can_stop {
+                        self.appearance.colors().text
+                    } else {
+                        self.appearance.colors().disabled
+                    }
+                ))
+                .style(secondary_button)
+                .on_press_maybe(can_stop.then_some(Message::Stop))
             ),
             text(if self.audition_preparation.is_busy() {
                 "Preparing playback…"
@@ -10071,69 +10972,52 @@ impl CleanSlateApp {
         ]
         .spacing(8)
         .align_y(iced::Center);
-        let listening_modes = row![
-            self.shortcut_control(
+        let mut listening_modes = row![].spacing(2).align_y(iced::Center);
+        for (command, mode, label, message) in [
+            (
                 Command::Original,
-                button(if self.audition_mode == AuditionMode::Original {
-                    "Original ✓"
-                } else {
-                    "Original"
-                })
-                .style(if self.audition_mode == AuditionMode::Original {
-                    selected_button
-                } else {
-                    quiet_button
-                })
-                .selected(self.audition_mode == AuditionMode::Original)
-                .on_press(Message::Original)
+                AuditionMode::Original,
+                "Original",
+                Message::Original,
             ),
-            self.shortcut_control(
+            (
                 Command::Processed,
-                button(if self.audition_mode == AuditionMode::Processed {
-                    "Processed ✓"
-                } else {
-                    "Processed"
-                })
-                .style(if self.audition_mode == AuditionMode::Processed {
-                    selected_button
-                } else {
-                    quiet_button
-                })
-                .selected(self.audition_mode == AuditionMode::Processed)
-                .on_press_maybe(self.preview.as_ref().map(|_| Message::Processed))
+                AuditionMode::Processed,
+                "Processed",
+                Message::Processed,
             ),
-            self.shortcut_control(
+            (
                 Command::Removed,
-                button(if self.audition_mode == AuditionMode::Removed {
-                    "Removed ✓"
-                } else {
-                    "Removed"
-                })
-                .style(if self.audition_mode == AuditionMode::Removed {
-                    selected_button
-                } else {
-                    quiet_button
-                })
-                .selected(self.audition_mode == AuditionMode::Removed)
-                .on_press_maybe(self.preview.as_ref().map(|_| Message::Removed))
+                AuditionMode::Removed,
+                "Removed",
+                Message::Removed,
             ),
-        ]
-        .spacing(2)
-        .align_y(iced::Center);
+        ] {
+            let selected = self.audition_mode == mode;
+            let enabled = mode == AuditionMode::Original || self.preview.is_some();
+            listening_modes = listening_modes.push(
+                self.shortcut_control(
+                    command,
+                    button(text(label).size(14).font(iced::Font {
+                        weight: if selected {
+                            iced::font::Weight::Semibold
+                        } else {
+                            iced::font::Weight::Normal
+                        },
+                        ..iced::Font::with_name("Segoe UI")
+                    }))
+                    .width(98)
+                    .height(34)
+                    .style(move |theme, status| flat_button(theme, status, selected))
+                    .hover_outline(false)
+                    .selected(selected)
+                    .on_press_maybe(enabled.then_some(message)),
+                ),
+            );
+        }
         let listening = row![
             text("Listen").size(14),
-            container(listening_modes).padding(3).style(|theme| {
-                let c = colors(theme);
-                container::Style {
-                    background: Some(c.surface.into()),
-                    border: iced::Border {
-                        color: c.panel_border,
-                        width: 1.0,
-                        radius: 6.0.into(),
-                    },
-                    ..container::Style::default()
-                }
-            }),
+            listening_modes,
             text(format!("Monitor {:+.1} dB", self.monitor_db)),
             slider(-24.0..=6.0, self.monitor_db, Message::MonitorGain)
                 .step(1.0_f32)

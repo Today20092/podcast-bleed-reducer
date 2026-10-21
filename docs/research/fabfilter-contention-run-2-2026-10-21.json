@@ -1,0 +1,82 @@
+{
+  "analysis_ms": 23739.25485,
+  "analysis_result_matches_baseline": true,
+  "application_version": "0.1.0-alpha.6",
+  "cache_state": "separate initially empty application caches; OS and shared playback caches are not flushed; standalone analysis runs first",
+  "concurrent_stages_ms": {
+    "audio_preparation_ms": 11283.46836,
+    "overview_ms": 0.03073,
+    "ownership_ms": 11185.027078,
+    "reference_readiness_ms": 12.318045999999999,
+    "source_validation_ms": 225.59515199999998,
+    "temporal_ms": 1031.640264
+  },
+  "concurrent_track_seconds_per_second": 75.8237784367524,
+  "debug_assertions_enabled": true,
+  "foreground_baseline": {
+    "elapsed_ms": 2010.407119,
+    "max_ms": 2.557406,
+    "median_ms": 1.801304,
+    "observed": 92,
+    "overwritten": 0,
+    "p95_ms": 2.3618509999999997,
+    "p99_ms": 2.557406,
+    "retained": 92,
+    "software_starved_samples": 960,
+    "work_elapsed": {
+      "max_ms": 2.272845,
+      "median_ms": 1.438312,
+      "observed": 92,
+      "overwritten": 0,
+      "p95_ms": 1.8915119999999999,
+      "p99_ms": 2.272845,
+      "retained": 92
+    }
+  },
+  "foreground_boundary": "transient gain draft, shared effective envelope, playback delivery and 960 software output samples; completion includes wake lateness after a 20 ms rest; no catch-up",
+  "foreground_during_analysis": {
+    "elapsed_ms": 23751.884248,
+    "max_ms": 3.284524,
+    "median_ms": 2.050218,
+    "observed": 1077,
+    "overwritten": 0,
+    "p95_ms": 2.5048150000000002,
+    "p99_ms": 2.770772,
+    "retained": 1077,
+    "software_starved_samples": 960,
+    "work_elapsed": {
+      "max_ms": 2.576235,
+      "median_ms": 1.7164890000000002,
+      "observed": 1077,
+      "overwritten": 0,
+      "p95_ms": 2.099638,
+      "p99_ms": 2.247283,
+      "retained": 1077
+    }
+  },
+  "limitations": "headless component contention, not application frames, native callback deadlines, physical latency, listening or independent quality; use native capture and OS sampler alongside",
+  "measurement_kind": "headless-editor-background-contention",
+  "native_device_underruns": null,
+  "peak_process_memory_bytes": null,
+  "percentiles": "nearest rank; most recent retained observations",
+  "sample_limit": 4096,
+  "saved_project_unchanged": true,
+  "source_count": 3,
+  "source_rates": [
+    48000,
+    48000,
+    48000
+  ],
+  "standalone_analysis_ms": 22321.009373999997,
+  "standalone_stages_ms": {
+    "audio_preparation_ms": 10722.375051,
+    "overview_ms": 0.02647,
+    "ownership_ms": 10317.21406,
+    "reference_readiness_ms": 15.388618,
+    "source_validation_ms": 255.356617,
+    "temporal_ms": 1009.3747950000001
+  },
+  "standalone_track_seconds_per_second": 80.64151445125414,
+  "track_seconds": 1800.0,
+  "version": 1
+}

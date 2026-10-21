@@ -1,0 +1,323 @@
+{
+  "source_commit": "798594260a19c30e2824f197c70c757177d3c6a1",
+  "executable_sha256": "feffb695e346bc303cedc713b3f7ed2b516b3ddfa271445f7606f53331060c7d",
+  "method": "Process CPU delta / elapsed wall seconds * 100, normalized to one logical core. Samples are sequential, not repeated controlled trials. No screenshots or compilation during timed phases. Working set is sampled maximum, not guaranteed peak. Only the explicitly confirmed-minimized sample proves minimized state.",
+  "logical_processors": 32,
+  "phases": [
+    {
+      "elapsed_seconds": 5.1612214,
+      "working_set_sample_max_bytes": 199188480,
+      "pid": 28828,
+      "logical_processors": 32,
+      "cpu_seconds": 0.078125,
+      "samples": [
+        {
+          "working_set_bytes": 199188480,
+          "cpu_seconds": 3.65625,
+          "elapsed_seconds": 0.5319496
+        },
+        {
+          "working_set_bytes": 199188480,
+          "cpu_seconds": 3.65625,
+          "elapsed_seconds": 1.0448128
+        },
+        {
+          "working_set_bytes": 199188480,
+          "cpu_seconds": 3.65625,
+          "elapsed_seconds": 1.5618157
+        },
+        {
+          "working_set_bytes": 199188480,
+          "cpu_seconds": 3.6875,
+          "elapsed_seconds": 2.0672949
+        },
+        {
+          "working_set_bytes": 199188480,
+          "cpu_seconds": 3.703125,
+          "elapsed_seconds": 2.58394
+        },
+        {
+          "working_set_bytes": 199188480,
+          "cpu_seconds": 3.703125,
+          "elapsed_seconds": 3.0990178
+        },
+        {
+          "working_set_bytes": 199188480,
+          "cpu_seconds": 3.703125,
+          "elapsed_seconds": 3.6140716
+        },
+        {
+          "working_set_bytes": 199168000,
+          "cpu_seconds": 3.703125,
+          "elapsed_seconds": 4.127323
+        },
+        {
+          "working_set_bytes": 199168000,
+          "cpu_seconds": 3.703125,
+          "elapsed_seconds": 4.6417034
+        },
+        {
+          "working_set_bytes": 199168000,
+          "cpu_seconds": 3.71875,
+          "elapsed_seconds": 5.1564032
+        }
+      ],
+      "phase": "final-visible-stopped",
+      "one_core_cpu_percent": 1.5136920884657266,
+      "minimized_confirmed": false,
+      "classification": "stopped"
+    },
+    {
+      "working_set_sample_max_bytes": 235986944,
+      "one_core_cpu_percent": 106.14346199792912,
+      "elapsed_seconds": 5.1816663,
+      "logical_processors": 32,
+      "pid": 28828,
+      "phase": "final-visible-locked-follow-gain-editor",
+      "samples": [
+        {
+          "cpu_seconds": 97.609375,
+          "elapsed_seconds": 0.5298527,
+          "working_set_bytes": 235962368
+        },
+        {
+          "cpu_seconds": 98.125,
+          "elapsed_seconds": 1.0439289,
+          "working_set_bytes": 235962368
+        },
+        {
+          "cpu_seconds": 98.78125,
+          "elapsed_seconds": 1.5602411,
+          "working_set_bytes": 235962368
+        },
+        {
+          "cpu_seconds": 99.296875,
+          "elapsed_seconds": 2.0758086,
+          "working_set_bytes": 235962368
+        },
+        {
+          "cpu_seconds": 99.890625,
+          "elapsed_seconds": 2.5939171,
+          "working_set_bytes": 235962368
+        },
+        {
+          "cpu_seconds": 100.421875,
+          "elapsed_seconds": 3.1133826,
+          "working_set_bytes": 235962368
+        },
+        {
+          "cpu_seconds": 100.9375,
+          "elapsed_seconds": 3.6288295,
+          "working_set_bytes": 235962368
+        },
+        {
+          "cpu_seconds": 101.46875,
+          "elapsed_seconds": 4.1460358,
+          "working_set_bytes": 235962368
+        },
+        {
+          "cpu_seconds": 102.03125,
+          "elapsed_seconds": 4.6605104,
+          "working_set_bytes": 235962368
+        },
+        {
+          "cpu_seconds": 102.546875,
+          "elapsed_seconds": 5.1763409,
+          "working_set_bytes": 235986944
+        }
+      ],
+      "cpu_seconds": 5.5,
+      "minimized_confirmed": false,
+      "classification": "visible"
+    },
+    {
+      "one_core_cpu_percent": 99.81849463316907,
+      "samples": [
+        {
+          "elapsed_seconds": 0.5317779,
+          "cpu_seconds": 140.390625,
+          "working_set_bytes": 245129216
+        },
+        {
+          "elapsed_seconds": 1.0450956,
+          "cpu_seconds": 140.953125,
+          "working_set_bytes": 245129216
+        },
+        {
+          "elapsed_seconds": 1.564378,
+          "cpu_seconds": 141.515625,
+          "working_set_bytes": 245129216
+        },
+        {
+          "elapsed_seconds": 2.084828,
+          "cpu_seconds": 142.046875,
+          "working_set_bytes": 245129216
+        },
+        {
+          "elapsed_seconds": 2.6032139,
+          "cpu_seconds": 142.546875,
+          "working_set_bytes": 245129216
+        },
+        {
+          "elapsed_seconds": 3.1184866,
+          "cpu_seconds": 143.109375,
+          "working_set_bytes": 245362688
+        },
+        {
+          "elapsed_seconds": 3.6329201,
+          "cpu_seconds": 143.546875,
+          "working_set_bytes": 245362688
+        },
+        {
+          "elapsed_seconds": 4.1471949,
+          "cpu_seconds": 144.0625,
+          "working_set_bytes": 245362688
+        },
+        {
+          "elapsed_seconds": 4.6614978,
+          "cpu_seconds": 144.515625,
+          "working_set_bytes": 245362688
+        },
+        {
+          "elapsed_seconds": 5.1754254,
+          "cpu_seconds": 145.03125,
+          "working_set_bytes": 245362688
+        }
+      ],
+      "cpu_seconds": 5.171875,
+      "pid": 28828,
+      "working_set_sample_max_bytes": 245362688,
+      "elapsed_seconds": 5.1812793,
+      "phase": "final-minimized-after-title-button",
+      "logical_processors": 32,
+      "minimized_confirmed": false,
+      "classification": "exclude: title-index action did not confirm minimization"
+    },
+    {
+      "samples": [
+        {
+          "cpu_seconds": 162.96875,
+          "working_set_bytes": 245420032,
+          "elapsed_seconds": 0.5350745
+        },
+        {
+          "cpu_seconds": 163.5,
+          "working_set_bytes": 245420032,
+          "elapsed_seconds": 1.0501471
+        },
+        {
+          "cpu_seconds": 164.015625,
+          "working_set_bytes": 245420032,
+          "elapsed_seconds": 1.565742
+        },
+        {
+          "cpu_seconds": 164.515625,
+          "working_set_bytes": 245420032,
+          "elapsed_seconds": 2.0818043
+        },
+        {
+          "cpu_seconds": 165,
+          "working_set_bytes": 245420032,
+          "elapsed_seconds": 2.6008336
+        },
+        {
+          "cpu_seconds": 165.5,
+          "working_set_bytes": 245420032,
+          "elapsed_seconds": 3.113789
+        },
+        {
+          "cpu_seconds": 166.03125,
+          "working_set_bytes": 245420032,
+          "elapsed_seconds": 3.6308217
+        },
+        {
+          "cpu_seconds": 166.59375,
+          "working_set_bytes": 245420032,
+          "elapsed_seconds": 4.1488112
+        },
+        {
+          "cpu_seconds": 167.09375,
+          "working_set_bytes": 245420032,
+          "elapsed_seconds": 4.6642281
+        },
+        {
+          "cpu_seconds": 167.65625,
+          "working_set_bytes": 245420032,
+          "elapsed_seconds": 5.1787192
+        }
+      ],
+      "phase": "final-minimize-text-refresh",
+      "one_core_cpu_percent": 102.77580560751932,
+      "logical_processors": 32,
+      "working_set_sample_max_bytes": 245420032,
+      "elapsed_seconds": 5.1842211,
+      "cpu_seconds": 5.328125,
+      "pid": 28828,
+      "minimized_confirmed": false,
+      "classification": "exclude: title-index action did not confirm minimization"
+    },
+    {
+      "elapsed_seconds": 5.2203371,
+      "phase": "final-confirmed-minimized-locked-follow-gain-editor",
+      "samples": [
+        {
+          "cpu_seconds": 197.96875,
+          "elapsed_seconds": 0.5525369,
+          "working_set_bytes": 246013952
+        },
+        {
+          "cpu_seconds": 198,
+          "elapsed_seconds": 1.067065,
+          "working_set_bytes": 246013952
+        },
+        {
+          "cpu_seconds": 198.03125,
+          "elapsed_seconds": 1.5742563,
+          "working_set_bytes": 246013952
+        },
+        {
+          "cpu_seconds": 198.0625,
+          "elapsed_seconds": 2.0979893,
+          "working_set_bytes": 246185984
+        },
+        {
+          "cpu_seconds": 198.078125,
+          "elapsed_seconds": 2.617091,
+          "working_set_bytes": 246185984
+        },
+        {
+          "cpu_seconds": 198.109375,
+          "elapsed_seconds": 3.1377753,
+          "working_set_bytes": 246185984
+        },
+        {
+          "cpu_seconds": 198.140625,
+          "elapsed_seconds": 3.65521,
+          "working_set_bytes": 246185984
+        },
+        {
+          "cpu_seconds": 198.171875,
+          "elapsed_seconds": 4.1739844,
+          "working_set_bytes": 246185984
+        },
+        {
+          "cpu_seconds": 198.203125,
+          "elapsed_seconds": 4.6949075,
+          "working_set_bytes": 246185984
+        },
+        {
+          "cpu_seconds": 198.234375,
+          "elapsed_seconds": 5.2154266,
+          "working_set_bytes": 246185984
+        }
+      ],
+      "logical_processors": 32,
+      "working_set_sample_max_bytes": 246185984,
+      "cpu_seconds": 0.28125,
+      "pid": 28828,
+      "one_core_cpu_percent": 5.387583112209363,
+      "minimized_confirmed": true,
+      "classification": "minimized"
+    }
+  ]
+}

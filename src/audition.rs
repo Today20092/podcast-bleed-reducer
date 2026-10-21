@@ -18,6 +18,7 @@ use std::{
 };
 
 const CONTROL_BLOCK: usize = 256;
+const PLAYBACK_BLOCKS: usize = 4;
 
 #[cfg(test)]
 thread_local! {
@@ -430,6 +431,26 @@ struct Settings {
     monitor: f32,
     seek: Option<usize>,
     envelopes: Arc<Vec<GainEnvelope>>,
+    retired_envelopes: Option<Arc<Vec<GainEnvelope>>>,
+}
+
+impl Settings {
+    fn replace_envelopes(&mut self, envelopes: Vec<GainEnvelope>) {
+        // The sole source switches snapshots under this same write lock. Keep
+        // its old snapshot alive until a later control-side write can free it.
+        if self
+            .retired_envelopes
+            .as_ref()
+            .is_some_and(|old| Arc::strong_count(old) == 1)
+        {
+            self.retired_envelopes = None;
+        }
+        let old = std::mem::replace(&mut self.envelopes, Arc::new(envelopes));
+        if Arc::strong_count(&old) > 1 {
+            debug_assert!(self.retired_envelopes.is_none());
+            self.retired_envelopes = Some(old);
+        }
+    }
 }
 
 impl Controls {
@@ -477,6 +498,7 @@ impl Controls {
                 monitor,
                 seek: None,
                 envelopes: Arc::new(envelopes),
+                retired_envelopes: None,
             }),
         }
     }
@@ -488,6 +510,39 @@ struct PlaybackBlock {
     tracks: Vec<Vec<f32>>,
 }
 
+struct BlockRetirement {
+    sender: mpsc::SyncSender<Result<PlaybackBlock, RenderBlocker>>,
+    pending: Option<Result<PlaybackBlock, RenderBlocker>>,
+    disconnected: bool,
+}
+
+impl BlockRetirement {
+    fn flush(&mut self) -> bool {
+        let Some(value) = self.pending.take() else {
+            return true;
+        };
+        match self.sender.try_send(value) {
+            Ok(()) => true,
+            Err(mpsc::TrySendError::Full(value)) => {
+                self.pending = Some(value);
+                false
+            }
+            Err(mpsc::TrySendError::Disconnected(value)) => {
+                self.pending = Some(value);
+                self.disconnected = true;
+                false
+            }
+        }
+    }
+
+    fn retire(&mut self, value: Result<PlaybackBlock, RenderBlocker>) -> bool {
+        // Callers stop consuming as soon as the single pending slot is occupied.
+        debug_assert!(self.pending.is_none());
+        self.pending = Some(value);
+        self.flush()
+    }
+}
+
 /// Device iterator: bounded worker-fed PCM, with silence and a frozen playhead
 /// on underrun. Decoding, hashing, resampling and file reads stay on workers.
 struct AuditionSource {
@@ -497,6 +552,7 @@ struct AuditionSource {
     sample_rate: u32,
     blocks: Receiver<(usize, Result<PlaybackBlock, RenderBlocker>)>,
     block: Option<PlaybackBlock>,
+    retirement: BlockRetirement,
     cancelled: Arc<AtomicBool>,
     controls: Arc<Controls>,
     end: usize,
@@ -507,6 +563,7 @@ struct AuditionSource {
     monitor: f32,
     envelopes: Arc<Vec<GainEnvelope>>,
     failure: Option<RenderBlocker>,
+    worker_stopped_error: Option<RenderBlocker>,
 }
 
 struct PlaybackWorker {
@@ -574,7 +631,12 @@ impl AuditionPlayback {
         Ok(())
     }
     pub fn replace_envelopes(&self, envelopes: Vec<GainEnvelope>) {
-        self.source.controls.settings.write().unwrap().envelopes = Arc::new(envelopes);
+        self.source
+            .controls
+            .settings
+            .write()
+            .unwrap()
+            .replace_envelopes(envelopes);
     }
     pub fn error(&self) -> Option<&RenderBlocker> {
         self.source.error()
@@ -598,17 +660,27 @@ impl AuditionSource {
             .expect("validated playback grid");
         controls.end.store(end, Ordering::Release);
         let position = controls.position.load(Ordering::Relaxed);
-        let (sender, blocks) = mpsc::sync_channel(4);
+        let (sender, blocks) = mpsc::sync_channel(PLAYBACK_BLOCKS);
+        let (retire_sender, retired) = mpsc::sync_channel(PLAYBACK_BLOCKS);
         let cancelled = Arc::new(AtomicBool::new(false));
         let worker_cancelled = Arc::clone(&cancelled);
         let worker_controls = Arc::clone(&controls);
         #[cfg(test)]
         count_playback_work(2);
         let worker = std::thread::spawn(move || {
+            let reclaim = || {
+                for _ in 0..PLAYBACK_BLOCKS {
+                    match retired.try_recv() {
+                        Ok(value) => drop(value),
+                        Err(_) => break,
+                    }
+                }
+            };
             let mut generation = usize::MAX;
             let mut position = 0;
             let mut end = end;
             while !worker_cancelled.load(Ordering::Relaxed) {
+                reclaim();
                 if !worker_controls.running.load(Ordering::Acquire) {
                     std::thread::sleep(Duration::from_millis(1));
                     continue;
@@ -633,6 +705,7 @@ impl AuditionSource {
                     });
                 let failed = result.is_err();
                 loop {
+                    reclaim();
                     if worker_cancelled.load(Ordering::Relaxed) {
                         return;
                     }
@@ -653,7 +726,10 @@ impl AuditionSource {
                 }
             }
         });
-        let loop_start = controls.settings.read().unwrap().loop_start;
+        let (loop_start, envelopes) = {
+            let settings = controls.settings.read().unwrap();
+            (settings.loop_start, Arc::clone(&settings.envelopes))
+        };
         let source = Self {
             persistent: false,
             command_generation: 0,
@@ -661,6 +737,11 @@ impl AuditionSource {
             sample_rate,
             blocks,
             block: None,
+            retirement: BlockRetirement {
+                sender: retire_sender,
+                pending: None,
+                disconnected: false,
+            },
             cancelled: Arc::clone(&cancelled),
             controls,
             end,
@@ -669,8 +750,9 @@ impl AuditionSource {
             mode: AuditionMode::Original,
             solo: 0,
             monitor: 1.0,
-            envelopes: Arc::new(vec![]),
+            envelopes,
             failure: None,
+            worker_stopped_error: Some(RenderBlocker("playback worker stopped".into())),
         };
         AuditionPlayback {
             grid,
@@ -702,6 +784,18 @@ impl Iterator for AuditionSource {
     type Item = f32;
 
     fn next(&mut self) -> Option<Self::Item> {
+        #[cfg(test)]
+        let _sample_call = tests::SampleCall::enter();
+        if !self.retirement.flush() {
+            if self.retirement.disconnected {
+                if self.failure.is_none() {
+                    self.failure = self.worker_stopped_error.take();
+                }
+                return None;
+            }
+            self.controls.underruns.fetch_add(1, Ordering::Relaxed);
+            return Some(0.0);
+        }
         let command = self.controls.commands.load(Ordering::Acquire);
         if self.command_generation != command {
             self.remaining = 0;
@@ -719,7 +813,6 @@ impl Iterator for AuditionSource {
                 }
                 if let Some(position) = settings.seek.take() {
                     self.position = position.min(self.end);
-                    self.block = None;
                     self.controls
                         .requested
                         .store(self.position, Ordering::Release);
@@ -727,6 +820,12 @@ impl Iterator for AuditionSource {
                     self.controls
                         .position
                         .store(self.position, Ordering::Relaxed);
+                    if let Some(block) = self.block.take()
+                        && !self.retirement.retire(Ok(block))
+                    {
+                        self.controls.underruns.fetch_add(1, Ordering::Relaxed);
+                        return Some(0.0);
+                    }
                 }
                 self.command_generation = command;
                 self.controls
@@ -750,11 +849,16 @@ impl Iterator for AuditionSource {
             && let Some(start) = self.loop_start
         {
             self.position = start;
-            self.block = None;
             self.remaining = CONTROL_BLOCK;
             self.controls.requested.store(start, Ordering::Release);
             self.controls.generation.fetch_add(1, Ordering::AcqRel);
             self.controls.position.store(start, Ordering::Relaxed);
+            if let Some(block) = self.block.take()
+                && !self.retirement.retire(Ok(block))
+            {
+                self.controls.underruns.fetch_add(1, Ordering::Relaxed);
+                return Some(0.0);
+            }
         }
         let position = self.position;
         if position >= self.end || self.failure.is_some() {
@@ -766,23 +870,38 @@ impl Iterator for AuditionSource {
                 && block.start <= position
                 && position - block.start < block.tracks.first().map_or(0, Vec::len)
         }) {
-            self.block = None;
+            if let Some(block) = self.block.take()
+                && !self.retirement.retire(Ok(block))
+            {
+                self.controls.underruns.fetch_add(1, Ordering::Relaxed);
+                return Some(0.0);
+            }
             // At most the bounded queue is inspected; a stalled worker never
             // advances any track or performs I/O on the device thread.
-            for _ in 0..4 {
+            for _ in 0..PLAYBACK_BLOCKS {
                 match self.blocks.try_recv() {
-                    Ok((block_generation, _)) if block_generation != generation => continue,
+                    Ok((block_generation, value)) if block_generation != generation => {
+                        if !self.retirement.retire(value) {
+                            self.controls.underruns.fetch_add(1, Ordering::Relaxed);
+                            return Some(0.0);
+                        }
+                    }
                     Ok((_, Ok(block))) if block.start == position => {
                         self.block = Some(block);
                         break;
                     }
-                    Ok((_, Ok(_))) => continue,
+                    Ok((_, Ok(block))) => {
+                        if !self.retirement.retire(Ok(block)) {
+                            self.controls.underruns.fetch_add(1, Ordering::Relaxed);
+                            return Some(0.0);
+                        }
+                    }
                     Ok((_, Err(error))) => {
                         self.failure = Some(error);
                         return None;
                     }
                     Err(TryRecvError::Disconnected) => {
-                        self.failure = Some(RenderBlocker("playback worker stopped".into()));
+                        self.failure = self.worker_stopped_error.take();
                         return None;
                     }
                     Err(TryRecvError::Empty) => break,
@@ -1017,7 +1136,7 @@ impl LiveAudition {
             settings.mode = mode;
             settings.monitor = monitor;
             settings.solo = solo;
-            settings.envelopes = Arc::new(envelopes);
+            settings.replace_envelopes(envelopes);
             settings.seek = None;
         }
         restart_controls(&self.controls, self.grid, range, repeating)?;
@@ -1050,7 +1169,7 @@ impl LiveAudition {
         let mut settings = self.controls.settings.write().unwrap();
         // Added recordings join on the next start; the active stream keeps its source snapshot.
         if settings.envelopes.len() == envelopes.len() {
-            settings.envelopes = Arc::new(envelopes);
+            settings.replace_envelopes(envelopes);
         }
     }
     pub(crate) fn position(&self) -> TimePosition {
@@ -1089,6 +1208,137 @@ impl LiveAudition {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::Instant;
+
+    // Track one live envelope allocation, including frees on the device thread.
+    // All allocator operations still use System; the marker never allocates.
+    struct ObservedAllocator;
+    #[global_allocator]
+    static ALLOCATOR: ObservedAllocator = ObservedAllocator;
+    static WATCHED_ENVELOPE: std::sync::atomic::AtomicUsize =
+        std::sync::atomic::AtomicUsize::new(0);
+    static ENVELOPE_FREED: AtomicBool = AtomicBool::new(false);
+    static FREED_IN_SAMPLE: AtomicBool = AtomicBool::new(false);
+    thread_local! {
+        static IN_SAMPLE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    }
+
+    pub(super) struct SampleCall(bool);
+    impl SampleCall {
+        pub(super) fn enter() -> Self {
+            Self(IN_SAMPLE.with(|inside| inside.replace(true)))
+        }
+    }
+    impl Drop for SampleCall {
+        fn drop(&mut self) {
+            IN_SAMPLE.with(|inside| inside.set(self.0));
+        }
+    }
+
+    // SAFETY: pointers and layouts are forwarded unchanged to System. Observation
+    // uses only atomics and a const-initialized, destructor-free thread local.
+    unsafe impl std::alloc::GlobalAlloc for ObservedAllocator {
+        unsafe fn alloc(&self, layout: std::alloc::Layout) -> *mut u8 {
+            unsafe { std::alloc::GlobalAlloc::alloc(&std::alloc::System, layout) }
+        }
+        unsafe fn alloc_zeroed(&self, layout: std::alloc::Layout) -> *mut u8 {
+            unsafe { std::alloc::GlobalAlloc::alloc_zeroed(&std::alloc::System, layout) }
+        }
+        unsafe fn realloc(&self, ptr: *mut u8, layout: std::alloc::Layout, size: usize) -> *mut u8 {
+            unsafe { std::alloc::GlobalAlloc::realloc(&std::alloc::System, ptr, layout, size) }
+        }
+        unsafe fn dealloc(&self, ptr: *mut u8, layout: std::alloc::Layout) {
+            let watched = WATCHED_ENVELOPE
+                .compare_exchange(ptr as usize, 0, Ordering::Relaxed, Ordering::Relaxed)
+                .is_ok();
+            let inside = watched && IN_SAMPLE.try_with(|inside| inside.get()).unwrap_or(false);
+            unsafe { std::alloc::GlobalAlloc::dealloc(&std::alloc::System, ptr, layout) }
+            if watched {
+                FREED_IN_SAMPLE.store(inside, Ordering::Relaxed);
+                ENVELOPE_FREED.store(true, Ordering::Release);
+            }
+        }
+    }
+
+    #[test]
+    #[ignore = "requires a real default audio output"]
+    fn native_restart_reclaims_envelopes_outside_sample_production() {
+        use rodio::cpal::traits::{DeviceTrait, HostTrait};
+        let device = rodio::cpal::default_host().default_output_device().unwrap();
+        let rate = device.default_output_config().unwrap().sample_rate().0;
+        let path =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/import/mono96000.wav");
+        let prepared =
+            PreparedAudio::prepare_for_rate(&[path], rate, &AtomicBool::new(false)).unwrap();
+        let envelope =
+            || vec![GainEnvelope::constant_at_rate(prepared.frame_count(), rate, 0.5).unwrap()];
+        let range = TimeRange {
+            start: 0,
+            end: prepared.duration(),
+        };
+        let mut output = None;
+        let live = LiveAudition::start_on_output(
+            &mut output,
+            prepared.clone(),
+            envelope(),
+            AuditionMode::Processed,
+            0.0,
+            range,
+            0,
+            true,
+        )
+        .unwrap();
+        let wait_for_buffer = || {
+            let command = live.controls.commands.load(Ordering::Acquire);
+            let started = Instant::now();
+            while live.controls.first_buffer_command.load(Ordering::Acquire) != command {
+                assert!(
+                    started.elapsed() < Duration::from_secs(5),
+                    "native buffer timeout"
+                );
+                std::thread::sleep(Duration::from_millis(1));
+            }
+        };
+        wait_for_buffer();
+        live.stop();
+        let pointer = live.controls.settings.read().unwrap().envelopes.as_ptr() as usize;
+        ENVELOPE_FREED.store(false, Ordering::Relaxed);
+        FREED_IN_SAMPLE.store(false, Ordering::Relaxed);
+        WATCHED_ENVELOPE.store(pointer, Ordering::Relaxed);
+        assert!(
+            live.restart(
+                &prepared,
+                envelope(),
+                AuditionMode::Processed,
+                0.0,
+                range,
+                0,
+                true
+            )
+            .unwrap()
+        );
+        wait_for_buffer();
+        // A subsequent ordinary control edit also releases a retained snapshot.
+        live.replace_envelopes(envelope());
+        let started = Instant::now();
+        while !ENVELOPE_FREED.load(Ordering::Acquire) {
+            assert!(
+                started.elapsed() < Duration::from_secs(5),
+                "envelope reclamation timeout"
+            );
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        live.stop();
+        let inside = FREED_IN_SAMPLE.load(Ordering::Relaxed);
+        println!(
+            "NATIVE_RESTART device={:?} rate={rate} freed=true freed_in_sample={inside}",
+            device.name()
+        );
+        assert!(
+            !inside,
+            "restart freed the previous envelope inside sample production"
+        );
+    }
 
     #[test]
     #[ignore = "owner-device timing; set CLEANSLATE_PLAYBACK_BENCH_SOURCE"]
@@ -1522,8 +1772,11 @@ mod tests {
         );
         assert!((0..CONTROL_BLOCK).all(|frame| next_at(&mut source, frame) == Some(0.5)));
         let position = controls.position.load(Ordering::Relaxed);
-        controls.settings.write().unwrap().envelopes =
-            Arc::new(vec![GainEnvelope::constant(1024, 0.25)]);
+        controls
+            .settings
+            .write()
+            .unwrap()
+            .replace_envelopes(vec![GainEnvelope::constant(1024, 0.25)]);
         assert_eq!(controls.position.load(Ordering::Relaxed), position);
         assert!(
             (CONTROL_BLOCK..CONTROL_BLOCK * 2)
