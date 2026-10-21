@@ -186,6 +186,7 @@ pub(crate) fn button<'a, Message: Clone + 'a>(
         on_press: None,
         keyboard_enabled: true,
         selected: false,
+        hover_outline: true,
         id: None,
     }
 }
@@ -195,6 +196,7 @@ pub(crate) struct ControlButton<'a, Message> {
     on_press: Option<Message>,
     keyboard_enabled: bool,
     selected: bool,
+    hover_outline: bool,
     id: Option<iced::advanced::widget::Id>,
 }
 
@@ -241,6 +243,11 @@ impl<'a, Message: Clone + 'a> ControlButton<'a, Message> {
 
     pub fn selected(mut self, selected: bool) -> Self {
         self.selected = selected;
+        self
+    }
+
+    pub fn hover_outline(mut self, enabled: bool) -> Self {
+        self.hover_outline = enabled;
         self
     }
 }
@@ -456,7 +463,7 @@ impl<'a, Message: Clone + 'a> Widget<Message, Theme, Renderer> for ControlButton
             Event::Window(window::Event::RedrawRequested(now)) => *now,
             _ => Instant::now(),
         };
-        if state.hover.set(over && enabled, now) || state.hover.running(now) {
+        if state.hover.set(over && enabled && self.hover_outline, now) || state.hover.running(now) {
             shell.request_redraw();
         }
         if state.selection.set(self.selected, now) || state.selection.running(now) {
@@ -495,7 +502,11 @@ impl<'a, Message: Clone + 'a> Widget<Message, Theme, Renderer> for ControlButton
         );
         let state = tree.state.downcast_ref::<ButtonState>();
         let focused = state.focused && self.keyboard_enabled && self.on_press.is_some();
-        let hover = state.hover.value(Instant::now());
+        let hover = if self.hover_outline {
+            state.hover.value(Instant::now())
+        } else {
+            0.0
+        };
         let selection = state.selection.value(Instant::now());
         if focused || hover > 0.0 || selection > 0.0 {
             let Some(clipped) = layout.bounds().intersection(viewport) else {
@@ -1010,7 +1021,7 @@ mod tests {
     fn dismissing_shortcut_hint_preserves_focused_armed_and_native_button_state() {
         let hint = |generation| ShortcutHint {
             hint: iced::widget::tooltip(
-                button("Play").on_press(()),
+                button("Play").hover_outline(false).on_press(()),
                 "Play · Space",
                 iced::widget::tooltip::Position::Bottom,
             )

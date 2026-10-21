@@ -6,6 +6,7 @@ use crate::{
     appearance::{self, Appearance, colors},
     audition::{AuditionMode, AuditionPreparation, LiveAudition},
     gui_controls::button,
+    gui_icons::ToolbarIcon,
     shortcuts::{Binding, Command, Context, DEFINITIONS, Shortcuts},
     timebase::{TICKS_PER_SECOND, TimePosition},
     timeline::{PlaybackScroll, TimelineEvent, TimelineViewport},
@@ -911,6 +912,40 @@ mod tests {
                 assert!(contrast(style.text_color, background) >= 4.5, "{status:?}");
             }
         }
+        for appearance in [super::Appearance::Dark, super::Appearance::Light] {
+            let theme = appearance.theme();
+            let panel = super::colors(&theme).panel;
+            for status in [
+                iced::widget::button::Status::Active,
+                iced::widget::button::Status::Hovered,
+                iced::widget::button::Status::Pressed,
+                iced::widget::button::Status::Disabled,
+            ] {
+                for selected in [false, true] {
+                    let style = super::flat_button(&theme, status, selected);
+                    assert_eq!(
+                        style.border.width, 0.0,
+                        "Flat controls must not regain outlines"
+                    );
+                    assert_eq!(style.shadow.blur_radius, 0.0);
+                    let background = match style.background {
+                        Some(iced::Background::Color(color)) => iced::Color::from_rgb(
+                            color.r * color.a + panel.r * (1.0 - color.a),
+                            color.g * color.a + panel.g * (1.0 - color.a),
+                            color.b * color.a + panel.b * (1.0 - color.a),
+                        ),
+                        None => panel,
+                        _ => panic!("Unexpected flat-control gradient"),
+                    };
+                    if status != iced::widget::button::Status::Disabled {
+                        assert!(
+                            contrast(style.text_color, background) >= 4.5,
+                            "{appearance:?} {status:?}"
+                        );
+                    }
+                }
+            }
+        }
     }
 
     #[test]
@@ -1138,6 +1173,124 @@ mod tests {
         );
         assert_eq!(std::fs::read(path).unwrap(), saved);
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn locked_middle_pan_preserves_context_and_reanchors_only_once() {
+        use super::{Message, PlaybackScroll, TimelineEvent, TimelineViewport};
+        let root =
+            std::env::temp_dir().join(format!("cleanslate-middle-pan-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let source = root.join("voice.wav");
+        write_wav(&source, &[0.0; 100]);
+        let path = root.join("session.cleanslate");
+        let project = synchronized_project(&path, vec![source]).unwrap();
+        let saved = std::fs::read(&path).unwrap();
+        let mut app = super::CleanSlateApp {
+            project: Some(project),
+            timeline: TimelineViewport::new(100 * crate::TICKS_PER_SECOND),
+            playback_scroll: PlaybackScroll::Locked,
+            selected_example: Some(7),
+            selection_track: Some(0),
+            selected_gain_point: Some((0, 8, 0)),
+            ..Default::default()
+        };
+        app.timeline
+            .fit_range(30 * crate::TICKS_PER_SECOND, 50 * crate::TICKS_PER_SECOND);
+        app.timeline.seek(40 * crate::TICKS_PER_SECOND);
+        app.timeline.lock_playhead();
+        let selection = Some((crate::TICKS_PER_SECOND, 2 * crate::TICKS_PER_SECOND));
+        app.timeline.set_selection(selection);
+        let parameters = app.preview_parameters;
+        let _ = app.update(Message::TrackTimeline(0, TimelineEvent::PanStart));
+        let _ = app.update(Message::TrackTimeline(
+            0,
+            TimelineEvent::Pan {
+                delta_x: -25.0,
+                width: 100.0,
+            },
+        ));
+        assert_eq!(app.playback_scroll, PlaybackScroll::Locked);
+        assert!(app.timeline.is_middle_panning());
+        let panned = app.timeline.start();
+        app.timeline.seek(42 * crate::TICKS_PER_SECOND);
+        assert!(!app.timeline.follow_playhead(app.playback_scroll));
+        assert_eq!(app.timeline.start(), panned);
+        let fraction = app.timeline.x_for_sample(app.timeline.playhead(), 100.0);
+        let _ = app.update(Message::TrackTimeline(0, TimelineEvent::PanEnd));
+        assert!(!app.timeline.is_middle_panning());
+        assert_eq!(app.timeline.start(), panned);
+        let _ = app.update(Message::Timeline(TimelineEvent::PanEnd));
+        assert_eq!(app.timeline.start(), panned);
+        app.timeline.seek(43 * crate::TICKS_PER_SECOND);
+        app.timeline.follow_playhead(app.playback_scroll);
+        assert!(
+            (app.timeline.x_for_sample(app.timeline.playhead(), 100.0) - fraction).abs() < 0.001
+        );
+        assert_eq!(app.selected_example, Some(7));
+        assert_eq!(app.selection_track, Some(0));
+        assert_eq!(app.selected_gain_point, Some((0, 8, 0)));
+        assert_eq!(app.timeline.selection(), selection);
+        assert_eq!(app.preview_parameters, parameters);
+        assert_eq!(std::fs::read(&path).unwrap(), saved);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn middle_pan_cancellation_modes_and_explicit_unlock_are_authoritative() {
+        use super::{Message, PlaybackScroll, TimelineEvent, TimelineViewport};
+        for mode in [
+            PlaybackScroll::Off,
+            PlaybackScroll::Page,
+            PlaybackScroll::Locked,
+        ] {
+            for cancel in [false, true] {
+                let mut app = super::CleanSlateApp {
+                    timeline: TimelineViewport::new(100 * crate::TICKS_PER_SECOND),
+                    playback_scroll: mode,
+                    ..Default::default()
+                };
+                app.timeline
+                    .fit_range(30 * crate::TICKS_PER_SECOND, 50 * crate::TICKS_PER_SECOND);
+                app.timeline.seek(40 * crate::TICKS_PER_SECOND);
+                app.timeline.lock_playhead();
+                let _ = app.update(Message::Timeline(TimelineEvent::PanStart));
+                let _ = app.update(Message::Timeline(TimelineEvent::Pan {
+                    delta_x: -25.0,
+                    width: 100.0,
+                }));
+                let expected = if mode == PlaybackScroll::Locked {
+                    mode
+                } else {
+                    PlaybackScroll::Off
+                };
+                assert_eq!(app.playback_scroll, expected);
+                if mode == PlaybackScroll::Locked && !cancel {
+                    let _ = app.update(Message::LockPlayhead);
+                    assert_eq!(app.playback_scroll, PlaybackScroll::Off);
+                }
+                let panned = app.timeline.start();
+                app.timeline.seek(42 * crate::TICKS_PER_SECOND);
+                app.app_dialog = Some(super::AppDialog::Settings);
+                let event = if cancel {
+                    TimelineEvent::PanCancel
+                } else {
+                    TimelineEvent::PanEnd
+                };
+                let _ = app.update(Message::Timeline(event));
+                assert!(!app.timeline.is_middle_panning());
+                if expected == PlaybackScroll::Locked && cancel {
+                    assert_eq!(
+                        app.timeline.x_for_sample(app.timeline.playhead(), 100.0),
+                        50.0
+                    );
+                } else {
+                    assert_eq!(app.playback_scroll, PlaybackScroll::Off);
+                    assert_eq!(app.timeline.start(), panned);
+                }
+                assert_eq!(app.timeline.playhead(), 42 * crate::TICKS_PER_SECOND);
+            }
+        }
     }
 
     #[test]
@@ -4856,6 +5009,36 @@ fn quiet_button(theme: &Theme, status: button::Status) -> button::Style {
     style
 }
 
+fn flat_button(theme: &Theme, status: button::Status, selected: bool) -> button::Style {
+    let c = colors(theme);
+    button::Style {
+        background: match status {
+            button::Status::Hovered => Some(c.hover.into()),
+            button::Status::Pressed => Some(c.pressed.into()),
+            button::Status::Active if selected => Some(c.selection.into()),
+            _ => None,
+        },
+        text_color: if status == button::Status::Disabled {
+            c.disabled
+        } else {
+            c.text
+        },
+        border: iced::Border {
+            radius: 5.0.into(),
+            ..iced::Border::default()
+        },
+        shadow: iced::Shadow::default(),
+        ..button::Style::default()
+    }
+}
+
+fn toolbar_label(icon: ToolbarIcon, label: &str) -> Element<'_, Message> {
+    row![canvas(icon).width(20).height(20), text(label).size(13)]
+        .spacing(6)
+        .align_y(iced::Center)
+        .into()
+}
+
 impl CleanSlateApp {
     fn commit_sound(&mut self) {
         let Some((parameter, draft)) = &self.sound_draft else {
@@ -4909,11 +5092,15 @@ impl CleanSlateApp {
             .on_right_press(Message::SoundMenu(parameter))
             .into()
         };
-        let mut content = column![
-            row![text(label).size(14), Space::new().width(Fill), control]
-                .spacing(6)
-                .align_y(iced::Center)
-        ]
+        let mut content = if label.is_empty() {
+            column![control]
+        } else {
+            column![
+                row![text(label).size(14), Space::new().width(Fill), control]
+                    .spacing(6)
+                    .align_y(iced::Center)
+            ]
+        }
         .spacing(4);
         if self
             .sound_draft
@@ -4931,6 +5118,46 @@ impl CleanSlateApp {
             );
         }
         content.into()
+    }
+
+    fn sound_dial(&self, parameter: SoundParameter, size: f32) -> Element<'_, Message> {
+        use crate::parameter_dial::{DialKind, ParameterDial};
+        let (kind, on_change): (DialKind, fn(f32) -> Message) = match parameter {
+            SoundParameter::Attenuation => (DialKind::Attenuation, Message::Attenuation),
+            SoundParameter::Open => (DialKind::Open, Message::OpenTime),
+            SoundParameter::Close => (DialKind::Close, Message::CloseTime),
+            SoundParameter::Gap => (DialKind::Gap, Message::MinimumGap),
+        };
+        canvas(ParameterDial {
+            kind,
+            value: parameter.value(self.preview_parameters),
+            muted: parameter == SoundParameter::Attenuation && self.preview_parameters.mute,
+            enabled: self.workspace_input_active(),
+            keyboard_enabled: self.sound_draft.is_none() && self.track_name_draft.is_none(),
+            on_change,
+            on_release: Message::RefreshPreview,
+            on_reset: Message::ResetSound(parameter),
+            on_edit: Message::EditSound(parameter),
+        })
+        .width(size)
+        .height(size)
+        .into()
+    }
+
+    fn timing_control(
+        &self,
+        parameter: SoundParameter,
+        label: &'static str,
+    ) -> Element<'_, Message> {
+        row![
+            self.sound_dial(parameter, 56.0),
+            column![text(label).size(14), self.sound_value(parameter, "")]
+                .spacing(4)
+                .width(Fill),
+        ]
+        .spacing(12)
+        .align_y(iced::Center)
+        .into()
     }
     fn install_waveforms(&mut self, waveforms: Vec<WaveformCache>) {
         self.close_reference_menu();
@@ -6580,6 +6807,9 @@ impl CleanSlateApp {
     }
 
     fn stop_audition(&mut self) {
+        if self.timeline.is_middle_panning() {
+            self.update_playback_position();
+        }
         if let Some(snapshot) = &mut self.reference_audition {
             snapshot.paused = true;
         }
@@ -6868,6 +7098,28 @@ impl CleanSlateApp {
     }
 
     fn update(&mut self, message: Message) -> Task<Message> {
+        let pan_end = match &message {
+            Message::Timeline(TimelineEvent::PanEnd)
+            | Message::TrackTimeline(_, TimelineEvent::PanEnd) => Some(false),
+            Message::Timeline(TimelineEvent::PanCancel)
+            | Message::TrackTimeline(_, TimelineEvent::PanCancel) => Some(true),
+            _ => None,
+        };
+        if let Some(cancel) = pan_end {
+            if self.timeline.is_middle_panning() {
+                // Read the audio position while follow is suspended, before capturing the new anchor.
+                self.update_playback_position();
+                let moved = if cancel {
+                    self.timeline.cancel_middle_pan(self.playback_scroll)
+                } else {
+                    self.timeline.finish_middle_pan(self.playback_scroll)
+                };
+                if moved {
+                    self.drawing_revision = self.drawing_revision.wrapping_add(1);
+                }
+            }
+            return Task::none();
+        }
         if matches!(message, Message::ShortcutHintInput) {
             self.shortcut_hint_generation = self.shortcut_hint_generation.wrapping_add(1);
             return Task::none();
@@ -7413,7 +7665,12 @@ impl CleanSlateApp {
                 return self.update(Message::OpenReferenceMenu(track, point));
             }
             Message::TrackTimeline(track, event) => {
-                if matches!(event, TimelineEvent::FitRange(_, _)) {
+                if matches!(
+                    event,
+                    TimelineEvent::FitRange(_, _) | TimelineEvent::PanStart
+                ) || (matches!(event, TimelineEvent::Pan { .. })
+                    && self.timeline.is_middle_panning())
+                {
                     return self.update(Message::Timeline(event));
                 }
                 self.close_reference_menu();
@@ -7515,6 +7772,7 @@ impl CleanSlateApp {
             }
             Message::SetupDetails(show) => self.setup_details = show,
             Message::LockPlayhead => {
+                self.timeline.override_middle_pan_anchor();
                 if self.playback_scroll == PlaybackScroll::Locked {
                     self.playback_scroll = PlaybackScroll::Off;
                 } else {
@@ -8135,8 +8393,19 @@ impl CleanSlateApp {
                     }
                 }
                 TimelineEvent::Pan { delta_x, width } => {
-                    self.playback_scroll = PlaybackScroll::Off;
+                    if !self.timeline.is_middle_panning() {
+                        self.playback_scroll = PlaybackScroll::Off;
+                    }
                     self.timeline.pan_by_pixels(delta_x, width)
+                }
+                TimelineEvent::PanStart => {
+                    self.timeline.begin_middle_pan(self.playback_scroll);
+                    if self.playback_scroll == PlaybackScroll::Page {
+                        self.playback_scroll = PlaybackScroll::Off;
+                    }
+                }
+                TimelineEvent::PanEnd | TimelineEvent::PanCancel => {
+                    unreachable!("Pan cleanup runs before modal input guards")
                 }
                 TimelineEvent::Select(start, end) => {
                     self.selected_example = None;
@@ -8166,6 +8435,21 @@ impl CleanSlateApp {
     }
 
     fn subscription(&self) -> Subscription<Message> {
+        let pan_cleanup = if self.timeline.is_middle_panning() {
+            iced::event::listen_with(|event, _, _| match event {
+                iced::Event::Mouse(iced::mouse::Event::ButtonReleased(
+                    iced::mouse::Button::Middle,
+                )) => Some(Message::Timeline(TimelineEvent::PanEnd)),
+                iced::Event::Window(window::Event::Unfocused)
+                | iced::Event::Keyboard(keyboard::Event::KeyPressed {
+                    key: keyboard::Key::Named(keyboard::key::Named::Escape),
+                    ..
+                }) => Some(Message::Timeline(TimelineEvent::PanCancel)),
+                _ => None,
+            })
+        } else {
+            Subscription::none()
+        };
         let shortcut_hints = iced::event::listen_with(|event, _, _| match event {
             // Reset on release so rebuilding the hint never loses a button's pending click.
             iced::Event::Mouse(iced::mouse::Event::ButtonReleased(_))
@@ -8259,6 +8543,7 @@ impl CleanSlateApp {
             Subscription::none()
         };
         Subscription::batch([
+            pan_cleanup,
             shortcut_hints,
             drops,
             processing,
@@ -8312,7 +8597,21 @@ impl CleanSlateApp {
                 "Wheel | Ctrl+wheel",
                 "Preserves lock unless Unlock playhead when zooming is enabled.",
             ),
-            ("Pan", "Middle-button drag", ""),
+            (
+                "Pan",
+                "Middle-button drag",
+                "Repositions an existing playhead lock on release.",
+            ),
+            (
+                "Adjust sound parameter",
+                "Drag dial | Wheel",
+                "Hold Shift for fine adjustment.",
+            ),
+            (
+                "Type exact value",
+                "Double-click dial | Click value",
+                "Enter saves; Escape cancels.",
+            ),
             (
                 "Select or resize example",
                 "Click label strip | Drag selected handles",
@@ -8340,7 +8639,11 @@ impl CleanSlateApp {
             ),
             (
                 "Reset sound parameter",
-                "Ctrl+click | Right-click sound control",
+                if cfg!(target_os = "macos") {
+                    "Command+click | Right-click value"
+                } else {
+                    "Ctrl+click | Right-click value"
+                },
                 "",
             ),
             (
@@ -9761,24 +10064,53 @@ impl CleanSlateApp {
         } else {
             timeline_content.into()
         };
+        let locked = self.playback_scroll == PlaybackScroll::Locked;
+        let meter_control = iced::widget::tooltip(
+            button(toolbar_label(
+                ToolbarIcon::Meters {
+                    at_playhead: self.meters_at_playhead,
+                },
+                "Meters",
+            ))
+            .padding([6, 8])
+            .height(34)
+            .style(|theme, status| flat_button(theme, status, false))
+            .hover_outline(false)
+            .on_press(Message::ToggleMeterPlacement),
+            container(
+                text(if self.meters_at_playhead {
+                    "Speaker meters at the playhead · move to the right"
+                } else {
+                    "Speaker meters on the right · move to the playhead"
+                })
+                .size(14),
+            )
+            .padding(8)
+            .style(editor_panel),
+            iced::widget::tooltip::Position::Bottom,
+        )
+        .delay(Duration::from_millis(600))
+        .snap_within_viewport(true);
         let timeline = column![
             row![
                 text("Timeline").size(16).font(iced::Font { weight: iced::font::Weight::Semibold, ..iced::Font::with_name("Segoe UI") }),
                 Space::new().width(Fill),
-                self.shortcut_control(Command::Lock, button(text(if self.playback_scroll == PlaybackScroll::Locked {
-                    "Unlock playhead"
-                } else {
-                    "Lock playhead"
-                }).size(14)).on_press(Message::LockPlayhead)
-                    .style(if self.playback_scroll == PlaybackScroll::Locked { selected_button } else { secondary_button }).selected(self.playback_scroll == PlaybackScroll::Locked)),
-                self.shortcut_control(Command::Center, button(text("Center playhead").size(14)).style(secondary_button).on_press(Message::CenterPlayhead)),
-                button(text(if self.meters_at_playhead { "Meters: Playhead" } else { "Meters: Right" }).size(14))
-                    .style(secondary_button).on_press(Message::ToggleMeterPlacement),
+                self.shortcut_control(Command::Lock,
+                    button(toolbar_label(ToolbarIcon::Lock { locked }, "Lock"))
+                        .padding([6, 8]).height(34)
+                        .style(move |theme, status| flat_button(theme, status, locked))
+                        .hover_outline(false).selected(locked).on_press(Message::LockPlayhead)),
+                self.shortcut_control(Command::Center,
+                    button(toolbar_label(ToolbarIcon::Center, "Center"))
+                        .padding([6, 8]).height(34)
+                        .style(|theme, status| flat_button(theme, status, false))
+                        .hover_outline(false).on_press(Message::CenterPlayhead)),
+                crate::gui_controls::shortcut_hint(meter_control, self.shortcut_hint_generation),
             ].spacing(8).align_y(iced::Center),
             iced::widget::tooltip(
                 text("Drag to mark a speaker example · red shading shows reduced volume")
                     .size(14).color(self.appearance.colors().muted),
-                container(text("Click to seek. Drag to label speech or room tone.\nWheel to zoom. Ctrl-wheel or middle-drag to pan.").size(14))
+                container(text("Click to seek. Drag to label speech or room tone.\nWheel to zoom. Ctrl-wheel or middle-drag to pan.\nWhile locked, release a middle-drag to set the new lock position.").size(14))
                     .padding(12).style(editor_panel),
                 iced::widget::tooltip::Position::Bottom,
             ),
@@ -9870,15 +10202,7 @@ impl CleanSlateApp {
             self.setup_details || setup_required,
         ));
         let attenuation = row![
-            canvas(crate::attenuation_dial::AttenuationDial {
-                value: parameters.attenuation_db,
-                muted: parameters.mute,
-                keyboard_enabled: self.sound_draft.is_none() && self.track_name_draft.is_none(),
-                on_change: Message::Attenuation,
-                on_release: Message::RefreshPreview,
-            })
-            .width(88)
-            .height(88),
+            self.sound_dial(SoundParameter::Attenuation, 96.0),
             column![
                 inspector_heading("Attenuation"),
                 self.sound_value(SoundParameter::Attenuation, ""),
@@ -9904,33 +10228,11 @@ impl CleanSlateApp {
         .align_y(iced::Center);
         let transitions = column![
             inspector_heading("Transitions and gaps"),
-            column![
-                self.sound_value(SoundParameter::Open, "Fade to full volume"),
-                slider(1.0..=1000.0, parameters.open_ms, Message::OpenTime)
-                    .step(1.0_f32)
-                    .on_release(Message::RefreshPreview),
-            ]
-            .spacing(4),
-            column![
-                self.sound_value(SoundParameter::Close, "Fade to reduced volume"),
-                slider(1.0..=2000.0, parameters.close_ms, Message::CloseTime)
-                    .step(1.0_f32)
-                    .on_release(Message::RefreshPreview),
-            ]
-            .spacing(4),
-            column![
-                self.sound_value(SoundParameter::Gap, "Ignore gaps shorter than"),
-                slider(
-                    10.0..=5000.0,
-                    parameters.minimum_gap_ms,
-                    Message::MinimumGap
-                )
-                .step(1.0_f32)
-                .on_release(Message::RefreshPreview),
-            ]
-            .spacing(4),
+            self.timing_control(SoundParameter::Open, "Fade to full volume"),
+            self.timing_control(SoundParameter::Close, "Fade to reduced volume"),
+            self.timing_control(SoundParameter::Gap, "Ignore gaps shorter than"),
         ]
-        .spacing(14);
+        .spacing(12);
         let inspector_header = column![
             preview_state,
             text(self.next_action())
@@ -10071,69 +10373,52 @@ impl CleanSlateApp {
         ]
         .spacing(8)
         .align_y(iced::Center);
-        let listening_modes = row![
-            self.shortcut_control(
+        let mut listening_modes = row![].spacing(2).align_y(iced::Center);
+        for (command, mode, label, message) in [
+            (
                 Command::Original,
-                button(if self.audition_mode == AuditionMode::Original {
-                    "Original ✓"
-                } else {
-                    "Original"
-                })
-                .style(if self.audition_mode == AuditionMode::Original {
-                    selected_button
-                } else {
-                    quiet_button
-                })
-                .selected(self.audition_mode == AuditionMode::Original)
-                .on_press(Message::Original)
+                AuditionMode::Original,
+                "Original",
+                Message::Original,
             ),
-            self.shortcut_control(
+            (
                 Command::Processed,
-                button(if self.audition_mode == AuditionMode::Processed {
-                    "Processed ✓"
-                } else {
-                    "Processed"
-                })
-                .style(if self.audition_mode == AuditionMode::Processed {
-                    selected_button
-                } else {
-                    quiet_button
-                })
-                .selected(self.audition_mode == AuditionMode::Processed)
-                .on_press_maybe(self.preview.as_ref().map(|_| Message::Processed))
+                AuditionMode::Processed,
+                "Processed",
+                Message::Processed,
             ),
-            self.shortcut_control(
+            (
                 Command::Removed,
-                button(if self.audition_mode == AuditionMode::Removed {
-                    "Removed ✓"
-                } else {
-                    "Removed"
-                })
-                .style(if self.audition_mode == AuditionMode::Removed {
-                    selected_button
-                } else {
-                    quiet_button
-                })
-                .selected(self.audition_mode == AuditionMode::Removed)
-                .on_press_maybe(self.preview.as_ref().map(|_| Message::Removed))
+                AuditionMode::Removed,
+                "Removed",
+                Message::Removed,
             ),
-        ]
-        .spacing(2)
-        .align_y(iced::Center);
+        ] {
+            let selected = self.audition_mode == mode;
+            let enabled = mode == AuditionMode::Original || self.preview.is_some();
+            listening_modes = listening_modes.push(
+                self.shortcut_control(
+                    command,
+                    button(text(label).size(14).font(iced::Font {
+                        weight: if selected {
+                            iced::font::Weight::Semibold
+                        } else {
+                            iced::font::Weight::Normal
+                        },
+                        ..iced::Font::with_name("Segoe UI")
+                    }))
+                    .width(98)
+                    .height(34)
+                    .style(move |theme, status| flat_button(theme, status, selected))
+                    .hover_outline(false)
+                    .selected(selected)
+                    .on_press_maybe(enabled.then_some(message)),
+                ),
+            );
+        }
         let listening = row![
             text("Listen").size(14),
-            container(listening_modes).padding(3).style(|theme| {
-                let c = colors(theme);
-                container::Style {
-                    background: Some(c.surface.into()),
-                    border: iced::Border {
-                        color: c.panel_border,
-                        width: 1.0,
-                        radius: 6.0.into(),
-                    },
-                    ..container::Style::default()
-                }
-            }),
+            listening_modes,
             text(format!("Monitor {:+.1} dB", self.monitor_db)),
             slider(-24.0..=6.0, self.monitor_db, Message::MonitorGain)
                 .step(1.0_f32)
