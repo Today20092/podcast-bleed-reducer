@@ -13,7 +13,10 @@ fn distribution(mut milliseconds: Vec<f64>) -> serde_json::Value {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let supplied: Vec<_> = std::env::args_os().skip(1).collect();
-    if supplied.first().is_some_and(|arg| arg == "--project") {
+    if supplied
+        .first()
+        .is_some_and(|arg| arg == "--project" || arg == "--contention")
+    {
         return rust_app::benchmark_editor_project_command(&supplied);
     }
     let mut args = std::env::args_os().skip(1);

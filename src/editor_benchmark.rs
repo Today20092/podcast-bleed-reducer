@@ -134,6 +134,9 @@ fn link_prepared_audio_cache(
 pub fn benchmark_editor_project_command(
     args: &[std::ffi::OsString],
 ) -> Result<(), Box<dyn std::error::Error>> {
+    if args.first().is_some_and(|arg| arg == "--contention") {
+        return benchmark_editor_contention(args);
+    }
     if args.len() != 5 || args[0] != "--project" {
         return Err(
             "--project <iterations> <session.cleanslate> <new-report.json> <cache-directory>"
@@ -263,6 +266,203 @@ pub fn benchmark_editor_project_command(
     if inflight_failed {
         return Err("Cancellation probe failed; completed benchmark measurements were retained in the report.".into());
     }
+    Ok(())
+}
+
+fn contention_summary(mut samples: Vec<f64>, observed: u64) -> serde_json::Value {
+    samples.sort_by(f64::total_cmp);
+    let percentile = |percent: usize| samples[(samples.len() * percent).div_ceil(100) - 1];
+    serde_json::json!({
+        "observed": observed, "retained": samples.len(),
+        "overwritten": observed - samples.len() as u64,
+        "median_ms": percentile(50), "p95_ms": percentile(95),
+        "p99_ms": percentile(99), "max_ms": samples.last(),
+    })
+}
+
+/// Opt-in headless comparison; the editor's worker, gain drafts and playback consumer are real.
+fn benchmark_editor_contention(
+    args: &[std::ffi::OsString],
+) -> Result<(), Box<dyn std::error::Error>> {
+    use std::sync::atomic::{AtomicU8, Ordering};
+    use std::time::Duration;
+    if args.len() != 4 {
+        return Err(
+            "--contention <session.cleanslate> <new-report.json> <new-cache-directory>".into(),
+        );
+    }
+    let output = std::path::Path::new(&args[2]);
+    if output.exists() {
+        return Err("Benchmark output already exists; choose a new path.".into());
+    }
+    let project = Project::open(std::path::PathBuf::from(&args[1]))?;
+    let saved = std::fs::read(project.path())?;
+    let cache = std::path::Path::new(&args[3]);
+    std::fs::create_dir(cache)?;
+    let cancel = AtomicBool::new(false);
+    let progress = AtomicU8::new(0);
+    let start = Instant::now();
+    let baseline = crate::EditorAnalysisWorker::default().analyze(
+        &project,
+        &cache.join("standalone"),
+        &progress,
+        &cancel,
+    )?;
+    let standalone_analysis_ms = start.elapsed().as_secs_f64() * 1000.0;
+    let settings = crate::project_fade_settings(&project)?;
+    let mut envelopes = crate::EffectiveEnvelopeCache::default();
+    let accepted = envelopes.update(&project, &baseline.temporal, settings, Some(&cancel))?;
+    let prepared = crate::PreparedAudio::prepare_sources_for_rate(
+        &project.audio_sources(),
+        None,
+        48_000,
+        &cancel,
+    )?;
+    let mut playback = prepared.transport(
+        accepted.envelopes.clone(),
+        crate::AuditionMode::Processed,
+        1.0 / project.sources.len() as f32,
+        crate::TimeRange::new(0, prepared.duration())?,
+    )?;
+    playback.set_loop(true);
+    let range = crate::TimeRange::new(0, prepared.duration().min(crate::TICKS_PER_SECOND))?;
+    let mut phases = Vec::new();
+    let mut concurrent = None;
+    for active in [false, true] {
+        playback.seek(0);
+        std::thread::sleep(Duration::from_millis(20));
+        let phase = std::thread::scope(|scope| -> Result<_, RenderBlocker> {
+            let job = active.then(|| {
+                scope.spawn(|| {
+                    let start = Instant::now();
+                    let result = crate::EditorAnalysisWorker::default().analyze(
+                        &project,
+                        &cache.join("concurrent"),
+                        &progress,
+                        &cancel,
+                    );
+                    (result, start.elapsed().as_secs_f64() * 1000.0)
+                })
+            });
+            let start = Instant::now();
+            let mut due = start;
+            let mut samples = Vec::with_capacity(4096);
+            let mut work_samples = Vec::with_capacity(4096);
+            let mut observed = 0_u64;
+            let mut starved = 0_u64;
+            let foreground = (|| -> Result<(), RenderBlocker> {
+                while job.as_ref().map_or_else(
+                    || start.elapsed() < Duration::from_secs(2),
+                    |job| !job.is_finished(),
+                ) {
+                    let work = Instant::now();
+                    let draft = project.region_gain_edit(
+                        project.sources[0].track_id,
+                        range,
+                        crate::GainRegionAction::Attenuate(if observed.is_multiple_of(2) {
+                            0.25
+                        } else {
+                            0.5
+                        }),
+                    )?;
+                    let preview = envelopes.preview_edit(
+                        &project,
+                        &baseline.temporal,
+                        settings,
+                        &draft,
+                        Some(&cancel),
+                    )?;
+                    std::hint::black_box(preview.envelopes[0].gain_at_time(range.end / 2));
+                    playback.replace_envelopes(preview.envelopes.clone());
+                    // Consume 20 ms at 48 kHz; stalled position means software starvation, not a device underrun.
+                    for _ in 0..960 {
+                        let before = playback.position_frame();
+                        let sample = playback
+                            .next()
+                            .ok_or_else(|| RenderBlocker("Benchmark playback ended.".into()))?;
+                        std::hint::black_box(sample);
+                        starved += u64::from(playback.position_frame() == before);
+                    }
+                    if let Some(error) = playback.error() {
+                        return Err(RenderBlocker(error.to_string()));
+                    }
+                    let response = due.elapsed().as_secs_f64() * 1000.0;
+                    let elapsed = work.elapsed().as_secs_f64() * 1000.0;
+                    let index = observed as usize % 4096;
+                    if samples.len() < 4096 {
+                        samples.push(response);
+                        work_samples.push(elapsed);
+                    } else {
+                        samples[index] = response;
+                        work_samples[index] = elapsed;
+                    }
+                    observed += 1;
+                    // Do not catch up with unbounded work after a missed cadence.
+                    due = Instant::now() + Duration::from_millis(20);
+                    std::thread::sleep(due.saturating_duration_since(Instant::now()));
+                }
+                if observed == 0 {
+                    return Err(RenderBlocker("Analysis completed before any concurrent observation; repeat with a larger project.".into()));
+                }
+                Ok(())
+            })();
+            if foreground.is_err() {
+                cancel.store(true, Ordering::Relaxed);
+            }
+            if let Some(job) = job {
+                let (result, milliseconds) = job
+                    .join()
+                    .map_err(|_| RenderBlocker("Benchmark analysis thread failed.".into()))?;
+                concurrent = Some((result?, milliseconds));
+            }
+            foreground?;
+            let mut summary = contention_summary(samples, observed);
+            summary["work_elapsed"] = contention_summary(work_samples, observed);
+            summary["software_starved_samples"] = serde_json::json!(starved);
+            summary["elapsed_ms"] = serde_json::json!(start.elapsed().as_secs_f64() * 1000.0);
+            Ok(summary)
+        })?;
+        phases.push(phase);
+    }
+    let (analysis, analysis_ms) = concurrent.ok_or("Concurrent analysis was not measured.")?;
+    let effective = envelopes.update(&project, &analysis.temporal, settings, Some(&cancel))?;
+    if accepted.envelopes != effective.envelopes
+        || baseline.temporal.regions() != analysis.temporal.regions()
+    {
+        return Err(
+            "Concurrent analysis changed authoritative regions or effective envelopes.".into(),
+        );
+    }
+    project.validate_sources_cancellable(Some(&cancel))?;
+    if std::fs::read(project.path())? != saved {
+        return Err("Project changed during benchmark.".into());
+    }
+    let track_seconds: f64 = project
+        .sources
+        .iter()
+        .map(|s| s.metadata.grid.frame_count as f64 / f64::from(s.metadata.grid.sample_rate))
+        .sum();
+    let report = serde_json::json!({
+        "version": 1, "measurement_kind": "headless-editor-background-contention",
+        "application_version": env!("CARGO_PKG_VERSION"), "debug_assertions_enabled": cfg!(debug_assertions),
+        "source_count": project.sources.len(), "source_rates": project.sources.iter().map(|s| s.metadata.grid.sample_rate).collect::<Vec<_>>(),
+        "track_seconds": track_seconds, "standalone_analysis_ms": standalone_analysis_ms, "analysis_ms": analysis_ms,
+        "standalone_stages_ms": baseline.timings, "concurrent_stages_ms": analysis.timings,
+        "standalone_track_seconds_per_second": track_seconds * 1000.0 / standalone_analysis_ms,
+        "concurrent_track_seconds_per_second": track_seconds * 1000.0 / analysis_ms,
+        "foreground_baseline": phases[0], "foreground_during_analysis": phases[1],
+        "foreground_boundary": "transient gain draft, shared effective envelope, playback delivery and 960 software output samples; completion includes wake lateness after a 20 ms rest; no catch-up",
+        "sample_limit": 4096, "percentiles": "nearest rank; most recent retained observations",
+        "cache_state": "separate initially empty application caches; OS and shared playback caches are not flushed; standalone analysis runs first",
+        "analysis_result_matches_baseline": true, "saved_project_unchanged": true,
+        "native_device_underruns": null, "peak_process_memory_bytes": null,
+        "limitations": "headless component contention, not application frames, native callback deadlines, physical latency, listening or independent quality; use native capture and OS sampler alongside",
+    });
+    let file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(output)?;
+    serde_json::to_writer_pretty(file, &report)?;
     Ok(())
 }
 

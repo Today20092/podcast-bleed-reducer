@@ -1,0 +1,82 @@
+{
+  "analysis_ms": 23257.731569,
+  "analysis_result_matches_baseline": true,
+  "application_version": "0.1.0-alpha.6",
+  "cache_state": "separate initially empty application caches; OS and shared playback caches are not flushed; standalone analysis runs first",
+  "concurrent_stages_ms": {
+    "audio_preparation_ms": 11136.104379,
+    "overview_ms": 0.027377,
+    "ownership_ms": 10968.301139,
+    "reference_readiness_ms": 16.838243,
+    "source_validation_ms": 228.92253100000002,
+    "temporal_ms": 906.155461
+  },
+  "concurrent_track_seconds_per_second": 77.3936183182715,
+  "debug_assertions_enabled": true,
+  "foreground_baseline": {
+    "elapsed_ms": 2018.7264030000001,
+    "max_ms": 2.86387,
+    "median_ms": 1.8713549999999999,
+    "observed": 92,
+    "overwritten": 0,
+    "p95_ms": 2.46745,
+    "p99_ms": 2.86387,
+    "retained": 92,
+    "software_starved_samples": 960,
+    "work_elapsed": {
+      "max_ms": 2.224654,
+      "median_ms": 1.554737,
+      "observed": 92,
+      "overwritten": 0,
+      "p95_ms": 2.027353,
+      "p99_ms": 2.224654,
+      "retained": 92
+    }
+  },
+  "foreground_boundary": "transient gain draft, shared effective envelope, playback delivery and 960 software output samples; completion includes wake lateness after a 20 ms rest; no catch-up",
+  "foreground_during_analysis": {
+    "elapsed_ms": 23261.891246000003,
+    "max_ms": 3.2560979999999997,
+    "median_ms": 2.0510569999999997,
+    "observed": 1055,
+    "overwritten": 0,
+    "p95_ms": 2.503908,
+    "p99_ms": 2.695063,
+    "retained": 1055,
+    "software_starved_samples": 960,
+    "work_elapsed": {
+      "max_ms": 2.518895,
+      "median_ms": 1.730108,
+      "observed": 1055,
+      "overwritten": 0,
+      "p95_ms": 2.0774980000000003,
+      "p99_ms": 2.1966479999999997,
+      "retained": 1055
+    }
+  },
+  "limitations": "headless component contention, not application frames, native callback deadlines, physical latency, listening or independent quality; use native capture and OS sampler alongside",
+  "measurement_kind": "headless-editor-background-contention",
+  "native_device_underruns": null,
+  "peak_process_memory_bytes": null,
+  "percentiles": "nearest rank; most recent retained observations",
+  "sample_limit": 4096,
+  "saved_project_unchanged": true,
+  "source_count": 3,
+  "source_rates": [
+    48000,
+    48000,
+    48000
+  ],
+  "standalone_analysis_ms": 22660.018033,
+  "standalone_stages_ms": {
+    "audio_preparation_ms": 10812.260846000001,
+    "overview_ms": 0.051473,
+    "ownership_ms": 10692.459377000001,
+    "reference_readiness_ms": 18.335220999999997,
+    "source_validation_ms": 250.079969,
+    "temporal_ms": 885.096989
+  },
+  "standalone_track_seconds_per_second": 79.43506476378981,
+  "track_seconds": 1800.0,
+  "version": 1
+}
