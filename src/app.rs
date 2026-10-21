@@ -6844,8 +6844,7 @@ impl CleanSlateApp {
         )
         .delay(Duration::from_millis(600))
         .snap_within_viewport(true);
-        iced::widget::keyed::Column::with_children([(self.shortcut_hint_generation, hint.into())])
-            .into()
+        crate::gui_controls::shortcut_hint(hint, self.shortcut_hint_generation)
     }
 
     fn settings_action(&self) -> Message {

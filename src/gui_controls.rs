@@ -12,7 +12,10 @@ use iced::{
     },
     keyboard::{self, Key, key::Named},
     time::Instant,
-    widget::button::{self, Button},
+    widget::{
+        Tooltip,
+        button::{self, Button},
+    },
     window,
 };
 use std::time::Duration;
@@ -597,6 +600,136 @@ struct ScopeState {
     active: bool,
 }
 
+pub(crate) fn shortcut_hint<'a, Message: 'a>(
+    hint: Tooltip<'a, Message>,
+    generation: u64,
+) -> Element<'a, Message> {
+    Element::new(ShortcutHint { hint, generation })
+}
+
+struct ShortcutHint<'a, Message> {
+    hint: Tooltip<'a, Message>,
+    generation: u64,
+}
+
+struct HintGeneration(u64);
+
+impl<Message> Widget<Message, Theme, Renderer> for ShortcutHint<'_, Message> {
+    fn tag(&self) -> tree::Tag {
+        tree::Tag::of::<HintGeneration>()
+    }
+    fn state(&self) -> tree::State {
+        tree::State::new(HintGeneration(self.generation))
+    }
+    fn children(&self) -> Vec<Tree> {
+        vec![Tree::new(
+            &self.hint as &dyn Widget<Message, Theme, Renderer>,
+        )]
+    }
+    fn diff(&self, tree: &mut Tree) {
+        let generation = tree.state.downcast_mut::<HintGeneration>();
+        if generation.0 != self.generation {
+            // Dismiss only the hint timer/open state; keep the control's focus and press state.
+            tree.children[0].state = self.hint.state();
+            generation.0 = self.generation;
+        }
+        self.hint.diff(&mut tree.children[0]);
+    }
+    fn size(&self) -> Size<Length> {
+        self.hint.size()
+    }
+    fn size_hint(&self) -> Size<Length> {
+        self.hint.size_hint()
+    }
+    fn layout(
+        &mut self,
+        tree: &mut Tree,
+        renderer: &Renderer,
+        limits: &layout::Limits,
+    ) -> layout::Node {
+        self.hint.layout(&mut tree.children[0], renderer, limits)
+    }
+    fn operate(
+        &mut self,
+        tree: &mut Tree,
+        layout: Layout<'_>,
+        renderer: &Renderer,
+        operation: &mut dyn Operation,
+    ) {
+        self.hint
+            .operate(&mut tree.children[0], layout, renderer, operation);
+    }
+    fn update(
+        &mut self,
+        tree: &mut Tree,
+        event: &Event,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+        renderer: &Renderer,
+        clipboard: &mut dyn Clipboard,
+        shell: &mut Shell<'_, Message>,
+        viewport: &Rectangle,
+    ) {
+        self.hint.update(
+            &mut tree.children[0],
+            event,
+            layout,
+            cursor,
+            renderer,
+            clipboard,
+            shell,
+            viewport,
+        );
+    }
+    fn draw(
+        &self,
+        tree: &Tree,
+        renderer: &mut Renderer,
+        theme: &Theme,
+        style: &renderer::Style,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+        viewport: &Rectangle,
+    ) {
+        self.hint.draw(
+            &tree.children[0],
+            renderer,
+            theme,
+            style,
+            layout,
+            cursor,
+            viewport,
+        );
+    }
+    fn mouse_interaction(
+        &self,
+        tree: &Tree,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+        viewport: &Rectangle,
+        renderer: &Renderer,
+    ) -> mouse::Interaction {
+        self.hint
+            .mouse_interaction(&tree.children[0], layout, cursor, viewport, renderer)
+    }
+    fn overlay<'a>(
+        &'a mut self,
+        tree: &'a mut Tree,
+        layout: Layout<'a>,
+        renderer: &Renderer,
+        viewport: &Rectangle,
+        translation: Vector,
+    ) -> Option<overlay::Element<'a, Message, Theme, Renderer>> {
+        self.hint.overlay(
+            &mut tree.children[0],
+            layout,
+            renderer,
+            viewport,
+            translation,
+        )
+    }
+}
+
 impl<Message> Widget<Message, Theme, Renderer> for FocusScope<'_, Message> {
     fn tag(&self) -> tree::Tag {
         tree::Tag::of::<ScopeState>()
@@ -871,6 +1004,50 @@ mod tests {
         let end = now + HOVER_DURATION;
         assert_eq!(state.selection.value(end), 0.0);
         assert!(!state.selection.running(end));
+    }
+
+    #[test]
+    fn dismissing_shortcut_hint_preserves_focused_armed_and_native_button_state() {
+        let hint = |generation| ShortcutHint {
+            hint: iced::widget::tooltip(
+                button("Play").on_press(()),
+                "Play · Space",
+                iced::widget::tooltip::Position::Bottom,
+            )
+            .delay(Duration::from_millis(600)),
+            generation,
+        };
+        let initial = hint(0);
+        let mut tree = Tree::new(&initial as &dyn Widget<(), Theme, Renderer>);
+        let control = &mut tree.children[0].children[0];
+        let state = control.state.downcast_mut::<ButtonState>();
+        state.focus();
+        assert_eq!(
+            state.key_action(&key_event(Named::Space, true, false), true),
+            KeyAction::Capture
+        );
+        let state_address = |state: &tree::State| match state {
+            tree::State::Some(state) => state.as_ref() as *const dyn std::any::Any as *const (),
+            tree::State::None => panic!("Expected native button state"),
+        };
+        let native_button_state = state_address(&control.children[0].state);
+        struct PreviousHintTimer;
+        tree.children[0].state = tree::State::new(PreviousHintTimer);
+        hint(1).diff(&mut tree);
+        assert!(
+            matches!(&tree.children[0].state, tree::State::Some(state) if !state.is::<PreviousHintTimer>())
+        );
+        let control = &mut tree.children[0].children[0];
+        assert_eq!(
+            state_address(&control.children[0].state),
+            native_button_state
+        );
+        let state = control.state.downcast_mut::<ButtonState>();
+        assert!(state.is_focused());
+        assert_eq!(
+            state.key_action(&key_event(Named::Space, false, false), true),
+            KeyAction::Activate
+        );
     }
 
     #[test]
