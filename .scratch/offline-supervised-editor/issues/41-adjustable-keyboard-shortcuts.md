@@ -83,3 +83,13 @@ The owner confirmed the app keyboard/update and local-preference load/save test 
 ## Required owner check
 
 After the verified build is handed off, check the left-hand labeling loop (speaker keys, R, S, Enter, room tone and editing), shortcut capture/conflicts/remapping and restart persistence. Check shortcut hints and delayed tooltips in Dark/Light at narrow/wide widths and near window edges, including typing/click dismissal and the current Lock/Unlock name. Exercise Center/Lock plus zoom/fit while playing under both preference values. This agent has not controlled the owner's GUI or claimed these checks passed.
+
+## Standards
+
+Independent code-review axis compared `git diff 0d9ef4c...09f6b9d`: one P2 finding. The configurable Reference guard preceded dialog navigation, so binding it to Page Down opened the reference instead of scrolling Settings/About/Help. This violated the input-ownership requirement and AGENTS.md's instruction to update affected callers. Fixed by letting existing named-key dialog handlers own input before the reference guard. The regression failed on the checkpoint and covers all three dialogs plus subsequent workspace activation. Follow-up review: resolved; no additional actionable standards breaches or smell findings.
+
+## Spec
+
+Independent code-review axis compared the same checkpoint with ticket 41's accepted design: one P2 finding. The gain editor still named Arrow/Delete after remapping, contrary to accepted design item 5. Fixed by formatting the visible instruction from effective Earlier/Later/Louder/Quieter/DeleteGain bindings, including Unbound. Follow-up review confirmed the gain hint, dialog priority and unambiguous Plus key display; no new actionable Spec findings. The plus-key regression also failed before its display fix. Reviewers ran no builds, tests or GUI checks.
+
+Review summary: initial Standards 1 (dialog ownership), Spec 1 (stale gain hints); both resolved, with 0 remaining findings on either axis after follow-up. Native owner acceptance remains pending.

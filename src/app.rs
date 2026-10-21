@@ -1334,6 +1334,79 @@ mod tests {
     }
 
     #[test]
+    fn gain_hints_follow_effective_bindings_and_unbinding() {
+        use super::{CleanSlateApp, Message};
+        use crate::shortcuts::Command;
+        use iced::keyboard::{Key, Modifiers};
+        let mut app = CleanSlateApp::default();
+        let _ = app.update(Message::Settings);
+        let _ = app.update(Message::CaptureShortcut(Command::Earlier));
+        let _ = app.update(Message::KeyPressed(
+            Key::Character("j".into()),
+            Modifiers::empty(),
+        ));
+        let _ = app.update(Message::ApplyShortcut);
+        let _ = app.update(Message::UnbindShortcut(Command::DeleteGain));
+        assert_eq!(
+            app.gain_key_hint(),
+            "Drag pink points to adjust gain and fades.\nEarlier: J; later: Right; up: Up; down: Down; remove: Unbound."
+        );
+    }
+
+    #[test]
+    fn dialog_navigation_owns_a_remapped_reference_key() {
+        use super::{CleanSlateApp, Message};
+        use crate::shortcuts::Command;
+        use iced::keyboard::{Key, Modifiers, key::Named};
+        let mut app = CleanSlateApp::default();
+        let _ = app.update(Message::Settings);
+        let _ = app.update(Message::CaptureShortcut(Command::Reference));
+        let _ = app.update(Message::KeyPressed(
+            Key::Named(Named::PageDown),
+            Modifiers::empty(),
+        ));
+        let _ = app.update(Message::ApplyShortcut);
+        for dialog in [Message::Settings, Message::About, Message::Help] {
+            let _ = app.update(Message::CloseHelp);
+            let _ = app.update(dialog);
+            let _ = app.update(Message::KeyPressed(
+                Key::Named(Named::PageDown),
+                Modifiers::empty(),
+            ));
+            assert!(
+                !app.shortcuts_open,
+                "Dialog scrolling must retain input ownership"
+            );
+            assert!(app.app_dialog.is_some() || app.help_open);
+        }
+        let _ = app.update(Message::CloseHelp);
+        let _ = app.update(Message::KeyPressed(
+            Key::Named(Named::PageDown),
+            Modifiers::empty(),
+        ));
+        assert!(
+            app.shortcuts_open,
+            "The remapped binding still works in the workspace"
+        );
+    }
+
+    #[test]
+    fn plus_binding_has_an_unambiguous_display_name() {
+        use super::{CleanSlateApp, Message};
+        use crate::shortcuts::Command;
+        use iced::keyboard::{Key, Modifiers};
+        let mut app = CleanSlateApp::default();
+        let _ = app.update(Message::Settings);
+        let _ = app.update(Message::CaptureShortcut(Command::SaveExample));
+        let _ = app.update(Message::KeyPressed(
+            Key::Character("+".into()),
+            Modifiers::empty(),
+        ));
+        let _ = app.update(Message::ApplyShortcut);
+        assert_eq!(app.shortcuts.hint(Command::SaveExample), "Plus");
+    }
+
+    #[test]
     fn remapped_popup_save_uses_validation_for_room_tone_edits_and_enter() {
         use super::{CleanSlateApp, Message, TimelineEvent};
         use crate::shortcuts::Command;
@@ -6430,6 +6503,17 @@ impl CleanSlateApp {
         }
     }
 
+    fn gain_key_hint(&self) -> String {
+        format!(
+            "Drag pink points to adjust gain and fades.\nEarlier: {}; later: {}; up: {}; down: {}; remove: {}.",
+            self.shortcuts.hint(Command::Earlier),
+            self.shortcuts.hint(Command::Later),
+            self.shortcuts.hint(Command::Louder),
+            self.shortcuts.hint(Command::Quieter),
+            self.shortcuts.hint(Command::DeleteGain)
+        )
+    }
+
     fn shortcut_control<'a>(
         &'a self,
         command: Command,
@@ -6584,12 +6668,6 @@ impl CleanSlateApp {
                     self.shortcut_capture = None;
                     return Task::none();
                 }
-                Message::KeyPressed(key, modifiers)
-                    if self.shortcuts.resolve(key, *modifiers, Context::Labels)
-                        == Some(Command::Reference) =>
-                {
-                    return self.update(Message::KeyboardShortcuts);
-                }
                 Message::KeyPressed(keyboard::Key::Named(key), modifiers) => {
                     use keyboard::key::Named;
                     match key {
@@ -6662,6 +6740,12 @@ impl CleanSlateApp {
                     }
                     return Task::none();
                 }
+                Message::KeyPressed(key, modifiers)
+                    if self.shortcuts.resolve(key, *modifiers, Context::Labels)
+                        == Some(Command::Reference) =>
+                {
+                    return self.update(Message::KeyboardShortcuts);
+                }
                 Message::Settings
                 | Message::Appearance(_)
                 | Message::About
@@ -6677,13 +6761,6 @@ impl CleanSlateApp {
         }
         if self.help_open || self.shortcuts_open {
             match &message {
-                Message::KeyPressed(key, modifiers)
-                    if self.help_open
-                        && self.shortcuts.resolve(key, *modifiers, Context::Labels)
-                            == Some(Command::Reference) =>
-                {
-                    return self.update(Message::KeyboardShortcuts);
-                }
                 Message::KeyPressed(keyboard::Key::Named(keyboard::key::Named::Escape), _)
                 | Message::CloseHelp => {
                     self.help_open = false;
@@ -6729,6 +6806,13 @@ impl CleanSlateApp {
                         Named::End => iced::widget::operation::snap_to_end("shortcut-reference"),
                         _ => Task::none(),
                     };
+                }
+                Message::KeyPressed(key, modifiers)
+                    if self.help_open
+                        && self.shortcuts.resolve(key, *modifiers, Context::Labels)
+                            == Some(Command::Reference) =>
+                {
+                    return self.update(Message::KeyboardShortcuts);
                 }
                 Message::KeyboardShortcuts | Message::Tick | Message::PlaybackFrame => {}
                 _ => return Task::none(),
@@ -8588,16 +8672,42 @@ impl CleanSlateApp {
         .spacing(8);
         if self.gain_tool {
             controls = controls
-                .push(text("Drag pink points to adjust gain and fades. Arrow keys move the selected point; Delete removes its override.").size(14))
-                .push(row![
-                    self.shortcut_control(Command::UndoGain, button("Undo gain").style(secondary_button).on_press(Message::UndoGain)),
-                    self.shortcut_control(Command::RedoGain, button("Redo gain").style(secondary_button).on_press(Message::RedoGain)),
-                ].spacing(6))
-                .push(button("Add point at cursor").style(secondary_button).on_press(Message::InsertGainPoint))
-                .push(self.shortcut_control(Command::DeleteGain, button("Remove selected override").style(secondary_button).on_press(Message::DeleteGain)))
-                .push(iced::widget::checkbox(self.replace_gain_constraints)
-                    .label("Replace overlapping overrides and protections")
-                    .on_toggle(Message::ReplaceGainConstraints));
+                .push(text(self.gain_key_hint()).size(14))
+                .push(
+                    row![
+                        self.shortcut_control(
+                            Command::UndoGain,
+                            button("Undo gain")
+                                .style(secondary_button)
+                                .on_press(Message::UndoGain)
+                        ),
+                        self.shortcut_control(
+                            Command::RedoGain,
+                            button("Redo gain")
+                                .style(secondary_button)
+                                .on_press(Message::RedoGain)
+                        ),
+                    ]
+                    .spacing(6),
+                )
+                .push(
+                    button("Add point at cursor")
+                        .style(secondary_button)
+                        .on_press(Message::InsertGainPoint),
+                )
+                .push(
+                    self.shortcut_control(
+                        Command::DeleteGain,
+                        button("Remove selected override")
+                            .style(secondary_button)
+                            .on_press(Message::DeleteGain),
+                    ),
+                )
+                .push(
+                    iced::widget::checkbox(self.replace_gain_constraints)
+                        .label("Replace overlapping overrides and protections")
+                        .on_toggle(Message::ReplaceGainConstraints),
+                );
             if self.can_protect_selection() {
                 controls = controls.push(
                     button("Preserve selection on all tracks")

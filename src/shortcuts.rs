@@ -388,10 +388,16 @@ impl Binding {
         if self.shift {
             parts.push("Shift".into());
         }
-        parts.push(if self.key.chars().count() == 1 {
-            self.key.to_uppercase()
-        } else {
-            self.key.clone()
+        parts.push(match self.key.as_str() {
+            "+" => "Plus".into(),
+            "ArrowLeft" => "Left".into(),
+            "ArrowRight" => "Right".into(),
+            "ArrowUp" => "Up".into(),
+            "ArrowDown" => "Down".into(),
+            "PageUp" => "Page Up".into(),
+            "PageDown" => "Page Down".into(),
+            _ if self.key.chars().count() == 1 => self.key.to_uppercase(),
+            _ => self.key.clone(),
         });
         parts.join("+")
     }
@@ -429,9 +435,12 @@ impl Shortcuts {
                 .map(|s| Binding::default(s))
                 .collect(),
         };
-        // Project save and popup Enter are fixed compatibility confirmations.
-        if command == SaveProject && !bindings.contains(&Binding::default("Cmd+s")) {
-            bindings.push(Binding::default("Cmd+s"));
+        // Retain the platform project-save chord as a compatibility binding.
+        if command == SaveProject {
+            let compatibility = Binding::default(command.definition().defaults[0]);
+            if !bindings.contains(&compatibility) {
+                bindings.push(compatibility);
+            }
         }
         bindings
     }
