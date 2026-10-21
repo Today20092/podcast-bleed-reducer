@@ -1,6 +1,6 @@
 # FabFilter-inspired performance follow-up
 
-Status: implementation authorized by owner on 2026-10-21; test-boundary confirmation pending.
+Status: implementation authorized; owner confirmed all proposed test boundaries on 2026-10-21.
 Integration branch: `codex/fabfilter-performance`.
 Base: `7be3fe319689fe7bb7a5fdb46025f7a2ae9264d0` on the existing isolated GUI review branch. Development/main and preserved GUI builds remain separate.
 
@@ -53,14 +53,14 @@ Use measured conditional outcomes honestly: a justified no-change result resolve
 
 ## Test boundaries
 
-Proposed boundaries pending the owner's response to the required TDD confirmation:
+Owner-confirmed boundaries (2026-10-21: “Use those existing boundaries”):
 
 - Existing application update/subscription and real canvas output: catches stale redraws and visibility state; cannot prove physical display delivery.
 - Playback source/output and lifetime probes: catches output/generation/starvation/reclamation regressions; deterministic checks cannot guarantee device deadlines or listening quality.
 - Shared effective-envelope evaluation via preview/render: catches gain, manual edit and parity errors; cannot establish subjective sound quality.
 - Existing benchmark/diagnostic command and copied report output: catches metadata/statistics/unsupported-field/privacy errors; synthetic workloads do not establish hardware performance.
 
-No new tests are written before that confirmation. Exact selected scenarios and limitations are retained with each ticket.
+The confirmation covers these existing boundaries for all eight tickets; do not ask again. Exact selected scenarios and limitations are retained with each ticket. Preparation notes are preserved outside the repo under `C:/Users/User/Documents/Codex/Investigations/cleanslate-performance-implementation-2026-10-21/` (editor-notes.md, audio-notes.md, graphics-notes.md).
 
 ## Review baseline
 
