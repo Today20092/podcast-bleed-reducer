@@ -1,6 +1,6 @@
 # 07: Measure and improve continuous-follow drawing reuse
 
-Status: claimed
+Status: done
 Assignee: perf07_implementer
 Type: task
 Blocked by: 01 — Measure application frame pacing and input feedback
@@ -12,7 +12,7 @@ Source proposal: P6
 
 - [x] Measure waveform plus gain drawing together, separating CPU preparation and application frame observations from actual presented-frame metrics.
 - [x] If follow geometry is a demonstrated bottleneck, add bounded reuse within the existing renderer; otherwise record the measured decision and preserve the current implementation.
-- [ ] Verify clipping, source time, edits, zoom/fit, resize, themes/scales, recording bounds and middle-pan release reanchoring; bound additional memory.
+- [x] Verify clipping, source time, edits, zoom/fit, resize, themes/scales, recording bounds and middle-pan release reanchoring; bound additional memory.
 - [x] Coordinate with the existing edge-catch-up proposal without implementing its separate animation behavior or changing playback/selection semantics.
 
 ## Context
@@ -52,4 +52,10 @@ Two same-process alternating-order2176-column comparisons observed small complet
 Exclusive build/measurement lease released to root after these checks. Status remains claimed for root's combined application/canvas and native clipping/edit/zoom/fit/resize/theme/scale/recording-bound/middle-pan-release acceptance; those are not all claimed from numeric curve checks. Existing invalidation and viewport behavior are unchanged. Ticket42, playback, selection and envelope/audio contracts remain untouched. No physical gesture, listening or presented-frame measurement is claimed.
 
 2026-10-21 integrated closure audit: full combined checks passed 338 tests (19 ignored) and strict Clippy at `7985942`. Native checks added locked-follow/live-attenuation/gain-editor/zoom, 1026x932 ↔ 2560x1392 resize, recording-end seek, minimized completion and restore. Already passing tests cover clipped waveform boundaries, arbitrary-rate source rounding, mixed-rate two-hour pan/zoom bounds, manual linear knots/half-open return to automatic gain, fit/zoom lock policy and middle-pan release/cancellation/reanchor/resize behavior. Theme invalidation preserves domain state in the application test; compact point generation is independent of theme and scale and adds no cache or allocation bound. Direct theme/DPI canvas-output comparison and physical DPI/middle-button release remain unverified. Keep this criterion open rather than equating logical gesture tests with physical input or a pixel comparison. See [the final receipt](../../../docs/research/fabfilter-performance-final-review-2026-10-21.md).
+
+### Software acceptance completed — 2026-10-21
+
+The preceding software theme/scale gap is now resolved at the owner-confirmed application/real-canvas seam. `app::tests::follow_canvases_rebuild_truthfully_across_themes_and_logical_scales` passed1/1. It draws actual waveform+processed preview and gain output through Dark1x → Light1x → Light2x → Dark2x → Dark1x, using640/1280 logical widths and proportionate heights. Retained geometry equals fresh-state geometry; repeated unchanged drawing reuses the same primitive Arc; each theme/size change creates different geometry. Gain clip bounds match the requested canvas and compact curves retain source0/0.25 and the existing source-end/unity endpoints. Together with the previously passing source/edit/zoom/fit/bounds/logical middle-pan tests and root's recorded native observations, this completes scoped software acceptance without a production change.
+
+Merged integration1190b91 before delivery. The test harness needed explicit renderer type and a bound fresh-state variable, then passed without exposing a product defect. Strict library Clippy, formatting and diff checks passed. Root owns subsequent combined checks/GUI build and all build/native leases. Logical1x/2x geometry checks do not establish physical DPI changes, raster/presentation equality, physical middle-button gestures or listening quality; these unavailable observations remain explicitly unclaimed. Ticket42 and the4096-column diagnostic limitation are unchanged.
 

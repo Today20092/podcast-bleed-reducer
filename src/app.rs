@@ -1670,6 +1670,119 @@ mod tests {
     }
 
     #[test]
+    fn follow_canvases_rebuild_truthfully_across_themes_and_logical_scales() {
+        use iced::widget::canvas::{Geometry, Program};
+        use std::sync::Arc;
+        let root =
+            std::env::temp_dir().join(format!("cleanslate-follow-colors-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let source = root.join("voice.wav");
+        write_wav(&source, &[0.25; 4096]);
+        let project = synchronized_project(root.join("session.cleanslate"), vec![source]).unwrap();
+        let envelope = crate::GainEnvelope::constant_at_rate(4096, 48_000, 0.25).unwrap();
+        let mut builder = crate::waveform::WaveformBuilder::default();
+        builder.push(&[0.25; 4096]);
+        let waveform = builder.finish(48_000);
+        let mut app = super::CleanSlateApp {
+            timeline: crate::timeline::TimelineViewport::new(waveform.duration()),
+            waveforms: vec![waveform],
+            project: Some(project),
+            ..Default::default()
+        };
+        app.preview = Some(crate::AnalysisPreview {
+            stems: app.project.as_ref().unwrap().source_paths(),
+            regions: vec![],
+            envelopes: vec![envelope.clone()],
+            protections: vec![],
+            parameters: app.project.as_ref().unwrap().parameters(),
+        });
+        let project = app.project.as_ref().unwrap();
+        let constraints = project.gain_constraints();
+        let gain = crate::gain_editor::GainCanvas {
+            revision: 0,
+            project,
+            constraints: &constraints,
+            track: project.sources[0].track_id,
+            viewport: &app.timeline,
+            automatic: None,
+            effective: Some(&envelope),
+            editing: true,
+            selected_point: None,
+            on_event: Box::new(|_| ()),
+        };
+        let renderer = iced::Renderer::Secondary(iced_tiny_skia::Renderer::new(
+            iced::Font::DEFAULT,
+            iced::Pixels(16.0),
+        ));
+        let waveform_state = crate::waveform::TimelineCanvasState::default();
+        let gain_state = crate::gain_editor::GainCanvasState::default();
+        let mut previous_waveform = None;
+        let mut previous_gain = None;
+        for (appearance, scale) in [
+            (crate::appearance::Appearance::Dark, 1.0),
+            (crate::appearance::Appearance::Light, 1.0),
+            (crate::appearance::Appearance::Light, 2.0),
+            (crate::appearance::Appearance::Dark, 2.0),
+            (crate::appearance::Appearance::Dark, 1.0),
+        ] {
+            let theme = appearance.theme();
+            let bounds = iced::Rectangle::with_size(iced::Size::new(640.0 * scale, 120.0 * scale));
+            let waveform = drawn_waveform(&app, &waveform_state, &renderer, &theme, bounds);
+            let fresh = drawn_waveform(&app, &Default::default(), &renderer, &theme, bounds);
+            assert_eq!(format!("{waveform:?}"), format!("{fresh:?}"));
+            assert!(Arc::ptr_eq(
+                &waveform,
+                &drawn_waveform(&app, &waveform_state, &renderer, &theme, bounds)
+            ));
+            if let Some(previous) = previous_waveform.replace(waveform.clone()) {
+                assert!(!Arc::ptr_eq(&previous, &waveform));
+                assert_ne!(format!("{previous:?}"), format!("{waveform:?}"));
+            }
+            let bounds = iced::Rectangle::with_size(iced::Size::new(640.0 * scale, 64.0 * scale));
+            let draw = |state| {
+                gain.draw(
+                    state,
+                    &renderer,
+                    &theme,
+                    bounds,
+                    iced::mouse::Cursor::Unavailable,
+                )
+            };
+            let retained = draw(&gain_state);
+            let fresh_state = Default::default();
+            let fresh = draw(&fresh_state);
+            assert_eq!(format!("{retained:?}"), format!("{fresh:?}"));
+            let Geometry::<iced::Renderer>::Secondary(iced_tiny_skia::geometry::Geometry::Cache(
+                cached,
+            )) = &retained[0]
+            else {
+                panic!("expected cached gain canvas");
+            };
+            assert_eq!(cached.clip_bounds.size(), bounds.size());
+            let repeated = draw(&gain_state);
+            let Geometry::<iced::Renderer>::Secondary(iced_tiny_skia::geometry::Geometry::Cache(
+                repeated,
+            )) = &repeated[0]
+            else {
+                panic!("expected repeated gain canvas");
+            };
+            assert!(Arc::ptr_eq(&cached.primitives, &repeated.primitives));
+            if let Some(previous) = previous_gain.replace(cached.primitives.clone()) {
+                assert!(!Arc::ptr_eq(&previous, &cached.primitives));
+                assert_ne!(format!("{previous:?}"), format!("{:?}", cached.primitives));
+            }
+            let curve = crate::visible_gain_curve(&app.timeline, bounds.width, &envelope);
+            assert_eq!((curve[0].time, curve[0].gain), (0, 0.25));
+            assert_eq!(
+                (curve.last().unwrap().time, curve.last().unwrap().gain),
+                (envelope.duration(), 1.0)
+            );
+        }
+        drop(gain);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn visibility_observations_preserve_canvas_and_background_job_delivery() {
         let mut app = super::CleanSlateApp::default();
         let mut builder = crate::waveform::WaveformBuilder::default();
