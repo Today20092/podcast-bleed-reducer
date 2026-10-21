@@ -32,6 +32,8 @@ pwsh -NoProfile -File scripts/gui-dev.ps1 -Project 'C:/path/session.cleanslate'
 
 The script and `scripts/check.ps1 -Local` share `%LOCALAPPDATA%/CleanSlate/BuildCache` on Windows, outside all worktrees. `scripts/local-build-settings.ps1` owns the target and locked/offline, single-job Cargo flags; GUI `-TargetDir` remains an explicit override. Keep `rust-toolchain.toml`, Cargo.lock and `scripts/gui-dev.toml` consistent between builds. Incremental compilation stays enabled; dependency debug information is disabled to reduce disk use, so detailed dependency debugging needs a deliberate separate configuration. Cargo locks the shared target while compiling; coordinate builds and close the development executable before rebuilding. A fresh cache requires the dependencies to be available locally. Nemotron has been removed.
 
+The [2026-10-21 native baseline](research/fabfilter-performance-baseline-2026-10-21.md) preserves a representative mixed-run receipt, retained-window statistics and separate OS process samples before selective invalidation. Its scope and missing physical/presentation measurements are explicit; use isolated repeated captures for causal comparisons.
+
 ## Measurements on 2026-10-09
 
 Speaker examples replace the exact-time input panel. The saved list uses minutes:seconds and short durations, with Play, Show on timeline and Delete. The waveform's example strip selects existing examples; its selected left/right handles resize the range. Right-click an example to change its speakers or delete it. Dragging previews the change, release saves one undoable edit, and Escape or leaving the waveform cancels. Conflicting ranges are rejected; speaker changes retain explicit conflict replacement. Analyze is still required after saved changes.
