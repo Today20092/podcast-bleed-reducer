@@ -26,6 +26,7 @@ mod references;
 pub mod release_gate;
 mod review;
 mod session_ownership;
+mod shortcuts;
 mod storage;
 mod storage_io;
 mod supervised_render;

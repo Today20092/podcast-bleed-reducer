@@ -1,8 +1,8 @@
 # Make keyboard shortcuts adjustable and save examples with S
 
-Status: ready-for-agent
+Status: claimed
 Type: task
-Assignee: unassigned
+Assignee: Codex ticket_41
 Blocked by: 31, 34, 37
 Target branch: development
 Spec: #accepted-design
@@ -61,8 +61,25 @@ Macros, multi-step key sequences, downloadable presets, cloud sync, per-project 
 
 ## Results
 
-Not implemented. Created from the owner's 2026-10-12 request for adjustable shortcuts and S to save examples. No source changes, GUI actions or builds were performed for this ticket.
+2026-10-20 implementation claim: clean primary checkout on development at `0d9ef4c34d18f56013855212048e6f925222b544`; dependencies 31/34/37 verified done. Read accepted design/checks, migration roadmap/spec, domain context/ADR and GUI/build guidance. Graph discovery confirmed app keyboard dispatch and appearance preference persistence; the installed Iced tooltip supports delayed hover and viewport bounds. Implementation has not started: the requested TDD skill requires owner-confirmed seams before writing tests. Proposed app update/keyboard dispatch and local preference load/save seams, plus starting HEAD as the review comparison point, are awaiting owner confirmation. No GUI control, build, source changes or acceptance checks claimed. Context-mode tools were unavailable in this session.
+
+Historical specification note: created from the owner's 2026-10-12 request for adjustable shortcuts and S to save examples; implementation was not authorized in that original specification session.
 
 2026-10-12 follow-up: the owner requested Center playhead, Lock playhead and Unlock playhead shortcuts, plus small tooltips that reveal shortcuts after a hover delay. Added these to this ticket's scope and acceptance checks; no application behavior changed yet.
 
 2026-10-12 zoom follow-up: the owner requested that zoom not change playhead lock, with a possible Settings choice. Default to preserving lock; specify an opt-in local preference to unlock on user zoom. This is ticket scope only, not an implemented change.
+
+## Implementation — 2026-10-20
+
+The owner confirmed the app keyboard/update and local-preference load/save test seams, and `0d9ef4c34d18f56013855212048e6f925222b544` as the review baseline. Work stays in the clean primary development checkout. No owner GUI control, main promotion or release publication is authorized or performed.
+
+- Added one context-aware command definition shared by dispatch, Settings, reference keycaps, popup hints and delayed command tooltips. S saves new/edited examples through the existing validated action; Enter remains a fixed popup confirmation and Ctrl/Command+S remains project saving. Command capture previews before applying, consumes input, names conflicts/contexts and cancels on Escape. Native text editing, dialog confirmation/cancellation, focus navigation and operating-system keys remain reserved; modifiers distinguish chords from plain keys. Individual/default restoration and unbinding preserve compatibility confirmations.
+- Reused the existing local preference file, merging fields and saving atomically. Overrides and the zoom preference survive reload and New project without changing project data. Invalid/obsolete/conflicting entries recover independently with actionable feedback; malformed JSON is preserved and saving reports the required repair rather than discarding unrelated preferences.
+- Center defaults to C and Toggle lock to L, using the mouse messages. Command tooltips use Iced's existing 600 ms delay and viewport bounds with semantic theme styles. Input resets hint state; click resets occur on release so the tooltip wrapper cannot discard the pending button press. Sound-value instruction tooltips remain absent. Native visual timing, edge placement and theme/width readability still require the owner check below.
+- All seven available zoom/fit dispatch routes share the preserve-lock default and opt-in unlock policy. Locked zoom/fit retains the captured playhead anchor at the new scale, subject to recording bounds; it does not seek or alter selection/playback. Manual pan and non-zoom workflows are unchanged; ticket 42 retains precedence and is not implemented here.
+- TDD: the initial S regression failed because the popup stayed open, then passed. The remapping slice first failed to compile for its missing interface, then passed. Persistence failed on the absent saved override, then passed. Zoom failed on the old wheel-unlocks behavior; the subsequent gain-route fixture was corrected to enable its existing gain-tool availability condition. Repeat handling first failed for the missing event seam and now passes. Focused app checks: **57 passed, 0 failed, 4 existing ignored**. Strict all-target/all-feature Clippy, formatting and diff checks passed using locked/offline, one-job shared local settings. Test compilation uses ticket 55's documented command-only `profile.test.package.rust-app.codegen-units=4` memory workaround; the repository profile is unchanged.
+- Final full local checks, two-axis review, GUI build, tested executable preservation and development backup are pending. Status remains claimed; the acceptance checklist remains incomplete until required checks, including owner verification, pass.
+
+## Required owner check
+
+After the verified build is handed off, check the left-hand labeling loop (speaker keys, R, S, Enter, room tone and editing), shortcut capture/conflicts/remapping and restart persistence. Check shortcut hints and delayed tooltips in Dark/Light at narrow/wide widths and near window edges, including typing/click dismissal and the current Lock/Unlock name. Exercise Center/Lock plus zoom/fit while playing under both preference values. This agent has not controlled the owner's GUI or claimed these checks passed.

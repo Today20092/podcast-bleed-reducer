@@ -11,12 +11,6 @@ pub(crate) enum Appearance {
     Dark,
     Light,
 }
-#[derive(Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct Preferences {
-    appearance: Appearance,
-}
-
 pub(crate) fn preference_path() -> Result<PathBuf, String> {
     path_for(
         std::env::consts::OS,
@@ -47,8 +41,10 @@ fn path_for(
 }
 pub(crate) fn load(path: &Path) -> (Appearance, Option<String>) {
     match std::fs::read(path) {
-        Ok(bytes) => match serde_json::from_slice::<Preferences>(&bytes) {
-            Ok(p) => (p.appearance, None),
+        Ok(bytes) => match serde_json::from_slice::<serde_json::Value>(&bytes)
+            .and_then(|value| serde_json::from_value::<Appearance>(value["appearance"].clone()))
+        {
+            Ok(appearance) => (appearance, None),
             Err(error) => (
                 Appearance::Dark,
                 Some(format!(
@@ -66,12 +62,83 @@ pub(crate) fn load(path: &Path) -> (Appearance, Option<String>) {
     }
 }
 pub(crate) fn save(path: &Path, appearance: Appearance) -> Result<(), String> {
+    update_preferences(
+        path,
+        [(
+            "appearance",
+            serde_json::to_value(appearance).map_err(|e| e.to_string())?,
+        )],
+    )
+}
+
+fn read_preferences(path: &Path) -> Result<serde_json::Map<String, serde_json::Value>, String> {
+    match std::fs::read(path) {
+        Ok(bytes) => serde_json::from_slice(&bytes).map_err(|e| {
+            format!(
+                "Could not read preferences; keep a copy and repair {} before saving. {e}",
+                path.display()
+            )
+        }),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(Default::default()),
+        Err(error) => Err(format!("Could not read {}. {error}", path.display())),
+    }
+}
+
+fn update_preferences<const N: usize>(
+    path: &Path,
+    updates: [(&str, serde_json::Value); N],
+) -> Result<(), String> {
+    let mut preferences = read_preferences(path)?;
+    for (name, value) in updates {
+        preferences.insert(name.into(), value);
+    }
     let parent = path
         .parent()
-        .ok_or("Appearance preferences need a parent directory.")?;
+        .ok_or("Preferences need a parent directory.")?;
     std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-    let bytes = serde_json::to_vec(&Preferences { appearance }).map_err(|e| e.to_string())?;
+    let bytes = serde_json::to_vec_pretty(&preferences).map_err(|e| e.to_string())?;
     crate::project::atomic_save(path, &bytes).map_err(|e| e.to_string())
+}
+
+pub(crate) fn load_shortcuts(path: &Path) -> (crate::shortcuts::Shortcuts, bool, Option<String>) {
+    let preferences = match read_preferences(path) {
+        Ok(preferences) => preferences,
+        Err(error) => return (Default::default(), false, Some(error)),
+    };
+    let (shortcuts, mut errors) = preferences
+        .get("shortcuts")
+        .map(crate::shortcuts::Shortcuts::from_value)
+        .unwrap_or_default();
+    let unlock = match preferences.get("unlock_playhead_when_zooming") {
+        Some(serde_json::Value::Bool(value)) => *value,
+        None => false,
+        _ => {
+            errors.push("Invalid Unlock playhead when zooming preference; using off. Set it again in Settings.".into());
+            false
+        }
+    };
+    (
+        shortcuts,
+        unlock,
+        (!errors.is_empty()).then(|| errors.join("\n")),
+    )
+}
+
+pub(crate) fn save_shortcuts(
+    path: &Path,
+    shortcuts: &crate::shortcuts::Shortcuts,
+    unlock: bool,
+) -> Result<(), String> {
+    update_preferences(
+        path,
+        [
+            (
+                "shortcuts",
+                serde_json::to_value(shortcuts).map_err(|e| e.to_string())?,
+            ),
+            ("unlock_playhead_when_zooming", unlock.into()),
+        ],
+    )
 }
 
 #[derive(Clone, Copy)]
@@ -366,12 +433,7 @@ mod tests {
         assert_eq!(load(&path), (Appearance::Light, None));
         save(&path, Appearance::Dark).unwrap();
         assert_eq!(load(&path), (Appearance::Dark, None));
-        for invalid in [
-            "{",
-            "{}",
-            "{\"appearance\":\"unknown\"}",
-            "{\"appearance\":\"Dark\",\"other\":1}",
-        ] {
+        for invalid in ["{", "{}", "{\"appearance\":\"unknown\"}"] {
             std::fs::write(&path, invalid).unwrap();
             let (appearance, error) = load(&path);
             assert_eq!(appearance, Appearance::Dark);
