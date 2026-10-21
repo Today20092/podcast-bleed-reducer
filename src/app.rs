@@ -5026,7 +5026,8 @@ enum Message {
 }
 
 pub fn run() -> iced::Result {
-    iced::application(
+    crate::performance::start_from_environment();
+    let result = iced::application(
         || {
             #[cfg(debug_assertions)]
             let project = std::env::var_os("CLEANSLATE_DEV_PROJECT").map(PathBuf::from);
@@ -5034,7 +5035,12 @@ pub fn run() -> iced::Result {
             let project = None;
             startup(project)
         },
-        CleanSlateApp::update,
+        |app: &mut CleanSlateApp, message| {
+            let _update = crate::performance::measure(crate::performance::Metric::AppUpdate);
+            let _poll = matches!(message, Message::Tick)
+                .then(|| crate::performance::measure(crate::performance::Metric::WorkerPoll));
+            app.update(message)
+        },
         CleanSlateApp::view,
     )
     .title(
@@ -5046,7 +5052,17 @@ pub fn run() -> iced::Result {
     )
     .theme(CleanSlateApp::theme)
     .default_font(iced::Font::with_name("Segoe UI"))
-    .subscription(CleanSlateApp::subscription)
+    .subscription(|app: &CleanSlateApp| {
+        let observations = if crate::performance::is_active() {
+            iced::event::listen_raw(|event, _, _| {
+                crate::performance::observe_event(&event);
+                None::<Message>
+            })
+        } else {
+            Subscription::none()
+        };
+        Subscription::batch([app.subscription(), observations])
+    })
     .window(window::Settings {
         icon: Some(
             window::icon::from_rgba(include_bytes!("../assets/cleanslate.rgba").to_vec(), 64, 64)
@@ -5056,7 +5072,9 @@ pub fn run() -> iced::Result {
         min_size: Some(iced::Size::new(960.0, 900.0)),
         ..window::Settings::default()
     })
-    .run()
+    .run();
+    crate::performance::finish();
+    result
 }
 
 fn startup(project: Option<PathBuf>) -> CleanSlateApp {

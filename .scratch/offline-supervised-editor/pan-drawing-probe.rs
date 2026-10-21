@@ -1,5 +1,14 @@
 //! Read-only production waveform/gain probe; unused file-loading entry points never execute.
 pub use rust_app::*;
+#[path = "../../src/appearance.rs"]
+mod appearance;
+#[path = "../../src/shortcuts.rs"]
+mod shortcuts;
+mod performance {
+    pub use rust_app::performance::Metric;
+    // The software probe does not start the native editor's optional recorder.
+    pub fn measure(_: Metric) {}
+}
 #[path = "../../src/editor_drawing.rs"]
 mod editor_drawing;
 #[path = "../../src/gain_editor.rs"]
@@ -9,23 +18,22 @@ mod waveform;
 mod timebase {
     pub use rust_app::{Rounding, SourceTimebase, TICKS_PER_SECOND, TimePosition};
 }
-mod timeline {
-    pub use rust_app::timeline::TimelineViewport;
-    #[derive(Clone, Copy, Debug)]
-    pub enum TimelineEvent {
-        Seek(crate::TimePosition),
-        Drag(crate::TimePosition),
-        DragEnd(crate::TimePosition),
-        Select(crate::TimePosition, crate::TimePosition),
-        Zoom {
-            cursor_x: f32,
-            width: f32,
-            direction: f32,
-        },
-        Pan {
-            delta_x: f32,
-            width: f32,
-        },
+#[path = "../../src/timeline.rs"]
+mod timeline;
+
+struct AudioSource(rust_app::AudioSource);
+impl std::ops::Deref for AudioSource {
+    type Target = rust_app::AudioSource;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+impl AudioSource {
+    fn mono(path: std::path::PathBuf) -> Self {
+        Self(rust_app::AudioSource::mono(path))
+    }
+    fn fingerprint(&self, _: Option<&std::sync::atomic::AtomicBool>) -> Result<String, std::io::Error> {
+        unreachable!("synthetic probe never fingerprints audio")
     }
 }
 mod project {
@@ -46,30 +54,15 @@ mod audio_io {
     pub struct Decoded {
         pub metadata: crate::SourceMetadata,
     }
-    pub fn decode_chunks(
-        _: &std::path::Path,
+    pub fn decode_source_chunks(
+        _: &crate::AudioSource,
         _: Option<&std::sync::atomic::AtomicBool>,
         _: impl FnMut(u32, &[f32]) -> Result<(), crate::RenderBlocker>,
     ) -> Result<Decoded, crate::RenderBlocker> {
         unreachable!("synthetic waveform only")
     }
 }
-pub use editor_drawing::visible_gain_buckets;
-fn visible_automatic_buckets(
-    viewport: &timeline::TimelineViewport,
-    width: f32,
-    envelope: &AutomaticEnvelope,
-) -> Vec<editor_drawing::GainDrawingBucket> {
-    rust_app::visible_automatic_buckets(viewport, width, envelope)
-        .into_iter()
-        .map(|b| editor_drawing::GainDrawingBucket {
-            start: b.start,
-            end: b.end,
-            lower: b.lower,
-            upper: b.upper,
-        })
-        .collect()
-}
+pub use editor_drawing::{visible_automatic_buckets, visible_gain_buckets};
 mod prepared_analysis {
     pub fn check_cancelled(
         cancel: Option<&std::sync::atomic::AtomicBool>,

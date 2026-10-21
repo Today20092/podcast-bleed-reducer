@@ -1,10 +1,10 @@
 param([string]$Project)
 $ErrorActionPreference = 'Stop'
 $panRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-if (-not $Project) { $Project = Join-Path $panRoot 'test-audio/quick-test-10min/261005-quick-test.gui-dev.cleanslate' }
+if (-not $Project) { $Project = Join-Path $panRoot 'test-audio/quick-test-10min/261005-quick-test.cleanslate' }
 $Project = (Resolve-Path -LiteralPath $Project).Path
-$panTarget = Join-Path $env:USERPROFILE '.codex/worktrees/offline-timebase/podcast-automix-rust-gui/target/owner-ui'
-if (-not (Test-Path -LiteralPath $panTarget)) { $panTarget = Join-Path $panRoot 'target/owner-ui' }
+$panSettings = & (Join-Path $PSScriptRoot 'local-build-settings.ps1')
+$panTarget = $panSettings.TargetDir
 $panDeps = Join-Path $panTarget 'debug/deps'
 $panApp = (Get-ChildItem -LiteralPath $panDeps -Filter 'librust_app-*.rlib' | Sort-Object LastWriteTime -Descending | Select-Object -First 1).FullName
 $panIced = (Get-ChildItem -LiteralPath $panDeps -Filter 'libiced-*.rlib' | Sort-Object LastWriteTime -Descending | Select-Object -First 1).FullName
