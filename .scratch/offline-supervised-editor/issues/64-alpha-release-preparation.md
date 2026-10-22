@@ -21,4 +21,6 @@ Labels: ready-for-agent
 
 ## Results
 
+Documentation agents integrated through f8b8865/2a0d7e1 and release candidate 6f02015. Seven actual Windows alpha.7 GUI captures include manual gain dragging and preservation; temporary demo edits were undone. README, user guide, portable help, release guide/notes, performance evidence and roadmap are refreshed. 89 edited-document local references passed; five badge endpoints returned SVG successfully. [Promotion PR 17](https://github.com/Today20092/podcast-bleed-reducer/pull/17) is open with all four required native checks running. Local checks hit E0463 loading a stale application crate after the version bump; the tested screenshot executable/runtime were preserved outside the repository, and only this package's shared-cache artifacts were cleared before retrying. The retry's Clippy stage passed; final tests are pending. Native package/download verification and publication remain pending.
+
 Claimed on development at 6160da9 before release edits. The current application is version 0.1.0-alpha.6; release/version availability audit is in progress. Documentation and release review may proceed in parallel; Cargo builds remain coordinated in the shared target.
