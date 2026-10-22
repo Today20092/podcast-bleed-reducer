@@ -7,6 +7,7 @@ use iced::{
 #[derive(Clone, Copy)]
 pub(crate) enum ToolbarIcon {
     Waveform(crate::waveform::WaveformDisplay),
+    CatchUp,
     Lock { locked: bool },
     Center,
     Meters { at_playhead: bool },
@@ -28,6 +29,7 @@ impl ToolbarIcon {
             Self::Waveform(crate::waveform::WaveformDisplay::Both) => {
                 include_bytes!("../assets/ui/waveform-both.svg")
             }
+            Self::CatchUp => include_bytes!("../assets/lucide/arrow-right-to-line.svg"),
             Self::Lock { locked: true } => include_bytes!("../assets/lucide/lock-keyhole.svg"),
             Self::Lock { locked: false } => {
                 include_bytes!("../assets/lucide/lock-keyhole-open.svg")

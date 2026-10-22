@@ -109,6 +109,8 @@ In Who is talking?, 1 through 8 toggles speakers, R clears the selected speakers
 
 Menu also opens the shortcut reference, Usage documentation, GitHub, Report a bug and About. About provides version information and credits. Dark and Light appearances are available in Settings and persist independently of projects.
 
+The menu groups configuration, help/project links and application information in aligned rows. Tab, Shift+Tab or Up/Down selects a row; Enter opens it. Escape, Close or a click outside the menu dismisses it. The shortcut hint beside Keyboard shortcuts follows your current binding.
+
 ## Export settings
 
 Open Export after checking the current result. The dialog lists track/channel order and original sample rates and offers payload-size estimates. Choose a writable parent location; CleanSlate creates a new export folder inside it without replacing existing files.

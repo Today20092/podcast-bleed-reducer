@@ -380,6 +380,14 @@ mod tests {
         use super::{CleanSlateApp, Command, Message, PlaybackScroll};
         use iced::keyboard::{Key, Modifiers};
         let mut app = CleanSlateApp::default();
+        let button = crate::button_action::message(super::RegisteredButton(Command::CatchUp));
+        let _ = app.update(button);
+        assert_eq!(app.playback_scroll, PlaybackScroll::Off);
+        let _ = app.update(Message::KeyPressed(
+            Key::Character("c".into()),
+            Modifiers::SHIFT,
+        ));
+        assert_eq!(app.playback_scroll, PlaybackScroll::Page);
         let key = Key::Character("c".into());
         let _ = app.update(Message::KeyPressed(key.clone(), Modifiers::SHIFT));
         assert_eq!(app.playback_scroll, PlaybackScroll::Off);
@@ -401,6 +409,104 @@ mod tests {
             Modifiers::SHIFT,
         ));
         assert_eq!(app.playback_scroll, PlaybackScroll::Page);
+    }
+
+    #[test]
+    fn initially_unbound_timeline_action_can_be_discovered_remapped_saved_and_invoked() {
+        use super::{CleanSlateApp, Command, Message};
+        use iced::keyboard::{Key, Modifiers};
+        let root = crate::audio_io::multichannel_tests::root();
+        let path = root.join("preferences.json");
+        let mut app = CleanSlateApp {
+            preferences_path: Some(path.clone()),
+            ..Default::default()
+        };
+        assert!(
+            super::DEFINITIONS
+                .iter()
+                .any(|d| d.command == Command::Meters
+                    && d.name == "Move speaker meters"
+                    && d.defaults.is_empty())
+        );
+        assert_eq!(app.shortcuts.hint(Command::Meters), "Unbound");
+        let _ = app.update(Message::Settings);
+        let _ = app.update(Message::CaptureShortcut(Command::Meters));
+        let _ = app.update(Message::KeyPressed(
+            Key::Character("j".into()),
+            Modifiers::SHIFT,
+        ));
+        let _ = app.update(Message::ApplyShortcut);
+        let (reloaded, _, error) = crate::appearance::load_shortcuts(&path);
+        assert!(error.is_none());
+        app.shortcuts = reloaded;
+        assert_eq!(
+            app.action_hint(Command::Meters),
+            "Move speaker meters · Shift+J"
+        );
+        let _ = app.update(Message::CloseHelp);
+        let initial = app.meters_at_playhead;
+        let _ = app.update(Message::InvokeAction(Command::Meters));
+        assert_ne!(app.meters_at_playhead, initial);
+        let _ = app.update(Message::KeyPressed(
+            Key::Character("j".into()),
+            Modifiers::SHIFT,
+        ));
+        assert_eq!(app.meters_at_playhead, initial);
+        let _ = app.update(Message::Settings);
+        let _ = app.update(Message::CaptureShortcut(Command::Meters));
+        let _ = app.update(Message::KeyPressed(
+            Key::Character("k".into()),
+            Modifiers::SHIFT,
+        ));
+        let _ = app.update(Message::ApplyShortcut);
+        let (reassigned, _, error) = crate::appearance::load_shortcuts(&path);
+        assert!(error.is_none());
+        app.shortcuts = reassigned;
+        assert_eq!(
+            app.action_hint(Command::Meters),
+            "Move speaker meters · Shift+K"
+        );
+        let _ = app.update(Message::CloseHelp);
+        let _ = app.update(Message::KeyPressed(
+            Key::Character("j".into()),
+            Modifiers::SHIFT,
+        ));
+        assert_eq!(app.meters_at_playhead, initial);
+        let _ = app.update(Message::KeyPressed(
+            Key::Character("k".into()),
+            Modifiers::SHIFT,
+        ));
+        assert_ne!(app.meters_at_playhead, initial);
+        let _ = app.update(Message::Settings);
+        let _ = app.update(Message::UnbindShortcut(Command::Meters));
+        assert_eq!(app.shortcuts.hint(Command::Meters), "Unbound");
+        let _ = app.update(Message::RestoreShortcut(Command::Meters));
+        assert_eq!(app.shortcuts.hint(Command::Meters), "Unbound");
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn registered_timeline_buttons_and_keys_obey_the_same_modal_availability() {
+        use super::{CleanSlateApp, Command, Message};
+        use iced::keyboard::{Key, Modifiers};
+        let mut app = CleanSlateApp::default();
+        let mode = app.playback_scroll;
+        let _ = app.update(Message::Settings);
+        assert!(!app.action_available(Command::CatchUp));
+        let _ = app.update(crate::button_action::message(super::RegisteredButton(
+            Command::CatchUp,
+        )));
+        let _ = app.update(Message::KeyPressed(
+            Key::Character("c".into()),
+            Modifiers::SHIFT,
+        ));
+        assert_eq!(app.playback_scroll, mode);
+        let _ = app.update(Message::CloseHelp);
+        assert!(app.action_available(Command::CatchUp));
+        let _ = app.update(crate::button_action::message(super::RegisteredButton(
+            Command::CatchUp,
+        )));
+        assert_ne!(app.playback_scroll, mode);
     }
 
     #[test]
@@ -4748,6 +4854,50 @@ mod app_menu_tests {
         assert!(app.app_dialog.is_none());
         assert_eq!(app.timeline.selection(), Some((1, 2)));
     }
+
+    #[test]
+    fn menu_outside_click_dismisses_without_editing_the_workspace() {
+        let mut app = CleanSlateApp::default();
+        app.timeline.set_selection(Some((1, 2)));
+        let _ = app.update(Message::Menu);
+        let messages = {
+            let mut content = app.view();
+            let mut tree = iced::advanced::widget::Tree::new(content.as_widget());
+            let renderer = iced::Renderer::Secondary(iced_tiny_skia::Renderer::new(
+                iced::Font::DEFAULT,
+                iced::Pixels(16.0),
+            ));
+            let viewport = iced::Rectangle::with_size(iced::Size::new(1024.0, 768.0));
+            let layout = content.as_widget_mut().layout(
+                &mut tree,
+                &renderer,
+                &iced::advanced::layout::Limits::new(iced::Size::ZERO, viewport.size()),
+            );
+            let mut messages = Vec::new();
+            content.as_widget_mut().update(
+                &mut tree,
+                &iced::Event::Mouse(iced::mouse::Event::ButtonPressed(iced::mouse::Button::Left)),
+                iced::advanced::Layout::new(&layout),
+                iced::mouse::Cursor::Available(iced::Point::new(4.0, 4.0)),
+                &renderer,
+                &mut iced::advanced::clipboard::Null,
+                &mut iced::advanced::Shell::new(&mut messages),
+                &viewport,
+            );
+            messages
+        };
+        assert_eq!(
+            messages.len(),
+            1,
+            "outside click must only dismiss the menu"
+        );
+        assert!(matches!(messages[0], Message::CloseHelp));
+        for message in messages {
+            let _ = app.update(message);
+        }
+        assert!(!app.menu_open);
+        assert_eq!(app.timeline.selection(), Some((1, 2)));
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -4778,15 +4928,7 @@ impl AppLink {
 }
 
 fn menu_action(index: usize) -> Message {
-    match index {
-        0 => Message::Settings,
-        1 => Message::KeyboardShortcuts,
-        2 => Message::OpenLink(AppLink::Help),
-        3 => Message::OpenLink(AppLink::GitHub),
-        4 => Message::OpenLink(AppLink::ReportBug),
-        5 => Message::About,
-        _ => Message::CloseHelp,
-    }
+    crate::button_action::message(legacy_menu_action(index))
 }
 
 fn version_info(version: &str, build: Option<&str>, os: &str, arch: &str) -> String {
@@ -5398,6 +5540,7 @@ impl Drop for PreviewProcessing {
 
 #[derive(Debug, Clone)]
 enum Message {
+    InvokeAction(Command),
     CaptureShortcut(Command),
     ApplyShortcut,
     RestoreShortcut(Command),
@@ -5526,6 +5669,107 @@ enum Message {
     CancelExportDialog,
     SubmitExport,
     Timeline(TimelineEvent),
+}
+
+// Individually audited exceptions; new actions belong in shortcuts::commands.
+macro_rules! legacy_buttons {
+    ($($variant:ident $(($($arg:ident: $ty:ty),*))? => $reason:literal),* $(,)?) => {
+        #[derive(Clone)]
+        enum LegacyButton { $($variant $(($($ty),*))?),* }
+        impl crate::button_action::ButtonAction<Message> for LegacyButton {
+            fn into_message(self) -> Message {
+                match self { $(Self::$variant $(($($arg),*))? => {
+                    let _reason = $reason;
+                    Message::$variant $(($($arg),*))?
+                }),* }
+            }
+        }
+    };
+}
+legacy_buttons! {
+    About => "About: Transient dialog, capture or menu navigation.",
+    AnalysisDetails(a: bool) => "AnalysisDetails: Text/value editor or disclosure with local input ownership.",
+    AnalyzeReferences => "AnalyzeReferences: Legacy command pending migration; existing availability and keyboard binding retained.",
+    Appearance(a: Appearance) => "Appearance: Text/value editor or disclosure with local input ownership.",
+    ApplyShortcut => "ApplyShortcut: Transient dialog, capture or menu navigation.",
+    Audition => "Audition: Legacy command pending migration; existing availability and keyboard binding retained.",
+    CalibrationTiming(a: bool) => "CalibrationTiming: Text/value editor or disclosure with local input ownership.",
+    Cancel => "Cancel: Legacy command pending migration; existing availability and keyboard binding retained.",
+    CancelAnalysis => "CancelAnalysis: Legacy command pending migration; existing availability and keyboard binding retained.",
+    CancelChannels => "CancelChannels: Transient dialog, capture or menu navigation.",
+    CancelExportDialog => "CancelExportDialog: Transient dialog, capture or menu navigation.",
+    CancelPendingImports => "CancelPendingImports: Legacy command pending migration; existing availability and keyboard binding retained.",
+    CancelTrackName => "CancelTrackName: Text/value editor or disclosure with local input ownership.",
+    CaptureShortcut(a: Command) => "CaptureShortcut: Transient dialog, capture or menu navigation.",
+    CloseHelp => "CloseHelp: Transient dialog, capture or menu navigation.",
+    ConfirmChannels => "ConfirmChannels: Transient dialog, capture or menu navigation.",
+    ContextReference(a: Vec<SpeakerId>, b: bool) => "ContextReference: Explicit item arguments; current source, range and selection validation retained.",
+    CopyProjectPath => "CopyProjectPath: Legacy command pending migration; existing availability and keyboard binding retained.",
+    CopyVersion => "CopyVersion: Transient dialog, capture or menu navigation.",
+    DeleteGain => "DeleteGain: Legacy command pending migration; existing availability and keyboard binding retained.",
+    DeleteRegion(a: usize, b: u64) => "DeleteRegion: Explicit item arguments; current source, range and selection validation retained.",
+    DismissReferenceMenu => "DismissReferenceMenu: Transient dialog, capture or menu navigation.",
+    EditSound(a: SoundParameter) => "EditSound: Text/value editor or disclosure with local input ownership.",
+    EditTrackName(a: usize) => "EditTrackName: Text/value editor or disclosure with local input ownership.",
+    Export => "Export: Legacy command pending migration; existing availability and keyboard binding retained.",
+    ExportDestination => "ExportDestination: Transient dialog, capture or menu navigation.",
+    GainAction(a: usize, b: bool) => "GainAction: Explicit item arguments; current source, range and selection validation retained.",
+    ImportStems => "ImportStems: Legacy command pending migration; existing availability and keyboard binding retained.",
+    InsertGainPoint => "InsertGainPoint: Explicit item arguments; current source, range and selection validation retained.",
+    KeyboardShortcuts => "KeyboardShortcuts: Transient dialog, capture or menu navigation.",
+    Menu => "Menu: Transient dialog, capture or menu navigation.",
+    Mute => "Mute: Text/value editor or disclosure with local input ownership.",
+    NewProject => "NewProject: Legacy command pending migration; existing availability and keyboard binding retained.",
+    OpenLink(a: AppLink) => "OpenLink: Transient dialog, capture or menu navigation.",
+    OpenProject => "OpenProject: Legacy command pending migration; existing availability and keyboard binding retained.",
+    Original => "Original: Legacy command pending migration; existing availability and keyboard binding retained.",
+    PlayExample(a: u64) => "PlayExample: Explicit item arguments; current source, range and selection validation retained.",
+    Previous => "Previous: Legacy command pending migration; existing availability and keyboard binding retained.",
+    Processed => "Processed: Legacy command pending migration; existing availability and keyboard binding retained.",
+    ProtectSelection => "ProtectSelection: Explicit item arguments; current source, range and selection validation retained.",
+    RebindSource(a: usize) => "RebindSource: Explicit item arguments; current source, range and selection validation retained.",
+    RedoGain => "RedoGain: Legacy command pending migration; existing availability and keyboard binding retained.",
+    RedoReferences => "RedoReferences: Legacy command pending migration; existing availability and keyboard binding retained.",
+    Relink(a: usize) => "Relink: Explicit item arguments; current source, range and selection validation retained.",
+    RemoveImport(a: u64) => "RemoveImport: Explicit item arguments; current source, range and selection validation retained.",
+    RemoveReference(a: u64) => "RemoveReference: Explicit item arguments; current source, range and selection validation retained.",
+    Removed => "Removed: Legacy command pending migration; existing availability and keyboard binding retained.",
+    ResetSound(a: SoundParameter) => "ResetSound: Text/value editor or disclosure with local input ownership.",
+    RestoreAllShortcuts => "RestoreAllShortcuts: Transient dialog, capture or menu navigation.",
+    RestoreShortcut(a: Command) => "RestoreShortcut: Transient dialog, capture or menu navigation.",
+    RetryImport(a: u64) => "RetryImport: Explicit item arguments; current source, range and selection validation retained.",
+    SaveProject => "SaveProject: Legacy command pending migration; existing availability and keyboard binding retained.",
+    SaveTrackName => "SaveTrackName: Text/value editor or disclosure with local input ownership.",
+    Settings => "Settings: Transient dialog, capture or menu navigation.",
+    SetupDetails(a: bool) => "SetupDetails: Text/value editor or disclosure with local input ownership.",
+    ShowExample(a: u64) => "ShowExample: Explicit item arguments; current source, range and selection validation retained.",
+    SoloTrack(a: usize) => "SoloTrack: Explicit item arguments; current source, range and selection validation retained.",
+    Stop => "Stop: Legacy command pending migration; existing availability and keyboard binding retained.",
+    SubmitExport => "SubmitExport: Transient dialog, capture or menu navigation.",
+    UnbindShortcut(a: Command) => "UnbindShortcut: Transient dialog, capture or menu navigation.",
+    UndoGain => "UndoGain: Legacy command pending migration; existing availability and keyboard binding retained.",
+    UndoReferences => "UndoReferences: Legacy command pending migration; existing availability and keyboard binding retained.",
+    Validate => "Validate: Legacy command pending migration; existing availability and keyboard binding retained.",
+    WaveformDisplay(a: waveform::WaveformDisplay) => "WaveformDisplay: Text/value editor or disclosure with local input ownership.",
+}
+
+struct RegisteredButton(Command);
+impl crate::button_action::ButtonAction<Message> for RegisteredButton {
+    fn into_message(self) -> Message {
+        Message::InvokeAction(self.0)
+    }
+}
+
+fn legacy_menu_action(index: usize) -> LegacyButton {
+    match index {
+        0 => LegacyButton::Settings,
+        1 => LegacyButton::KeyboardShortcuts,
+        2 => LegacyButton::OpenLink(AppLink::Help),
+        3 => LegacyButton::OpenLink(AppLink::GitHub),
+        4 => LegacyButton::OpenLink(AppLink::ReportBug),
+        5 => LegacyButton::About,
+        _ => LegacyButton::CloseHelp,
+    }
 }
 
 pub fn run() -> iced::Result {
@@ -5747,7 +5991,7 @@ impl CleanSlateApp {
                     .padding([6, 10])
                     .width(108)
                     .style(sound_button)
-                    .on_press(Message::EditSound(parameter)),
+                    .on_press(LegacyButton::EditSound(parameter)),
             )
             .on_right_press(Message::SoundMenu(parameter))
             .into()
@@ -5774,7 +6018,7 @@ impl CleanSlateApp {
             content = content.push(
                 button("Reset to default")
                     .style(secondary_button)
-                    .on_press(Message::ResetSound(parameter)),
+                    .on_press(LegacyButton::ResetSound(parameter)),
             );
         }
         content.into()
@@ -7175,6 +7419,9 @@ impl CleanSlateApp {
 
     fn dispatch_shortcut(&mut self, command: Command) {
         use Command::*;
+        if !self.action_available(command) {
+            return;
+        }
         let message = match command {
             SaveExample => Some(Message::ContextReference(
                 self.reference_speakers.clone(),
@@ -7220,6 +7467,7 @@ impl CleanSlateApp {
             Center => Some(Message::CenterPlayhead),
             Lock => Some(Message::LockPlayhead),
             CatchUp => Some(Message::ToggleCatchUp),
+            Meters => Some(Message::ToggleMeterPlacement),
             Help => Some(Message::Help),
             Menu => Some(Message::Menu),
             Reference => Some(Message::KeyboardShortcuts),
@@ -7749,17 +7997,50 @@ impl CleanSlateApp {
         )
     }
 
+    fn action_hint(&self, command: Command) -> String {
+        let binding = self.shortcuts.hint(command);
+        if binding == "Unbound" {
+            format!("{} · Unbound", self.command_name(command))
+        } else {
+            format!("{} · {}", self.command_name(command), binding)
+        }
+    }
+
+    fn action_available(&self, command: Command) -> bool {
+        if matches!(
+            command,
+            Command::Center | Command::Lock | Command::CatchUp | Command::Meters
+        ) {
+            self.workspace_input_active()
+                && self.sound_draft.is_none()
+                && self.track_name_draft.is_none()
+                && self.shortcut_capture.is_none()
+                && self.sound_menu.is_none()
+        } else {
+            true
+        }
+    }
+
+    fn action_control<'a>(
+        &'a self,
+        command: Command,
+        control: crate::gui_controls::ControlButton<'a, Message>,
+    ) -> Element<'a, Message> {
+        self.shortcut_control(
+            command,
+            control.on_press_maybe(
+                self.action_available(command)
+                    .then_some(RegisteredButton(command)),
+            ),
+        )
+    }
+
     fn shortcut_control<'a>(
         &'a self,
         command: Command,
         control: impl Into<Element<'a, Message>>,
     ) -> Element<'a, Message> {
-        let binding = self.shortcuts.hint(command);
-        let label = if binding == "Unbound" {
-            self.command_name(command).to_owned()
-        } else {
-            format!("{} · {}", self.command_name(command), binding)
-        };
+        let label = self.action_hint(command);
         let hint = iced::widget::tooltip(
             control,
             container(text(label).size(13))
@@ -7794,6 +8075,10 @@ impl CleanSlateApp {
 
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
+            Message::InvokeAction(command) => {
+                self.dispatch_shortcut(command);
+                return Task::none();
+            }
             Message::CheckWindowVisibility => {
                 self.update_playback_position();
                 self.window_visibility_generation =
@@ -8234,6 +8519,7 @@ impl CleanSlateApp {
         }
         let previous_parameters = self.preview_parameters;
         match message {
+            Message::InvokeAction(_) => unreachable!("actions dispatch before input routing"),
             Message::ImportChannel(index, selected) => {
                 if let Some(choice) = self.import_choices.get_mut(index) {
                     choice.selected = selected;
@@ -9358,7 +9644,7 @@ impl CleanSlateApp {
     fn shortcut_reference(&self) -> Element<'_, Message> {
         let mut content = column![
             row![text("Keyboard shortcuts").size(24), Space::new().width(Fill),
-                button("Close    Enter / Esc").on_press(Message::CloseHelp)].spacing(16),
+                button("Close    Enter / Esc").on_press(LegacyButton::CloseHelp)].spacing(16),
             text("Effective application bindings are shown below. Text fields, dialogs and speaker popups own input before workspace commands. Change bindings in Settings.").size(14),
         ].spacing(12).width(Fill).padding([0, 12]);
         let commands = DEFINITIONS
@@ -9555,12 +9841,24 @@ impl CleanSlateApp {
         if self.menu_open || self.app_dialog.is_some() {
             return responsive(|size| {
                 let content: Element<'_, Message> = if self.menu_open {
-                    let mut items = column![text("Menu").size(24), text("Tab / Up / Down · Enter to activate · Esc to close").size(14)].spacing(12);
-                    for (index, label) in ["Settings".to_owned(), format!("Keyboard shortcuts    {}", self.shortcuts.hint(Command::Reference)), "Help · Usage documentation".into(), "GitHub".into(), "Report a bug".into(), "About".into(), "Close".into()].iter().enumerate() {
-                        items = items.push(button(text(format!("{}{}", if index == self.menu_selected { "› " } else { "" }, label))).on_press(menu_action(index)));
+                    let mut items = column![container(text("Menu").size(20)).padding([4, 12])].spacing(4).width(Fill);
+                    for (index, label) in ["Settings", "Keyboard shortcuts", "Help", "GitHub", "Report a bug", "About", "Close"].into_iter().enumerate() {
+                        if matches!(index, 2 | 5 | 6) {
+                            items = items.push(container(iced::widget::rule::horizontal(1)).padding([6, 12]));
+                        }
+                        let hint = match index {
+                            1 => self.shortcuts.hint(Command::Reference),
+                            6 => "Esc".into(),
+                            _ => String::new(),
+                        };
+                        let selected = index == self.menu_selected;
+                        items = items.push(button(row![text(label).width(Fill), text(hint).size(14)].spacing(16).align_y(iced::Center))
+                            .width(Fill).padding([10, 12]).keyboard_enabled(false).selected(selected)
+                            .style(move |theme, status| flat_button(theme, status, selected))
+                            .on_press(legacy_menu_action(index)));
                     }
-                    if let Some(feedback) = &self.app_feedback { items = items.push(text(feedback).size(14)); }
-                    scrollable(items).id("app-dialog").height((size.height - 120.0).clamp(180.0, 580.0)).into()
+                    if let Some(feedback) = &self.app_feedback { items = items.push(container(text(feedback).size(14)).padding([6, 12])); }
+                    container(scrollable(items).id("app-dialog")).max_height((size.height - 80.0).max(120.0)).into()
                 } else {
                     let about = self.app_dialog == Some(AppDialog::About);
                     let mut body = column![text(if about { "About CleanSlate" } else { "Settings" }).size(24)].spacing(14).width(Fill).padding([0, 12]);
@@ -9579,7 +9877,7 @@ impl CleanSlateApp {
                         body = body.push(text("Appearance").size(18));
                         for (index, appearance, label) in [(0, Appearance::Dark, "Dark"), (1, Appearance::Light, "Light")] {
                             let label = format!("{}{}{}", if self.settings_selected == index { "› " } else { "" }, label, if self.appearance == appearance { " · Selected" } else { "" });
-                            body = body.push(button(text(label)).keyboard_enabled(false).selected(self.appearance == appearance).style(if self.appearance == appearance { selected_button } else { secondary_button }).on_press(Message::Appearance(appearance)));
+                            body = body.push(button(text(label)).keyboard_enabled(false).selected(self.appearance == appearance).style(if self.appearance == appearance { selected_button } else { secondary_button }).on_press(LegacyButton::Appearance(appearance)));
                         }
                         if let Some(error) = &self.appearance_error { body = body.push(text(error).color(self.appearance.colors().error)); }
                         body = body.push(text("Timeline").size(18))
@@ -9588,10 +9886,10 @@ impl CleanSlateApp {
                                 .on_toggle(Message::UnlockOnZoom));
                         body = body.push(text("Keyboard shortcuts").size(18))
                             .push(text("Select Change and press a key or chord. Review it, then Enter or Apply confirms; Escape cancels. Text editing, Tab, Enter, Escape and operating-system chords are reserved. Ctrl/Command+S always saves the project. Popup Enter remains a save alternative.").size(14))
-                            .push(button(if self.settings_selected == 3 { "› Restore all defaults" } else { "Restore all defaults" }).style(secondary_button).on_press(Message::RestoreAllShortcuts));
+                            .push(button(if self.settings_selected == 3 { "› Restore all defaults" } else { "Restore all defaults" }).style(secondary_button).on_press(LegacyButton::RestoreAllShortcuts));
                         if let Some((command, proposed)) = &self.shortcut_capture {
                             body = body.push(text(format!("Changing {} · {}", self.command_name(*command), proposed.as_ref().map_or_else(|| "Press a key…".into(), Binding::label))))
-                                .push(button("Apply").on_press_maybe(proposed.as_ref().filter(|binding| self.shortcuts.validate(*command, Some(binding)).is_ok()).map(|_| Message::ApplyShortcut)));
+                                .push(button("Apply").on_press_maybe(proposed.as_ref().filter(|binding| self.shortcuts.validate(*command, Some(binding)).is_ok()).map(|_| LegacyButton::ApplyShortcut)));
                         }
                         for (index, definition) in DEFINITIONS.iter().enumerate() {
                             let command = definition.command;
@@ -9600,22 +9898,31 @@ impl CleanSlateApp {
                                 text(format!("{} · {}", self.command_name(command), self.shortcuts.hint(command))).size(15),
                                 text(definition.context.name()).size(13).color(self.appearance.colors().muted),
                                 row![
-                                    button(if selected == 4 + index * 3 { "› Change" } else { "Change" }).style(secondary_button).on_press(Message::CaptureShortcut(command)),
-                                    button(if selected == 5 + index * 3 { "› Restore default" } else { "Restore default" }).style(secondary_button).on_press(Message::RestoreShortcut(command)),
-                                    button(text(format!("{}{}", if selected == 6 + index * 3 { "› " } else { "" }, if command == Command::SaveProject { "Remove extra" } else { "Unbind" }))).style(secondary_button).on_press(Message::UnbindShortcut(command)),
+                                    button(if selected == 4 + index * 3 { "› Change" } else { "Change" }).style(secondary_button).on_press(LegacyButton::CaptureShortcut(command)),
+                                    button(if selected == 5 + index * 3 { "› Restore default" } else { "Restore default" }).style(secondary_button).on_press(LegacyButton::RestoreShortcut(command)),
+                                    button(text(format!("{}{}", if selected == 6 + index * 3 { "› " } else { "" }, if command == Command::SaveProject { "Remove extra" } else { "Unbind" }))).style(secondary_button).on_press(LegacyButton::UnbindShortcut(command)),
                                 ].spacing(8).wrap(),
                             ].spacing(5);
                             body = body.push(item);
                         }
                     }
                     let mut actions = row![].spacing(12);
-                    if about { actions = actions.push(button(if self.about_copy_selected { "› Copy version info" } else { "Copy version info" }).on_press_maybe(self.copy_request.is_none().then_some(Message::CopyVersion))); }
-                    actions = actions.push(button(if (about && !self.about_copy_selected) || (!about && self.settings_selected == 4 + DEFINITIONS.len() * 3) { "› Close    Esc" } else { "Close    Esc" }).on_press(Message::CloseHelp));
+                    if about { actions = actions.push(button(if self.about_copy_selected { "› Copy version info" } else { "Copy version info" }).on_press_maybe(self.copy_request.is_none().then_some(LegacyButton::CopyVersion))); }
+                    actions = actions.push(button(if (about && !self.about_copy_selected) || (!about && self.settings_selected == 4 + DEFINITIONS.len() * 3) { "› Close    Esc" } else { "Close    Esc" }).on_press(LegacyButton::CloseHelp));
                     let mut panel = column![scrollable(body).id("app-dialog").width(Fill).height((size.height - 220.0).clamp(140.0, 560.0)), actions].spacing(16).width(Fill);
                     if let Some(feedback) = &self.app_feedback { panel = panel.push(text(feedback).size(14)); }
                     panel.into()
                 };
-                stack![self.workspace(compact_workspace(size.width), size.height, size.width), opaque(container(container(crate::gui_controls::focus_scope(content, false)).padding(24).width(Fill).max_width(if self.menu_open { 520 } else { 720 }).style(container::rounded_box)).center_x(Fill).center_y(Fill).style(|theme| container::Style { background: Some(colors(theme).scrim.into()), ..Default::default() }))].into()
+                let panel = container(crate::gui_controls::focus_scope(content, false)).padding(if self.menu_open { 12 } else { 24 }).width(Fill).max_width(if self.menu_open { 420 } else { 720 }).style(container::rounded_box);
+                if self.menu_open {
+                    stack![
+                        self.workspace(compact_workspace(size.width), size.height, size.width),
+                        opaque(mouse_area(container(Space::new()).width(Fill).height(Fill).style(|theme| container::Style { background: Some(colors(theme).scrim.into()), ..Default::default() })).on_press(Message::CloseHelp)),
+                        container(opaque(panel)).padding(16).center_x(Fill).center_y(Fill),
+                    ].into()
+                } else {
+                    stack![self.workspace(compact_workspace(size.width), size.height, size.width), opaque(container(panel).center_x(Fill).center_y(Fill).style(|theme| container::Style { background: Some(colors(theme).scrim.into()), ..Default::default() }))].into()
+                }
             }).into();
         }
         if self.help_open || self.shortcuts_open {
@@ -9634,14 +9941,14 @@ impl CleanSlateApp {
                                 if self.help_close_selected { "" } else { "› " },
                                 self.shortcuts.hint(Command::Reference)
                             )))
-                            .on_press(Message::KeyboardShortcuts)
+                            .on_press(LegacyButton::KeyboardShortcuts)
                         ),
                         button(if self.help_close_selected {
                             "› Close"
                         } else {
                             "Close"
                         })
-                        .on_press(Message::CloseHelp)
+                        .on_press(LegacyButton::CloseHelp)
                     ]
                     .spacing(16)
                     .into()
@@ -9817,13 +10124,13 @@ impl CleanSlateApp {
             actions = actions.push(
                 button("Import channels")
                     .style(primary_button)
-                    .on_press(Message::ConfirmChannels),
+                    .on_press(LegacyButton::ConfirmChannels),
             );
         }
         actions = actions.push(
             button(if committing { "Finishing…" } else { "Cancel" })
                 .style(secondary_button)
-                .on_press_maybe((!committing).then_some(Message::CancelChannels)),
+                .on_press_maybe((!committing).then_some(LegacyButton::CancelChannels)),
         );
         container(
             column![
@@ -10006,7 +10313,7 @@ impl CleanSlateApp {
                         .padding([7, 10])
                         .width(Fill)
                         .style(inspector_button)
-                        .on_press(Message::UndoReferences)
+                        .on_press(LegacyButton::UndoReferences)
                 ),
                 self.shortcut_control(
                     Command::RedoLabels,
@@ -10014,7 +10321,7 @@ impl CleanSlateApp {
                         .padding([7, 10])
                         .width(Fill)
                         .style(inspector_button)
-                        .on_press(Message::RedoReferences)
+                        .on_press(LegacyButton::RedoReferences)
                 ),
                 button(text("Analyze").size(14))
                     .padding([7, 10])
@@ -10024,7 +10331,7 @@ impl CleanSlateApp {
                     } else {
                         inspector_button
                     })
-                    .on_press(Message::AnalyzeReferences),
+                    .on_press(LegacyButton::AnalyzeReferences),
             ]
             .spacing(6)
             .width(Fill),
@@ -10048,7 +10355,7 @@ impl CleanSlateApp {
                 "Show examples ▸"
             })
             .style(quiet_button)
-            .on_press(Message::CalibrationTiming(!self.calibration_timing)),
+            .on_press(LegacyButton::CalibrationTiming(!self.calibration_timing)),
         );
         if let Some(notice) = project.calibration_notice()
             && (!project.pending_source_reviews().is_empty()
@@ -10092,13 +10399,13 @@ impl CleanSlateApp {
                             row![
                                 button(text("Play").size(14))
                                     .style(button::text)
-                                    .on_press(Message::PlayExample(label.id)),
+                                    .on_press(LegacyButton::PlayExample(label.id)),
                                 button(text("Show on timeline").size(14))
                                     .style(button::text)
-                                    .on_press(Message::ShowExample(label.id)),
+                                    .on_press(LegacyButton::ShowExample(label.id)),
                                 button(text("Delete").size(13))
                                     .style(button::text)
-                                    .on_press(Message::RemoveReference(label.id)),
+                                    .on_press(LegacyButton::RemoveReference(label.id)),
                             ]
                             .spacing(5),
                         ]
@@ -10170,13 +10477,13 @@ impl CleanSlateApp {
                             Command::UndoGain,
                             button("Undo gain")
                                 .style(secondary_button)
-                                .on_press(Message::UndoGain)
+                                .on_press(LegacyButton::UndoGain)
                         ),
                         self.shortcut_control(
                             Command::RedoGain,
                             button("Redo gain")
                                 .style(secondary_button)
-                                .on_press(Message::RedoGain)
+                                .on_press(LegacyButton::RedoGain)
                         ),
                     ]
                     .spacing(6),
@@ -10184,14 +10491,14 @@ impl CleanSlateApp {
                 .push(
                     button("Add point at cursor")
                         .style(secondary_button)
-                        .on_press(Message::InsertGainPoint),
+                        .on_press(LegacyButton::InsertGainPoint),
                 )
                 .push(
                     self.shortcut_control(
                         Command::DeleteGain,
                         button("Remove selected override")
                             .style(secondary_button)
-                            .on_press(Message::DeleteGain),
+                            .on_press(LegacyButton::DeleteGain),
                     ),
                 )
                 .push(
@@ -10203,7 +10510,7 @@ impl CleanSlateApp {
                 controls = controls.push(
                     button("Preserve selection on all tracks")
                         .style(secondary_button)
-                        .on_press(Message::ProtectSelection),
+                        .on_press(LegacyButton::ProtectSelection),
                 );
             }
         }
@@ -10217,11 +10524,11 @@ impl CleanSlateApp {
         let mut controls = column![
             text("Sources").size(16),
             text(format!("Project autosaved to {}", project.path().display())).size(12),
-            button("Copy project path").style(secondary_button).on_press(Message::CopyProjectPath),
+            button("Copy project path").style(secondary_button).on_press(LegacyButton::CopyProjectPath),
             text("Original audio is read only. Keep its card or drive connected until processing finishes.").size(12),
             button("Recheck source files")
                 .style(secondary_button)
-                .on_press(Message::Validate),
+                .on_press(LegacyButton::Validate),
         ]
         .spacing(8);
         if let Err(error) = project.require_alignment() {
@@ -10245,14 +10552,14 @@ impl CleanSlateApp {
                 source_controls = source_controls.push(
                     button("Relink source")
                         .style(primary_button)
-                        .on_press(Message::Relink(index)),
+                        .on_press(LegacyButton::Relink(index)),
                 );
             }
             if project.pending_source_reviews().contains(&source.track_id) {
                 source_controls = source_controls.push(
                     button("Accept source changes")
                         .style(primary_button)
-                        .on_press(Message::RebindSource(index)),
+                        .on_press(LegacyButton::RebindSource(index)),
                 );
             }
             if !source.available || project.pending_source_reviews().contains(&source.track_id) {
@@ -10273,7 +10580,7 @@ impl CleanSlateApp {
                 .push(
                     button("Cancel WAV preparation")
                         .style(secondary_button)
-                        .on_press(Message::Cancel),
+                        .on_press(LegacyButton::Cancel),
                 );
         } else {
             controls = controls.push(
@@ -10286,14 +10593,14 @@ impl CleanSlateApp {
                     } else {
                         inspector_button
                     })
-                    .on_press_maybe(self.can_prepare_export().then_some(Message::Export)),
+                    .on_press_maybe(self.can_prepare_export().then_some(LegacyButton::Export)),
             );
         }
         if self.exporting.is_some() {
             controls = controls.push(text("Checking and saving WAV files…")).push(
                 button("Cancel saving")
                     .style(secondary_button)
-                    .on_press(Message::Cancel),
+                    .on_press(LegacyButton::Cancel),
             );
         }
         if let Some(error) = &self.export_error {
@@ -10389,7 +10696,7 @@ impl CleanSlateApp {
         content = content.push(
             button("Choose destination folder")
                 .style(secondary_button)
-                .on_press(Message::ExportDestination),
+                .on_press(LegacyButton::ExportDestination),
         );
         content = content.push(
             text(dialog.destination.as_ref().map_or_else(
@@ -10409,12 +10716,12 @@ impl CleanSlateApp {
                 row![
                     button("Cancel")
                         .style(secondary_button)
-                        .on_press(Message::CancelExportDialog),
+                        .on_press(LegacyButton::CancelExportDialog),
                     button("Export files").style(primary_button).on_press_maybe(
                         (blocker.is_none()
                             && dialog.destination.is_some()
                             && self.can_prepare_export())
-                        .then_some(Message::SubmitExport)
+                        .then_some(LegacyButton::SubmitExport)
                     )
                 ]
                 .spacing(12),
@@ -10478,24 +10785,26 @@ impl CleanSlateApp {
                 } else {
                     quiet_button
                 })
-                .on_press(Message::ImportStems),
+                .on_press(LegacyButton::ImportStems),
             self.shortcut_control(
                 Command::Menu,
                 button("Menu")
                     .style(secondary_button)
-                    .on_press(Message::Menu)
+                    .on_press(LegacyButton::Menu)
             ),
-            button("New project")
-                .style(quiet_button)
-                .on_press_maybe(self.can_start_new_project().then_some(Message::NewProject)),
+            button("New project").style(quiet_button).on_press_maybe(
+                self.can_start_new_project()
+                    .then_some(LegacyButton::NewProject)
+            ),
             button("Open project").style(quiet_button).on_press_maybe(
-                (!self.sources_busy() && self.processing.is_none()).then_some(Message::OpenProject)
+                (!self.sources_busy() && self.processing.is_none())
+                    .then_some(LegacyButton::OpenProject)
             ),
             self.shortcut_control(
                 Command::SaveProject,
                 button("Save project").style(quiet_button).on_press_maybe(
                     (self.project.is_some() && self.source_loading.is_none())
-                        .then_some(Message::SaveProject)
+                        .then_some(LegacyButton::SaveProject)
                 )
             ),
         ]
@@ -10506,7 +10815,7 @@ impl CleanSlateApp {
         if self.import_jobs.iter().any(|job| !job.accepted) {
             timeline_content = timeline_content.push(row![
                 text("Pending audio is excluded from Save, Analyze and Export. Ready tracks remain editable.").size(14),
-                button("Cancel all pending").style(secondary_button).on_press(Message::CancelPendingImports)
+                button("Cancel all pending").style(secondary_button).on_press(LegacyButton::CancelPendingImports)
             ].spacing(12));
         }
         if let Some(error) = &self.appearance_error {
@@ -10521,7 +10830,7 @@ impl CleanSlateApp {
                         text(
                             "Import synchronized speaker tracks or a multichannel WAV, or drop them anywhere in this window."
                         ),
-                        button("Import tracks").style(primary_button).on_press(Message::ImportStems),
+                        button("Import tracks").style(primary_button).on_press(LegacyButton::ImportStems),
                     ]
                     .spacing(12)
                     .align_x(iced::Center),
@@ -10561,7 +10870,7 @@ impl CleanSlateApp {
                         actions = actions.push(
                             button("Retry")
                                 .style(primary_button)
-                                .on_press(Message::RetryImport(id)),
+                                .on_press(LegacyButton::RetryImport(id)),
                         );
                     }
                     actions = actions.push(
@@ -10571,7 +10880,7 @@ impl CleanSlateApp {
                             "Cancel / Remove"
                         })
                         .style(secondary_button)
-                        .on_press(Message::RemoveImport(id)),
+                        .on_press(LegacyButton::RemoveImport(id)),
                     );
                     let mut content = column![actions].spacing(6);
                     if let Some(error) = &job.error {
@@ -10626,10 +10935,10 @@ impl CleanSlateApp {
                                 .width(280),
                             button(text("Save").size(14))
                                 .style(primary_button)
-                                .on_press(Message::SaveTrackName),
+                                .on_press(LegacyButton::SaveTrackName),
                             button(text("Cancel").size(14))
                                 .style(secondary_button)
-                                .on_press(Message::CancelTrackName),
+                                .on_press(LegacyButton::CancelTrackName),
                         ]
                         .spacing(8)
                         .align_y(iced::Center)
@@ -10652,7 +10961,7 @@ impl CleanSlateApp {
                         )
                         .style(button::text)
                         .padding([3, 6])
-                        .on_press(Message::EditTrackName(index)),
+                        .on_press(LegacyButton::EditTrackName(index)),
                         text(format!("Click to rename · {}", source.path.display())).size(14),
                         iced::widget::tooltip::Position::Bottom,
                     )
@@ -10673,7 +10982,7 @@ impl CleanSlateApp {
                         secondary_button
                     })
                     .selected(self.solo_tracks & (1u64 << index) != 0)
-                    .on_press(Message::SoloTrack(index)),
+                    .on_press(LegacyButton::SoloTrack(index)),
                     title,
                     text(if self.editing_track() == Some(index) {
                         "Editing"
@@ -10688,14 +10997,14 @@ impl CleanSlateApp {
                         .on_press_maybe(
                             self.timeline
                                 .selection()
-                                .map(|_| Message::GainAction(index, true))
+                                .map(|_| LegacyButton::GainAction(index, true))
                         ),
                     button(text("Attenuate").size(14))
                         .style(secondary_button)
                         .on_press_maybe(
                             self.timeline
                                 .selection()
-                                .map(|_| Message::GainAction(index, false))
+                                .map(|_| LegacyButton::GainAction(index, false))
                         ),
                 ]
                 .spacing(8)
@@ -10867,7 +11176,8 @@ impl CleanSlateApp {
         };
         let locked = self.playback_scroll == PlaybackScroll::Locked;
         let catch_up = self.playback_scroll == PlaybackScroll::Page;
-        let meter_control = iced::widget::tooltip(
+        let meter_control = self.action_control(
+            Command::Meters,
             button(toolbar_label(
                 ToolbarIcon::Meters {
                     at_playhead: self.meters_at_playhead,
@@ -10877,25 +11187,9 @@ impl CleanSlateApp {
             .padding([6, 8])
             .height(34)
             .style(|theme, status| flat_button(theme, status, false))
-            .hover_outline(false)
-            .on_press(Message::ToggleMeterPlacement),
-            container(
-                text(if self.meters_at_playhead {
-                    "Speaker meters at the playhead · move to the right"
-                } else {
-                    "Speaker meters on the right · move to the playhead"
-                })
-                .size(14),
-            )
-            .padding(8)
-            .style(editor_panel),
-            iced::widget::tooltip::Position::Bottom,
-        )
-        .delay(Duration::from_millis(600))
-        .snap_within_viewport(true);
-        let mut waveform_modes = row![text("Waveform").size(13)]
-            .spacing(4)
-            .align_y(iced::Center);
+            .hover_outline(false),
+        );
+        let mut waveform_modes = row![].spacing(4).align_y(iced::Center);
         for mode in [
             waveform::WaveformDisplay::Original,
             waveform::WaveformDisplay::Processed,
@@ -10909,7 +11203,7 @@ impl CleanSlateApp {
                 .style(move |theme, status| flat_button(theme, status, selected))
                 .hover_outline(false)
                 .selected(selected)
-                .on_press(Message::WaveformDisplay(mode));
+                .on_press(LegacyButton::WaveformDisplay(mode));
             waveform_modes = waveform_modes.push(
                 iced::widget::tooltip(
                     control,
@@ -10926,21 +11220,22 @@ impl CleanSlateApp {
             row![
                 text("Timeline").size(16).font(iced::Font { weight: iced::font::Weight::Semibold, ..iced::Font::with_name("Segoe UI") }),
                 Space::new().width(Fill),
-                self.shortcut_control(Command::CatchUp,
-                    button(text("Catch up").size(13)).padding([6, 8]).height(34)
+                self.action_control(Command::CatchUp,
+                    button(container(ToolbarIcon::CatchUp.view(None)).center(Fill))
+                        .padding(6).width(34).height(34)
                         .style(move |theme, status| flat_button(theme, status, catch_up))
-                        .hover_outline(false).selected(catch_up).on_press(Message::ToggleCatchUp)),
-                self.shortcut_control(Command::Lock,
+                        .hover_outline(false).selected(catch_up)),
+                self.action_control(Command::Lock,
                     button(toolbar_label(ToolbarIcon::Lock { locked }, "Lock"))
                         .padding([6, 8]).height(34)
                         .style(move |theme, status| flat_button(theme, status, locked))
-                        .hover_outline(false).selected(locked).on_press(Message::LockPlayhead)),
-                self.shortcut_control(Command::Center,
+                        .hover_outline(false).selected(locked)),
+                self.action_control(Command::Center,
                     button(toolbar_label(ToolbarIcon::Center, "Center"))
                         .padding([6, 8]).height(34)
                         .style(|theme, status| flat_button(theme, status, false))
-                        .hover_outline(false).on_press(Message::CenterPlayhead)),
-                crate::gui_controls::shortcut_hint(meter_control, self.shortcut_hint_generation),
+                        .hover_outline(false)),
+                meter_control,
                 Space::new().width(12),
                 waveform_modes,
             ].spacing(8).align_y(iced::Center),
@@ -10974,7 +11269,7 @@ impl CleanSlateApp {
                     Space::new().width(Fill),
                     button(text("Cancel analysis").size(14))
                         .style(inspector_button)
-                        .on_press(Message::CancelAnalysis),
+                        .on_press(LegacyButton::CancelAnalysis),
                 ]
                 .align_y(iced::Center),
                 text(format!(
@@ -11034,7 +11329,7 @@ impl CleanSlateApp {
                 .on_press_maybe(
                     self.analysis_details
                         .as_ref()
-                        .map(|_| Message::AnalysisDetails(!self.analysis_details_open))
+                        .map(|_| LegacyButton::AnalysisDetails(!self.analysis_details_open))
                 ),
             ]
             .spacing(8)
@@ -11053,7 +11348,7 @@ impl CleanSlateApp {
                 "Sources ▸"
             })
             .style(quiet_button)
-            .on_press(Message::SetupDetails(!self.setup_details))
+            .on_press(LegacyButton::SetupDetails(!self.setup_details))
         ]
         .spacing(12);
         setup = setup.push(crate::gui_disclosure::reveal(
@@ -11073,10 +11368,10 @@ impl CleanSlateApp {
                             inspector_button
                         })
                         .selected(parameters.mute)
-                        .on_press(Message::Mute),
+                        .on_press(LegacyButton::Mute),
                     button(text("Reset").size(13))
                         .style(inspector_button)
-                        .on_press(Message::ResetSound(SoundParameter::Attenuation)),
+                        .on_press(LegacyButton::ResetSound(SoundParameter::Attenuation)),
                 ]
                 .spacing(6),
             ]
@@ -11247,7 +11542,7 @@ impl CleanSlateApp {
                 .width(40)
                 .height(36)
                 .style(secondary_button)
-                .on_press(Message::Previous)
+                .on_press(LegacyButton::Previous)
             ),
             self.shortcut_control(
                 if self.reference_menu.is_some() {
@@ -11266,7 +11561,7 @@ impl CleanSlateApp {
                 .width(40)
                 .height(36)
                 .style(primary_button)
-                .on_press_maybe(can_audition.then_some(Message::Audition))
+                .on_press_maybe(can_audition.then_some(LegacyButton::Audition))
             ),
             self.shortcut_control(
                 Command::Play,
@@ -11281,7 +11576,7 @@ impl CleanSlateApp {
                 .width(40)
                 .height(36)
                 .style(secondary_button)
-                .on_press_maybe(can_stop.then_some(Message::Stop))
+                .on_press_maybe(can_stop.then_some(LegacyButton::Stop))
             ),
         ]
         .spacing(8)
@@ -11292,19 +11587,19 @@ impl CleanSlateApp {
                 Command::Original,
                 AuditionMode::Original,
                 "Original",
-                Message::Original,
+                LegacyButton::Original,
             ),
             (
                 Command::Processed,
                 AuditionMode::Processed,
                 "Processed",
-                Message::Processed,
+                LegacyButton::Processed,
             ),
             (
                 Command::Removed,
                 AuditionMode::Removed,
                 "Removed",
-                Message::Removed,
+                LegacyButton::Removed,
             ),
         ] {
             let selected = self.audition_mode == mode;
@@ -11392,11 +11687,11 @@ impl CleanSlateApp {
                     column![
                         button("Remove manual gain adjustment")
                             .style(primary_button)
-                            .on_press(Message::DeleteRegion(track, time)),
+                            .on_press(LegacyButton::DeleteRegion(track, time)),
                         text("Restore automatic gain for this section.").size(14),
                         button("Cancel")
                             .style(secondary_button)
-                            .on_press(Message::DismissReferenceMenu),
+                            .on_press(LegacyButton::DismissReferenceMenu),
                     ]
                     .spacing(6),
                 )
@@ -11474,17 +11769,17 @@ impl CleanSlateApp {
                                 "Save example"
                             })
                             .style(primary_button)
-                            .on_press(Message::ContextReference(
+                            .on_press(LegacyButton::ContextReference(
                                 self.reference_speakers.clone(),
                                 false
                             ))
                         ),
                         button("Stop")
                             .style(secondary_button)
-                            .on_press(Message::Stop),
+                            .on_press(LegacyButton::Stop),
                         button("Cancel")
                             .style(secondary_button)
-                            .on_press(Message::DismissReferenceMenu)
+                            .on_press(LegacyButton::DismissReferenceMenu)
                     ]
                     .spacing(8),
                 );
@@ -11498,7 +11793,7 @@ impl CleanSlateApp {
                     menu = menu.push(
                         button("Delete example")
                             .style(secondary_button)
-                            .on_press(Message::RemoveReference(id)),
+                            .on_press(LegacyButton::RemoveReference(id)),
                     );
                 }
             }
@@ -11523,7 +11818,7 @@ impl CleanSlateApp {
                     menu = menu.push(
                         button("Replace conflicting examples")
                             .style(primary_button)
-                            .on_press(Message::ContextReference(
+                            .on_press(LegacyButton::ContextReference(
                                 self.reference_speakers.clone(),
                                 true,
                             )),
