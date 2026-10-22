@@ -1,5 +1,7 @@
 # Offline supervised CleanSlate architecture
 
+2026-10-22 stable release delivered: owner-authorized ticket 71 is done; v1.0.0 is published from reviewed main with four verified native packages and checksums. The [receipt](../../docs/research/stable1-release-receipt-2026-10-22.md) records checks and unchanged physical/quality limits. Earlier preparation-only and unpublished-download statements are historical. This adds no algorithm, plugin or new hardware claim.
+
 2026-10-22 stable-source promotion: the owner requests the accepted development batch become stable 1.0.0 on main under [ticket 71](../offline-supervised-editor/issues/71-stable-1.0-main-promotion.md) and the existing versioning policy. This authorizes release preparation and protected-PR promotion, retaining compatibility, package checks and truthful evidence limits. It does not add algorithms/plugins or imply new physical-platform acceptance. Public downloads continue to identify actually published packages until replacement publication.
 
 2026-10-22 accepted menu/action delivery: owner-approved tickets 60/63/69 close the menu redesign, typed action/shortcut contract and icon-only toolbar follow-up for development integration. The [combined receipt](../../docs/research/menu-actions-integration-2026-10-22.md) records scope, software checks and explicitly unperformed native automation; the owner requested no further computer control. Earlier pending/future references to these tickets are superseded. No audio architecture or release identity changes.
