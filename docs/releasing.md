@@ -1,5 +1,7 @@
 # Desktop releases
 
+The owner accepted the current offline workflow as stable and authorized development-to-main promotion as **1.0.0** on 2026-10-22. The [1.0.0 notes](release-notes.md) describe that source and its compatibility promise. Native 1.0.0 packages still require release checks and publication; the download links and publication record below remain alpha.8 until that happens. Follow [Versioning and stability](#versioning-and-stability) for subsequent versions.
+
 The current published prerelease is [v0.1.0-alpha.8](https://github.com/Today20092/podcast-bleed-reducer/releases/tag/v0.1.0-alpha.8), following alpha.6.
 Alpha.7 stopped at the dependency-license packaging gate and was not published.
 Alpha.8 tag source `24361a2aa201fb7e22258f44a2a1be4626d58ce1` was promoted through
@@ -34,12 +36,41 @@ version without `v`. Windows needs the bundled DLLs; Mac bundles its support fil
 inside `CleanSlate.app`; Linux bundles them inside the AppImage. Analysis needs no
 runtime model download. Windows is unsigned; Mac is ad-hoc signed, not notarized.
 
+## Versioning and stability
+
+On 2026-10-22 the owner accepted **1.0.0 as the next release target and first stable release** for the existing offline podcast workflow. UI refinement can continue after 1.0; another feature milestone or beta period is not required. This decision supersedes earlier instructions to keep future releases experimental. The published alpha.8 packages retain their original version and status until a new release is prepared, verified and published. This policy decision authorizes documentation; promotion, tagging and publication require release-specific owner authorization.
+
+Stable means we recommend and maintain the documented workflow: import synchronized microphone tracks, provide speaker examples, analyze, audition and edit gain, save the project, and export processed audio. It does not promise perfect detection on every recording. Keep listening review, aligned-input requirements, known sound limitations, signing status and platform-specific testing evidence visible. Package CI success and hands-on desktop/audio qualification are separate evidence. Formal independent comparisons and whole-session benchmarks remain unestablished; the owner-closed evaluation project is not reopened by choosing 1.0.
+
+### Choose a version
+
+Use [Semantic Versioning 2.0.0](https://semver.org/). For this desktop application, the public compatibility contract is the documented workflow and supported inputs/exports, existing saved projects, speaker examples, manual gain edits and persisted preferences. Preserve these across compatible updates; migrate stored data safely when its representation changes. Internal format or implementation changes alone do not require a major version when compatibility is preserved. Compatibility does not promise identical reanalysis results after a documented algorithm fix or improvement; preserve saved human edits and explain consequential sound changes.
+
+| Change | Version after 1.0.0 | Selection rule |
+| --- | --- | --- |
+| Compatible bug fix or small UI refinement | `1.0.1` | Existing functionality and saved data remain usable. |
+| Compatible new functionality | `1.1.0` | New capabilities preserve the compatibility contract. Reset patch to zero. |
+| Incompatible change | `2.0.0` | A deliberate break to the contract requires a major version, migration/recovery guidance and release notes. Reset minor and patch to zero. |
+
+Choose the highest required increment in the batch. Documentation-only changes can accompany the next release without creating an application release. Stable versions have no suffix. Use `-alpha.N` for an incomplete experimental candidate, `-beta.N` for a workflow ready for broader testing, and `-rc.N` for a stable-release candidate awaiting final verification. These labels describe the candidate's readiness; they are not mandatory stages. Stable does not mean development stops or that future polish requires a major version.
+
+### Prepare the stable transition
+
+Complete these steps under the release-specific ticket before publishing 1.0:
+
+1. Select the reviewed source and set Cargo.toml, Cargo.lock and candidate packaging inputs to the same unused version. Keep existing published tags and assets intact. Completion: source metadata and package identities agree.
+2. Update current README/status/help/package wording and release notes to describe the stable workflow and concrete limitations. Preserve historical alpha receipts and notes. Completion: current release copy agrees on version/status and platform claims match recorded evidence.
+3. Review the release automation against the intended status. `portable-release.yml` defaults to v1.0.0 and keeps every release a draft: tags with a prerelease suffix use the prerelease flag and historical alpha notes; plain stable versions clear that flag and use `docs/release-notes.md`. A draft rerun refreshes its metadata before uploading checked assets; a published release cannot be replaced. Completion: the draft has the intended assets and release notes, its prerelease flag matches the selected status, and a stable release is selected as the latest release when published. See [GitHub release settings](https://docs.github.com/en/repositories/releasing-projects-on-github/managing-releases-in-a-repository).
+4. Complete the [per-release checklist](branch-workflow.md#release-checklist), record actual results and omissions, and obtain the owner's authorization for promotion/tagging/publication. Completion: the ticket identifies the tested source and final packages, records support limits and authorization, and verifies public downloads after publication.
+
+The existing development → main merge promotion and four-platform draft/package verification process remains in place. A version-policy decision alone does not change the published downloads or establish new platform qualification.
+
 ## Prepare a candidate
 
 1. Finish the scoped ticket and review the diff. Exclude recordings, projects,
    caches, private captures and build artifacts. Keep approved documentation screenshots.
-   Update `Cargo.toml`, `Cargo.lock` to the same unused version, currently
-   `0.1.0-alpha.8`. The packaged README substitutes
+   Update `Cargo.toml` and `Cargo.lock` to the same unused version selected using
+   the policy above. The packaged README substitutes
    version and platform from the build; do not hard-code a version in that template.
 2. Run `./scripts/check.ps1 -Local` for the shared Windows cache/profile, or
    `./scripts/check.ps1` in hosted/native packaging environments. Ignored tests must be
@@ -47,8 +78,8 @@ runtime model download. Windows is unsigned; Mac is ad-hoc signed, not notarized
 3. Commit the reviewed source and docs. Build from that commit:
 
    ```powershell
-   pwsh -File scripts/package.ps1 -Version 0.1.0-alpha.8
-   pwsh -File scripts/check-package.ps1 -Package dist/CleanSlate-0.1.0-alpha.8-windows-x64
+   pwsh -File scripts/package.ps1 -Version 1.0.0
+   pwsh -File scripts/check-package.ps1 -Package dist/CleanSlate-1.0.0-windows-x64
    ```
 
 Run the same `pwsh -File scripts/package.ps1 -Version VERSION` command natively on
@@ -112,14 +143,16 @@ does not already exist before creating it:
 
 ```powershell
 git fetch origin
-git tag -a v0.1.0-alpha.8 origin/main -m "CleanSlate 0.1.0-alpha.8"
-git push origin v0.1.0-alpha.8
+git tag -a v1.0.0 origin/main -m "CleanSlate 1.0.0"
+git push origin v1.0.0
 ```
 
 `.github/workflows/portable-release.yml` runs on version tags. It installs the pinned
 compiler, runs checks/tests and packages on Windows x64, both Mac architectures and
 Linux x64. A single upload job runs only after all four succeed, then prepares a
-**draft prerelease** with all four downloads and checksums. It never publishes
+**draft release** with all four downloads and checksums. Plain stable versions use
+stable release notes and clear the prerelease flag; suffixed versions remain
+prereleases with alpha notes. It never publishes
 automatically. A rerun uploads
 replacement assets to the existing draft; a published release is never overwritten.
 
@@ -134,8 +167,11 @@ real device enumeration and listening still require a Windows GUI check.
 
 Download and clean-test the actual GitHub packages before publication: their binaries can
 differ from the local build. In GitHub's Releases page, review the draft's version,
-assets, checksum and limitations, keep **Set as a pre-release** selected, then publish.
-Do not move a published tag or replace published assets; issue the next numbered alpha.
+assets, checksum and limitations. For stable 1.0.0, clear **Set as a pre-release**
+and select it as the latest release; retain the prerelease flag for a suffixed
+candidate. Publish only after package verification and owner authorization.
+Do not move a published tag or replace published assets; select the next version
+under the semantic-versioning policy.
 
 Test each Mac DMG on its matching architecture without build tools or caches. Open
 the app through Finder, import test audio, Analyze, save/reopen, audition and export.
@@ -144,9 +180,10 @@ the normal executable launch and `--appimage-extract-and-run` fallback. Headless
 CI self-checks verify analysis and delivery, not real sound-device playback.
 
 Release notes must state the attached platforms, signing status, offline acoustic
-workflow and any pending desktop/listening/performance checks. Before a stable
-`v0.1.0`, agree and complete fresh stable-release qualification, resolve the
-applicable known limits and update the workflow's prerelease policy deliberately.
+workflow and any pending desktop/listening/performance checks. For stable 1.0.0,
+complete the versioning policy's transition and per-release checks, retain known
+limits and identify actual package/hardware evidence without treating omitted
+qualification as passing.
 Owner-closed 14 and retired 15/25 are historical evidence, not tickets to reopen.
 
 ## Keep README downloads current

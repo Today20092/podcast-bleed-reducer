@@ -3537,7 +3537,7 @@ dependencies = [
 
 [[package]]
 name = "rust-app"
-version = "0.1.0-alpha.8"
+version = "1.0.0"
 dependencies = [
  "bwavfile",
  "iced",

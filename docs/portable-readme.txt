@@ -1,4 +1,4 @@
-CleanSlate @VERSION@ - @PLATFORM@ experimental alpha
+CleanSlate @VERSION@ - @PLATFORM@
 
 Windows 11 x64: extract the entire ZIP to a writable folder and open CleanSlate.exe.
 Keep its support DLLs beside the application.
@@ -12,10 +12,12 @@ a working desktop/audio system. If FUSE is unavailable, run the AppImage with
 No installation, Python, model download or internet connection is required.
 Acoustic analysis uses your reference labels and the embedded Silero VAD.
 
-This alpha is experimental. Windows builds are unsigned; macOS builds use ad-hoc
-signing and are not notarized. Your operating system may show a security warning.
-Keep your original recordings and save project copies before trying it.
-Listening quality and long-session qualification are still pending.
+The 1.0 stable workflow supports aligned tracks, speaker examples, editable gain,
+project save/reopen and processed WAV export. Keep original recordings and project
+backups. Windows builds are unsigned; macOS builds use ad-hoc signing and are not
+notarized. Your operating system may show a security warning.
+Formal independent quality comparisons and long-session qualification are not
+established. Review each recording by listening before export.
 Quiet unlabeled overlap can receive a low ownership estimate. Review and label
 wanted speech/overlap or protect it before exporting.
 
@@ -27,6 +29,9 @@ Use the Timeline waveform icons to show Original, Processed or Both independentl
 of the audio you audition. Catch up follows playback at the right edge and stays
 enabled when you navigate; Shift+C toggles it. Lock follows continuously.
 Menu > Settings lets you change appearance and customize keyboard shortcuts.
+Meters starts without a binding; you can assign one in Settings. Some older
+dialog/editing buttons are not individually remappable. The grouped menu has
+aligned rows; Escape or an outside click closes it.
 Hover over command buttons for their current bindings. Details beside Ready shows
 analysis stage timings. The online usage guide explains editing and export:
 https://github.com/Today20092/podcast-bleed-reducer/blob/main/docs/editor-workflow.md

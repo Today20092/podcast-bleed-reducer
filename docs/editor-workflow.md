@@ -1,6 +1,6 @@
 # Supervised editor workflow
 
-Import aligned microphone tracks, label solo speech and room tone, run Analyze, then compare the result by listening before exporting. This guide describes the alpha.8 editor. Screenshots were captured from the alpha.7 preparation build; alpha.8 adds dependency license coverage with the same interface. See the [release notes](alpha-release-notes.md) for changes and package status.
+Import aligned microphone tracks, label solo speech and room tone, run Analyze, then compare the result by listening before exporting. This guide describes the stable 1.0.0 source workflow. Screenshots remain from alpha.7 preparation; the current source has a newer menu, icon-only Catch up and no Waveform group label. See the [release notes](release-notes.md) for changes and package status. Published downloads remain alpha.8 until 1.0.0 packages are verified and published.
 
 [Import and storage](#sd-cards-and-working-storage) · [Analysis and editing](#analysis-and-editing) · [Timeline and playback](#timeline-and-playback) · [Keyboard shortcuts](#keyboard-shortcuts) · [Export](#export-settings)
 
@@ -74,7 +74,7 @@ The centered transport has fixed-size icons to return to the selection or record
 
 Compare **Original** with **Processed**, then listen to **Removed** for wanted speech that should remain. **Monitor** changes listening level only. Track-header **Solo** buttons can monitor several tracks together; they do not change exported gain.
 
-Catch up is enabled by default. The timeline stays still while the playhead crosses the view, then slides left at the right edge so playback continues near the left side. Panning, seeking, zooming and fitting do not deselect Catch up. Middle-drag suspends following during the gesture and resumes it on release. Turn Catch up off with its button or shortcut when you want a manual view. Choosing Lock selects that separate follow mode instead.
+Catch up is enabled by default. Its arrow-to-edge icon has a selected state and a tooltip showing the current shortcut. The timeline stays still while the playhead crosses the view, then slides left at the right edge so playback continues near the left side. Panning, seeking, zooming and fitting do not deselect Catch up. Middle-drag suspends following during the gesture and resumes it on release. Turn Catch up off with its button or shortcut when you want a manual view. Choosing Lock selects that separate follow mode instead.
 
 Lock keeps the playhead at a fixed horizontal position. While locked, middle-drag pans freely without disabling Lock; release anchors the then-current playhead position on screen. A click without movement preserves the prior anchor, cancellation restores it, and explicit follow-mode or Center commands take precedence. Center moves the view to the playhead once. Settings has an optional Unlock playhead when zooming preference; it is off by default. Meters changes the placement of the speaker estimates. Panning and follow controls do not seek or edit labels, selection, gain or the saved project.
 
@@ -87,6 +87,8 @@ Final rendering applies the accepted effective envelopes at each source's native
 ## Keyboard shortcuts
 
 Open Menu → Settings to change command bindings. Select Change, press the key or chord, review it, then confirm with Enter or Apply. Escape cancels capture. You can unbind an action, restore one default or restore all defaults. Settings saves locally, independently of the project. Same-context conflicts and reserved keys are rejected. The shortcut reference and command hints show the effective bindings.
+
+Meters is available in the command list without a default shortcut; assign one if you use it often. Registered timeline actions use the same availability and activation for buttons and shortcuts. Some older dialog and editing buttons remain explicit exceptions and are not individually remappable.
 
 ![Shortcut Settings with command names, current bindings and controls to change, restore or unbind them.](images/alpha7-shortcuts.png)
 
@@ -108,6 +110,8 @@ Common defaults:
 In Who is talking?, 1 through 8 toggles speakers, R clears the selected speakers, and S saves the example. Enter also saves; nobody selected means room tone. Popup bindings do not change the workspace monitoring choices. Text fields keep their typing keys, and held keys do not repeatedly toggle commands. Use Settings for the full command list and context rules.
 
 Menu also opens the shortcut reference, Usage documentation, GitHub, Report a bug and About. About provides version information and credits. Dark and Light appearances are available in Settings and persist independently of projects.
+
+The menu groups configuration, help/project links and application information in aligned rows. Tab, Shift+Tab or Up/Down selects a row; Enter opens it. Escape, Close or a click outside the menu dismisses it. The shortcut hint beside Keyboard shortcuts follows your current binding.
 
 ## Export settings
 

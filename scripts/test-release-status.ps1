@@ -11,7 +11,7 @@ function New-Fixture {
             @{ name = 'Save checked package'; status = 'completed'; conclusion = 'success' }
         ) }
     })
-    $jobs += @{ id = 200; name = 'Prepare one draft with all desktop packages'; status = 'completed'; conclusion = 'success'; steps = @(@{ name = 'Prepare draft prerelease'; status = 'completed'; conclusion = 'success' }) }
+    $jobs += @{ id = 200; name = 'Prepare one draft with all desktop packages'; status = 'completed'; conclusion = 'success'; steps = @(@{ name = 'Prepare draft release'; status = 'completed'; conclusion = 'success' }) }
     return @{
         Run = @{ id = 1; html_url = 'https://github.com/example/repo/actions/runs/1'; run_attempt = 2; status = 'completed'; conclusion = 'success' }
         Jobs = $jobs
@@ -21,6 +21,10 @@ function New-Fixture {
 $fixture = New-Fixture
 $report = Get-ReleaseReport @fixture
 Assert ($report.releaseReady -and $report.packagesReady) 'All actual checks and artifacts should pass'
+$fixture.Jobs[4].steps[0].name = 'Prepare draft prerelease'
+$report = Get-ReleaseReport @fixture
+Assert $report.releaseReady 'Historical prerelease workflow evidence must remain readable'
+$fixture = New-Fixture
 $fixture.Jobs[4].conclusion = 'skipped'
 $fixture.Jobs[4].steps = @()
 $report = Get-ReleaseReport @fixture

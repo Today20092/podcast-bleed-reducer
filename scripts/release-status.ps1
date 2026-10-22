@@ -50,7 +50,8 @@ function Get-ReleaseReport($Run, [array]$Jobs, [array]$Artifacts, [hashtable]$Lo
         }
     })
     $release = $Jobs | Where-Object name -EQ 'Prepare one draft with all desktop packages' | Sort-Object id -Descending | Select-Object -First 1
-    $draft = Get-CheckState $release 'Prepare draft prerelease'
+    $draft = Get-CheckState $release 'Prepare draft release'
+    if ($draft -eq 'missing') { $draft = Get-CheckState $release 'Prepare draft prerelease' }
     [pscustomobject]@{
         runId = $Run.id; url = $Run.html_url; attempt = $Run.run_attempt
         workflowStatus = $Run.status; workflowConclusion = $Run.conclusion

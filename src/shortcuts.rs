@@ -2,44 +2,6 @@ use iced::keyboard::{Key, Modifiers};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-pub(crate) enum Command {
-    Play,
-    Start,
-    Original,
-    Processed,
-    Removed,
-    FitRecording,
-    FitSelection,
-    Center,
-    Lock,
-    CatchUp,
-    Help,
-    Menu,
-    Reference,
-    SaveProject,
-    UndoLabels,
-    RedoLabels,
-    UndoGain,
-    RedoGain,
-    DeleteGain,
-    Earlier,
-    Later,
-    Louder,
-    Quieter,
-    SaveExample,
-    ClearSpeakers,
-    Loop,
-    Speaker1,
-    Speaker2,
-    Speaker3,
-    Speaker4,
-    Speaker5,
-    Speaker6,
-    Speaker7,
-    Speaker8,
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Context {
     Workspace,
@@ -75,220 +37,61 @@ pub(crate) struct Definition {
     pub context: Context,
     pub defaults: &'static [&'static str],
 }
+// One declaration owns identity, display metadata and optional bindings.
+macro_rules! commands {
+    ($($command:ident => ($name:literal, $context:ident, [$($default:literal),*])),* $(,)?) => {
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+        pub(crate) enum Command { $($command),* }
+        pub(crate) const DEFINITIONS: &[Definition] = &[
+            $(Definition { command: Command::$command, name: $name,
+                context: Context::$context, defaults: &[$($default),*] }),*
+        ];
+        impl Command {
+            pub(crate) fn definition(self) -> &'static Definition {
+                match self { $(Self::$command => &DEFINITIONS[Self::$command as usize]),* }
+            }
+        }
+    };
+}
+commands! {
+    Play => ("Play or stop", Workspace, ["Space"]),
+    Start => ("Seek to start", Workspace, ["Home"]),
+    Original => ("Monitor Original", Workspace, ["1"]),
+    Processed => ("Monitor Processed", Workspace, ["2"]),
+    Removed => ("Monitor Removed", Workspace, ["3"]),
+    FitRecording => ("Fit recording", Workspace, ["f"]),
+    FitSelection => ("Fit selection", Workspace, ["Shift+f"]),
+    Center => ("Center playhead", Workspace, ["c"]),
+    Lock => ("Toggle playhead lock", Workspace, ["l"]),
+    CatchUp => ("Toggle catch up", Workspace, ["Shift+c"]),
+    Meters => ("Move speaker meters", Workspace, []),
+    Help => ("Open Help", Workspace, ["Alt+h"]),
+    Menu => ("Open Menu", Workspace, ["Alt+m"]),
+    Reference => ("Open keyboard shortcuts", Workspace, ["Ctrl+/"]),
+    SaveProject => ("Save project", Project, ["Cmd+s"]),
+    UndoLabels => ("Undo labels", Labels, ["Cmd+z"]),
+    RedoLabels => ("Redo labels", Labels, ["Cmd+Shift+z", "Cmd+y"]),
+    UndoGain => ("Undo gain", Gain, ["Cmd+z"]),
+    RedoGain => ("Redo gain", Gain, ["Cmd+Shift+z", "Cmd+y"]),
+    DeleteGain => ("Delete selected manual gain edit", Gain, ["Delete"]),
+    Earlier => ("Move selected point earlier", Gain, ["ArrowLeft"]),
+    Later => ("Move selected point later", Gain, ["ArrowRight"]),
+    Louder => ("Increase selected point gain", Gain, ["ArrowUp"]),
+    Quieter => ("Decrease selected point gain", Gain, ["ArrowDown"]),
+    SaveExample => ("Save example", Popup, ["s"]),
+    ClearSpeakers => ("Clear speakers", Popup, ["r"]),
+    Loop => ("Pause / resume loop", Popup, ["Space"]),
+    Speaker1 => ("Toggle speaker 1", Popup, ["1"]),
+    Speaker2 => ("Toggle speaker 2", Popup, ["2"]),
+    Speaker3 => ("Toggle speaker 3", Popup, ["3"]),
+    Speaker4 => ("Toggle speaker 4", Popup, ["4"]),
+    Speaker5 => ("Toggle speaker 5", Popup, ["5"]),
+    Speaker6 => ("Toggle speaker 6", Popup, ["6"]),
+    Speaker7 => ("Toggle speaker 7", Popup, ["7"]),
+    Speaker8 => ("Toggle speaker 8", Popup, ["8"]),
+}
 use Command::*;
-pub(crate) const DEFINITIONS: &[Definition] = &[
-    Definition {
-        command: Play,
-        name: "Play or stop",
-        context: Context::Workspace,
-        defaults: &["Space"],
-    },
-    Definition {
-        command: Start,
-        name: "Seek to start",
-        context: Context::Workspace,
-        defaults: &["Home"],
-    },
-    Definition {
-        command: Original,
-        name: "Monitor Original",
-        context: Context::Workspace,
-        defaults: &["1"],
-    },
-    Definition {
-        command: Processed,
-        name: "Monitor Processed",
-        context: Context::Workspace,
-        defaults: &["2"],
-    },
-    Definition {
-        command: Removed,
-        name: "Monitor Removed",
-        context: Context::Workspace,
-        defaults: &["3"],
-    },
-    Definition {
-        command: FitRecording,
-        name: "Fit recording",
-        context: Context::Workspace,
-        defaults: &["f"],
-    },
-    Definition {
-        command: FitSelection,
-        name: "Fit selection",
-        context: Context::Workspace,
-        defaults: &["Shift+f"],
-    },
-    Definition {
-        command: Center,
-        name: "Center playhead",
-        context: Context::Workspace,
-        defaults: &["c"],
-    },
-    Definition {
-        command: Lock,
-        name: "Toggle playhead lock",
-        context: Context::Workspace,
-        defaults: &["l"],
-    },
-    Definition {
-        command: CatchUp,
-        name: "Toggle catch up",
-        context: Context::Workspace,
-        defaults: &["Shift+c"],
-    },
-    Definition {
-        command: Help,
-        name: "Open Help",
-        context: Context::Workspace,
-        defaults: &["Alt+h"],
-    },
-    Definition {
-        command: Menu,
-        name: "Open Menu",
-        context: Context::Workspace,
-        defaults: &["Alt+m"],
-    },
-    Definition {
-        command: Reference,
-        name: "Open keyboard shortcuts",
-        context: Context::Workspace,
-        defaults: &["Ctrl+/"],
-    },
-    Definition {
-        command: SaveProject,
-        name: "Save project",
-        context: Context::Project,
-        defaults: &["Cmd+s"],
-    },
-    Definition {
-        command: UndoLabels,
-        name: "Undo labels",
-        context: Context::Labels,
-        defaults: &["Cmd+z"],
-    },
-    Definition {
-        command: RedoLabels,
-        name: "Redo labels",
-        context: Context::Labels,
-        defaults: &["Cmd+Shift+z", "Cmd+y"],
-    },
-    Definition {
-        command: UndoGain,
-        name: "Undo gain",
-        context: Context::Gain,
-        defaults: &["Cmd+z"],
-    },
-    Definition {
-        command: RedoGain,
-        name: "Redo gain",
-        context: Context::Gain,
-        defaults: &["Cmd+Shift+z", "Cmd+y"],
-    },
-    Definition {
-        command: DeleteGain,
-        name: "Delete selected manual gain edit",
-        context: Context::Gain,
-        defaults: &["Delete"],
-    },
-    Definition {
-        command: Earlier,
-        name: "Move selected point earlier",
-        context: Context::Gain,
-        defaults: &["ArrowLeft"],
-    },
-    Definition {
-        command: Later,
-        name: "Move selected point later",
-        context: Context::Gain,
-        defaults: &["ArrowRight"],
-    },
-    Definition {
-        command: Louder,
-        name: "Increase selected point gain",
-        context: Context::Gain,
-        defaults: &["ArrowUp"],
-    },
-    Definition {
-        command: Quieter,
-        name: "Decrease selected point gain",
-        context: Context::Gain,
-        defaults: &["ArrowDown"],
-    },
-    Definition {
-        command: SaveExample,
-        name: "Save example",
-        context: Context::Popup,
-        defaults: &["s"],
-    },
-    Definition {
-        command: ClearSpeakers,
-        name: "Clear speakers",
-        context: Context::Popup,
-        defaults: &["r"],
-    },
-    Definition {
-        command: Loop,
-        name: "Pause / resume loop",
-        context: Context::Popup,
-        defaults: &["Space"],
-    },
-    Definition {
-        command: Speaker1,
-        name: "Toggle speaker 1",
-        context: Context::Popup,
-        defaults: &["1"],
-    },
-    Definition {
-        command: Speaker2,
-        name: "Toggle speaker 2",
-        context: Context::Popup,
-        defaults: &["2"],
-    },
-    Definition {
-        command: Speaker3,
-        name: "Toggle speaker 3",
-        context: Context::Popup,
-        defaults: &["3"],
-    },
-    Definition {
-        command: Speaker4,
-        name: "Toggle speaker 4",
-        context: Context::Popup,
-        defaults: &["4"],
-    },
-    Definition {
-        command: Speaker5,
-        name: "Toggle speaker 5",
-        context: Context::Popup,
-        defaults: &["5"],
-    },
-    Definition {
-        command: Speaker6,
-        name: "Toggle speaker 6",
-        context: Context::Popup,
-        defaults: &["6"],
-    },
-    Definition {
-        command: Speaker7,
-        name: "Toggle speaker 7",
-        context: Context::Popup,
-        defaults: &["7"],
-    },
-    Definition {
-        command: Speaker8,
-        name: "Toggle speaker 8",
-        context: Context::Popup,
-        defaults: &["8"],
-    },
-];
 impl Command {
-    pub(crate) fn definition(self) -> &'static Definition {
-        DEFINITIONS
-            .iter()
-            .find(|d| d.command == self)
-            .expect("command definition")
-    }
     pub(crate) fn speaker(index: usize) -> Option<Self> {
         [
             Speaker1, Speaker2, Speaker3, Speaker4, Speaker5, Speaker6, Speaker7, Speaker8,

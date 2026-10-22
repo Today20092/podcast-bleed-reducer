@@ -8,7 +8,7 @@ on:
       release_tag:
         description: Version tag to build
         required: true
-        default: v0.1.0-alpha.8
+        default: v1.0.0
       build_only:
         description: Check the selected branch without creating or updating a release
         type: boolean
@@ -137,11 +137,13 @@ jobs:
         with:
           path: release-assets
           merge-multiple: true
-      - name: Prepare draft prerelease
+      - name: Prepare draft release
         shell: pwsh
         run: |
           $tag = $env:RELEASE_TAG
           $version = $tag.Substring(1)
+          $prerelease = ($version.Contains('-')).ToString().ToLowerInvariant()
+          $notes = if ($prerelease -eq 'true') { 'docs/alpha-release-notes.md' } else { 'docs/release-notes.md' }
           $assets = @()
           foreach ($item in @('windows-x64.zip', 'macos-arm64.dmg', 'macos-x64.dmg', 'linux-x64.AppImage')) {
             $asset = "release-assets/CleanSlate-$version-$item"
@@ -151,8 +153,10 @@ jobs:
           $existing = gh release view $tag --json isDraft 2>$null
           if ($LASTEXITCODE -eq 0) {
             if (-not ($existing | ConvertFrom-Json).isDraft) { throw 'Refusing to replace a published release' }
+            gh release edit $tag --draft "--prerelease=$prerelease" --title "CleanSlate $tag" --notes-file $notes
+            if ($LASTEXITCODE -ne 0) { throw 'Draft release metadata update failed' }
             gh release upload $tag @assets --clobber
           } else {
-            gh release create $tag @assets --verify-tag --draft --prerelease --title "CleanSlate $tag" --notes-file docs/alpha-release-notes.md
+            gh release create $tag @assets --verify-tag --draft "--prerelease=$prerelease" --title "CleanSlate $tag" --notes-file $notes
           }
           if ($LASTEXITCODE -ne 0) { throw 'Draft release upload failed' }

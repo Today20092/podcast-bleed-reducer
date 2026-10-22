@@ -13,6 +13,7 @@ try {
     & "$PSScriptRoot/test-ci.ps1"
     & "$PSScriptRoot/test-packaging.ps1"
     & "$PSScriptRoot/test-release-status.ps1"
+    & "$PSScriptRoot/test-action-contract.ps1"
     cargo fmt --all -- --check
     if ($LASTEXITCODE -ne 0) { throw 'Formatting failed' }
     cargo clippy --all-targets --all-features @cargoArguments -- -D warnings
