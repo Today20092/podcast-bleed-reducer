@@ -7,6 +7,8 @@ Blocked by: 16, 21
 
 ## Selected inspector B — 2026-10-21
 
+2026-10-22 release decision: the owner says the development branch looks good and authorizes alpha.7 preparation/promotion under ticket 64. The current appearance is accepted. Seven current native documentation states were captured, including actual gain-point dragging and preservation in the separate demo copy. This does not assert the complete error/import/export/device/enlarged-text matrix below passed; retain this ticket for those specific checks.
+
 Owner review and integration follow-up: the owner reports “it all looks great” and requests consolidating all completed changes into development. The approved GUI history is merged at `6b99a9a4f3540bb669c249837f9952307c98d433`, with 311 passing tests, strict Clippy, GUI rebuild and canonical/preserved executable self-checks on development. [Integrated build receipt](C:/Users/User/AppData/Local/CleanSlate/VerifiedBuilds/ticket-56-development-6b99a9a/receipt.md). The temporary GUI branches are retired; mockup files/history are archived locally. This records approval of the reviewed GUI appearance and supersedes the initial branch-only handoff below.
 
 Owner subsequently authorized all fourteen earlier FabFilter-inspired suggestions and applicable report lessons, with subagents on the same GUI branch. [Ticket 56](56-fabfilter-inspired-gui.md) records that expanded implementation and review checklist. This ticket retains the integrated owner-acceptance queue.

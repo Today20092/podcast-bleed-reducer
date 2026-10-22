@@ -1,5 +1,7 @@
 # Plan the offline supervised CleanSlate migration
 
+2026-10-22 release authorization: the owner accepts the current development interface and requests the complete documentation/screenshot refresh, roadmap reconciliation, development-to-main promotion and shipping alpha.7. [64 — Release preparation](../offline-supervised-editor/issues/64-alpha-release-preparation.md) owns integration and verification. This explicitly supersedes older statements withholding promotion/publication authorization; mechanical package checks and truthful platform/physical limitations still apply. Future menu redesign 60 and action registration 63 remain separate from this release.
+
 2026-10-22 future action contract: [63 — Registered actions and shortcuts](../offline-supervised-editor/issues/63-registered-actions-shortcut-contract.md) is the owner-requested separate, unblocked ticket. It extends the existing command system so a user action's registration supplies button/keyboard dispatch, customizable bindings and hints, with enforcement against unregistered new controls. No registry refactor is part of the current fix.
 
 2026-10-22 follow-up: 42 now preserves Catch up selection through navigation and registers customizable Shift+C, remaining claimed for its broader native/owner acceptance. 62's organized timing rows are done and verified at compact/wide sizes. The owner explicitly supersedes disabling Catch up on manual pan; only follow-mode controls may change its selection. The rebuilt development app is open.

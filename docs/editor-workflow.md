@@ -58,6 +58,10 @@ See the [fade-and-gap plots](effective-envelopes.md) for the difference between 
 
 Switch the envelope tool on to drag manual points horizontally for fade duration or vertically for gain. A drag uses a transient draft; release commits one undo command and cancellation restores the saved curve and markers. Arrow keys move a selected point and Delete removes its whole override. Ctrl+Z/Ctrl+Y undo/redo on Windows/Linux; macOS uses Command. Text inputs retain their captured keys. Preserve and Attenuate create region edits. Conflicts require the explicit **Replace entire overlapping overrides and protections** option; it removes the conflicting records as whole records, including the other bindings of a global protection.
 
+![Manual attenuation region after dragging a selected pink gain point in the demo project.](images/alpha7-gain-edit.png)
+
+![Preserve keeps the selected speech interval at full gain and marks its protection in gold.](images/alpha7-preserve.png)
+
 The fade controls specify finite S-shaped transitions with exact endpoints and zero endpoint slope and curvature. Shared evaluation keeps automatic fades outside preserved speech. Manual gain remains authoritative until removed and retains linear interpolation. All source-time curves stay sparse; native-rate playback and rendering use the same evaluator. Transparent attenuation remains a listening requirement, not a guarantee from the curve alone.
 
 Review the waveform and audition directly. There is no uncertainty review queue. Use labels to improve detection or Preserve/Attenuate and protection to correct gain. Ignore gaps shorter than bridges brief automatic attenuation gaps between speech spans; it does not erase explicit room-tone labels. Original works before analysis. When a preview exists, Original, Processed and Removed preserve transport and seek context while using the current effective envelopes.

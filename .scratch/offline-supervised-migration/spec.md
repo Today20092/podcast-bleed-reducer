@@ -1,5 +1,7 @@
 # Offline supervised CleanSlate architecture
 
+2026-10-22 owner release decision: prepare the accepted development batch as 0.1.0-alpha.7 with current screenshots, README/usage/help/release notes and measured performance evidence. Promote through a development-to-main merge PR and ship verified native packages under ticket 64. Preserve experimental status and known limitations; do not bundle unimplemented menu/action-registry proposals or invent physical-platform acceptance.
+
 2026-10-22 owner correction: Catch up remains selected through manual navigation and example inspection/editing; only explicit follow-mode controls disable it. Middle dragging suspends following during the gesture and resumes it on release. Details presents total analysis time followed by aligned stage/duration rows, collapsed by default. This supersedes the manual-navigation-disable policy below.
 
 2026-10-22 second presentation refinement: replace waveform dropdown selection with a clearly grouped three-icon control at the right of the timeline toolbar, retaining selected-state and descriptive hover hints. Quiet completed analysis to Ready with timing information behind Details, preserving errors/progress/actionable blockers. Implement ticket 42's animated edge catch-up as the default ordinary app follow mode, with an explicit Catch up toggle alongside Lock. Manual navigation can disable following. The installed Pro-L 2 Slow Down help is the behavioral reference; 250 ms easing and a 5% left inset remain CleanSlate implementation constants, not recovered plugin timing.

@@ -41,6 +41,8 @@ FabFilter's Fast, Slow, Infinite and Off metering modes; new audio meters; conti
 
 ## Results
 
+2026-10-22 owner accepted the current development application for alpha.7 release after the persistent-selection/Shift+C correction. This records acceptance of the reviewed behavior/appearance for shipping. The complete native interruption/middle-drag/boundary matrix remains unperformed unless separately recorded; ticket stays claimed for that evidence rather than implying the release implements a future feature.
+
 Final correction validation: 353 tests passed, zero failures, 20 existing ignored; formatting, strict Clippy, script fixtures and GUI rebuild/launch passed. Ticket 62 records the final executable hash and the resolved Windows executable-lock retry. The wider physical interaction/owner-feel checks remain open.
 
 2026-10-22 owner correction supersedes the manual-pan/off policy above: Catch up stays selected through manual timeline navigation and example inspection/editing. Only an explicit follow-mode control changes it. Panning cancels the current animation and temporarily suspends following during a middle drag; following resumes on release. Existing Locked mode policies remain separate. Claimed for this correction before editing.

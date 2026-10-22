@@ -1,12 +1,12 @@
 # Local development, builds and releases
 
-Current policy: 2026-10-20. [Ticket 54](../.scratch/offline-supervised-editor/issues/54-local-build-consolidation.md) records consolidation, storage measurements and checks. The earlier inventory remains available in Git history at commit f69b1e6.
+Current policy: 2026-10-22. The owner authorized the alpha.7 release, documentation refresh and development-to-main promotion in [ticket 64](../.scratch/offline-supervised-editor/issues/64-alpha-release-preparation.md). Catch-up scrolling, waveform modes, dial smoothing and the latest transport/status refinements are implemented on development. Publication still requires the checks below. [Ticket 54](../.scratch/offline-supervised-editor/issues/54-local-build-consolidation.md) records historical consolidation measurements.
 
 ## One place to work
 
 The primary checkout is `C:/Users/User/Documents/Codex/2026-08-14/podcast-automix-rust-gui`, on `development`. Keep only development and main as ongoing branch names. Main remains the reviewed release branch and GitHub's default branch. The detached `ticket14-frozen-baseline` checkout is intentional comparison evidence, not another development branch.
 
-All completed application branches and the primary checkout's pending documentation are integrated into development, including adjustable shortcuts, the owner-approved FabFilter-inspired GUI pass (`6b99a9a`) and the later rotary-control/Lucide/performance batch (`1235ca1`, 2026-10-21). [The latest development receipt](research/development-integration-2026-10-21.md) records 339 passing tests, strict Clippy, the preserved executable and launch verification. Owner testing of that combined build precedes any later main/release decision. Only development/main remain as ongoing local branches. Catch-up scrolling remains a future specification; merging that ticket does not implement it. Generated diagnostics and experimental/private scratch material are preserved locally rather than published as source. The disposable inspector mockups and their Git history are archived beside the original `ticket-56-24b812a` build receipt in local application data.
+The integrated development history includes adjustable shortcuts, the owner-approved FabFilter-inspired GUI pass (`6b99a9a`), rotary controls/Lucide/performance (`1235ca1`) and the October 22 follow-up through `6160da9`. The owner accepted the current development GUI for release preparation. Only development/main remain as ongoing local branches; release documentation agents use temporary scoped worktrees. Generated diagnostics and private scratch material remain local. Earlier receipts preserve the historical build and measurement limits.
 
 ## Everyday work
 
@@ -61,7 +61,7 @@ See [Cargo's build-cache documentation](https://doc.rust-lang.org/cargo/referenc
 
 Use GitHub → Actions → Desktop draft release for build progress/artifacts and GitHub → Releases for draft/public releases. Windows packages are ZIPs, Apple Silicon and Intel Mac packages are separate DMGs, and Linux packages are AppImages; each has a checksum. The workflow is [portable-release.yml](../.github/workflows/portable-release.yml), using [GitHub's documented triggers](https://github.com/github/docs/blob/main/content/actions/reference/workflows-and-actions/events-that-trigger-workflows.md).
 
-There is no automatic release after a particular number of features. Choose a version when the tested batch is ready, tag the reviewed source, verify every native package, then publish. Main and published alpha.6 stay unchanged during this consolidation.
+There is no automatic release after a particular number of features. Choose a version when the tested batch is ready, tag the reviewed source, verify every native package, then publish. The current authorized release target is alpha.7; published alpha.6 links remain valid until the new assets are verified and published.
 
 ## Release checklist
 

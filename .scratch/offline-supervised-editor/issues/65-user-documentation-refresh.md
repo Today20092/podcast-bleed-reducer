@@ -1,6 +1,6 @@
 # Refresh the release README and user guide
 
-Status: claimed
+Status: done
 Type: task
 Assignee: Codex user-docs
 Blocked by: None
@@ -13,11 +13,13 @@ Labels: ready-for-agent
 ## Acceptance
 
 - [x] Current controls and default bindings match implementation/documented checks.
-- [ ] Replace branch-only wording and stale screenshot descriptions with current behavior and new native captures supplied by the release coordinator.
+- [x] Replace branch-only wording and stale screenshot descriptions with current behavior and new native captures supplied by the release coordinator.
 - [x] README retains installation, usage, disclosure, support and limitations without duplicating the detailed guide.
-- [ ] Validate edited Markdown links/anchors/images, wording and whitespace. Record unavailable rendered/physical checks.
+- [x] Validate edited Markdown links/anchors/images, wording and whitespace. Record unavailable rendered/physical checks.
 
 ## Results
+
+Coordinator integrated all five requested screenshots plus native preservation/gain-drag captures, visually inspected each live native state and linked them in the guide. These are actual alpha.7 Windows development-build captures, not mockups. The selected demo copy's temporary edits were undone; original sources and owner project were untouched. GitHub-rendered Markdown and other-platform image rendering remain separate from native image inspection; no claim that they were physically verified. Download/candidate wording will be finalized only once publication succeeds under ticket 64.
 
 Claimed before edits on codex/release-user-docs from development 6160da9. Documentation-only work; builds and screenshots are coordinated by the parent release task.
 

@@ -61,6 +61,8 @@ Macros, multi-step key sequences, downloadable presets, cloud sync, per-project 
 
 ## Results
 
+2026-10-22 owner accepted the current development GUI and authorized alpha.7 release preparation. The release screenshot verifies the current native shortcut reference, including Catch up Shift+C. General appearance/release acceptance does not claim every remapping/restart/held-gesture check below; keep those explicit remaining checks here and coordinate package acceptance through 64.
+
 2026-10-20 implementation claim: clean primary checkout on development at `0d9ef4c34d18f56013855212048e6f925222b544`; dependencies 31/34/37 verified done. Read accepted design/checks, migration roadmap/spec, domain context/ADR and GUI/build guidance. Graph discovery confirmed app keyboard dispatch and appearance preference persistence; the installed Iced tooltip supports delayed hover and viewport bounds. At claim time, the requested TDD skill required owner confirmation of the app keyboard/update and preference persistence seams, plus the starting review baseline; the owner subsequently confirmed all three. No GUI control or checks were claimed at that initial pause. Context-mode tools were unavailable in this session.
 
 Historical specification note: created from the owner's 2026-10-12 request for adjustable shortcuts and S to save examples; implementation was not authorized in that original specification session.

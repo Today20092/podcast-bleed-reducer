@@ -1,13 +1,15 @@
 # Add editor-first documentation visuals after the GUI is settled
 
-Status: claimed
+Status: done
 Assignee: Codex
 Type: task
-Deferred: remaining GUI captures until appearance settles; optional interactive companion
-Blocked by: 16, 23
+Deferred: optional interactive companion only
+Blocked by: 16
 Spec: ../../offline-supervised-migration/spec.md
 
 ## Current remaining work — 2026-10-20
+
+2026-10-22 completion supersedes the historical remaining-work state below. The owner accepted the current appearance and explicitly authorized new release screenshots, clearing the appearance dependency on 23 for this capture scope. Refreshed seven native alpha.7 captures: editor overview, sound/timing Details, listening choices, speaker popup, shortcut reference, preservation and manual gain editing. The gain capture follows an actual selected-point drag; temporary preservation/attenuation/drag changes were undone in the separate development copy, and no original audio or owner project was changed. Captures were visually inspected at native size with no private path panels exposed and embedded in the current guide/README. Earlier teaching figures and browser checks remain valid. The optional interactive companion remains deferred, not a missing release deliverable.
 
 This is the single documentation-visual queue, including browser acceptance transferred from 27. Seven replacement diagrams and four teaching figures are implemented. The 2026-10-20 implementation pass below adds browser evidence to the earlier static checks; only the GUI-dependent capture follow-up remains.
 
