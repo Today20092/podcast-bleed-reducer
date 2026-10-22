@@ -506,7 +506,26 @@ pub(crate) fn draw_selection_edges(
     }
 }
 
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum WaveformDisplay {
+    Original,
+    Processed,
+    #[default]
+    Both,
+}
+
+impl std::fmt::Display for WaveformDisplay {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Original => "Original",
+            Self::Processed => "Processed",
+            Self::Both => "Both",
+        })
+    }
+}
+
 pub(crate) struct TimelineCanvas<'a, Message> {
+    display: WaveformDisplay,
     revision: u64,
     cache: Option<&'a WaveformCache>,
     viewport: &'a TimelineViewport,
@@ -532,6 +551,7 @@ impl<'a, Message: 'a> TimelineCanvas<'a, Message> {
         selecting: bool,
     ) -> Self {
         Self {
+            display: WaveformDisplay::Both,
             revision: 0,
             cache: Some(cache),
             viewport,
@@ -555,6 +575,7 @@ impl<'a, Message: 'a> TimelineCanvas<'a, Message> {
         on_event: fn(TimelineEvent) -> Message,
     ) -> Self {
         Self {
+            display: WaveformDisplay::Both,
             revision: 0,
             cache: None,
             viewport,
@@ -574,6 +595,11 @@ impl<'a, Message: 'a> TimelineCanvas<'a, Message> {
 }
 
 impl<'a, Message> TimelineCanvas<'a, Message> {
+    pub fn with_display(mut self, display: WaveformDisplay) -> Self {
+        self.display = display;
+        self
+    }
+
     pub fn with_editing_target(mut self, editing_target: bool) -> Self {
         self.editing_target = editing_target;
         self
@@ -631,6 +657,7 @@ impl<'a, Message> TimelineCanvas<'a, Message> {
 
 #[derive(Default)]
 pub(crate) struct TimelineCanvasState {
+    display: Cell<Option<WaveformDisplay>>,
     appearance: Cell<Option<crate::appearance::Appearance>>,
     geometry: canvas::Cache,
     revision: Cell<Option<u64>>,
@@ -1004,7 +1031,8 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
         let colors = appearance.colors();
         let revision_changed = state.revision.replace(Some(self.revision)) != Some(self.revision);
         let appearance_changed = state.appearance.replace(Some(appearance)) != Some(appearance);
-        if revision_changed || appearance_changed {
+        let display_changed = state.display.replace(Some(self.display)) != Some(self.display);
+        if revision_changed || appearance_changed || display_changed {
             state.geometry.clear();
         }
         let geometry = state.geometry.draw(renderer, bounds.size(), |frame| {
@@ -1099,12 +1127,18 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
                         builder.line_to(Point::new(x, center - min * scale));
                     }
                 });
-                frame.stroke(
-                    &original,
-                    canvas::Stroke::default()
-                        .with_width(1.0)
-                        .with_color(colors.original_waveform),
-                );
+                if self.display != WaveformDisplay::Processed
+                    || self
+                        .preview
+                        .is_none_or(|(preview, track)| preview.envelopes.get(track).is_none())
+                {
+                    frame.stroke(
+                        &original,
+                        canvas::Stroke::default()
+                            .with_width(1.0)
+                            .with_color(colors.original_waveform),
+                    );
+                }
                 if let Some((preview, track)) = self.preview
                     && let Some(envelope) = preview.envelopes.get(track)
                 {
@@ -1129,12 +1163,14 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
                             builder.line_to(Point::new(x, center - min * scale));
                         }
                     });
-                    frame.stroke(
-                        &processed,
-                        canvas::Stroke::default()
-                            .with_width(1.4)
-                            .with_color(colors.waveform),
-                    );
+                    if self.display != WaveformDisplay::Original {
+                        frame.stroke(
+                            &processed,
+                            canvas::Stroke::default()
+                                .with_width(1.4)
+                                .with_color(colors.waveform),
+                        );
+                    }
                     let gain_path = canvas::Path::new(|builder| {
                         for x in 0..bounds.width as usize {
                             let sample = self.viewport.sample_at(x as f32, bounds.width);

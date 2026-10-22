@@ -1651,6 +1651,7 @@ mod tests {
             app.preview.as_ref().map(|preview| (preview, 0)),
             false,
         )
+        .with_display(app.waveform_display)
         .with_revision(app.drawing_revision);
         let geometry = canvas.draw(
             state,
@@ -1667,6 +1668,111 @@ mod tests {
         };
         assert!(!cached.primitives.is_empty());
         cached.primitives.clone()
+    }
+
+    #[test]
+    fn transport_buttons_keep_equal_sizes_and_center_at_compact_and_wide_widths() {
+        fn collect(
+            node: &iced::advanced::layout::Node,
+            offset: iced::Vector,
+            centers: &mut Vec<f32>,
+        ) {
+            let bounds = node.bounds();
+            let origin = offset + iced::Vector::new(bounds.x, bounds.y);
+            if bounds.size() == iced::Size::new(40.0, 36.0) {
+                centers.push(origin.x + bounds.width / 2.0);
+            }
+            for child in node.children() {
+                collect(child, origin, centers);
+            }
+        }
+        let app = super::CleanSlateApp::default();
+        let renderer = iced::Renderer::Secondary(iced_tiny_skia::Renderer::new(
+            iced::Font::DEFAULT,
+            iced::Pixels(16.0),
+        ));
+        for width in [1024.0, 1390.0, 1600.0, 2560.0] {
+            let mut content = app.workspace(super::compact_workspace(width), 900.0, width);
+            let mut tree = iced::advanced::widget::Tree::new(content.as_widget());
+            let layout = content.as_widget_mut().layout(
+                &mut tree,
+                &renderer,
+                &iced::advanced::layout::Limits::new(
+                    iced::Size::ZERO,
+                    iced::Size::new(width, 900.0),
+                ),
+            );
+            let mut centers = vec![];
+            collect(&layout, iced::Vector::ZERO, &mut centers);
+            centers.sort_by(f32::total_cmp);
+            centers.dedup();
+            assert_eq!(centers.len(), 3, "transport at width {width}: {centers:?}");
+            assert!(
+                (centers[1] - width / 2.0).abs() < 1.0,
+                "width {width}: {centers:?}"
+            );
+            assert!((centers[1] - centers[0] - 48.0).abs() < 1.0);
+            assert!((centers[2] - centers[1] - 48.0).abs() < 1.0);
+        }
+    }
+
+    #[test]
+    fn waveform_display_modes_change_geometry_without_changing_audio_or_reusing_stale_cache() {
+        use crate::waveform::WaveformDisplay;
+        let mut builder = crate::waveform::WaveformBuilder::default();
+        builder.push(&[0.5; 4096]);
+        let waveform = builder.finish(48_000);
+        let mut app = super::CleanSlateApp {
+            timeline: crate::timeline::TimelineViewport::new(waveform.duration()),
+            waveforms: vec![waveform],
+            preview: Some(crate::AnalysisPreview {
+                stems: vec![],
+                regions: vec![],
+                protections: vec![],
+                envelopes: vec![crate::GainEnvelope::constant_at_rate(4096, 48_000, 0.25).unwrap()],
+                parameters: Default::default(),
+            }),
+            ..Default::default()
+        };
+        let renderer = iced::Renderer::Secondary(iced_tiny_skia::Renderer::new(
+            iced::Font::DEFAULT,
+            iced::Pixels(16.0),
+        ));
+        let state = crate::waveform::TimelineCanvasState::default();
+        let bounds = iced::Rectangle::with_size(iced::Size::new(640.0, 120.0));
+        let mut shapes = vec![];
+        let audio_mode = app.audition_mode;
+        let parameters = app.preview_parameters;
+        for mode in [
+            WaveformDisplay::Original,
+            WaveformDisplay::Processed,
+            WaveformDisplay::Both,
+            WaveformDisplay::Original,
+        ] {
+            let _ = app.update(super::Message::WaveformDisplay(mode));
+            let cached = drawn_waveform(&app, &state, &renderer, &super::editor_theme(), bounds);
+            let fresh = drawn_waveform(
+                &app,
+                &Default::default(),
+                &renderer,
+                &super::editor_theme(),
+                bounds,
+            );
+            assert_eq!(format!("{cached:?}"), format!("{fresh:?}"));
+            shapes.push(format!("{cached:?}"));
+            assert_eq!(app.audition_mode, audio_mode);
+            assert_eq!(app.preview_parameters, parameters);
+        }
+        assert_ne!(shapes[0], shapes[1]);
+        assert_ne!(shapes[1], shapes[2]);
+        assert_ne!(shapes[0], shapes[2]);
+        assert_eq!(shapes[0], shapes[3]);
+        app.preview = None;
+        app.drawing_revision += 1;
+        let original = drawn_waveform(&app, &state, &renderer, &super::editor_theme(), bounds);
+        app.waveform_display = WaveformDisplay::Processed;
+        let unity = drawn_waveform(&app, &state, &renderer, &super::editor_theme(), bounds);
+        assert_eq!(format!("{original:?}"), format!("{unity:?}"));
     }
 
     #[test]
@@ -4747,6 +4853,7 @@ pub struct CleanSlateApp {
     timeline: TimelineViewport,
     playback_scroll: PlaybackScroll,
     meters_at_playhead: bool,
+    waveform_display: waveform::WaveformDisplay,
     solo_tracks: u64,
     drawing_revision: u64,
     window_minimized: bool,
@@ -4900,6 +5007,7 @@ impl Default for CleanSlateApp {
             timeline: TimelineViewport::default(),
             playback_scroll: PlaybackScroll::default(),
             meters_at_playhead: true,
+            waveform_display: waveform::WaveformDisplay::Both,
             solo_tracks: 0,
             drawing_revision: 0,
             window_minimized: false,
@@ -5243,6 +5351,7 @@ enum Message {
     LockPlayhead,
     CenterPlayhead,
     ToggleMeterPlacement,
+    WaveformDisplay(waveform::WaveformDisplay),
     SoloTrack(usize),
     SetupDetails(bool),
     #[cfg(test)]
@@ -5483,18 +5592,6 @@ fn toolbar_label(icon: ToolbarIcon, label: &str) -> Element<'_, Message> {
 }
 
 impl CleanSlateApp {
-    fn transport_label<'a>(
-        &self,
-        icon: ToolbarIcon,
-        label: &'a str,
-        tint: iced::Color,
-    ) -> Element<'a, Message> {
-        row![icon.view(Some(tint)), text(label)]
-            .spacing(6)
-            .align_y(iced::Center)
-            .into()
-    }
-
     fn commit_sound(&mut self) {
         let Some((parameter, draft)) = &self.sound_draft else {
             return;
@@ -8308,6 +8405,7 @@ impl CleanSlateApp {
             }
             Message::CenterPlayhead => self.timeline.center_playhead(),
             Message::ToggleMeterPlacement => self.meters_at_playhead = !self.meters_at_playhead,
+            Message::WaveformDisplay(display) => self.waveform_display = display,
             Message::SoloTrack(track) => {
                 if self.reference_audition.is_some() {
                     return Task::none();
@@ -9561,6 +9659,7 @@ impl CleanSlateApp {
                                 None,
                                 false,
                             )
+                            .with_display(self.waveform_display)
                             .with_revision(self.drawing_revision),
                         )
                         .width(Fill)
@@ -9700,7 +9799,7 @@ impl CleanSlateApp {
             if !result.snapshot.matches(project) {
                 return "Analysis needs updating".into();
             }
-            return "Analysis complete".into();
+            return String::new();
         }
         "Examples ready · run Analyze".into()
     }
@@ -10217,10 +10316,6 @@ impl CleanSlateApp {
         };
         let header = row![
             column![
-                text("CleanSlate").size(24).font(iced::Font {
-                    weight: iced::font::Weight::Semibold,
-                    ..iced::Font::with_name("Segoe UI")
-                }),
                 text(
                     self.project
                         .as_ref()
@@ -10230,7 +10325,7 @@ impl CleanSlateApp {
                             |name| name.to_string_lossy().into_owned()
                         )
                 )
-                .size(14)
+                .size(20)
             ]
             .push(
                 text(self.workspace_status())
@@ -10355,6 +10450,7 @@ impl CleanSlateApp {
                                 None,
                                 false,
                             )
+                            .with_display(self.waveform_display)
                             .with_revision(self.drawing_revision),
                         )
                         .width(Fill)
@@ -10553,6 +10649,7 @@ impl CleanSlateApp {
                                 self.selecting_range || self.calibrating,
                             )
                             .with_revision(self.drawing_revision)
+                            .with_display(self.waveform_display)
                             .with_editing_target(self.editing_track() == Some(index))
                             .with_context(move |point, time| {
                                 Message::OpenTimelineMenu(index, time, point)
@@ -10661,6 +10758,12 @@ impl CleanSlateApp {
         let timeline = column![
             row![
                 text("Timeline").size(16).font(iced::Font { weight: iced::font::Weight::Semibold, ..iced::Font::with_name("Segoe UI") }),
+                text("Waveform").size(13),
+                iced::widget::pick_list(
+                    [waveform::WaveformDisplay::Original, waveform::WaveformDisplay::Processed, waveform::WaveformDisplay::Both],
+                    Some(self.waveform_display),
+                    Message::WaveformDisplay,
+                ).text_size(13),
                 Space::new().width(Fill),
                 self.shortcut_control(Command::Lock,
                     button(toolbar_label(ToolbarIcon::Lock { locked }, "Lock"))
@@ -10889,19 +10992,6 @@ impl CleanSlateApp {
         let can_stop = self.audition.is_some()
             || self.audition_range.is_some()
             || self.audition_preparation.is_busy();
-        let playback_label = if let Some(status) = self.audition_status() {
-            status
-        } else if self
-            .reference_audition
-            .as_ref()
-            .is_some_and(|snapshot| snapshot.paused)
-        {
-            "Paused · Resume"
-        } else if self.audition.is_some() {
-            "Playing"
-        } else {
-            "Play"
-        };
         let playback_icon = if self
             .reference_audition
             .as_ref()
@@ -10911,21 +11001,27 @@ impl CleanSlateApp {
         } else {
             ToolbarIcon::Play
         };
+        let mut timestamp = column![text(format!(
+            "{:02}:{:06.3}",
+            self.timeline.playhead() / TICKS_PER_SECOND / 60,
+            (self.timeline.playhead() % (TICKS_PER_SECOND * 60)) as f64 / TICKS_PER_SECOND as f64
+        ))];
+        if let Some(status) = self.audition_status().or_else(|| {
+            self.audition_preparation
+                .is_busy()
+                .then_some("Preparing playback…")
+        }) {
+            timestamp = timestamp.push(text(status).size(13));
+        }
         let playback = row![
-            text(format!(
-                "{:02}:{:06.3}",
-                self.timeline.playhead() / TICKS_PER_SECOND / 60,
-                (self.timeline.playhead() % (TICKS_PER_SECOND * 60)) as f64
-                    / TICKS_PER_SECOND as f64
-            )),
-            Space::new().width(Fill),
             self.shortcut_control(
                 Command::Start,
-                button(self.transport_label(
-                    ToolbarIcon::Previous,
-                    "Previous",
-                    self.appearance.colors().text
-                ))
+                button(
+                    container(ToolbarIcon::Previous.view(Some(self.appearance.colors().text)))
+                        .center(Fill)
+                )
+                .width(40)
+                .height(36)
                 .style(secondary_button)
                 .on_press(Message::Previous)
             ),
@@ -10935,40 +11031,34 @@ impl CleanSlateApp {
                 } else {
                     Command::Play
                 },
-                button(self.transport_label(
-                    playback_icon,
-                    playback_label,
-                    if can_audition {
+                button(
+                    container(playback_icon.view(Some(if can_audition {
                         self.appearance.colors().action_text
                     } else {
                         self.appearance.colors().disabled
-                    }
-                ))
+                    })))
+                    .center(Fill)
+                )
+                .width(40)
+                .height(36)
                 .style(primary_button)
                 .on_press_maybe(can_audition.then_some(Message::Audition))
             ),
             self.shortcut_control(
                 Command::Play,
-                button(self.transport_label(
-                    ToolbarIcon::Stop,
-                    "Stop",
-                    if can_stop {
+                button(
+                    container(ToolbarIcon::Stop.view(Some(if can_stop {
                         self.appearance.colors().text
                     } else {
                         self.appearance.colors().disabled
-                    }
-                ))
+                    })))
+                    .center(Fill)
+                )
+                .width(40)
+                .height(36)
                 .style(secondary_button)
                 .on_press_maybe(can_stop.then_some(Message::Stop))
             ),
-            text(if self.audition_preparation.is_busy() {
-                "Preparing playback…"
-            } else if self.audition_ready {
-                "Playback ready"
-            } else {
-                ""
-            })
-            .size(13),
         ]
         .spacing(8)
         .align_y(iced::Center);
@@ -11024,13 +11114,27 @@ impl CleanSlateApp {
         ]
         .spacing(8)
         .align_y(iced::Center);
-        let transport: Element<'_, Message> = if width < 1250.0 {
-            column![playback, listening].spacing(10).into()
+        let transport: Element<'_, Message> = if width < 1400.0 {
+            column![
+                row![
+                    container(timestamp).width(Fill),
+                    playback,
+                    Space::new().width(Fill)
+                ]
+                .align_y(iced::Center),
+                container(listening).center_x(Fill),
+            ]
+            .spacing(10)
+            .into()
         } else {
-            row![playback, Space::new().width(Fill), listening]
-                .spacing(16)
-                .align_y(iced::Center)
-                .into()
+            row![
+                container(timestamp).width(Fill),
+                playback,
+                container(listening).align_right(Fill)
+            ]
+            .spacing(16)
+            .align_y(iced::Center)
+            .into()
         };
         let editor: Element<'_, Message> = if compact {
             column![timeline, inspector].spacing(12).height(Fill).into()

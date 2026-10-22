@@ -1,5 +1,13 @@
 # GUI development
 
+## Transport and waveform display
+
+The transport uses three equal-size icon buttons centered on the full window. Hover for command names and effective shortcuts. The native title bar identifies CleanSlate; the workspace header shows the project name. Preparation and buffering still report actionable status, without a permanent Playback ready label.
+
+The Timeline toolbar's Waveform selector shows Original source peaks, Processed peaks after the effective gain envelope, or Both (the default). It changes drawing only, independently of Original/Processed/Removed audition. Gain curves, attenuation shading and speaker examples remain visible. Before an envelope is available, Processed shows the source at unity. The choice lasts for the current application session; it does not change saved projects or exports.
+
+Sound dials apply values immediately and animate their indicators to the new value over 110 ms. Repeated steps retarget from the current visual position; settled dials request no animation redraws. Wheel step sizes, fine adjustment, typing and reset behavior are unchanged.
+
 ## Opt-in editor performance observations
 
 Run `scripts/profile-gui.ps1 -Project 'C:/path/session.cleanslate' -Scenario 'locked-follow-background' -Report 'C:/existing-directory/new-report.json'` for a separate GUI-development project copy. The wrapper builds through the shared settings, labels the scenario, records the source commit (with a dirty suffix when applicable) and hashes the built executable. Coordinate the shared target so another branch does not rebuild it between capture build and launch. Existing report files are refused. Close the captured window normally to write its one JSON report; a forced termination does not produce a completed report. The prior GUI and owner source/project files are retained.

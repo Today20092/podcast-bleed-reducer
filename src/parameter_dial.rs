@@ -7,6 +7,7 @@ use iced::{
         self, Action, Frame, Geometry, Gradient, LineCap, Path, Stroke, gradient, path,
     },
 };
+use std::time::{Duration, Instant};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum DialKind {
@@ -74,10 +75,40 @@ pub(crate) struct ParameterDial<Message> {
 
 #[derive(Default)]
 pub(crate) struct DialState {
+    motion: Option<DialMotion>,
     drag: Option<Drag>,
     modifiers: keyboard::Modifiers,
     last_click: Option<Click>,
     wheel_remainder: f32,
+}
+
+struct DialMotion {
+    from: f32,
+    target: f32,
+    started: Instant,
+}
+
+impl DialMotion {
+    const DURATION: Duration = Duration::from_millis(110);
+
+    fn value(&self, now: Instant) -> f32 {
+        let t = (now.saturating_duration_since(self.started).as_secs_f32()
+            / Self::DURATION.as_secs_f32())
+        .min(1.0);
+        self.from + (self.target - self.from) * (1.0 - (1.0 - t).powi(3))
+    }
+
+    fn retarget(&mut self, target: f32, now: Instant) {
+        if self.target != target {
+            self.from = self.value(now);
+            self.target = target;
+            self.started = now;
+        }
+    }
+
+    fn active(&self, now: Instant) -> bool {
+        self.from != self.target && now.saturating_duration_since(self.started) < Self::DURATION
+    }
 }
 
 struct Drag {
@@ -112,6 +143,15 @@ impl<Message: Clone> canvas::Program<Message> for ParameterDial<Message> {
         bounds: Rectangle,
         cursor: mouse::Cursor,
     ) -> Option<Action<Message>> {
+        if let canvas::Event::Window(iced::window::Event::RedrawRequested(now)) = event {
+            let motion = state.motion.get_or_insert(DialMotion {
+                from: self.value,
+                target: self.value,
+                started: *now,
+            });
+            motion.retarget(self.value, *now);
+            return motion.active(*now).then(Action::request_redraw);
+        }
         if let canvas::Event::Keyboard(
             keyboard::Event::ModifiersChanged(modifiers)
             | keyboard::Event::KeyPressed { modifiers, .. },
@@ -307,7 +347,11 @@ impl<Message: Clone> canvas::Program<Message> for ParameterDial<Message> {
         let start = std::f32::consts::PI * 0.75;
         let sweep = std::f32::consts::PI * 1.5;
         let (min, max) = self.kind.range();
-        let fraction = ((self.value - min) / (max - min)).clamp(0.0, 1.0);
+        let displayed = state
+            .motion
+            .as_ref()
+            .map_or(self.value, |motion| motion.value(Instant::now()));
+        let fraction = ((displayed - min) / (max - min)).clamp(0.0, 1.0);
         let over = self.enabled && cursor.is_over(bounds);
         let dragging = self.enabled && state.drag.is_some();
         let accent = if !self.enabled {
@@ -428,6 +472,64 @@ impl<Message: Clone> canvas::Program<Message> for ParameterDial<Message> {
 mod tests {
     use super::*;
     use canvas::Program;
+
+    #[test]
+    fn motion_retargets_continuously_and_settles_without_idle_redraws() {
+        let now = Instant::now();
+        let mut motion = DialMotion {
+            from: -18.0,
+            target: -18.0,
+            started: now,
+        };
+        assert!(!motion.active(now));
+        motion.retarget(-12.0, now);
+        assert_eq!(motion.value(now), -18.0);
+        let middle = now + Duration::from_millis(55);
+        let displayed = motion.value(middle);
+        assert!(displayed > -18.0 && displayed < -12.0);
+        motion.retarget(-20.0, middle);
+        assert_eq!(motion.value(middle), displayed);
+        let end = middle + DialMotion::DURATION;
+        assert_eq!(motion.value(end), -20.0);
+        assert!(!motion.active(end));
+    }
+
+    #[test]
+    fn redraw_animation_never_publishes_audio_changes() {
+        let mut dial = dial(DialKind::Attenuation, -18.0);
+        let mut state = DialState::default();
+        let now = Instant::now();
+        assert!(
+            event(
+                &dial,
+                &mut state,
+                canvas::Event::Window(iced::window::Event::RedrawRequested(now)),
+                148.0
+            )
+            .is_none()
+        );
+        dial.value = -12.0;
+        let action = event(
+            &dial,
+            &mut state,
+            canvas::Event::Window(iced::window::Event::RedrawRequested(now)),
+            148.0,
+        )
+        .unwrap();
+        assert!(action.0.is_none());
+        assert_eq!(state.motion.as_ref().unwrap().value(now), -18.0);
+        assert!(
+            event(
+                &dial,
+                &mut state,
+                canvas::Event::Window(iced::window::Event::RedrawRequested(
+                    now + DialMotion::DURATION
+                )),
+                148.0
+            )
+            .is_none()
+        );
+    }
 
     #[derive(Clone, Debug, PartialEq)]
     enum Message {
