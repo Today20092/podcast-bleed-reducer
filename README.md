@@ -69,9 +69,9 @@ See the [usage guide](docs/editor-workflow.md) for editing, reanalysis and expor
 
 The editor after Analyze. Each lane is a microphone track. Gain curves and shading show volume reduction; percentages estimate speaker activity, not volume. Teach the recording with **Speaker examples**, adjust the sound with the dials, and compare **Original / Processed / Removed** by listening. This screenshot illustrates the controls, not a detection-accuracy result.
 
-## What's new in alpha.7
+## What's new in alpha.8
 
-The alpha.7 release candidate updates the editor and playback workflow:
+The alpha.8 release candidate updates the editor and playback workflow. Alpha.7 passed its source checks but packaging stopped on missing third-party notices; alpha.8 adds the upstream license coverage. The screenshots show the unchanged editor from the alpha.7 preparation build.
 
 - Catch up keeps the timeline still between smooth right-edge scrolls. It stays enabled when you navigate; use the button or customizable `Shift+C` binding to change it.
 - Original, Processed and Both waveform buttons let you inspect the effect of gain independently of the audio you are monitoring.
@@ -80,7 +80,7 @@ The alpha.7 release candidate updates the editor and playback workflow:
 - Shortcut Settings supports rebinding, clearing and restoring commands. Lock, Center and Catch up have command hints that reflect your bindings.
 - Playback reuses prepared audio, unchanged drawing avoids rebuilding geometry, and minimized windows suspend unnecessary drawing work.
 
-See the [release notes](docs/alpha-release-notes.md) for the full change list, measured performance results and limits. The download table above continues to point to published packages until alpha.7 is published.
+See the [release notes](docs/alpha-release-notes.md) for the full change list, measured performance results and limits. The download table above continues to point to published packages until alpha.8 is published.
 
 ## What it does
 
