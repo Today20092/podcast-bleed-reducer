@@ -67,7 +67,7 @@ There is no automatic release after a particular number of features. Choose a ve
 
 ## Release checklist
 
-Choose the release version and status using the [versioning and stability policy](releasing.md#versioning-and-stability). The owner accepted 1.0.0 as the next stable target; the existing alpha.8 publication remains historical evidence. Complete the stable-transition steps in that policy during release preparation.
+Choose future release versions and status using the [versioning and stability policy](releasing.md#versioning-and-stability). The first stable transition completed with 1.0.0; earlier alpha publication remains historical evidence. Apply the per-release checks below to each new candidate.
 
 Owner accepted the current application's sound and performance on 2026-10-20 and closed 14. Ticket 15 is retired into this procedure, including package checks carried from 25. Repeat these mechanical checks when preparing an owner-authorized release; they are not an ongoing feature backlog or a request to recreate already published packages.
 

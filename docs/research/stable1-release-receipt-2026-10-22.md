@@ -35,4 +35,4 @@ One P2 outdated alpha-only publication instruction was corrected. Stable tagging
 
 The owner accepted the development appearance, explicitly requested no further computer control, then authorized stable publication and the checked README download merge. No new native screenshot matrix, clean-desktop GUI session, physical Mac/Linux audio qualification, subjective listening study or independent whole-session benchmark is claimed. Existing signing and analysis limits remain in the release notes. Ignored tests are not passing evidence. Research 70 and proposed features 72/73 are excluded from this release.
 
-The publication-triggered README workflow derives downloads from actual public assets. Its update is merged only after required checks pass; release publication and README promotion are separate operations.
+The publication-triggered README workflow derives downloads from actual public assets. [PR 22](https://github.com/Today20092/podcast-bleed-reducer/pull/22) combines its generated table with the stable publication record. Its merge is gated by required checks; release publication and README promotion are separate operations.
