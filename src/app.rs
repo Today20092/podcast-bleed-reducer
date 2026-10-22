@@ -4748,6 +4748,50 @@ mod app_menu_tests {
         assert!(app.app_dialog.is_none());
         assert_eq!(app.timeline.selection(), Some((1, 2)));
     }
+
+    #[test]
+    fn menu_outside_click_dismisses_without_editing_the_workspace() {
+        let mut app = CleanSlateApp::default();
+        app.timeline.set_selection(Some((1, 2)));
+        let _ = app.update(Message::Menu);
+        let messages = {
+            let mut content = app.view();
+            let mut tree = iced::advanced::widget::Tree::new(content.as_widget());
+            let renderer = iced::Renderer::Secondary(iced_tiny_skia::Renderer::new(
+                iced::Font::DEFAULT,
+                iced::Pixels(16.0),
+            ));
+            let viewport = iced::Rectangle::with_size(iced::Size::new(1024.0, 768.0));
+            let layout = content.as_widget_mut().layout(
+                &mut tree,
+                &renderer,
+                &iced::advanced::layout::Limits::new(iced::Size::ZERO, viewport.size()),
+            );
+            let mut messages = Vec::new();
+            content.as_widget_mut().update(
+                &mut tree,
+                &iced::Event::Mouse(iced::mouse::Event::ButtonPressed(iced::mouse::Button::Left)),
+                iced::advanced::Layout::new(&layout),
+                iced::mouse::Cursor::Available(iced::Point::new(4.0, 4.0)),
+                &renderer,
+                &mut iced::advanced::clipboard::Null,
+                &mut iced::advanced::Shell::new(&mut messages),
+                &viewport,
+            );
+            messages
+        };
+        assert_eq!(
+            messages.len(),
+            1,
+            "outside click must only dismiss the menu"
+        );
+        assert!(matches!(messages[0], Message::CloseHelp));
+        for message in messages {
+            let _ = app.update(message);
+        }
+        assert!(!app.menu_open);
+        assert_eq!(app.timeline.selection(), Some((1, 2)));
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -9555,12 +9599,24 @@ impl CleanSlateApp {
         if self.menu_open || self.app_dialog.is_some() {
             return responsive(|size| {
                 let content: Element<'_, Message> = if self.menu_open {
-                    let mut items = column![text("Menu").size(24), text("Tab / Up / Down · Enter to activate · Esc to close").size(14)].spacing(12);
-                    for (index, label) in ["Settings".to_owned(), format!("Keyboard shortcuts    {}", self.shortcuts.hint(Command::Reference)), "Help · Usage documentation".into(), "GitHub".into(), "Report a bug".into(), "About".into(), "Close".into()].iter().enumerate() {
-                        items = items.push(button(text(format!("{}{}", if index == self.menu_selected { "› " } else { "" }, label))).on_press(menu_action(index)));
+                    let mut items = column![container(text("Menu").size(20)).padding([4, 12])].spacing(4).width(Fill);
+                    for (index, label) in ["Settings", "Keyboard shortcuts", "Help", "GitHub", "Report a bug", "About", "Close"].into_iter().enumerate() {
+                        if matches!(index, 2 | 5 | 6) {
+                            items = items.push(container(iced::widget::rule::horizontal(1)).padding([6, 12]));
+                        }
+                        let hint = match index {
+                            1 => self.shortcuts.hint(Command::Reference),
+                            6 => "Esc".into(),
+                            _ => String::new(),
+                        };
+                        let selected = index == self.menu_selected;
+                        items = items.push(button(row![text(label).width(Fill), text(hint).size(14)].spacing(16).align_y(iced::Center))
+                            .width(Fill).padding([10, 12]).keyboard_enabled(false).selected(selected)
+                            .style(move |theme, status| flat_button(theme, status, selected))
+                            .on_press(menu_action(index)));
                     }
-                    if let Some(feedback) = &self.app_feedback { items = items.push(text(feedback).size(14)); }
-                    scrollable(items).id("app-dialog").height((size.height - 120.0).clamp(180.0, 580.0)).into()
+                    if let Some(feedback) = &self.app_feedback { items = items.push(container(text(feedback).size(14)).padding([6, 12])); }
+                    container(scrollable(items).id("app-dialog")).max_height((size.height - 80.0).max(120.0)).into()
                 } else {
                     let about = self.app_dialog == Some(AppDialog::About);
                     let mut body = column![text(if about { "About CleanSlate" } else { "Settings" }).size(24)].spacing(14).width(Fill).padding([0, 12]);
@@ -9615,7 +9671,16 @@ impl CleanSlateApp {
                     if let Some(feedback) = &self.app_feedback { panel = panel.push(text(feedback).size(14)); }
                     panel.into()
                 };
-                stack![self.workspace(compact_workspace(size.width), size.height, size.width), opaque(container(container(crate::gui_controls::focus_scope(content, false)).padding(24).width(Fill).max_width(if self.menu_open { 520 } else { 720 }).style(container::rounded_box)).center_x(Fill).center_y(Fill).style(|theme| container::Style { background: Some(colors(theme).scrim.into()), ..Default::default() }))].into()
+                let panel = container(crate::gui_controls::focus_scope(content, false)).padding(if self.menu_open { 12 } else { 24 }).width(Fill).max_width(if self.menu_open { 420 } else { 720 }).style(container::rounded_box);
+                if self.menu_open {
+                    stack![
+                        self.workspace(compact_workspace(size.width), size.height, size.width),
+                        opaque(mouse_area(container(Space::new()).width(Fill).height(Fill).style(|theme| container::Style { background: Some(colors(theme).scrim.into()), ..Default::default() })).on_press(Message::CloseHelp)),
+                        container(opaque(panel)).padding(16).center_x(Fill).center_y(Fill),
+                    ].into()
+                } else {
+                    stack![self.workspace(compact_workspace(size.width), size.height, size.width), opaque(container(panel).center_x(Fill).center_y(Fill).style(|theme| container::Style { background: Some(colors(theme).scrim.into()), ..Default::default() }))].into()
+                }
             }).into();
         }
         if self.help_open || self.shortcuts_open {
