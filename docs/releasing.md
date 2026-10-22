@@ -1,5 +1,7 @@
 # Desktop releases
 
+For version selection and the next release target, use [Versioning and stability](#versioning-and-stability). The publication record below describes the existing alpha release.
+
 The current published prerelease is [v0.1.0-alpha.8](https://github.com/Today20092/podcast-bleed-reducer/releases/tag/v0.1.0-alpha.8), following alpha.6.
 Alpha.7 stopped at the dependency-license packaging gate and was not published.
 Alpha.8 tag source `24361a2aa201fb7e22258f44a2a1be4626d58ce1` was promoted through
@@ -34,12 +36,41 @@ version without `v`. Windows needs the bundled DLLs; Mac bundles its support fil
 inside `CleanSlate.app`; Linux bundles them inside the AppImage. Analysis needs no
 runtime model download. Windows is unsigned; Mac is ad-hoc signed, not notarized.
 
+## Versioning and stability
+
+On 2026-10-22 the owner accepted **1.0.0 as the next release target and first stable release** for the existing offline podcast workflow. UI refinement can continue after 1.0; another feature milestone or beta period is not required. This decision supersedes earlier instructions to keep future releases experimental. The published alpha.8 packages retain their original version and status until a new release is prepared, verified and published. This policy decision authorizes documentation; promotion, tagging and publication require release-specific owner authorization.
+
+Stable means we recommend and maintain the documented workflow: import synchronized microphone tracks, provide speaker examples, analyze, audition and edit gain, save the project, and export processed audio. It does not promise perfect detection on every recording. Keep listening review, aligned-input requirements, known sound limitations, signing status and platform-specific testing evidence visible. Package CI success and hands-on desktop/audio qualification are separate evidence. Formal independent comparisons and whole-session benchmarks remain unestablished; the owner-closed evaluation project is not reopened by choosing 1.0.
+
+### Choose a version
+
+Use [Semantic Versioning 2.0.0](https://semver.org/). For this desktop application, the public compatibility contract is the documented workflow and supported inputs/exports, existing saved projects, speaker examples, manual gain edits and persisted preferences. Preserve these across compatible updates; migrate stored data safely when its representation changes. Internal format or implementation changes alone do not require a major version when compatibility is preserved. Compatibility does not promise identical reanalysis results after a documented algorithm fix or improvement; preserve saved human edits and explain consequential sound changes.
+
+| Change | Version after 1.0.0 | Selection rule |
+| --- | --- | --- |
+| Compatible bug fix or small UI refinement | `1.0.1` | Existing functionality and saved data remain usable. |
+| Compatible new functionality | `1.1.0` | New capabilities preserve the compatibility contract. Reset patch to zero. |
+| Incompatible change | `2.0.0` | A deliberate break to the contract requires a major version, migration/recovery guidance and release notes. Reset minor and patch to zero. |
+
+Choose the highest required increment in the batch. Documentation-only changes can accompany the next release without creating an application release. Stable versions have no suffix. Use `-alpha.N` for an incomplete experimental candidate, `-beta.N` for a workflow ready for broader testing, and `-rc.N` for a stable-release candidate awaiting final verification. These labels describe the candidate's readiness; they are not mandatory stages. Stable does not mean development stops or that future polish requires a major version.
+
+### Prepare the stable transition
+
+Complete these steps under the release-specific ticket before publishing 1.0:
+
+1. Select the reviewed source and set Cargo.toml, Cargo.lock and candidate packaging inputs to the same unused version. Keep existing published tags and assets intact. Completion: source metadata and package identities agree.
+2. Update current README/status/help/package wording and release notes to describe the stable workflow and concrete limitations. Preserve historical alpha receipts and notes. Completion: current release copy agrees on version/status and platform claims match recorded evidence.
+3. Review the release automation against the intended status. Currently `portable-release.yml` creates a draft with `--prerelease` and reads `docs/alpha-release-notes.md`; its manual default also names alpha.8. Adapt these inputs/behavior during release preparation or explicitly correct the resulting draft. Completion: the draft has the intended assets and 1.0 notes, its prerelease flag is cleared for stable publication, and it is selected as the latest release when published. See [GitHub release settings](https://docs.github.com/en/repositories/releasing-projects-on-github/managing-releases-in-a-repository).
+4. Complete the [per-release checklist](branch-workflow.md#release-checklist), record actual results and omissions, and obtain the owner's authorization for promotion/tagging/publication. Completion: the ticket identifies the tested source and final packages, records support limits and authorization, and verifies public downloads after publication.
+
+The existing development → main merge promotion and four-platform draft/package verification process remains in place. A version-policy decision alone does not change the published downloads or establish new platform qualification.
+
 ## Prepare a candidate
 
 1. Finish the scoped ticket and review the diff. Exclude recordings, projects,
    caches, private captures and build artifacts. Keep approved documentation screenshots.
-   Update `Cargo.toml`, `Cargo.lock` to the same unused version, currently
-   `0.1.0-alpha.8`. The packaged README substitutes
+   Update `Cargo.toml` and `Cargo.lock` to the same unused version selected using
+   the policy above. The packaged README substitutes
    version and platform from the build; do not hard-code a version in that template.
 2. Run `./scripts/check.ps1 -Local` for the shared Windows cache/profile, or
    `./scripts/check.ps1` in hosted/native packaging environments. Ignored tests must be
@@ -47,8 +78,8 @@ runtime model download. Windows is unsigned; Mac is ad-hoc signed, not notarized
 3. Commit the reviewed source and docs. Build from that commit:
 
    ```powershell
-   pwsh -File scripts/package.ps1 -Version 0.1.0-alpha.8
-   pwsh -File scripts/check-package.ps1 -Package dist/CleanSlate-0.1.0-alpha.8-windows-x64
+   pwsh -File scripts/package.ps1 -Version 1.0.0
+   pwsh -File scripts/check-package.ps1 -Package dist/CleanSlate-1.0.0-windows-x64
    ```
 
 Run the same `pwsh -File scripts/package.ps1 -Version VERSION` command natively on

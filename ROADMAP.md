@@ -6,6 +6,7 @@ This page is the public overview, last reviewed on 2026-10-22. The [active map](
 
 ## Current priorities
 
+- The next release target is **1.0.0**, the first stable release of the existing offline workflow. The [versioning and stability policy](docs/releasing.md#versioning-and-stability) defines compatibility, patch/minor/major selection and the preparation checks. Alpha.8 remains the published version until a separate release is prepared and published.
 - The owner accepts current sound and performance; [evaluation ticket 14](.scratch/offline-supervised-editor/issues/14-independent-release-evaluation.md) is closed. Formal benchmarking is optional future work, with no new ticket requested. This does not assert that independent comparisons or long-session measurements passed.
 - Use the [recurring editor verification procedure](docs/branch-workflow.md#editor-regression-coverage) for change-appropriate appearance, import, shortcut and playback checks. Implemented feature tickets are closed; bug reports and UI/UX feedback can identify new actionable work.
 - [Alpha.8 is published](https://github.com/Today20092/podcast-bleed-reducer/releases/tag/v0.1.0-alpha.8) under completed [release ticket 64](.scratch/offline-supervised-editor/issues/64-alpha-release-preparation.md), with refreshed documentation, seven actual Windows screenshots and checked native packages. Alpha.7 stopped on missing dependency license texts; alpha.8 supplies their upstream notices. The [per-release procedure](docs/branch-workflow.md#release-checklist) retains package and physical-check requirements for future releases. Alpha wording and known limits remain explicit.
@@ -22,7 +23,7 @@ Check each ticket for its latest status. This list describes agreed work, not a 
 
 ## Future possibilities
 
-These ideas need investigation and an agreed specification before implementation. They have no delivery date and are not release requirements.
+These ideas need investigation and an agreed specification before implementation. They have no delivery date and are not release requirements. [Live/DAW plugin discovery (67)](.scratch/offline-supervised-editor/issues/67-live-clap-vst3-discovery.md) is an active design interview and feasibility investigation, including OBS broadcast output and single/multiple microphones. It does not authorize plugin implementation or change the offline application's scope. The [product opportunities research](docs/research/podcast-bleed-product-opportunities-2026-10-22.md) records additional proposals for discussion.
 
 The [feature idea table](docs/roadmap-ideas.md) captures the owner's proposals and interview decisions. I05–I14 and initial settings/help/themes now have accepted scoped specifications and build tickets listed above, with overlay editing separated for design. Independent-source synchronization and drift correction are deferred by owner decision. Plugin exploration and later customization still require decisions before implementation commitments.
 

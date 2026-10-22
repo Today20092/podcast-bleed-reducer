@@ -30,6 +30,8 @@ When discovering tools, retrieve only the metadata needed for the task. Before s
 
 ## Repository
 
+For version selection, release-status wording or release preparation, read the [versioning and stability policy](docs/releasing.md#versioning-and-stability). It defines the compatibility promise and stable-release transition.
+
 Use `development` as the ordinary local working branch and retain `main` as the release branch. For owner-requested parallel work, use temporary scoped `codex/` branches/worktrees from development; integrate their tested commits locally and remove them after preserving their files. Sequential work can stay on development. Push development as a backup; feature PRs are optional for solo local integration. External contributions still use PRs targeting development.
 
 Test combined features in the primary checkout on development. A local feature merge already updates its files; merge subsequent feature revisions again before rebuilding. Pull with `git pull --ff-only` when GitHub has commits absent locally. Use `scripts/gui-dev.ps1` for GUI builds and `scripts/check.ps1 -Local` for local checks; both share the application-data Cargo target, pinned toolchain and development profile. Keep incremental compilation and coordinate builds through Cargo's target lock. Record the source commit and executable path; preserve the tested executable before retiring a cache or worktree.
