@@ -58,7 +58,7 @@ See [Cargo's build-cache documentation](https://doc.rust-lang.org/cargo/referenc
 | Push development or merge an ordinary PR | No application release packages from that action alone. |
 | Open/update a PR | Four-platform checks; no application release. |
 | Manually run **Desktop draft release** on development with `build_only: true` | Checked native packages under the Actions run's Artifacts; no release is created or updated. Set release_tag to the current Cargo version with a leading v. |
-| Deliberately push a `v*` version tag | Checks and packages four platforms, then prepares one draft prerelease after all package jobs succeed. |
+| Deliberately push a `v*` version tag | Checks and packages four platforms, then prepares one draft after all package jobs succeed. Its stable/prerelease status follows the version tag. |
 | Publish the verified draft | Public release assets and the README-download update workflow. |
 
 Use GitHub → Actions → Desktop draft release for build progress/artifacts and GitHub → Releases for draft/public releases. Windows packages are ZIPs, Apple Silicon and Intel Mac packages are separate DMGs, and Linux packages are AppImages; each has a checksum. The workflow is [portable-release.yml](../.github/workflows/portable-release.yml), using [GitHub's documented triggers](https://github.com/github/docs/blob/main/content/actions/reference/workflows-and-actions/events-that-trigger-workflows.md).

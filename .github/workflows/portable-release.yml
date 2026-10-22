@@ -137,7 +137,7 @@ jobs:
         with:
           path: release-assets
           merge-multiple: true
-      - name: Prepare draft prerelease
+      - name: Prepare draft release
         shell: pwsh
         run: |
           $tag = $env:RELEASE_TAG

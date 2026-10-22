@@ -143,14 +143,16 @@ does not already exist before creating it:
 
 ```powershell
 git fetch origin
-git tag -a v0.1.0-alpha.8 origin/main -m "CleanSlate 0.1.0-alpha.8"
-git push origin v0.1.0-alpha.8
+git tag -a v1.0.0 origin/main -m "CleanSlate 1.0.0"
+git push origin v1.0.0
 ```
 
 `.github/workflows/portable-release.yml` runs on version tags. It installs the pinned
 compiler, runs checks/tests and packages on Windows x64, both Mac architectures and
 Linux x64. A single upload job runs only after all four succeed, then prepares a
-**draft prerelease** with all four downloads and checksums. It never publishes
+**draft release** with all four downloads and checksums. Plain stable versions use
+stable release notes and clear the prerelease flag; suffixed versions remain
+prereleases with alpha notes. It never publishes
 automatically. A rerun uploads
 replacement assets to the existing draft; a published release is never overwritten.
 
@@ -165,8 +167,11 @@ real device enumeration and listening still require a Windows GUI check.
 
 Download and clean-test the actual GitHub packages before publication: their binaries can
 differ from the local build. In GitHub's Releases page, review the draft's version,
-assets, checksum and limitations, keep **Set as a pre-release** selected, then publish.
-Do not move a published tag or replace published assets; issue the next numbered alpha.
+assets, checksum and limitations. For stable 1.0.0, clear **Set as a pre-release**
+and select it as the latest release; retain the prerelease flag for a suffixed
+candidate. Publish only after package verification and owner authorization.
+Do not move a published tag or replace published assets; select the next version
+under the semantic-versioning policy.
 
 Test each Mac DMG on its matching architecture without build tools or caches. Open
 the app through Finder, import test audio, Analyze, save/reopen, audition and export.
@@ -175,9 +180,10 @@ the normal executable launch and `--appimage-extract-and-run` fallback. Headless
 CI self-checks verify analysis and delivery, not real sound-device playback.
 
 Release notes must state the attached platforms, signing status, offline acoustic
-workflow and any pending desktop/listening/performance checks. Before a stable
-`v0.1.0`, agree and complete fresh stable-release qualification, resolve the
-applicable known limits and update the workflow's prerelease policy deliberately.
+workflow and any pending desktop/listening/performance checks. For stable 1.0.0,
+complete the versioning policy's transition and per-release checks, retain known
+limits and identify actual package/hardware evidence without treating omitted
+qualification as passing.
 Owner-closed 14 and retired 15/25 are historical evidence, not tickets to reopen.
 
 ## Keep README downloads current

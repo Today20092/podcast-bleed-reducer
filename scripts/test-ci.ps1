@@ -26,7 +26,7 @@ if ($downloads -match '(?m)^\s+git push\s*\r?$|git push.*(?:--force|refs/heads/m
 Write-Output 'Protected-branch download automation checks: pass'
 
 # Execute the actual release step with a local CLI double, without network or assets.
-$draftMatch = [regex]::Match($release, '(?s)- name: Prepare draft prerelease\n\s+shell: pwsh\n\s+run: \|\n(?<code>.*)\z')
+$draftMatch = [regex]::Match($release, '(?s)- name: Prepare draft release\n\s+shell: pwsh\n\s+run: \|\n(?<code>.*)\z')
 if (-not $draftMatch.Success) { throw 'Draft preparation step missing' }
 $draftStep = [scriptblock]::Create($draftMatch.Groups['code'].Value)
 function Test-DraftPreparation([string]$Tag, [string]$Existing, [string]$Failure = '', [switch]$MissingAsset) {

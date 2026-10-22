@@ -23,7 +23,7 @@ rerun, while newer pending retries replace their earlier results.
 Workflow conclusion, package readiness and draft preparation are separate.
 A successful build-only run can have all packages ready without a prepared draft.
 Release readiness requires all packages, successful workflow completion and the
-successful **Prepare draft prerelease** step. This reports workflow evidence,
+successful **Prepare draft release** step (or the historical **Prepare draft prerelease** name). This reports workflow evidence,
 not public release publication or a subsequent download check.
 
 For failed jobs, available failed-step logs supply up to 12 diagnostic lines
