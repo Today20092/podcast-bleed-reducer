@@ -226,11 +226,15 @@ impl<'a, Message: Clone + 'a> ControlButton<'a, Message> {
         self
     }
 
-    pub fn on_press(self, message: Message) -> Self {
-        self.on_press_maybe(Some(message))
+    pub fn on_press(self, action: impl crate::button_action::ButtonAction<Message>) -> Self {
+        self.on_press_maybe(Some(action))
     }
 
-    pub fn on_press_maybe(mut self, message: Option<Message>) -> Self {
+    pub fn on_press_maybe(
+        mut self,
+        action: Option<impl crate::button_action::ButtonAction<Message>>,
+    ) -> Self {
+        let message = action.map(crate::button_action::message);
         self.inner = self.inner.on_press_maybe(message.clone());
         self.on_press = message;
         self
@@ -888,6 +892,9 @@ impl<Message> Widget<Message, Theme, Renderer> for FocusScope<'_, Message> {
 
 #[cfg(test)]
 mod tests {
+    impl crate::button_action::ButtonAction<()> for () {
+        fn into_message(self) {}
+    }
     use super::*;
 
     fn key_event(key: Named, pressed: bool, repeat: bool) -> Event {

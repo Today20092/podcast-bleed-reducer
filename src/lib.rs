@@ -5,6 +5,7 @@ pub mod app;
 mod appearance;
 mod audio_io;
 mod audition;
+mod button_action;
 mod calibration;
 pub mod detector_quality;
 mod editor_benchmark;
