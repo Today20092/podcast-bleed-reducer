@@ -61,7 +61,7 @@ See [Cargo's build-cache documentation](https://doc.rust-lang.org/cargo/referenc
 
 Use GitHub → Actions → Desktop draft release for build progress/artifacts and GitHub → Releases for draft/public releases. Windows packages are ZIPs, Apple Silicon and Intel Mac packages are separate DMGs, and Linux packages are AppImages; each has a checksum. The workflow is [portable-release.yml](../.github/workflows/portable-release.yml), using [GitHub's documented triggers](https://github.com/github/docs/blob/main/content/actions/reference/workflows-and-actions/events-that-trigger-workflows.md).
 
-There is no automatic release after a particular number of features. Choose a version when the tested batch is ready, tag the reviewed source, verify every native package, then publish. The current authorized release target is alpha.7; published alpha.6 links remain valid until the new assets are verified and published.
+There is no automatic release after a particular number of features. Choose a version when the tested batch is ready, tag the reviewed source, verify every native package, then publish. The current authorized batch now targets alpha.8 after alpha.7 stopped at the dependency-license gate. Published alpha.6 links remain valid until the new assets are verified and published; the failed alpha.7 tag is retained unchanged.
 
 ## Release checklist
 

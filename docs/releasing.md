@@ -1,6 +1,7 @@
 # Desktop releases
 
-The current release candidate is `v0.1.0-alpha.7`, following published alpha.6.
+The current release candidate is `v0.1.0-alpha.8`, following published alpha.6.
+Alpha.7 stopped at the dependency-license packaging gate and was not published.
 The owner authorized promotion and release in ticket 64. Use the current
 [branch workflow and per-release checklist](branch-workflow.md#release-checklist).
 Ticket 14 is owner-closed; retired 15/25 now route to that repeatable checklist.
@@ -25,7 +26,7 @@ runtime model download. Windows is unsigned; Mac is ad-hoc signed, not notarized
 1. Finish the scoped ticket and review the diff. Exclude recordings, projects,
    caches, private captures and build artifacts. Keep approved documentation screenshots.
    Update `Cargo.toml`, `Cargo.lock` to the same unused version, currently
-   `0.1.0-alpha.7`. The packaged README substitutes
+   `0.1.0-alpha.8`. The packaged README substitutes
    version and platform from the build; do not hard-code a version in that template.
 2. Run `./scripts/check.ps1 -Local` for the shared Windows cache/profile, or
    `./scripts/check.ps1` in hosted/native packaging environments. Ignored tests must be
@@ -33,8 +34,8 @@ runtime model download. Windows is unsigned; Mac is ad-hoc signed, not notarized
 3. Commit the reviewed source and docs. Build from that commit:
 
    ```powershell
-   pwsh -File scripts/package.ps1 -Version 0.1.0-alpha.7
-   pwsh -File scripts/check-package.ps1 -Package dist/CleanSlate-0.1.0-alpha.7-windows-x64
+   pwsh -File scripts/package.ps1 -Version 0.1.0-alpha.8
+   pwsh -File scripts/check-package.ps1 -Package dist/CleanSlate-0.1.0-alpha.8-windows-x64
    ```
 
 Run the same `pwsh -File scripts/package.ps1 -Version VERSION` command natively on
@@ -98,8 +99,8 @@ does not already exist before creating it:
 
 ```powershell
 git fetch origin
-git tag -a v0.1.0-alpha.7 origin/main -m "CleanSlate 0.1.0-alpha.7"
-git push origin v0.1.0-alpha.7
+git tag -a v0.1.0-alpha.8 origin/main -m "CleanSlate 0.1.0-alpha.8"
+git push origin v0.1.0-alpha.8
 ```
 
 `.github/workflows/portable-release.yml` runs on version tags. It installs the pinned
@@ -130,8 +131,10 @@ the normal executable launch and `--appimage-extract-and-run` fallback. Headless
 CI self-checks verify analysis and delivery, not real sound-device playback.
 
 Release notes must state the attached platforms, signing status, offline acoustic
-workflow and any pending desktop/listening/performance checks. Before a stable `v0.1.0`, complete tickets
-14/15 and update the workflow's prerelease policy deliberately.
+workflow and any pending desktop/listening/performance checks. Before a stable
+`v0.1.0`, agree and complete fresh stable-release qualification, resolve the
+applicable known limits and update the workflow's prerelease policy deliberately.
+Owner-closed 14 and retired 15/25 are historical evidence, not tickets to reopen.
 
 ## Keep README downloads current
 
@@ -140,7 +143,9 @@ table when a release is published, edited or deleted. It queries actual publishe
 assets, including prereleases, and selects the newest available package and checksum
 for each platform. Drafts and missing assets never produce download links. This
 avoids GitHub's `latest/download` shortcut, which does not select alpha prereleases.
-The workflow commits that table to the default branch. It does not publish releases.
+The workflow proposes that table through a PR to the default branch and explicitly
+dispatches native checks. Merge the checked PR and synchronize main back to
+development. It does not publish releases.
 
 Use `pwsh -File scripts/update-downloads.ps1` to refresh the same table locally,
 or dispatch **Update published download links** after changing release assets.

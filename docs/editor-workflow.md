@@ -1,6 +1,6 @@
 # Supervised editor workflow
 
-Import aligned microphone tracks, label solo speech and room tone, run Analyze, then compare the result by listening before exporting. This guide describes the alpha.7 editor. See the [release notes](alpha-release-notes.md) for changes and package status.
+Import aligned microphone tracks, label solo speech and room tone, run Analyze, then compare the result by listening before exporting. This guide describes the alpha.8 editor. Screenshots were captured from the alpha.7 preparation build; alpha.8 adds dependency license coverage with the same interface. See the [release notes](alpha-release-notes.md) for changes and package status.
 
 [Import and storage](#sd-cards-and-working-storage) · [Analysis and editing](#analysis-and-editing) · [Timeline and playback](#timeline-and-playback) · [Keyboard shortcuts](#keyboard-shortcuts) · [Export](#export-settings)
 

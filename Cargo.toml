@@ -1,6 +1,6 @@
 [package]
 name = "rust-app"
-version = "0.1.0-alpha.7"
+version = "0.1.0-alpha.8"
 license = "MIT"
 edition = "2024"
 

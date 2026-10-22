@@ -1,6 +1,8 @@
-# CleanSlate v0.1.0-alpha.7
+# CleanSlate v0.1.0-alpha.8
 
 This release brings the reviewed editor controls, customizable shortcuts and performance work into one desktop update. It also makes read-only recording media usable without writing beside the originals. It remains an experimental alpha.
+
+Alpha.7 passed source checks on all four platforms but did not produce a draft: packaging correctly stopped when the zune-core/zune-jpeg crate archives omitted license texts. Alpha.8 includes the identical upstream Zlib notices from those exact dependency revisions. The editor behavior and captured interface are unchanged.
 
 Changes below are relative to [v0.1.0-alpha.6](https://github.com/Today20092/podcast-bleed-reducer/releases/tag/v0.1.0-alpha.6). See the [usage guide](editor-workflow.md) for the complete workflow.
 
@@ -35,7 +37,7 @@ The [performance summary](research/alpha7-performance-summary-2026-10-22.md) rec
 
 The development source at `6160da9` passed 353 tests with zero failures and 20 existing opt-in checks ignored, plus formatting, strict all-target/all-feature Clippy and script fixtures. Native Windows checks covered compact and wide layouts, Dark and Light appearance, analysis, repeated catch-up scrolling and shortcut activation. The owner accepted the development application for release preparation on 2026-10-22.
 
-Final alpha.7 package checks, immutable tag/build identity and downloaded-package verification are recorded by the release preparation task before publication. Development checks alone do not establish fresh native qualification on every platform.
+Final alpha.8 package checks, immutable tag/build identity and downloaded-package verification are recorded by the release preparation task before publication. Development checks alone do not establish fresh native qualification on every platform.
 
 Quiet overlap without representative labels can receive a low ownership estimate. Listen to wanted speech and overlap, add representative examples and use protection or manual gain edits before exporting. Independent sound-quality comparisons, physical device-disconnect recovery and long-session qualification are not claimed complete. Keep original recordings and project backups.
 
@@ -57,7 +59,7 @@ Analysis runs offline with human reference labels, embedded Silero VAD and learn
 
 # Historical release notes: v0.1.0-alpha.6
 
-The following section records the earlier release and its verification. Its planned-work statements describe alpha.6, not alpha.7.
+The following section records the earlier release and its verification. Its planned-work statements describe alpha.6, not alpha.8.
 
 CleanSlate v0.1.0-alpha.6: application logo, editor workflow and keyboard shortcuts.
 

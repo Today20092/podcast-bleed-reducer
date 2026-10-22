@@ -8,7 +8,7 @@ This page is the public overview, last reviewed on 2026-10-22. The [active map](
 
 - The owner accepts current sound and performance; [evaluation ticket 14](.scratch/offline-supervised-editor/issues/14-independent-release-evaluation.md) is closed. Formal benchmarking is optional future work, with no new ticket requested. This does not assert that independent comparisons or long-session measurements passed.
 - Finish verification of the integrated editor's appearance, import flow and playback. [Ticket 23](.scratch/offline-supervised-editor/issues/23-gui-frontend-polish.md) consolidates the remaining checks from implemented tickets 38/39/40. Bug reports and UI/UX feedback help identify what still gets in the way.
-- Ship the owner-accepted development batch as alpha.7 under [release ticket 64](.scratch/offline-supervised-editor/issues/64-alpha-release-preparation.md), with refreshed documentation, screenshots and checked native packages. The [per-release procedure](docs/branch-workflow.md#release-checklist) retains package and physical-check requirements. Alpha wording and known limits remain explicit.
+- Ship the owner-accepted development batch as alpha.8 under [release ticket 64](.scratch/offline-supervised-editor/issues/64-alpha-release-preparation.md), with refreshed documentation, screenshots and checked native packages. Alpha.7 stopped on missing dependency license texts; alpha.8 supplies their upstream notices. The [per-release procedure](docs/branch-workflow.md#release-checklist) retains package and physical-check requirements. Alpha wording and known limits remain explicit.
 - Export settings for encoding and separate or multichannel WAV delivery are implemented under [ticket 28](.scratch/offline-supervised-editor/issues/28-export-settings-multichannel-wav.md). See the [usage guide](docs/editor-workflow.md#export-settings) for available choices and compatibility limits.
 - Refresh native documentation screenshots for the accepted interface under [ticket 20](.scratch/offline-supervised-editor/issues/20-editor-first-documentation-visuals.md). The eleven teaching diagrams and their local browser review are already complete.
 
@@ -45,7 +45,7 @@ Explore a Help action that opens the GitHub issue forms, followed by an optional
 ### Other proposals
 
 - [Menu research/redesign](.scratch/offline-supervised-editor/issues/60-rea-plugin-menu-design.md) using the requested plugin interface references.
-- [Registered actions and shortcuts](.scratch/offline-supervised-editor/issues/63-registered-actions-shortcut-contract.md), so new actions become customizable without separate requests. This infrastructure is planned, not part of alpha.7.
+- [Registered actions and shortcuts](.scratch/offline-supervised-editor/issues/63-registered-actions-shortcut-contract.md), so new actions become customizable without separate requests. This infrastructure is planned for a future release.
 
 An [advanced training panel](.scratch/offline-supervised-editor/issues/17-advanced-training-panel.md) is parked as a deferred proposal outside the active queue; implementation remains unapproved. Further ideas are welcome, including problems we have missed in the recording or editing workflow. The current focus remains bleed reduction and editable attenuation; use your usual audio editor for other production tasks.
 

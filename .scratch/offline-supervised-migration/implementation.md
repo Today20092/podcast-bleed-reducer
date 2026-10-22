@@ -1,5 +1,7 @@
 # Offline supervised editor implementation sequence
 
+2026-10-22 packaging amendment: ticket 64 now targets alpha.8. Alpha.7's four source checks passed, but its native package collector correctly rejected missing zune-core/zune-jpeg license texts. Exact upstream Zlib notices now cover both dependencies, verified against all four desktop metadata graphs. Failed alpha.7 source/tag evidence is retained; screenshots and editor behavior remain current.
+
 2026-10-22 release queue: owner-approved release preparation 64 now governs the alpha.7 documentation, screenshots, native package checks, main promotion and publication. Temporary documentation worktrees own tickets 65/66. Existing open verification tickets 20/23/41/42 retain unperformed checks; owner acceptance covers the reviewed appearance and release intent, not unmeasured gestures/platforms. Future work 60/63 stays outside this batch. Older no-release-authorized statements below are historical and superseded.
 
 2026-10-22 owner-requested future work: [63](../offline-supervised-editor/issues/63-registered-actions-shortcut-contract.md) is one separate ready-for-agent ticket with no blockers for a shared action/shortcut registration contract and enforcement. The immediate Catch up command uses the current registry in 42; implementing the new contract is deferred to this ticket.

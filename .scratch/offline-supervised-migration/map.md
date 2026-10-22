@@ -1,5 +1,7 @@
 # Plan the offline supervised CleanSlate migration
 
+2026-10-22 packaging amendment: the accepted release batch advances to alpha.8 because alpha.7 passed four-platform source checks but stopped on missing zune-core/zune-jpeg license texts. Ticket 64 includes the exact upstream notices, four-target license audit and renewed package verification. The failed tag is preserved; this changes packaging/version metadata, not editor behavior or release authorization.
+
 2026-10-22 release authorization: the owner accepts the current development interface and requests the complete documentation/screenshot refresh, roadmap reconciliation, development-to-main promotion and shipping alpha.7. [64 — Release preparation](../offline-supervised-editor/issues/64-alpha-release-preparation.md) owns integration and verification. This explicitly supersedes older statements withholding promotion/publication authorization; mechanical package checks and truthful platform/physical limitations still apply. Future menu redesign 60 and action registration 63 remain separate from this release.
 
 2026-10-22 future action contract: [63 — Registered actions and shortcuts](../offline-supervised-editor/issues/63-registered-actions-shortcut-contract.md) is the owner-requested separate, unblocked ticket. It extends the existing command system so a user action's registration supplies button/keyboard dispatch, customizable bindings and hints, with enforcement against unregistered new controls. No registry refactor is part of the current fix.
