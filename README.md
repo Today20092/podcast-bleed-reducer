@@ -18,7 +18,7 @@ CleanSlate is an offline microphone bleed-reduction tool for multitrack podcasts
   <a href="Cargo.toml"><img alt="Desktop GUI: Iced 0.14" src="https://img.shields.io/badge/GUI-Iced%200.14-B5DFE8?style=for-the-badge&amp;labelColor=29626B"></a>
 </p>
 
-[Download](#download) · [Usage guide](docs/editor-workflow.md) · [How it works](docs/ownership-explained.md) · [Roadmap](ROADMAP.md) · [Contribute](CONTRIBUTING.md) · [Report an issue](https://github.com/Today20092/podcast-bleed-reducer/issues/new/choose)
+[Download](#download) · [Usage guide](docs/editor-workflow.md) · [Release notes](docs/alpha-release-notes.md) · [How it works](docs/ownership-explained.md) · [Roadmap](ROADMAP.md) · [Contribute](CONTRIBUTING.md) · [Report an issue](https://github.com/Today20092/podcast-bleed-reducer/issues/new/choose)
 
 ## Watch the demo
 
@@ -45,7 +45,7 @@ Choose your platform below. CleanSlate runs locally without Python, a model down
 
 On a Mac, **Apple menu → About This Mac** shows either an Apple chip or an Intel processor. Linux packages target Ubuntu 22.04 or newer and require a working desktop and audio system. If your system cannot mount an AppImage, run it with `--appimage-extract-and-run`.
 
-These are experimental alpha packages. Windows builds are unsigned. Mac builds use ad-hoc signing and are not notarized, so the operating system may require approval to open them. Listening quality and long-session qualification remain pending. See the [release guide](docs/releasing.md) for checksums and package checks.
+These are experimental alpha packages. Windows builds are unsigned. Mac builds use ad-hoc signing and are not notarized, so the operating system may require approval to open them. Review your own recording before export; formal independent quality and long-session qualification are not established. See the [release guide](docs/releasing.md) for checksums and package checks.
 
 ## Try it
 
@@ -65,9 +65,22 @@ The steps below describe the same workflow. Tracks must already be synchronized;
 
 See the [usage guide](docs/editor-workflow.md) for editing, reanalysis and export details.
 
-![CleanSlate development editor with three microphone tracks, gain-reduction regions and fades, per-track speaker estimates, sound controls and Original, Processed and Removed listening buttons.](docs/images/editor-overview.png)
+![CleanSlate alpha.7 editor with three microphone tracks, gain curves, rotary sound controls, Catch up and three waveform view buttons.](docs/images/alpha7-editor-overview.png)
 
-The development editor after Analyze. Each lane is a microphone track. The gain curve and shaded regions show volume reduction; the percentages estimate whether each track's speaker is active at the playhead. Use **Speaker examples** to teach who is talking, **Sound** to adjust attenuation and fades, and **Original / Processed / Removed** to compare by listening. Recording filenames are redacted. This screenshot illustrates the controls, not an accepted quality result.
+The editor after Analyze. Each lane is a microphone track. Gain curves and shading show volume reduction; percentages estimate speaker activity, not volume. Teach the recording with **Speaker examples**, adjust the sound with the dials, and compare **Original / Processed / Removed** by listening. This screenshot illustrates the controls, not a detection-accuracy result.
+
+## What's new in alpha.7
+
+The alpha.7 release candidate updates the editor and playback workflow:
+
+- Catch up keeps the timeline still between smooth right-edge scrolls. It stays enabled when you navigate; use the button or customizable `Shift+C` binding to change it.
+- Original, Processed and Both waveform buttons let you inspect the effect of gain independently of the audio you are monitoring.
+- Rotary attenuation and timing controls have smooth indicators, fine adjustment, typed values and reset gestures. Sound changes apply immediately.
+- Fixed-size transport icons, a centered transport and a quieter Ready status reduce clutter. Details expands into labeled timing rows.
+- Shortcut Settings supports rebinding, clearing and restoring commands. Lock, Center and Catch up have command hints that reflect your bindings.
+- Playback reuses prepared audio, unchanged drawing avoids rebuilding geometry, and minimized windows suspend unnecessary drawing work.
+
+See the [release notes](docs/alpha-release-notes.md) for the full change list, measured performance results and limits. The download table above continues to point to published packages until alpha.7 is published.
 
 ## What it does
 
@@ -78,7 +91,7 @@ CleanSlate was created to make podcast microphone bleed reduction practical offl
 - Provides synchronized waveform navigation, gain controls and protected manual edits that survive reanalysis.
 - Keeps source files unchanged and uses the same effective gain envelope for display, audition and export.
 
-Automatic attenuation uses S-shaped fades: gain starts changing gently, moves fastest in the middle, then settles gently at the exact target. Open and close controls set the maximum fade durations. The fades fit inside non-speaking gaps and reach full volume before preserved speech. Short automatic gaps can be ignored with the gap control.
+Automatic attenuation uses S-shaped fades. Gain starts changing gently, moves fastest in the middle, then settles at the exact target. Fade to full volume and Fade to reduced volume set the maximum transition durations. The fades fit inside non-speaking gaps and reach full volume before preserved speech. Ignore gaps shorter than keeps brief automatic gaps open.
 
 Manual gain points use straight lines between points and remain authoritative after reanalysis. See the [gain-envelope contract](docs/effective-envelopes.md) for how these layers combine. The aim is transparent attenuation without audible clicks, pumping or obvious ducking; confirm the result by listening. Existing renders made with the previous exponential fades need to be regenerated.
 
@@ -94,9 +107,9 @@ Read [How CleanSlate reduces microphone bleed](docs/ownership-explained.md) for 
 
 Analysis uses acoustic measurements and your speaker examples. It runs locally; there is no Nemotron runtime, download or analysis option.
 
-Supply aligned tracks; CleanSlate does not automatically synchronize them. Ownership scores are model estimates, not guaranteed accuracy. Review the result by listening, especially to Removed audio. Independent quality, listening and eight-speaker/two-hour Windows release qualification remain pending.
+Supply aligned tracks; CleanSlate does not automatically synchronize them. Ownership scores are model estimates, not guaranteed accuracy. Review the result by listening, especially to Removed audio. Formal independent quality and eight-speaker/two-hour release qualification are not established.
 
-The alpha remains experimental while independent quality, listening and long-session checks are pending. See the [evaluation tracker](.scratch/offline-supervised-editor/issues/14-independent-release-evaluation.md). The earlier Nemotron experiment is retained as a [research idea](docs/research/nemotron.md).
+The owner has accepted the current sound and editor for this alpha release. That acceptance does not establish formal independent benchmarks or fresh hardware qualification on every platform. See the [evaluation record](.scratch/offline-supervised-editor/issues/14-independent-release-evaluation.md). The earlier Nemotron experiment is retained as a [research idea](docs/research/nemotron.md).
 
 ## Documentation and development
 
