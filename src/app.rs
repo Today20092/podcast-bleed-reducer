@@ -4928,15 +4928,7 @@ impl AppLink {
 }
 
 fn menu_action(index: usize) -> Message {
-    match index {
-        0 => Message::Settings,
-        1 => Message::KeyboardShortcuts,
-        2 => Message::OpenLink(AppLink::Help),
-        3 => Message::OpenLink(AppLink::GitHub),
-        4 => Message::OpenLink(AppLink::ReportBug),
-        5 => Message::About,
-        _ => Message::CloseHelp,
-    }
+    crate::button_action::message(legacy_menu_action(index))
 }
 
 fn version_info(version: &str, build: Option<&str>, os: &str, arch: &str) -> String {
