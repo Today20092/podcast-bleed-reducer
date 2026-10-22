@@ -11189,9 +11189,7 @@ impl CleanSlateApp {
             .style(|theme, status| flat_button(theme, status, false))
             .hover_outline(false),
         );
-        let mut waveform_modes = row![text("Waveform").size(13)]
-            .spacing(4)
-            .align_y(iced::Center);
+        let mut waveform_modes = row![].spacing(4).align_y(iced::Center);
         for mode in [
             waveform::WaveformDisplay::Original,
             waveform::WaveformDisplay::Processed,
@@ -11223,7 +11221,8 @@ impl CleanSlateApp {
                 text("Timeline").size(16).font(iced::Font { weight: iced::font::Weight::Semibold, ..iced::Font::with_name("Segoe UI") }),
                 Space::new().width(Fill),
                 self.action_control(Command::CatchUp,
-                    button(text("Catch up").size(13)).padding([6, 8]).height(34)
+                    button(container(ToolbarIcon::CatchUp.view(None)).center(Fill))
+                        .padding(6).width(34).height(34)
                         .style(move |theme, status| flat_button(theme, status, catch_up))
                         .hover_outline(false).selected(catch_up)),
                 self.action_control(Command::Lock,
