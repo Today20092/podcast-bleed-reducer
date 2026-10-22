@@ -1,12 +1,14 @@
 # Local development, builds and releases
 
-Current policy: 2026-10-22. The owner authorized the alpha.7 release, documentation refresh and development-to-main promotion in [ticket 64](../.scratch/offline-supervised-editor/issues/64-alpha-release-preparation.md). Catch-up scrolling, waveform modes, dial smoothing and the latest transport/status refinements are implemented on development. Publication still requires the checks below. [Ticket 54](../.scratch/offline-supervised-editor/issues/54-local-build-consolidation.md) records historical consolidation measurements.
+Current policy: 2026-10-22. The owner authorized the release, documentation refresh and development-to-main promotion in completed [ticket 64](../.scratch/offline-supervised-editor/issues/64-alpha-release-preparation.md). Published alpha.8 supersedes alpha.7's failed dependency-license packaging attempt. Catch-up scrolling, waveform modes, dial smoothing and the latest transport/status refinements are implemented. Future releases repeat the checks below. [Ticket 54](../.scratch/offline-supervised-editor/issues/54-local-build-consolidation.md) records historical consolidation measurements.
 
 ## One place to work
 
 The primary checkout is `C:/Users/User/Documents/Codex/2026-08-14/podcast-automix-rust-gui`, on `development`. Keep only development and main as ongoing branch names. Main remains the reviewed release branch and GitHub's default branch. The detached `ticket14-frozen-baseline` checkout is intentional comparison evidence, not another development branch.
 
 The integrated development history includes adjustable shortcuts, the owner-approved FabFilter-inspired GUI pass (`6b99a9a`), rotary controls/Lucide/performance (`1235ca1`) and the October 22 follow-up through `6160da9`. The owner accepted the current development GUI for release preparation. Only development/main remain as ongoing local branches; release documentation agents use temporary scoped worktrees. Generated diagnostics and private scratch material remain local. Earlier receipts preserve the historical build and measurement limits.
+
+[Alpha.8 is published](https://github.com/Today20092/podcast-bleed-reducer/releases/tag/v0.1.0-alpha.8) from source `24361a2aa201fb7e22258f44a2a1be4626d58ce1`, promoted by [PR 18](https://github.com/Today20092/podcast-bleed-reducer/pull/18) and synchronized into development. [Four-platform source CI](https://github.com/Today20092/podcast-bleed-reducer/actions/runs/39741751147) and [four native packages](https://github.com/Today20092/podcast-bleed-reducer/actions/runs/39742979614) passed. All eight downloaded assets passed checksums and identity against the tested Actions artifacts. Windows Sandbox interactive export, classification save/reopen and host audition in all three listening modes passed their functional checks. [The receipt](research/alpha8-release-receipt-2026-10-22.md) records identities and remaining qualification limits. Main promotion, draft preparation and publication remain distinct steps for future releases.
 
 ## Everyday work
 
@@ -61,7 +63,7 @@ See [Cargo's build-cache documentation](https://doc.rust-lang.org/cargo/referenc
 
 Use GitHub → Actions → Desktop draft release for build progress/artifacts and GitHub → Releases for draft/public releases. Windows packages are ZIPs, Apple Silicon and Intel Mac packages are separate DMGs, and Linux packages are AppImages; each has a checksum. The workflow is [portable-release.yml](../.github/workflows/portable-release.yml), using [GitHub's documented triggers](https://github.com/github/docs/blob/main/content/actions/reference/workflows-and-actions/events-that-trigger-workflows.md).
 
-There is no automatic release after a particular number of features. Choose a version when the tested batch is ready, tag the reviewed source, verify every native package, then publish. The current authorized batch now targets alpha.8 after alpha.7 stopped at the dependency-license gate. Published alpha.6 links remain valid until the new assets are verified and published; the failed alpha.7 tag is retained unchanged.
+There is no automatic release after a particular number of features. Choose a version when the tested batch is ready, tag the reviewed source, verify every native package, then publish. The current batch is published as alpha.8 after alpha.7 stopped at the dependency-license gate. README downloads follow the actual published assets; the failed alpha.7 tag is retained unchanged.
 
 ## Release checklist
 

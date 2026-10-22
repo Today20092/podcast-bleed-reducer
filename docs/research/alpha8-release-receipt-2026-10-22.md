@@ -12,7 +12,30 @@ Local formatting, script fixtures and strict Clippy passed. Local test compilati
 
 PR 17 merged as `e5c37aa29856da002f148f9475ca171e8ad98674`; annotated tag `v0.1.0-alpha.7` points to that reviewed main commit. Development was synchronized to the merge. [Alpha.7 native package workflow](https://github.com/Today20092/podcast-bleed-reducer/actions/runs/39734525594) passed source checks but all four package collectors rejected missing `zune-core 0.4.12` license texts. No draft or public release was produced. The failed tag remains unchanged.
 
-The corrected candidate advances to alpha.8 and includes the upstream Zlib alternative for both `zune-core 0.4.12` and `zune-jpeg 0.4.21`. Their crate VCS receipts identify commits `f8fbb123d5ed04441e8324a555bfcda0cb1bd28f` and `fa2c767a01d7d9373911d0bf63e0588553d67e0e`; both contain identical LICENSE-ZLIB text. A local metadata audit of all resolved dependencies on all four desktop targets found no remaining missing license coverage. Source CI, package verification and clean offline Windows verification for alpha.8 remain pending; publication must wait for that boundary.
+Alpha.8 includes the upstream Zlib alternative for both `zune-core 0.4.12` and `zune-jpeg 0.4.21`. Their crate VCS receipts identify commits `f8fbb123d5ed04441e8324a555bfcda0cb1bd28f` and `fa2c767a01d7d9373911d0bf63e0588553d67e0e`; both contain identical LICENSE-ZLIB text. A local metadata audit of all resolved dependencies on all four desktop targets found no remaining missing license coverage.
+
+[Alpha.8 PR 18](https://github.com/Today20092/podcast-bleed-reducer/pull/18) passed [all four source checks](https://github.com/Today20092/podcast-bleed-reducer/actions/runs/39741751147): Windows 353 tests, each Mac/Linux target 349, zero failures and 20 ignored on each. Formatting, strict Clippy and packaging fixtures passed. Merge commit `24361a2aa201fb7e22258f44a2a1be4626d58ce1` is the immutable `v0.1.0-alpha.8` source; development is synchronized. [Package run 39742979614](https://github.com/Today20092/podcast-bleed-reducer/actions/runs/39742979614) passed all four native package jobs and created one draft with eight assets. The actual release downloads passed their checksum files and match the checked Actions artifacts byte for byte.
+
+| Package | SHA-256 |
+| --- | --- |
+| Windows x64 ZIP | `0da2697dc6c59c6f6b490440331fbfa4841f803c6d1dd4fe277b238099ba67a0` |
+| Linux x64 AppImage | `527d2da04b67e8c0ef86c3d93809117d757ad41769d5f4632c951ffc2cc6d82d` |
+| macOS arm64 DMG | `b3bad4afa0dba620073b2573f059b3b826017fad87d7657d26e03717ac72c611` |
+| macOS x64 DMG | `b04d815bc5b54f2e9ccab2029460048f88ecfeaf7219e5443120ca9d85f04175` |
+
+## Clean Windows acceptance
+
+The downloaded Windows package passed extracted-file integrity checks; its manifest reports alpha.8, the source commit above and `dirty: false`. Its executable and supporting files are preserved outside the checkout in `C:/Users/User/Documents/Codex/Builds/CleanSlate-alpha8-verification/package/`.
+
+A fresh Windows 11 Sandbox had networking, clipboard redirection and vGPU disabled. Only the package and owner-authorized fixture copies were mapped read-only, with a separate writable results folder. No developer runtime or model cache was supplied. The packaged self-check reported `PASS: offline model inference, analysis, project save/reopen, render and cancellation.`
+
+Interactive checks imported three synchronized ten-minute microphone WAVs; reopened a copy of the owner's project; relinked its three sources with all 18 human examples retained; resaved existing solo and room-tone classifications; analyzed offline; advanced Original, Processed and Removed playback; saved and reopened the managed project; and exported three separate WAVs. The GUI confirmed successful export. Independent RIFF inspection confirmed each output is mono, 48 kHz, 32-bit float, 28,800,000 frames and 600 seconds. Sources were read-only throughout. Reopening correctly requires Analyze before processed output is available. Catch up remained selected through example navigation. These checks establish package operation, not a new independent listening-quality result.
+
+The same downloaded binary also opened the representative project on the Windows 11 host, analyzed its ten-minute sources and advanced Original, Processed and Removed playback through the host audio device, including the labeled Speaker 1 + Speaker 2 overlap region. Stop and mode switching completed without device errors. This is an operational device check; no fresh subjective listening or independent sound-quality score is claimed. The owner's earlier development listening acceptance remains the quality evidence.
+
+## Publication
+
+[CleanSlate v0.1.0-alpha.8](https://github.com/Today20092/podcast-bleed-reducer/releases/tag/v0.1.0-alpha.8) was published as an experimental prerelease on 2026-10-22 with four native packages and their four SHA-256 files. All eight public asset URLs returned HTTP 200 without authentication after publication. The reviewed tag and package assets are immutable; final documentation and download links are reconciled through [PR 19](https://github.com/Today20092/podcast-bleed-reducer/pull/19) and synchronized back to development.
 
 ## Known limits
 

@@ -35,9 +35,9 @@ The [performance summary](research/alpha7-performance-summary-2026-10-22.md) rec
 
 ## Verification and limits
 
-The development source at `6160da9` passed 353 tests with zero failures and 20 existing opt-in checks ignored, plus formatting, strict all-target/all-feature Clippy and script fixtures. Native Windows checks covered compact and wide layouts, Dark and Light appearance, analysis, repeated catch-up scrolling and shortcut activation. The owner accepted the development application for release preparation on 2026-10-22.
+The reviewed alpha.8 source is `24361a2aa201fb7e22258f44a2a1be4626d58ce1`. All four native source checks passed: Windows 353 tests, each Mac/Linux target 349, zero failures and 20 opt-in checks ignored on each, plus formatting, strict Clippy and script fixtures. All four native package checks passed. Native Windows checks covered compact and wide layouts, Dark and Light appearance, analysis, repeated catch-up scrolling and shortcut activation. The owner accepted the development application for release preparation on 2026-10-22.
 
-Final alpha.8 package checks, immutable tag/build identity and downloaded-package verification are recorded by the release preparation task before publication. Development checks alone do not establish fresh native qualification on every platform.
+The [release verification receipt](research/alpha8-release-receipt-2026-10-22.md) records the immutable tag, package hashes and clean offline Windows checks. Downloaded release packages match the checked build artifacts. Physical Mac/Linux desktop qualification remains pending; native CI does not establish physical sound-device or desktop qualification.
 
 Quiet overlap without representative labels can receive a low ownership estimate. Listen to wanted speech and overlap, add representative examples and use protection or manual gain edits before exporting. Independent sound-quality comparisons, physical device-disconnect recovery and long-session qualification are not claimed complete. Keep original recordings and project backups.
 

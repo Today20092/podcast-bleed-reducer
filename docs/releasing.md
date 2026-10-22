@@ -1,7 +1,20 @@
 # Desktop releases
 
-The current release candidate is `v0.1.0-alpha.8`, following published alpha.6.
+The current published prerelease is [v0.1.0-alpha.8](https://github.com/Today20092/podcast-bleed-reducer/releases/tag/v0.1.0-alpha.8), following alpha.6.
 Alpha.7 stopped at the dependency-license packaging gate and was not published.
+Alpha.8 tag source `24361a2aa201fb7e22258f44a2a1be4626d58ce1` was promoted through
+[PR 18](https://github.com/Today20092/podcast-bleed-reducer/pull/18).
+[Source CI](https://github.com/Today20092/podcast-bleed-reducer/actions/runs/39741751147)
+and [all four native packages plus draft preparation](https://github.com/Today20092/podcast-bleed-reducer/actions/runs/39742979614)
+passed. The draft's four packages and four checksum files were downloaded and
+matched against the tested Actions artifacts before publication. Windows Sandbox
+interactive export produced three 600-second, 48 kHz mono 32-bit float WAVs with
+independently inspected RIFF headers. Classification save/reopen retained 18 references;
+the actual host package analyzed and advanced in all three listening modes without
+device errors. Ticket 64 is complete. See the
+[release receipt](research/alpha8-release-receipt-2026-10-22.md) for identities and
+native acceptance limits. These functional checks are not a new subjective sound-quality
+claim or fresh Mac/Linux hardware qualification.
 The owner authorized promotion and release in ticket 64. Use the current
 [branch workflow and per-release checklist](branch-workflow.md#release-checklist).
 Ticket 14 is owner-closed; retired 15/25 now route to that repeatable checklist.
