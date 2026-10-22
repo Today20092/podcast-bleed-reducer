@@ -1,6 +1,6 @@
 # Local development, builds and releases
 
-Current policy: 2026-10-22. The owner authorized promoting the accepted development batch to main as stable 1.0.0 under [ticket 71](../.scratch/offline-supervised-editor/issues/71-stable-1.0-main-promotion.md). The [stable notes](release-notes.md) cover the source and compatibility promise. Published downloads remain alpha.8 until 1.0.0 packages pass the checks below and are published. Completed [ticket 64](../.scratch/offline-supervised-editor/issues/64-alpha-release-preparation.md) records alpha.8, which superseded alpha.7's failed dependency-license packaging attempt. [Ticket 54](../.scratch/offline-supervised-editor/issues/54-local-build-consolidation.md) records historical consolidation measurements.
+Current policy: 2026-10-22. Stable 1.0.0 is published under [ticket 71](../.scratch/offline-supervised-editor/issues/71-stable-1.0-main-promotion.md), after checked development-to-main promotion and explicit owner publication authorization. The [stable notes](release-notes.md) cover the workflow and compatibility promise. Completed [ticket 64](../.scratch/offline-supervised-editor/issues/64-alpha-release-preparation.md) records the preceding alpha.8 publication, which superseded alpha.7's failed dependency-license packaging attempt. [Ticket 54](../.scratch/offline-supervised-editor/issues/54-local-build-consolidation.md) records historical consolidation measurements.
 
 ## One place to work
 
@@ -63,11 +63,11 @@ See [Cargo's build-cache documentation](https://doc.rust-lang.org/cargo/referenc
 
 Use GitHub → Actions → Desktop draft release for build progress/artifacts and GitHub → Releases for draft/public releases. Windows packages are ZIPs, Apple Silicon and Intel Mac packages are separate DMGs, and Linux packages are AppImages; each has a checksum. The workflow is [portable-release.yml](../.github/workflows/portable-release.yml), using [GitHub's documented triggers](https://github.com/github/docs/blob/main/content/actions/reference/workflows-and-actions/events-that-trigger-workflows.md).
 
-There is no automatic release after a particular number of features. Choose a version when the tested batch is ready, tag the reviewed source, verify every native package, then publish. The current batch is published as alpha.8 after alpha.7 stopped at the dependency-license gate. README downloads follow the actual published assets; the failed alpha.7 tag is retained unchanged.
+There is no automatic release after a particular number of features. Choose a version when the tested batch is ready, tag the reviewed source, verify every native package, then publish. The current stable batch is 1.0.0. README downloads follow actual published assets; historical alpha tags and packages are retained unchanged.
 
 ## Release checklist
 
-Choose the release version and status using the [versioning and stability policy](releasing.md#versioning-and-stability). The owner accepted 1.0.0 as the next stable target; the existing alpha.8 publication remains historical evidence. Complete the stable-transition steps in that policy during release preparation.
+Choose future release versions and status using the [versioning and stability policy](releasing.md#versioning-and-stability). The first stable transition completed with 1.0.0; earlier alpha publication remains historical evidence. Apply the per-release checks below to each new candidate.
 
 Owner accepted the current application's sound and performance on 2026-10-20 and closed 14. Ticket 15 is retired into this procedure, including package checks carried from 25. Repeat these mechanical checks when preparing an owner-authorized release; they are not an ongoing feature backlog or a request to recreate already published packages.
 

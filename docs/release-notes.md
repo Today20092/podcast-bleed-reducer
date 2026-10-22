@@ -1,8 +1,8 @@
 # CleanSlate 1.0.0
 
-CleanSlate's first stable source delivers the accepted offline podcast workflow: import synchronized microphone tracks, label speaker examples, analyze, audition and edit gain, save the project, then export processed WAVs. The owner approved promoting the current development branch to main on 2026-10-22.
+CleanSlate's first stable release delivers the accepted offline podcast workflow: import synchronized microphone tracks, label speaker examples, analyze, audition and edit gain, save the project, then export processed WAVs. The owner approved promotion and publication on 2026-10-22.
 
-This page describes 1.0.0 source and release preparation. Public downloads remain [v0.1.0-alpha.8](https://github.com/Today20092/podcast-bleed-reducer/releases/tag/v0.1.0-alpha.8) until new native packages are checked and published. Historical [alpha release notes](alpha-release-notes.md), screenshots and package receipts retain their original identities.
+Download [v1.0.0](https://github.com/Today20092/podcast-bleed-reducer/releases/tag/v1.0.0) for Windows x64, Mac Apple Silicon, Mac Intel or Linux x64, with a SHA-256 checksum for each package. Historical [alpha release notes](alpha-release-notes.md), screenshots and package receipts retain their original identities.
 
 ## Changes since alpha.8
 

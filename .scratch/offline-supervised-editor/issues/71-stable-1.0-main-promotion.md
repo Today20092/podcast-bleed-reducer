@@ -1,6 +1,6 @@
 # Prepare stable 1.0.0 and promote development to main
 
-Status: claimed
+Status: done
 Type: release
 Assignee: Codex
 Blocked by: none
@@ -12,12 +12,20 @@ The owner accepts development and requests promotion into main as the first stab
 
 ## Acceptance
 
-- [ ] Align Cargo metadata, package defaults and stable-aware draft release automation; retain prerelease support and package safety checks.
-- [ ] Update current status/help/README/release notes truthfully, preserving historical alpha records, current public downloads and known limitations.
-- [ ] Run local checks and standard GUI build/self-check; record exact source and executable identity. The owner approved the appearance and requested no more computer control.
-- [ ] Promote development through a reviewed/check-passing PR to main using a merge commit; synchronize main back into development and retain main as GitHub's default branch.
-- [ ] Record native package verification/publication status accurately. A main merge does not itself publish packages; retain existing downloads until verified replacements are public.
+- [x] Align Cargo metadata, package defaults and stable-aware draft release automation; retain prerelease support and package safety checks.
+- [x] Update current status/help/README/release notes truthfully, preserving historical alpha records, current public downloads and known limitations.
+- [x] Run local checks and standard GUI build/self-check; record exact source and executable identity. The owner approved the appearance and requested no more computer control.
+- [x] Promote development through a reviewed/check-passing PR to main using a merge commit; synchronize main back into development and retain main as GitHub's default branch.
+- [x] Record native package verification/publication status accurately. A main merge does not itself publish packages; retain existing downloads until verified replacements are public.
 
 ## Authorization and limits
 
 This request authorizes stable release preparation and main promotion. No new algorithm, plugin, source alignment or unrelated research implementation is included. The compatibility promise and physical-platform/quality limits in docs/releasing.md remain authoritative. No new listening or hardware evidence is implied by the stable label.
+
+## Publication authorization — 2026-10-22
+
+The owner explicitly requested publishing stable 1.0.0 with all download packages and merging the generated README download update after checks pass. The annotated `v1.0.0` tag identifies reviewed main `68198b3703a6fb4ec0aef53b9712acf44a87cacd`. The tagged package workflow is run 39819315222. The earlier build-only preparation run 39816454872 passed all four native packages; its application source tree is identical to the tagged merge commit. Publication will use the final tagged-run assets, with checksums and artifact identity verified before making them public.
+
+## Results — 2026-10-22
+
+Stable v1.0.0 is published as the latest release with all four packages and checksums. All five tagged-workflow jobs passed; all eight draft files matched checked artifacts and all archive checksums matched. The final extracted Windows package passed integrity and offline self-checks. Source PR 21 passed every required platform check and merged with preserved ancestry; main remains the default branch. [The release receipt](../../../docs/research/stable1-release-receipt-2026-10-22.md) records source/package hashes, checks, reviews and explicitly unperformed native qualification. The publication documentation accompanies the generated README update, whose merge remains gated by required checks. This supersedes earlier preparation-only statements without claiming fresh hardware or subjective-quality evidence.

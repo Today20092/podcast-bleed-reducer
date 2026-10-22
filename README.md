@@ -10,7 +10,7 @@
 CleanSlate is an offline microphone bleed-reduction tool for multitrack podcasts. It uses a supervised algorithm to learn from a few examples of who is speaking, then attenuate each microphone when its assigned person is silent. Listen to the result and adjust the gain where needed.
 
 <p align="center">
-  <a href="docs/releasing.md#versioning-and-stability"><img alt="Source: stable 1.0.0" src="https://img.shields.io/badge/Source-Stable%201.0.0-C4A7E7?style=for-the-badge&amp;logo=github&amp;labelColor=493267"></a>
+  <a href="docs/releasing.md#versioning-and-stability"><img alt="Release: stable 1.0.0" src="https://img.shields.io/badge/Release-Stable%201.0.0-C4A7E7?style=for-the-badge&amp;logo=github&amp;labelColor=493267"></a>
   <a href="#download"><img alt="Release targets: Windows, macOS and Linux" src="https://img.shields.io/badge/Targets-Windows%20%7C%20macOS%20%7C%20Linux-B5DFE8?style=for-the-badge&amp;labelColor=29626B"></a>
   <a href="docs/ownership-explained.md"><img alt="Analysis runs offline" src="https://img.shields.io/badge/Analysis-Offline-A2FFB0?style=for-the-badge&amp;labelColor=246732"></a>
   <br>
@@ -20,7 +20,7 @@ CleanSlate is an offline microphone bleed-reduction tool for multitrack podcasts
 
 [Download](#download) · [Usage guide](docs/editor-workflow.md) · [Release notes](docs/release-notes.md) · [How it works](docs/ownership-explained.md) · [Roadmap](ROADMAP.md) · [Contribute](CONTRIBUTING.md) · [Report an issue](https://github.com/Today20092/podcast-bleed-reducer/issues/new/choose)
 
-The accepted offline workflow is now stable in the **1.0.0 source**. Stable means the documented workflow and saved-data compatibility are maintained; listen to your own recording before exporting. Native 1.0.0 packages are being prepared and verified. The download table below still points to the previously published alpha.8 packages.
+**CleanSlate 1.0.0 is the first stable release**, with downloads for Windows, both Mac architectures and Linux. Stable means the documented workflow and saved-data compatibility are maintained; listen to your own recording before exporting.
 
 ## Watch the demo
 
@@ -39,19 +39,19 @@ Choose your platform below. CleanSlate runs locally without Python, a model down
 <!-- downloads:start -->
 | Platform | Download | How to run |
 | --- | --- | --- |
-| Windows 11, 64-bit | [Download v0.1.0-alpha.8](https://github.com/Today20092/podcast-bleed-reducer/releases/download/v0.1.0-alpha.8/CleanSlate-0.1.0-alpha.8-windows-x64.zip) · [SHA-256](https://github.com/Today20092/podcast-bleed-reducer/releases/download/v0.1.0-alpha.8/CleanSlate-0.1.0-alpha.8-windows-x64.zip.sha256) | Extract the entire ZIP, then open `CleanSlate.exe`. Keep the support files together. |
-| Mac, Apple Silicon, macOS 13+ | [Download v0.1.0-alpha.8](https://github.com/Today20092/podcast-bleed-reducer/releases/download/v0.1.0-alpha.8/CleanSlate-0.1.0-alpha.8-macos-arm64.dmg) · [SHA-256](https://github.com/Today20092/podcast-bleed-reducer/releases/download/v0.1.0-alpha.8/CleanSlate-0.1.0-alpha.8-macos-arm64.dmg.sha256) | Open the DMG and drag `CleanSlate.app` to Applications. |
-| Mac, Intel, macOS 13+ | [Download v0.1.0-alpha.8](https://github.com/Today20092/podcast-bleed-reducer/releases/download/v0.1.0-alpha.8/CleanSlate-0.1.0-alpha.8-macos-x64.dmg) · [SHA-256](https://github.com/Today20092/podcast-bleed-reducer/releases/download/v0.1.0-alpha.8/CleanSlate-0.1.0-alpha.8-macos-x64.dmg.sha256) | Open the DMG and drag `CleanSlate.app` to Applications. |
-| Linux, 64-bit x86, glibc 2.35+ | [Download v0.1.0-alpha.8](https://github.com/Today20092/podcast-bleed-reducer/releases/download/v0.1.0-alpha.8/CleanSlate-0.1.0-alpha.8-linux-x64.AppImage) · [SHA-256](https://github.com/Today20092/podcast-bleed-reducer/releases/download/v0.1.0-alpha.8/CleanSlate-0.1.0-alpha.8-linux-x64.AppImage.sha256) | Allow the AppImage to run as a program in its file properties, then open it. |
+| Windows 11, 64-bit | [Download v1.0.0](https://github.com/Today20092/podcast-bleed-reducer/releases/download/v1.0.0/CleanSlate-1.0.0-windows-x64.zip) · [SHA-256](https://github.com/Today20092/podcast-bleed-reducer/releases/download/v1.0.0/CleanSlate-1.0.0-windows-x64.zip.sha256) | Extract the entire ZIP, then open `CleanSlate.exe`. Keep the support files together. |
+| Mac, Apple Silicon, macOS 13+ | [Download v1.0.0](https://github.com/Today20092/podcast-bleed-reducer/releases/download/v1.0.0/CleanSlate-1.0.0-macos-arm64.dmg) · [SHA-256](https://github.com/Today20092/podcast-bleed-reducer/releases/download/v1.0.0/CleanSlate-1.0.0-macos-arm64.dmg.sha256) | Open the DMG and drag `CleanSlate.app` to Applications. |
+| Mac, Intel, macOS 13+ | [Download v1.0.0](https://github.com/Today20092/podcast-bleed-reducer/releases/download/v1.0.0/CleanSlate-1.0.0-macos-x64.dmg) · [SHA-256](https://github.com/Today20092/podcast-bleed-reducer/releases/download/v1.0.0/CleanSlate-1.0.0-macos-x64.dmg.sha256) | Open the DMG and drag `CleanSlate.app` to Applications. |
+| Linux, 64-bit x86, glibc 2.35+ | [Download v1.0.0](https://github.com/Today20092/podcast-bleed-reducer/releases/download/v1.0.0/CleanSlate-1.0.0-linux-x64.AppImage) · [SHA-256](https://github.com/Today20092/podcast-bleed-reducer/releases/download/v1.0.0/CleanSlate-1.0.0-linux-x64.AppImage.sha256) | Allow the AppImage to run as a program in its file properties, then open it. |
 <!-- downloads:end -->
 
 On a Mac, **Apple menu → About This Mac** shows either an Apple chip or an Intel processor. Linux packages target Ubuntu 22.04 or newer and require a working desktop and audio system. If your system cannot mount an AppImage, run it with `--appimage-extract-and-run`.
 
-These are experimental alpha packages. Windows builds are unsigned. Mac builds use ad-hoc signing and are not notarized, so the operating system may require approval to open them. Review your own recording before export; formal independent quality and long-session qualification are not established. See the [release guide](docs/releasing.md) for checksums and package checks.
+Windows builds are unsigned. Mac builds use ad-hoc signing and are not notarized, so the operating system may require approval to open them. Review your own recording before export; formal independent quality and long-session qualification are not established. See the [release guide](docs/releasing.md) for checksums and package checks.
 
 ## Try it
 
-Download the available package for your platform [above](#download), then open it using the steps in the table. Those downloads remain alpha.8 until stable packages are published. To try the stable 1.0.0 source, follow the [build guide](docs/development.md).
+Download the stable package for your platform [above](#download), then open it using the steps in the table. To build from source, follow the [build guide](docs/development.md).
 
 [![From aligned tracks to processed WAVs.](docs/diagrams/workflow.svg)](docs/diagrams/workflow.svg)
 
@@ -73,7 +73,7 @@ The editor after Analyze, captured during alpha.7 preparation. The stable source
 
 ## What's new in 1.0.0
 
-The first stable source combines the accepted offline editor with the menu and shortcut improvements added after alpha.8. Existing projects, speaker examples, manual gain edits and preferences remain part of the compatibility contract.
+The first stable release combines the accepted offline editor with the menu and shortcut improvements added after alpha.8. Existing projects, speaker examples, manual gain edits and preferences remain part of the compatibility contract.
 
 - Catch up keeps the timeline still between smooth right-edge scrolls. It stays enabled when you navigate; use the button or customizable `Shift+C` binding to change it.
 - Original, Processed and Both waveform buttons let you inspect the effect of gain independently of the audio you are monitoring.
