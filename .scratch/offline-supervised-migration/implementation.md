@@ -1,5 +1,7 @@
 # Offline supervised editor implementation sequence
 
+2026-10-22 owner-authorized stable preparation: [71](../offline-supervised-editor/issues/71-stable-1.0-main-promotion.md) is claimed for stable 1.0.0 metadata/docs/automation and a checked development-to-main merge PR. It adds one active release task to the existing cleanup queue. The earlier menu/action acceptance and owner instruction against further computer control remain in force; public package status must remain factual.
+
 2026-10-22 owner-accepted development integration: menu redesign 60, registered actions/shortcuts 63 and toolbar icon cleanup 69 are done. The owner approved the development appearance and explicitly waived further computer control. The [combined receipt](../../docs/research/menu-actions-integration-2026-10-22.md) records software checks, source/executable identity and unperformed native automation. This supersedes their earlier pending-owner/ready states; no release is published.
 
 2026-10-22 release policy: [68 — Semantic versioning and stable release policy](../offline-supervised-editor/issues/68-semver-release-policy.md) records the owner-accepted 1.0.0 target and the [release guide's compatibility/versioning rules](../../docs/releasing.md#versioning-and-stability). This is a documentation task; the currently published alpha.8 identity and existing feature queue are unchanged. A release-specific preparation ticket will own version metadata, current public copy, automation readiness and publication checks.
@@ -24,11 +26,12 @@
 
 ## Current queue — reconciled 2026-10-22
 
-The owner requested closing implemented work after alpha.8 shipped, then accepted menu/action/toolbar tickets 60/63/69 for development integration. The build queue retains **1 active implementation ticket and 2 deferred proposals**; live-plugin discovery is outside this queue. GUI polish (23), adjustable shortcuts (41) and Catch up (42) are done on owner acceptance of the implemented release. Unperformed native qualification checks from closed tickets remain recorded in the [recurring editor verification procedure](../../docs/branch-workflow.md#editor-regression-coverage); closure does not claim those checks passed.
+The owner requested closing implemented work after alpha.8 shipped, then accepted menu/action/toolbar tickets 60/63/69 for development integration and authorized stable preparation 71. The queue retains cleanup 22 and release task 71, with 2 deferred proposals; live-plugin discovery is outside this queue. GUI polish (23), adjustable shortcuts (41) and Catch up (42) are done on owner acceptance of the implemented release. Unperformed native qualification checks from closed tickets remain recorded in the [recurring editor verification procedure](../../docs/branch-workflow.md#editor-regression-coverage); closure does not claim those checks passed.
 
 | Ticket | Remaining work | State |
 | --- | --- | --- |
 | [22](../offline-supervised-editor/issues/22-local-storage-cleanup.md) | Remove the retired recovery build target; Git cleanup is already verified | Claimed; cleanup remains |
+| [71](../offline-supervised-editor/issues/71-stable-1.0-main-promotion.md) | Prepare stable 1.0.0 and promote checked development into main | Claimed |
 
 [17 — Advanced training panel](../offline-supervised-editor/issues/17-advanced-training-panel.md) and [35 — Waveform-overlay editing](../offline-supervised-editor/issues/35-waveform-automation-editor-design.md) remain deferred.
 
