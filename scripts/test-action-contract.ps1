@@ -11,8 +11,7 @@ try {
 mod contract { include!(r#"$source"#); }
 struct Message;
 struct NewAction;
-fn activate(action: impl contract::ButtonAction<Message>) -> Message { contract::message(action) }
-fn omitted_registration() { activate(NewAction); }
+fn omitted_registration() { let _: Message = contract::message(NewAction); }
 "@
     [IO.File]::WriteAllText($fixture, $example)
     & rustc --edition 2024 --crate-name action_contract --crate-type lib --emit metadata $fixture -o $metadata 2> $diagnostics
