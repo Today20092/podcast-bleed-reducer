@@ -13,6 +13,7 @@ pub(crate) enum Command {
     FitSelection,
     Center,
     Lock,
+    CatchUp,
     Help,
     Menu,
     Reference,
@@ -129,6 +130,12 @@ pub(crate) const DEFINITIONS: &[Definition] = &[
         name: "Toggle playhead lock",
         context: Context::Workspace,
         defaults: &["l"],
+    },
+    Definition {
+        command: CatchUp,
+        name: "Toggle catch up",
+        context: Context::Workspace,
+        defaults: &["Shift+c"],
     },
     Definition {
         command: Help,

@@ -19,6 +19,12 @@ Labels: ready-for-agent
 
 ## Results
 
+Final follow-up validation: scripts/check.ps1 -Local passed 353 tests, zero failures, 20 existing ignored, formatting, strict all-target/all-feature Clippy and script fixtures. An overlapping check initially could not replace the reopened GUI executable (Windows access denied); closing the unchanged test window and rerunning passed. The final scripts/gui-dev.ps1 rebuild/launch succeeded, with executable SHA256 4405D8275B827854C75B0C00B8EF6AD091584E2DBBFEC58A0795FDE1E7C59024, superseding the earlier follow-up binary hash below. Source is development base f9fbe33 plus this correction. No project edits were saved.
+
+2026-10-22 follow-up: reopened for the owner's request to organize expanded Details into aligned labeled timing rows instead of a wrapped sentence. Keep Details collapsed by default; preserve informational timing data separately from actionable messages.
+
+Follow-up delivered: total analysis time is separated from five aligned stage/duration rows. Native Dark checks at 1026×932 and 2560×1392 show all rows fitting with Details open. The completed-analysis test checks structured stage data and collapsed/reset behavior. Impeccable layout detector returned no findings; native Rust coverage is not implied. Rebuilt through scripts/gui-dev.ps1 from development base f9fbe33 plus this correction, then opened the retained development project. Executable C:/Users/User/AppData/Local/CleanSlate/BuildCache/debug/rust-app.exe; SHA256 97016A8C6646CA8FEB4BB7485BD1FD3CC44BB8A5EA863403A7E217DD5725993E. Light/enlarged-text follow-up checks were not repeated.
+
 Claimed on development before editing; dependencies 59/61 are done. Installed user-level Impeccable 4.7.0 using the requested official npx installer with Codex provider and no hooks. Its scoped distill guidance is applied to the incumbent Rust/Iced interface; no new product/design onboarding is needed for this refinement. Menu redesign remains in ticket 60.
 
 Implemented three native icon buttons with selected states and delayed descriptive hover hints at the right of the timeline toolbar, separated from navigation. Authored waveform SVGs use the existing themed SVG path; no application dependency was added. Completed analysis now stores its informational timing summary separately from actionable feedback, keeping Ready compact and exposing timings through Details. Errors, stale/source guidance and active analysis/cancellation remain visible.

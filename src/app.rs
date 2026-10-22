@@ -336,7 +336,8 @@ mod tests {
             app.analysis_details
                 .as_ref()
                 .unwrap()
-                .contains("source checks")
+                .iter()
+                .any(|(label, seconds)| *label == "Source checks" && seconds.is_finite())
         );
         assert!(!app.analysis_details_open);
         let parameters = app.preview_parameters;
@@ -349,7 +350,7 @@ mod tests {
     }
 
     #[test]
-    fn catch_up_control_is_exclusive_with_lock_and_pan_restores_manual_view() {
+    fn catch_up_stays_selected_through_pan_until_explicitly_disabled() {
         use super::{CleanSlateApp, Message, PlaybackScroll};
         let mut app = CleanSlateApp::default();
         assert_eq!(app.playback_scroll, PlaybackScroll::Page);
@@ -361,11 +362,45 @@ mod tests {
             delta_x: -10.0,
             width: 1000.0,
         }));
-        assert_eq!(app.playback_scroll, PlaybackScroll::Off);
-        let _ = app.update(Message::ToggleCatchUp);
+        assert_eq!(app.playback_scroll, PlaybackScroll::Page);
+        let _ = app.update(Message::Timeline(crate::timeline::TimelineEvent::PanStart));
+        let _ = app.update(Message::Timeline(crate::timeline::TimelineEvent::Pan {
+            delta_x: 10.0,
+            width: 1000.0,
+        }));
+        assert_eq!(app.playback_scroll, PlaybackScroll::Page);
+        let _ = app.update(Message::Timeline(crate::timeline::TimelineEvent::PanEnd));
         assert_eq!(app.playback_scroll, PlaybackScroll::Page);
         let _ = app.update(Message::ToggleCatchUp);
         assert_eq!(app.playback_scroll, PlaybackScroll::Off);
+    }
+
+    #[test]
+    fn catch_up_shortcut_remaps_persists_and_uses_the_same_toggle() {
+        use super::{CleanSlateApp, Command, Message, PlaybackScroll};
+        use iced::keyboard::{Key, Modifiers};
+        let mut app = CleanSlateApp::default();
+        let key = Key::Character("c".into());
+        let _ = app.update(Message::KeyPressed(key.clone(), Modifiers::SHIFT));
+        assert_eq!(app.playback_scroll, PlaybackScroll::Off);
+        let binding =
+            crate::shortcuts::Binding::capture(&Key::Character("j".into()), Modifiers::SHIFT)
+                .unwrap();
+        app.shortcuts
+            .assign(Command::CatchUp, Some(binding))
+            .unwrap();
+        let saved = serde_json::to_value(&app.shortcuts).unwrap();
+        let (reloaded, errors) = crate::shortcuts::Shortcuts::from_value(&saved);
+        assert!(errors.is_empty());
+        app.shortcuts = reloaded;
+        assert_eq!(app.shortcuts.hint(Command::CatchUp), "Shift+J");
+        let _ = app.update(Message::KeyPressed(key, Modifiers::SHIFT));
+        assert_eq!(app.playback_scroll, PlaybackScroll::Off);
+        let _ = app.update(Message::KeyPressed(
+            Key::Character("j".into()),
+            Modifiers::SHIFT,
+        ));
+        assert_eq!(app.playback_scroll, PlaybackScroll::Page);
     }
 
     #[test]
@@ -1315,11 +1350,7 @@ mod tests {
                     delta_x: -25.0,
                     width: 100.0,
                 }));
-                let expected = if mode == PlaybackScroll::Locked {
-                    mode
-                } else {
-                    PlaybackScroll::Off
-                };
+                let expected = mode;
                 assert_eq!(app.playback_scroll, expected);
                 if mode == PlaybackScroll::Locked && !cancel {
                     let _ = app.update(Message::LockPlayhead);
@@ -1341,7 +1372,14 @@ mod tests {
                         50.0
                     );
                 } else {
-                    assert_eq!(app.playback_scroll, PlaybackScroll::Off);
+                    assert_eq!(
+                        app.playback_scroll,
+                        if mode == PlaybackScroll::Locked {
+                            PlaybackScroll::Off
+                        } else {
+                            mode
+                        }
+                    );
                     assert_eq!(app.timeline.start(), panned);
                 }
                 assert_eq!(app.timeline.playhead(), 42 * crate::TICKS_PER_SECOND);
@@ -4911,7 +4949,7 @@ pub struct CleanSlateApp {
     example_draft: Option<TimeRange>,
     gain_menu: Option<(usize, u64, iced::Point)>,
     setup_details: bool,
-    analysis_details: Option<String>,
+    analysis_details: Option<[(&'static str, f64); 6]>,
     analysis_details_open: bool,
     reference_stale: bool,
     reference_analyze_requested: bool,
@@ -7181,6 +7219,7 @@ impl CleanSlateApp {
             Removed => Some(Message::Removed),
             Center => Some(Message::CenterPlayhead),
             Lock => Some(Message::LockPlayhead),
+            CatchUp => Some(Message::ToggleCatchUp),
             Help => Some(Message::Help),
             Menu => Some(Message::Menu),
             Reference => Some(Message::KeyboardShortcuts),
@@ -7261,15 +7300,23 @@ impl CleanSlateApp {
                                 Ok(effective) => {
                                     let timings = &analysis.timings;
                                     self.messages.clear();
-                                    self.analysis_details = Some(format!(
-                                        "Analysis completed in {:.1}s · source checks {:.1}s · audio preparation {:.1}s · examples {:.1}s · speaker analysis {:.1}s · timeline {:.1}s",
-                                        processing.started_at.elapsed().as_secs_f64(),
-                                        timings.source_validation_ms / 1000.0,
-                                        timings.audio_preparation_ms / 1000.0,
-                                        timings.reference_readiness_ms / 1000.0,
-                                        timings.ownership_ms / 1000.0,
-                                        (timings.temporal_ms + timings.overview_ms) / 1000.0,
-                                    ));
+                                    self.analysis_details = Some([
+                                        (
+                                            "Total analysis",
+                                            processing.started_at.elapsed().as_secs_f64(),
+                                        ),
+                                        ("Source checks", timings.source_validation_ms / 1000.0),
+                                        (
+                                            "Audio preparation",
+                                            timings.audio_preparation_ms / 1000.0,
+                                        ),
+                                        ("Examples", timings.reference_readiness_ms / 1000.0),
+                                        ("Speaker analysis", timings.ownership_ms / 1000.0),
+                                        (
+                                            "Timeline",
+                                            (timings.temporal_ms + timings.overview_ms) / 1000.0,
+                                        ),
+                                    ]);
                                     let preview = analysis.preview(project, &effective);
                                     if let Some(audition) = &self.audition {
                                         audition.replace_envelopes(preview.envelopes.clone());
@@ -8301,7 +8348,9 @@ impl CleanSlateApp {
                 if self.selected_example == Some(id) {
                     if let Some((start, end)) = self.timeline.selection() {
                         self.timeline.show_range(start, end);
-                        self.playback_scroll = PlaybackScroll::Off;
+                        if self.playback_scroll == PlaybackScroll::Locked {
+                            self.playback_scroll = PlaybackScroll::Off;
+                        }
                         self.timeline.seek(start);
                     }
                     if play {
@@ -8348,7 +8397,9 @@ impl CleanSlateApp {
                     } else {
                         if self.example_draft.is_none() {
                             self.stop_audition();
-                            self.playback_scroll = PlaybackScroll::Off;
+                            if self.playback_scroll == PlaybackScroll::Locked {
+                                self.playback_scroll = PlaybackScroll::Off;
+                            }
                         }
                         self.example_draft = Some(range);
                         self.timeline.set_selection(Some((range.start, range.end)));
@@ -9129,16 +9180,15 @@ impl CleanSlateApp {
                     }
                 }
                 TimelineEvent::Pan { delta_x, width } => {
-                    if !self.timeline.is_middle_panning() {
+                    if !self.timeline.is_middle_panning()
+                        && self.playback_scroll == PlaybackScroll::Locked
+                    {
                         self.playback_scroll = PlaybackScroll::Off;
                     }
                     self.timeline.pan_by_pixels(delta_x, width)
                 }
                 TimelineEvent::PanStart => {
                     self.timeline.begin_middle_pan(self.playback_scroll);
-                    if self.playback_scroll == PlaybackScroll::Page {
-                        self.playback_scroll = PlaybackScroll::Off;
-                    }
                 }
                 TimelineEvent::PanEnd | TimelineEvent::PanCancel => {
                     unreachable!("Pan cleanup runs before modal input guards")
@@ -10876,13 +10926,10 @@ impl CleanSlateApp {
             row![
                 text("Timeline").size(16).font(iced::Font { weight: iced::font::Weight::Semibold, ..iced::Font::with_name("Segoe UI") }),
                 Space::new().width(Fill),
-                iced::widget::tooltip(
+                self.shortcut_control(Command::CatchUp,
                     button(text("Catch up").size(13)).padding([6, 8]).height(34)
                         .style(move |theme, status| flat_button(theme, status, catch_up))
-                        .hover_outline(false).selected(catch_up).on_press(Message::ToggleCatchUp),
-                    container(text("Follow playback with a quick scroll at the right edge").size(13)).padding(8).style(editor_panel),
-                    iced::widget::tooltip::Position::Bottom,
-                ).delay(Duration::from_millis(600)).snap_within_viewport(true),
+                        .hover_outline(false).selected(catch_up).on_press(Message::ToggleCatchUp)),
                 self.shortcut_control(Command::Lock,
                     button(toolbar_label(ToolbarIcon::Lock { locked }, "Lock"))
                         .padding([6, 8]).height(34)
@@ -11063,14 +11110,33 @@ impl CleanSlateApp {
             && self.preview_processing.is_none()
             && let Some(details) = &self.analysis_details
         {
+            let mut timings = column![].spacing(4);
+            for (index, (label, seconds)) in details.iter().enumerate() {
+                if index == 1 {
+                    timings = timings.push(iced::widget::rule::horizontal(1));
+                }
+                timings = timings.push(
+                    row![
+                        text(*label).size(13).width(Fill),
+                        text(format!("{seconds:.1} s")).size(13),
+                    ]
+                    .spacing(12),
+                );
+            }
             inspector_header = inspector_header.push(crate::gui_disclosure::reveal(
-                text(details).size(13).color(self.appearance.colors().muted),
+                timings,
                 self.analysis_details_open,
             ));
         }
         let mut inspector_status = column![
             container(scrollable(inspector_header))
-                .max_height(if compact { 110 } else { 150 })
+                .max_height(if self.analysis_details_open {
+                    230
+                } else if compact {
+                    110
+                } else {
+                    150
+                })
                 .width(Fill)
         ]
         .spacing(6);

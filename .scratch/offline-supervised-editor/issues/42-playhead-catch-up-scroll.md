@@ -41,6 +41,14 @@ FabFilter's Fast, Slow, Infinite and Off metering modes; new audio meters; conti
 
 ## Results
 
+Final correction validation: 353 tests passed, zero failures, 20 existing ignored; formatting, strict Clippy, script fixtures and GUI rebuild/launch passed. Ticket 62 records the final executable hash and the resolved Windows executable-lock retry. The wider physical interaction/owner-feel checks remain open.
+
+2026-10-22 owner correction supersedes the manual-pan/off policy above: Catch up stays selected through manual timeline navigation and example inspection/editing. Only an explicit follow-mode control changes it. Panning cancels the current animation and temporarily suspends following during a middle drag; following resumes on release. Existing Locked mode policies remain separate. Claimed for this correction before editing.
+
+The current correction also registers Catch up in the existing customizable command system with default Shift+C, shared button/keyboard toggle dispatch and effective-binding toolbar hint. Future single-registration action infrastructure is separate, as the owner requested; it is not bundled into this fix.
+
+Follow-up implementation preserves Page through regular/middle-pan start/end/cancel and example show/resize routes, while retaining existing Locked policies. Regression tests cover retained selection, explicit mode overrides and the shortcut's default/remapped activation and serialized reload. Native Shift+C toggled Catch up off/on; wheel zoom retained it. A horizontal-wheel probe did not move this canvas and is not claimed as physical pan verification; middle-drag and the full interaction matrix remain open. The rebuilt app is stopped and open for owner review. Build identity is recorded in ticket 62's follow-up results.
+
 2026-10-22 owner explicitly requested implementation while reviewing the development GUI, with REA inspection of FabFilter Pro-L 2. Claimed before editing on development; dependency 34 is done. Existing middle-drag/reanchor work is integrated and will be retained; this pass implements the outstanding edge-catch behavior and its controls. Scoped checks and owner feel acceptance remain pending.
 
 Implemented the Page/Catch up viewport state with controlled elapsed-time updates, one stable 250 ms cubic ease-out target and a 5% left inset. The app starts in Catch up and exposes a mutually exclusive toggle beside Lock. Only audio-frame updates use advance_playhead; explicit navigation retains seek/reveal behavior. Stop, failure/completion, seek/loop wrap, pan, zoom/fit, Center and mode changes cancel stale targets. Existing middle-drag lock semantics remain intact. Bounds and extreme zoom prevent overscroll or moving ahead of the real playhead; delayed frames complete once rather than replaying missed catches.
