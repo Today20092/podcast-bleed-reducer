@@ -14,6 +14,8 @@ The sole active roadmap is `.scratch/offline-supervised-migration/map.md`. Its r
 - Triage state is recorded as a `Status:` line near the top of each issue file (see `triage-labels.md` for the role strings)
 - Comments and conversation history append to the bottom of the file under a `## Comments` heading
 - Implementation readiness uses the canonical triage labels. Claim an unblocked ticket with `Status: claimed` and an assignee before work; use `Status: done` only after its scoped acceptance checks pass. `Blocked by: NN, NN` refers to sibling implementation tickets and requires all to be `done`. Readiness alone does not clear dependencies.
+- Consolidation closes a duplicate with `Status: superseded` and `Consolidated into: NN` (or a relative path to the continuing checklist). Preserve its specification/results and transfer every unmet check to the named open ticket or recurring procedure. Superseded does not mean its checks passed; update active dependencies explicitly rather than treating superseded as done.
+- `Status: deferred` parks an unapproved future proposal outside the active queue. Retain its scope and reopening conditions; deferred does not mean implemented or rejected.
 
 ## When a skill says "publish to the issue tracker"
 

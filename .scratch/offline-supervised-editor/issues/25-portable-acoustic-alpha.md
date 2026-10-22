@@ -1,9 +1,16 @@
 # Package the acoustic-only Windows portable alpha
 
-Status: claimed
+Status: superseded
+Consolidated into: ../../../docs/branch-workflow.md#release-checklist
 Type: task
 Assignee: Codex
 Blocked by: none
+
+## Consolidation — 2026-10-20
+
+Owner follow-up retires 15 as a standing ticket; its remaining downloaded-artifact and physical package checks now continue in the [per-release checklist](../../../docs/branch-workflow.md#release-checklist). The earlier transfer to 15 below is historical. Package integrity/publication evidence remains distinct from interactive physical verification.
+
+Acoustic-only implementation, package checks and alpha publication are completed historical work, superseded by subsequent published packages (26 and later release records). Remaining clean offline Windows testing of a downloaded artifact, interactive import/audition/export and real-device listening are now explicit in [15](15-windows-release-qualification.md#carried-forward-package-checks--2026-10-20). Preserve artifact identities and recorded limitations below. Public availability and package self-checks do not establish these physical checks or independent stable qualification; this duplicate is superseded, not marked fully accepted.
 
 ## Scope
 

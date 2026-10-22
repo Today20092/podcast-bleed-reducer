@@ -6,29 +6,32 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-if (-not $TargetDir) {
-    $retained = Join-Path $env:USERPROFILE '.codex/worktrees/offline-timebase/podcast-automix-rust-gui/target/owner-ui'
-    $TargetDir = if (Test-Path -LiteralPath $retained) { $retained } else { Join-Path $root 'target/owner-ui' }
-}
-$TargetDir = [IO.Path]::GetFullPath($TargetDir)
+$settings = & (Join-Path $PSScriptRoot 'local-build-settings.ps1') -TargetDir $TargetDir
+$TargetDir = $settings.TargetDir
+$cargoArguments = $settings.CargoArguments
 $exe = Join-Path $TargetDir 'debug/rust-app.exe'
 if (Get-Process -Name rust-app -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $exe }) {
     throw 'Save your edits and close the development window before rebuilding.'
 }
 
-# Keep edits in a separate project; source audio and the saved owner session stay intact.
+# Keep the development project local; source audio and the saved owner session stay intact.
 if (-not $BuildOnly) {
     if (-not $Project) { $Project = Join-Path $root 'test-audio/quick-test-10min/261005-quick-test.cleanslate' }
     $Project = (Resolve-Path -LiteralPath $Project).Path
-    $devProject = Join-Path ([IO.Path]::GetDirectoryName($Project)) (([IO.Path]::GetFileNameWithoutExtension($Project)) + '.gui-dev.cleanslate')
+    if (-not $env:LOCALAPPDATA -or -not [IO.Path]::IsPathRooted($env:LOCALAPPDATA)) {
+        throw 'A valid LOCALAPPDATA directory is required for the local development project.'
+    }
+    $hasher = [Security.Cryptography.SHA256]::Create()
+    try {
+        $identity = [BitConverter]::ToString($hasher.ComputeHash([Text.Encoding]::UTF8.GetBytes($Project))).Replace('-', '').ToLowerInvariant()
+    } finally {
+        $hasher.Dispose()
+    }
+    $developmentDirectory = Join-Path $env:LOCALAPPDATA "CleanSlate/Projects/GUI-development/$identity"
+    New-Item -ItemType Directory -Path $developmentDirectory -Force | Out-Null
+    $devProject = Join-Path $developmentDirectory (([IO.Path]::GetFileNameWithoutExtension($Project)) + '.gui-dev.cleanslate')
     if (-not (Test-Path -LiteralPath $devProject)) {
         Copy-Item -LiteralPath $Project -Destination $devProject
-        foreach ($extension in @('analysis-cache', 'waveforms.json')) {
-            $cache = [IO.Path]::ChangeExtension($Project, $extension)
-            if (Test-Path -LiteralPath $cache) {
-                Copy-Item -LiteralPath $cache -Destination ([IO.Path]::ChangeExtension($devProject, $extension)) -Recurse
-            }
-        }
     }
 }
 
@@ -36,7 +39,7 @@ $timer = [Diagnostics.Stopwatch]::StartNew()
 $previousIncremental = $env:CARGO_INCREMENTAL
 try {
     $env:CARGO_INCREMENTAL = '1'
-    & cargo build --manifest-path (Join-Path $root 'Cargo.toml') --bin rust-app --locked --offline -j 1 --target-dir $TargetDir --config (Join-Path $PSScriptRoot 'gui-dev.toml') --timings
+    & cargo build --manifest-path (Join-Path $root 'Cargo.toml') --bin rust-app @cargoArguments --timings
     if ($LASTEXITCODE -ne 0) { throw 'GUI build failed.' }
 } finally {
     $env:CARGO_INCREMENTAL = $previousIncremental

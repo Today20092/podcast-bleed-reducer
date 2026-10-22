@@ -33,6 +33,6 @@ The result retains probabilities, per-track states, exact regions and grouped pr
 
 The retained non-acoustic branch supports controlled development fixtures from the retired pipeline. It uses assigned speaker activity, raw speech, global activity and conservative intermediate uncertainty. Those conditions and its two-frame guard do not describe current editor Analyze behavior. The recipe name `independent-bands-consistent-activity-gap-preservation-v1` is shared, so the acoustic flag and settings also participate in identity.
 
-Tests cover acoustic hysteresis, optional bounded gap preservation, exact off-grid human boundaries, room truth, contradictory references, source identity, cache invalidation and cancellation. They establish mechanics, not independent wanted-speech/overlap or listening acceptance; those remain tickets 14/15.
+Tests cover acoustic hysteresis, optional bounded gap preservation, exact off-grid human boundaries, room truth, contradictory references, source identity, cache invalidation and cancellation. They establish mechanics, not independent wanted-speech/overlap quality. The owner accepted current sound/performance and closed 14 on 2026-10-20; unperformed formal measurements are optional future work. Ordinary package checks from retired 15 continue in the [per-release checklist](branch-workflow.md#release-checklist).
 
 Source: [temporal decisions and human constraints](../src/temporal_ownership.rs), [editor settings](../src/editor_workflow.rs), [automatic gain generation](../src/effective_envelope.rs).

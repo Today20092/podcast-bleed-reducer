@@ -197,6 +197,114 @@ fn project_at_stamp(stamp: u128) -> (std::path::PathBuf, rust_app::Project) {
 }
 
 #[test]
+fn a_single_track_draft_retains_other_tracks_complete_preparation() {
+    use std::sync::Arc;
+    let (root, seed_project) = project();
+    let second = root.join("second.wav");
+    std::fs::copy(&seed_project.sources[0].path, &second).unwrap();
+    let mut project = rust_app::Project::create(
+        root.join("two-tracks.cleanslate"),
+        vec![seed_project.sources[0].path.clone(), second],
+    )
+    .unwrap();
+    project.set_supplied_alignment(true).unwrap();
+    let seed = ownership();
+    let rows: Vec<_> = (0..100)
+        .map(|frame| {
+            seed.evidence()
+                .evidence_at(frame * OWNERSHIP_FRAME_TICKS)
+                .unwrap()[0]
+                .clone()
+        })
+        .collect();
+    let grid = TemporalEvidenceGrid::new(
+        project.sources.iter().map(|s| s.track_id).collect(),
+        seed.duration,
+        vec![rows.clone(), rows],
+        vec![0.01; 100],
+    )
+    .unwrap();
+    let current = TemporalOwnershipCache::default()
+        .optimize_project_evidence(&project, &grid, TemporalSettings::default(), None)
+        .unwrap();
+    let settings = GainFadeSettings {
+        minimum_gap: 0,
+        ..GainFadeSettings::default()
+    };
+    let mut cache = rust_app::EffectiveEnvelopeCache::default();
+    let accepted = cache.update(&project, &current, settings, None).unwrap();
+    assert_eq!(accepted.reused_tracks, 0);
+    let start = rust_app::TICKS_PER_SECOND;
+    let draft = project
+        .region_gain_edit(
+            project.sources[0].track_id,
+            rust_app::TimeRange::new(start, start * 2).unwrap(),
+            rust_app::GainRegionAction::Attenuate(0.4),
+        )
+        .unwrap();
+    let preview = cache
+        .preview_edit(&project, &current, settings, &draft, None)
+        .unwrap();
+    assert_eq!(
+        preview.reused_tracks, 1,
+        "an untouched track retains its complete preparation"
+    );
+    assert_eq!(preview.envelopes[0].gain_at_time(start), 0.4);
+    assert_eq!(preview.envelopes[1].gain_at_time(start), 1.0);
+    assert!(Arc::ptr_eq(cache.last_completed().unwrap(), &accepted));
+    project.commit_gain_edit(draft).unwrap();
+    let committed = cache.update(&project, &current, settings, None).unwrap();
+    assert_eq!(committed.reused_tracks, 1);
+    assert_eq!(committed.envelopes[0].gain_at_time(start), 0.4);
+    assert_eq!(committed.envelopes[1].gain_at_time(start), 1.0);
+    assert_eq!(cache.automatic_builds(), 1);
+    let changed = cache
+        .update(
+            &project,
+            &current,
+            GainFadeSettings {
+                attenuation: 0.2,
+                ..settings
+            },
+            None,
+        )
+        .unwrap();
+    assert_eq!(
+        changed.reused_tracks, 0,
+        "automatic changes invalidate every affected track"
+    );
+    assert_eq!(changed.envelopes[0].gain_at_time(start), 0.4);
+    assert_eq!(
+        changed.envelopes[1].gain_at_time(OWNERSHIP_FRAME_TICKS * 85),
+        0.2
+    );
+    let other_draft = project
+        .region_gain_edit(
+            project.sources[1].track_id,
+            rust_app::TimeRange::new(start, start * 2).unwrap(),
+            rust_app::GainRegionAction::Attenuate(0.7),
+        )
+        .unwrap();
+    let other_preview = cache
+        .preview_edit(
+            &project,
+            &current,
+            GainFadeSettings {
+                attenuation: 0.2,
+                ..settings
+            },
+            &other_draft,
+            None,
+        )
+        .unwrap();
+    assert_eq!(other_preview.reused_tracks, 1);
+    assert_eq!(other_preview.envelopes[0].gain_at_time(start), 0.4);
+    assert_eq!(other_preview.envelopes[1].gain_at_time(start), 0.7);
+    assert!(Arc::ptr_eq(cache.last_completed().unwrap(), &changed));
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn parallel_fixtures_keep_sources_independent_when_the_clock_repeats() {
     let (first, second) = std::thread::scope(|scope| {
         let first = scope.spawn(|| project_at_stamp(0));
@@ -849,6 +957,26 @@ fn manual_points_win_and_shared_evaluation_survives_reload_and_new_automatic_res
         envelope.gain_at_time(end),
         1.0,
         "half-open override restores automatic at its end"
+    );
+    let viewport = rust_app::timeline::TimelineViewport::new(envelope.duration());
+    let curve = rust_app::visible_gain_curve(&viewport, 1000.0, envelope);
+    for (time, gain) in [(start, 0.5), ((start + end) / 2, 0.375)] {
+        assert!(
+            curve
+                .iter()
+                .any(|point| point.time.abs_diff(time) <= 1 && (point.gain - gain).abs() < 1e-5)
+        );
+    }
+    assert_eq!(
+        curve.iter().find(|point| point.time >= end).unwrap().gain,
+        1.0
+    );
+    assert_eq!(curve.first().unwrap().time, 0);
+    assert_eq!(curve.last().unwrap().time, envelope.duration());
+    assert!(
+        curve
+            .windows(3)
+            .all(|points| { points[0].gain != points[1].gain || points[1].gain != points[2].gain })
     );
     assert_ne!(after.cache_key, before.cache_key);
     assert!(after.analysis_current);

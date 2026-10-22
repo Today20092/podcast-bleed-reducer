@@ -320,6 +320,24 @@ impl Project {
         atomic_save(&self.path, &bytes)
     }
 
+    /// GUI autosaves use local storage even when the opened project is on removable media.
+    pub(crate) fn localize_for_editing(&mut self) -> io::Result<bool> {
+        let local = crate::storage::root()?.join("Projects");
+        if fs::canonicalize(local).is_ok_and(|local| {
+            fs::canonicalize(&self.path).is_ok_and(|path| path.starts_with(local))
+        }) && !fs::metadata(&self.path)?.permissions().readonly()
+        {
+            return Ok(false);
+        }
+        let previous = self.path.clone();
+        self.path = crate::storage::new_project()?;
+        if let Err(error) = self.save() {
+            self.path = previous;
+            return Err(error);
+        }
+        Ok(true)
+    }
+
     pub(crate) fn defer_save(&mut self) {
         self.deferred_save = true;
     }
@@ -1658,7 +1676,7 @@ pub(crate) fn fingerprint_progress(
     mut progress: impl FnMut(u64, u64),
 ) -> io::Result<String> {
     let mut hash = Sha256::new();
-    let mut file = fs::File::open(path)?;
+    let mut file = crate::storage_io::SourceReader::open(path)?;
     let total = file.metadata()?.len();
     let mut completed = 0;
     let mut buffer = [0; 65_536];
@@ -1694,7 +1712,8 @@ pub(crate) fn atomic_save(path: &Path, bytes: &[u8]) -> io::Result<()> {
     let mut file = fs::OpenOptions::new()
         .write(true)
         .create_new(true)
-        .open(&staging)?;
+        .open(&staging)
+        .map_err(|e| crate::storage_io::context("create saved file", path, e))?;
     let result = (|| {
         file.write_all(bytes)?;
         file.sync_all()?;
@@ -1704,5 +1723,5 @@ pub(crate) fn atomic_save(path: &Path, bytes: &[u8]) -> io::Result<()> {
     if result.is_err() {
         let _ = fs::remove_file(staging);
     }
-    result
+    result.map_err(|e| crate::storage_io::context("save file", path, e))
 }

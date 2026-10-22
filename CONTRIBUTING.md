@@ -26,11 +26,11 @@ Follow the [tracker conventions](docs/agents/issue-tracker.md) and [triage vocab
 
 ## Build and submit a pull request
 
-1. Fork the repository, clone your fork and start from the current `main` branch. Use a scoped branch such as `codex/fix-waveform-help` for agent work.
+1. Fork the repository, clone your fork and start feature work from the current `development` branch. Use a scoped branch such as `codex/fix-waveform-help` for agent work. See the [branch and release workflow](docs/branch-workflow.md).
 2. Follow the [developer guide](docs/development.md) for builds and checks. GUI work uses the [GUI development guide](docs/gui-development.md) and `scripts/gui-dev.ps1`.
 3. Keep the change focused. Before changing domain behavior, read [CONTEXT.md](CONTEXT.md) and [ADR-0006](docs/adr/0006-offline-supervised-editable-envelopes.md). Preserve source validation, cancellation, safe exports and the shared gain-envelope evaluation.
 4. Run the ticket's acceptance checks and the relevant development checks. For documentation-only work, check links and formatting. Audio behavior needs meaningful automated checks and listening evidence where the ticket requires it; passing tests alone does not establish audio quality.
-5. Open a PR against `main`, linking its issue and local ticket. Describe the problem, resulting behavior, checks performed and anything still unverified. Include screenshots for visual changes and listening evidence for audio changes when relevant.
+5. External contributors open a feature PR against `development`, linking its issue and local ticket. The owner may integrate solo feature branches locally, revise and test the combined development build, then push development as a backup; per-feature PRs are optional in that workflow. Promote a tested batch through one `development` → `main` PR, then deliberately tag a release. Describe the resulting behavior, checks and anything unverified; include screenshots/listening evidence where relevant.
 
 Keep recordings, personal projects, caches and generated builds out of commits. Contributions use the project's [MIT license](LICENSE).
 

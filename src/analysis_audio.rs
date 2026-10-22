@@ -127,6 +127,16 @@ pub(crate) fn prepare_source_at_rate_in(
     output_rate: u32,
     cancelled: Option<&AtomicBool>,
 ) -> Result<PreparedAnalysisAudio, RenderBlocker> {
+    prepare_source_at_rate_with_feedback_in(source, cache, output_rate, cancelled, &mut |_| {})
+}
+
+pub(crate) fn prepare_source_at_rate_with_feedback_in(
+    source: &crate::AudioSource,
+    cache: &Path,
+    output_rate: u32,
+    cancelled: Option<&AtomicBool>,
+    decoded_frames: &mut dyn FnMut(u64),
+) -> Result<PreparedAnalysisAudio, RenderBlocker> {
     if output_rate == 0 {
         return Err(RenderBlocker("playback rate must be nonzero".into()));
     }
@@ -169,7 +179,10 @@ pub(crate) fn prepare_source_at_rate_in(
                 writer.take().unwrap(),
             )?);
         }
-        converter.as_mut().unwrap().feed(packet, cancelled)
+        let converter = converter.as_mut().unwrap();
+        converter.feed(packet, cancelled)?;
+        decoded_frames(converter.native_count);
+        Ok(())
     })?;
     let mut converter =
         converter.ok_or_else(|| RenderBlocker("source contains no audio".into()))?;

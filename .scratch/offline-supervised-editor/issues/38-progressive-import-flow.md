@@ -1,11 +1,16 @@
 # Make import responsive with early timelines and progressive waveforms
 
-Status: claimed
+Status: superseded
+Consolidated into: 23
 Type: task
 Assignee: Codex implement_38
 Blocked by: 03, 21, 24, 33
 Target branch: codex/editor-workflow-31-37
 Spec: #accepted-design
+
+## Consolidation — 2026-10-20
+
+Implementation and recorded software checks are integrated into development. Remaining visible import/readiness/queue/failure/cancellation/playback scenarios and GUI timing/memory measurements now live in [23](23-gui-frontend-polish.md#current-remaining-work--2026-10-20). Preserve this accepted design, measurements and limitations as evidence. Superseded closes the duplicate work item; it does not mark unchecked acceptance as passed. Full-session quality/performance remains in 14.
 
 ## Scope
 

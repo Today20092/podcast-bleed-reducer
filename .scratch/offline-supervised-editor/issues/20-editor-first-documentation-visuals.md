@@ -1,11 +1,24 @@
 # Add editor-first documentation visuals after the GUI is settled
 
-Status: claimed
+Status: done
 Assignee: Codex
 Type: task
-Deferred: gain-layer composition, interactive companion and remaining GUI captures
+Deferred: optional interactive companion only
 Blocked by: 16
 Spec: ../../offline-supervised-migration/spec.md
+
+## Current remaining work — 2026-10-20
+
+2026-10-22 completion supersedes the historical remaining-work state below. The owner accepted the current appearance and explicitly authorized new release screenshots, clearing the appearance dependency on 23 for this capture scope. Refreshed seven native alpha.7 captures: editor overview, sound/timing Details, listening choices, speaker popup, shortcut reference, preservation and manual gain editing. The gain capture follows an actual selected-point drag; temporary preservation/attenuation/drag changes were undone in the separate development copy, and no original audio or owner project was changed. Captures were visually inspected at native size with no private path panels exposed and embedded in the current guide/README. Earlier teaching figures and browser checks remain valid. The optional interactive companion remains deferred, not a missing release deliverable.
+
+This is the single documentation-visual queue, including browser acceptance transferred from 27. Seven replacement diagrams and four teaching figures are implemented. The 2026-10-20 implementation pass below adds browser evidence to the earlier static checks; only the GUI-dependent capture follow-up remains.
+
+- [x] Review all eleven diagrams in the local browser and image embeds: responsive scrolling, computed font stack, light/dark surrounds, accessible text/captions and links. The 2026-10-20 results below define the actual renderer/font coverage; preserve 27's exact content/routing requirements and recorded static evidence.
+- [x] Finish the automatic/manual/protected/final-gain comparison against the shared evaluator, with a readable static equivalent.
+- [ ] Once GUI acceptance in 23 settles the appearance, finish/refresh real gain-point dragging and preservation captures; retain privacy redaction and separate-project safeguards. Existing screenshots and illustrative solo/overlap/room/bleed/fade figures are completed evidence, not missing implementations.
+- [x] Triage the optional companion: retain static aligned timelines and text equivalents; defer interaction/animation until a concrete teaching gap justifies it. No new documentation site is needed.
+
+Keep the original scoped acceptance below for visual fidelity and evaluator/privacy checks. Documentation review remains independent of listening quality and release qualification.
 
 ## Problem
 
@@ -36,6 +49,12 @@ Ticket 16 must be done and the owner must confirm the GUI is settled enough to d
 - Verify rendering, legibility, links and light/dark presentation in the intended documentation viewer. Record checks and remaining limitations here.
 
 ## Comments
+
+2026-10-20 implementation pass: added `docs/diagrams/gain-composition.html` and its exported SVG, embedded in the effective-envelope guide and linked from the ownership guide/inventory. Four aligned rows show automatic gain, valid non-overlapping manual edits, protection and applied gain without implying multiplication or a precedence policy for invalid conflicts. Exact boundary values match the existing `touching_manual_constraints_have_explicit_right_endpoint_ownership_and_exact_bounds` test; that regression and `manual_points_win_and_shared_evaluation_survives_reload_and_new_automatic_results` both passed using the shared local Cargo settings. The new figure passed diagram-design self-check/export and visual browser inspection. No application source, dependencies, audio or project files changed.
+
+All eleven diagram HTML pages were reviewed in the in-app browser from a loopback-only docs server; Chrome's separate tool remained unavailable. Read-only browser checks confirmed accessible title/description references, text equivalents, computed Segoe UI/Arial/sans-serif stacks and no off-canvas text. Local review frames at 320/1000 px confirmed horizontal scrolling for all eleven; standalone image embeds were checked on light/dark surrounds, and the new figure was visually inspected at full size. Browser coverage is local Windows/IAB, not every external Markdown renderer or other-platform fallback font. Temporary review tooling/server were removed/stopped afterward. Existing screenshots were retained; no owner GUI session was controlled.
+
+Remaining: refresh/finish native gain-edit/preservation captures after ticket 23 settles the GUI. Owner explicitly said GUI work continues, so capturing a replacement now would immediately age it. Keep this ticket claimed for that bounded screenshot follow-up; browser/diagram work is no longer a blocker. The interactive companion is explicitly deferred: the static figure plus exact text equivalent explains this contract without another site or runtime.
 
 2026-10-11 scoped completion: added fades-and-gaps, speaker-label-examples and
 microphone-bleed as editable HTML and inline SVG figures. Embedded them in the

@@ -23,6 +23,14 @@ Import aligned recordings, label room tone and each speaker's solo speech,
 Analyze, review the gain envelopes, audition, then export to a new folder.
 New project starts an empty session; save your current project first.
 
+Use the Timeline waveform icons to show Original, Processed or Both independently
+of the audio you audition. Catch up follows playback at the right edge and stays
+enabled when you navigate; Shift+C toggles it. Lock follows continuously.
+Menu > Settings lets you change appearance and customize keyboard shortcuts.
+Hover over command buttons for their current bindings. Details beside Ready shows
+analysis stage timings. The online usage guide explains editing and export:
+https://github.com/Today20092/podcast-bleed-reducer/blob/main/docs/editor-workflow.md
+
 Application source: https://github.com/Today20092/podcast-bleed-reducer
 Application license: LICENSE (MIT). Dependency notices: THIRD-PARTY-NOTICES.txt.
 Model and runtime license texts are included in licenses/.

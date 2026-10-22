@@ -1,9 +1,14 @@
 # Remove sound-value hover help and improve shortcut readability
 
-Status: claimed
+Status: superseded
+Consolidated into: 23
 Type: task
 Assignee: Codex implement_39
 Blocked by: 32, 34, 37
+
+## Consolidation — 2026-10-20
+
+The reference presentation and sound-value tooltip removal are implemented and integrated into development. Owner verification of both themes, widths, value gestures, scrolling and Close/Enter/Escape now lives in [23](23-gui-frontend-polish.md#current-remaining-work--2026-10-20). Original checks and results remain below; unperformed checks are not passing evidence. Ticket 41 can build on the integrated reference without waiting for this duplicate acceptance record to become done.
 Target branch: codex/editor-workflow-31-37
 Spec: #accepted-design
 

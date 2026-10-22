@@ -1,6 +1,10 @@
-# Match the retained dependency cache; lightly optimize local drawing code.
+# One local profile for GUI builds and checks; keep dependencies small.
 [profile.dev]
 incremental = true
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false
 
 [profile.dev.package.rust-app]
 opt-level = 1

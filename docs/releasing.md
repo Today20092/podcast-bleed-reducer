@@ -1,11 +1,12 @@
 # Desktop releases
 
-The first release is `v0.1.0-alpha.1`: an unsigned, experimental Windows 11 x64 ZIP.
-Acoustic analysis runs offline with the embedded Silero model. Nemotron is removed.
-Tickets 14 and 15 still govern listening, preservation and long-session qualification.
-An alpha package does not establish that those gates passed. Future version tags
-also build macOS Apple Silicon and Intel DMGs and a Linux x64 AppImage. Native
-package checks are separate from clean desktop/audio testing and listening approval.
+The current release candidate is `v0.1.0-alpha.7`, following published alpha.6.
+The owner authorized promotion and release in ticket 64. Use the current
+[branch workflow and per-release checklist](branch-workflow.md#release-checklist).
+Ticket 14 is owner-closed; retired 15/25 now route to that repeatable checklist.
+Acoustic analysis runs offline with the embedded Silero model. All four native
+package targets are built by the release workflow. Native package checks remain
+separate from clean desktop/audio testing and physical listening approval.
 
 | Build system | Package | Target |
 | --- | --- | --- |
@@ -22,17 +23,18 @@ runtime model download. Windows is unsigned; Mac is ad-hoc signed, not notarized
 ## Prepare a candidate
 
 1. Finish the scoped ticket and review the diff. Exclude recordings, projects,
-   caches, raw screenshots and build artifacts. Update `Cargo.toml`, `Cargo.lock`
-   to the same version. Use `0.1.0-alpha.2` next. The packaged README substitutes
+   caches, private captures and build artifacts. Keep approved documentation screenshots.
+   Update `Cargo.toml`, `Cargo.lock` to the same unused version, currently
+   `0.1.0-alpha.7`. The packaged README substitutes
    version and platform from the build; do not hard-code a version in that template.
-2. Run `cargo fmt --all -- --check`, `cargo clippy --all-targets --locked -- -D warnings`
-   and `cargo test --all-targets --locked`. Ignored qualification tests must be
+2. Run `./scripts/check.ps1 -Local` for the shared Windows cache/profile, or
+   `./scripts/check.ps1` in hosted/native packaging environments. Ignored tests must be
    accounted for separately; a green test command does not imply listening approval.
 3. Commit the reviewed source and docs. Build from that commit:
 
    ```powershell
-   pwsh -File scripts/package.ps1 -Version 0.1.0-alpha.1
-   pwsh -File scripts/check-package.ps1 -Package dist/CleanSlate-0.1.0-alpha.1-windows-x64
+   pwsh -File scripts/package.ps1 -Version 0.1.0-alpha.7
+   pwsh -File scripts/check-package.ps1 -Package dist/CleanSlate-0.1.0-alpha.7-windows-x64
    ```
 
 Run the same `pwsh -File scripts/package.ps1 -Version VERSION` command natively on
@@ -89,12 +91,15 @@ verifies packaging mechanics; it does not establish real-recording audio quality
 
 ## Build drafts on GitHub
 
-After local checks and review, push the candidate branch and the version tag:
+After local checks and review, push development, open a development-to-main PR,
+wait for all four required native CI checks and merge with a merge commit. Fetch
+the reviewed main commit and tag that commit explicitly. Check that the new tag
+does not already exist before creating it:
 
 ```powershell
-git push origin main
-git tag -a v0.1.0-alpha.1 -m "CleanSlate 0.1.0-alpha.1"
-git push origin v0.1.0-alpha.1
+git fetch origin
+git tag -a v0.1.0-alpha.7 origin/main -m "CleanSlate 0.1.0-alpha.7"
+git push origin v0.1.0-alpha.7
 ```
 
 `.github/workflows/portable-release.yml` runs on version tags. It installs the pinned

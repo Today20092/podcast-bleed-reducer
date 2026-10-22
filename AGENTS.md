@@ -10,6 +10,16 @@ For ticket inventories, use context-mode to extract only status, dependencies, a
 
 For GUI changes, read [the GUI development guide](docs/gui-development.md) and use [scripts/gui-dev.ps1](scripts/gui-dev.ps1).
 
+## Maintainability
+
+For every project change, optimize for the lifetime cost of understanding, testing, and safely changing the code. Choose the smallest coherent solution; file count and diff size are not quality targets.
+
+- Fix root causes in the layer that owns the behavior. Update all affected callers, interfaces, tests, fixtures, and documentation, even when the solution spans multiple files.
+- Keep responsibilities clear and reuse established project patterns. Size the design to current requirements and demonstrated extension needs.
+- Perform refactoring needed to make the requested change maintainable within its accepted scope. Record unrelated cleanup separately.
+- Verify changed behavior and relevant failure cases with appropriate checks. Explain consequential design tradeoffs and remaining limitations when handing off the change.
+- For a temporary workaround, document its constraint, consequences, and the concrete condition for replacing it. Use a `shortcut:` comment beside the affected code and record any deferred work in the relevant ticket.
+
 ## Architecture and discovery
 
 Read [CONTEXT.md](CONTEXT.md) and [ADR-0006](docs/adr/0006-offline-supervised-editable-envelopes.md) before changing domain behavior. Consult the [active implementation tracker](.scratch/offline-supervised-migration/implementation.md) for current implementation status. Preserve source validation, cancellation, safe exports and shared envelope evaluation while migrating.
@@ -20,4 +30,12 @@ When discovering tools, retrieve only the metadata needed for the task. Before s
 
 ## Repository
 
-Use `main` as the shared starting point. The offline supervised development history was merged into `main` on 2026-10-11. Create scoped `codex/` branches when needed. Use commit `6a60cc2` as the frozen detector comparison baseline when the acceptance tickets require it.
+Use `development` as the ordinary local working branch and retain `main` as the release branch. For owner-requested parallel work, use temporary scoped `codex/` branches/worktrees from development; integrate their tested commits locally and remove them after preserving their files. Sequential work can stay on development. Push development as a backup; feature PRs are optional for solo local integration. External contributions still use PRs targeting development.
+
+Test combined features in the primary checkout on development. A local feature merge already updates its files; merge subsequent feature revisions again before rebuilding. Pull with `git pull --ff-only` when GitHub has commits absent locally. Use `scripts/gui-dev.ps1` for GUI builds and `scripts/check.ps1 -Local` for local checks; both share the application-data Cargo target, pinned toolchain and development profile. Keep incremental compilation and coordinate builds through Cargo's target lock. Record the source commit and executable path; preserve the tested executable before retiring a cache or worktree.
+
+Promote a tested batch through a `development` → `main` PR, preserving ancestry with a merge commit. Keep the GitHub default branch as `main`. Merge main-only fixes and release metadata back into development before subsequent feature work.
+
+Release publication is a separate owner-authorized step. A deliberate pushed `v*` tag triggers the four-platform draft-package workflow; a feature/main merge alone does not. For cross-platform development packages, manually dispatch that workflow on `development` with `build_only: true` and a release_tag matching Cargo's current version; inspect its checked Actions artifacts. Verify all native packages and release acceptance before publishing a draft. See [branch and release workflow](docs/branch-workflow.md) for the inventory, package triggers and promotion checks.
+
+Use commit `6a60cc2` as the frozen detector comparison baseline when the acceptance tickets require it.

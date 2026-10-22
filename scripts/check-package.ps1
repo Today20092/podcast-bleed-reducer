@@ -1,4 +1,4 @@
-param([string]$Package = (Join-Path $PSScriptRoot '../dist/CleanSlate-0.1.0-alpha.1-windows-x64'), [switch]$IntegrityOnly)
+param([string]$Package = (Join-Path $PSScriptRoot '../dist/CleanSlate-0.1.0-alpha.7-windows-x64'), [switch]$IntegrityOnly)
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $Package = (Resolve-Path -LiteralPath $Package).Path

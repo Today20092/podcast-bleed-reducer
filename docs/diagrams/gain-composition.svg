@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 864" role="img" aria-labelledby="gain-composition-title gain-composition-desc" id="gain-composition-root">
+<title id="gain-composition-title">Your edits choose the applied gain</title>
+<desc id="gain-composition-desc">Four aligned gain timelines show automatic gain 0.125, two adjoining manual edits, a separate full-volume protection and the final applied gain. Manual edits replace the automatic gain in their own intervals; protection keeps its interval at gain one. At a right endpoint the next interval takes over. Conflicting edits and protections are rejected, not multiplied.</desc>
+  <defs>
+      <style>#gain-composition-root { color: #E4E7EB; font-family: 'Segoe UI', Arial, sans-serif; }
+      #gain-composition-root .diagram-container { width: 100%; overflow-x: auto; }
+      #gain-composition-root details { margin-top: 24px; line-height: 1.6; }
+      #gain-composition-root summary { cursor: pointer; color: #779BC7; }
+      @media print {
+#gain-composition-root .diagram-container { overflow-x: visible; }
+}</style>
+  </defs>
+<rect width="1000" height="864" fill="#202226"/>
+<g fill="#E4E7EB"><text x="40" y="44" font-size="24" font-weight="600">Your edits choose the applied gain</text></g>
+<g fill="#ABB4C0" font-size="16"><text x="40" y="76">Illustrative, validated timeline · Same time and linear-gain scale in every row</text><text x="40" y="104">Manual edits and protection occupy different spans. These gains are not multiplied together.</text></g>
+<g stroke="#4A505A" stroke-width="1">
+<path d="M 160 164 H 920 M 160 244 H 920 M 160 300 H 920 M 160 380 H 920 M 160 436 H 920 M 160 516 H 920 M 160 572 H 920 M 160 652 H 920"/>
+<path d="M 304 156 V 664 M 448 156 V 664 M 592 156 V 664 M 736 156 V 664" stroke-dasharray="4 5"/>
+</g>
+<g fill="#ABB4C0" font-size="12" text-anchor="end">
+<text x="148" y="168">1.00</text><text x="148" y="248">0.00</text>
+<text x="148" y="304">1.00</text><text x="148" y="384">0.00</text>
+<text x="148" y="440">1.00</text><text x="148" y="520">0.00</text>
+<text x="148" y="576">1.00</text><text x="148" y="656">0.00</text>
+</g>
+<g fill="#E4E7EB" font-size="20" font-weight="600">
+<text x="40" y="144">1. Automatic</text><text x="40" y="280">2. Manual edits</text><text x="40" y="416">3. Protection</text><text x="40" y="552">4. Applied</text>
+</g>
+<g fill="#ABB4C0" font-size="14">
+<text x="620" y="144">Gain 0.125 (about −18 dB) throughout this view</text>
+<text x="620" y="280">Only the edited spans have manual values</text>
+<text x="620" y="416">Keep full volume from 2.048 to 2.176 s</text>
+<text x="620" y="552">The shared display, audition and export evaluator</text>
+</g>
+<path d="M 160 234 H 920" fill="none" stroke="#ABB4C0" stroke-width="3"/>
+<g fill="none" stroke="#B399D4" stroke-width="3"><path d="M 304 340 L 448 360 M 448 320 H 592"/></g>
+<g fill="#B399D4"><circle cx="304" cy="340" r="4"/><circle cx="448" cy="320" r="4"/></g>
+<g fill="#202226" stroke="#B399D4" stroke-width="2"><circle cx="448" cy="360" r="4"/><circle cx="592" cy="320" r="4"/></g>
+<path d="M 592 436 H 736" fill="none" stroke="#779BC7" stroke-width="4"/>
+<circle cx="592" cy="436" r="4" fill="#779BC7"/><circle cx="736" cy="436" r="4" fill="#202226" stroke="#779BC7" stroke-width="2"/>
+<path d="M 160 642 H 304 M 304 612 L 448 632 M 448 592 H 592 M 592 572 H 736 M 736 642 H 920" fill="none" stroke="#B399D4" stroke-width="4"/>
+<g fill="#B399D4"><circle cx="304" cy="612" r="4"/><circle cx="448" cy="592" r="4"/><circle cx="592" cy="572" r="4"/><circle cx="736" cy="642" r="4"/></g>
+<g fill="#202226" stroke="#B399D4" stroke-width="2"><circle cx="304" cy="642" r="4"/><circle cx="448" cy="632" r="4"/><circle cx="592" cy="592" r="4"/><circle cx="736" cy="572" r="4"/></g>
+<g fill="#ABB4C0" font-size="12" text-anchor="middle"><text x="160" y="688">1.664</text><text x="304" y="688">1.792</text><text x="448" y="688">1.920</text><text x="592" y="688">2.048</text><text x="736" y="688">2.176</text><text x="920" y="688">Time (s)</text></g>
+<g fill="#E4E7EB" font-size="14"><text x="304" y="336">0.50 → 0.25</text><text x="464" y="308">0.75</text><text x="608" y="460">1.00</text></g>
+<path d="M 40 716 H 960" stroke="#4A505A"/>
+<g fill="#ABB4C0" font-size="14"><text x="40" y="744">Filled endpoint: value at that time · Open endpoint: value immediately before the next span</text><text x="40" y="776">At 1.920 s the second edit takes over; at 2.048 s protection takes over.</text><text x="40" y="800">At 2.176 s protection ends and automatic gain returns. Reanalysis keeps accepted manual edits.</text><text x="40" y="832">This figure explains gain composition, not detection accuracy or recommended sound settings.</text></g>
+</svg>

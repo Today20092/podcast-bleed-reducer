@@ -3,6 +3,101 @@ use rust_app::{EditorAnalysisIdentity, Project, TICKS_PER_SECOND, TimeRange};
 mod fixture;
 
 #[test]
+fn analysis_feedback_reaches_inside_preparation_and_speech_detection() {
+    use std::sync::{
+        Mutex,
+        atomic::{AtomicBool, AtomicU8, Ordering},
+    };
+    let (root, project, _) = fixture::session();
+    let mut worker = rust_app::EditorAnalysisWorker::default();
+    let progress = AtomicU8::new(0);
+    let cancel = AtomicBool::new(false);
+    let messages = Mutex::new(Vec::<String>::new());
+    let feedback = |message: &str| messages.lock().unwrap().push(message.into());
+    let first = worker
+        .analyze_with_feedback(
+            &project,
+            &root.join("feedback-copies"),
+            &progress,
+            &cancel,
+            &feedback,
+        )
+        .unwrap();
+    let observed = messages.lock().unwrap();
+    for stage in [
+        "Checking source audio integrity",
+        "track 1 of 2 · decoded 00:",
+        "track 2 of 2 · decoded 00:",
+        "Detecting speech · track 1 of 2 · 00:",
+        "Detecting speech · track 2 of 2 · 00:",
+        "Learning speaker activity",
+        "Applying learned speaker activity",
+        "Checking whole-recording speaker activity",
+        "Building the gain preview",
+    ] {
+        assert!(
+            observed.iter().any(|message| message.contains(stage)),
+            "Missing {stage}: {observed:?}"
+        );
+    }
+    drop(observed);
+    messages.lock().unwrap().clear();
+    let stats = worker.stats();
+    let warm = worker
+        .analyze_with_feedback(
+            &project,
+            &root.join("feedback-copies"),
+            &progress,
+            &cancel,
+            &feedback,
+        )
+        .unwrap();
+    assert_eq!(worker.stats(), stats);
+    assert_eq!(first.ownership.cache_key, warm.ownership.cache_key);
+    assert!(
+        !messages
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|message| message.contains("decoded") || message.starts_with("Detecting speech"))
+    );
+    let cancelled = worker.analyze_with_feedback(
+        &project,
+        &root.join("cancelled-copies"),
+        &progress,
+        &cancel,
+        &|message| {
+            if message.contains("decoded") {
+                cancel.store(true, Ordering::Relaxed);
+            }
+        },
+    );
+    assert!(
+        cancelled
+            .unwrap_err()
+            .to_string()
+            .to_lowercase()
+            .contains("cancel")
+    );
+    assert!(std::sync::Arc::ptr_eq(
+        worker.last_completed().unwrap(),
+        &warm
+    ));
+    assert!(
+        !root
+            .join("cancelled-copies")
+            .read_dir()
+            .unwrap()
+            .any(|entry| entry
+                .unwrap()
+                .file_name()
+                .to_string_lossy()
+                .ends_with(".tmp"))
+    );
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn acoustic_analysis_trains_every_track_and_applies_beyond_reference_ranges() {
     let (root, mut project, audio) = fixture::session_gain(0.0);
     let mut parameters = project.parameters();
@@ -411,10 +506,16 @@ fn two_hour_overview_retains_brief_activity_and_bounds_visible_work() {
         let envelope =
             rust_app::GainEnvelope::constant_at_rate(7200 * rate as usize, rate, 0.25).unwrap();
         let curve = rust_app::visible_gain_curve(&viewport, 1000.0, &envelope);
-        assert_eq!(curve.len(), 1001);
+        assert_eq!(
+            curve.len(),
+            3,
+            "flat drawing keeps endpoints and the outside-source unity boundary"
+        );
         assert_eq!(curve[0].time, 0);
-        assert_eq!(curve[1000].time, duration);
-        assert_eq!(curve[500].gain, 0.25);
+        assert_eq!(curve[2].time, duration);
+        assert_eq!(curve[0].gain, 0.25);
+        assert_eq!(curve[1].gain, 0.25);
+        assert_eq!(curve[2].gain, 1.0);
         let mut navigated = viewport.clone();
         navigated.zoom_at(500.0, 1000.0, 5.0);
         navigated.pan_by_pixels(-100.0, 1000.0);

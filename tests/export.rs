@@ -252,3 +252,41 @@ fn blocks_stale_render_and_cancellation_without_partial_output() {
     assert!(!destination.exists());
     fs::remove_dir_all(dir).unwrap();
 }
+
+#[test]
+fn disconnected_or_changed_originals_cannot_publish_and_reconnected_originals_can_retry() {
+    let dir = temp_dir();
+    let project = current_project(&dir);
+    let source = project.sources[0].path.clone();
+    let original = fs::read(&source).unwrap();
+    let destination = dir.join("delivery");
+    let prepared = rust_app::prepare_export(&project, &destination, None).unwrap();
+    let removed = dir.join("disconnected.wav");
+    fs::rename(&source, &removed).unwrap();
+    let gate = rust_app::RenderGeneration::default();
+    let error = prepared
+        .publish(&project, &gate, gate.current(), None)
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains(&source.display().to_string()));
+    assert!(error.contains("Reconnect"));
+    assert!(!destination.exists());
+    fs::rename(&removed, &source).unwrap();
+    export(&project, &destination, None).unwrap();
+    let accepted = fs::read(destination.join("speaker-0-clean.wav")).unwrap();
+    let changed = dir.join("changed-delivery");
+    let prepared = rust_app::prepare_export(&project, &changed, None).unwrap();
+    fs::write(&source, b"a different recording").unwrap();
+    assert!(
+        prepared
+            .publish(&project, &gate, gate.current(), None)
+            .is_err()
+    );
+    assert!(!changed.exists());
+    assert_eq!(
+        fs::read(destination.join("speaker-0-clean.wav")).unwrap(),
+        accepted
+    );
+    fs::write(&source, original).unwrap();
+    fs::remove_dir_all(dir).unwrap();
+}

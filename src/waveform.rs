@@ -66,6 +66,51 @@ struct WaveformLevel {
     peaks: Vec<(f32, f32)>,
 }
 
+pub(crate) struct WaveformBuilder {
+    peaks: Vec<(f32, f32)>,
+    current: (f32, f32),
+    used: usize,
+    sample_count: usize,
+}
+
+impl Default for WaveformBuilder {
+    fn default() -> Self {
+        Self {
+            peaks: Vec::new(),
+            current: (f32::INFINITY, f32::NEG_INFINITY),
+            used: 0,
+            sample_count: 0,
+        }
+    }
+}
+
+impl WaveformBuilder {
+    pub(crate) fn push(&mut self, samples: &[f32]) {
+        self.sample_count += samples.len();
+        for &sample in samples {
+            self.current.0 = self.current.0.min(sample);
+            self.current.1 = self.current.1.max(sample);
+            self.used += 1;
+            if self.used == BASE_BUCKET {
+                self.peaks.push(self.current);
+                self.current = (f32::INFINITY, f32::NEG_INFINITY);
+                self.used = 0;
+            }
+        }
+    }
+
+    pub(crate) fn refine_preview(&self, preview: &mut WaveformCache) {
+        preview.refine_prefix(&self.peaks);
+    }
+
+    pub(crate) fn finish(mut self, sample_rate: u32) -> WaveformCache {
+        if self.used != 0 {
+            self.peaks.push(self.current);
+        }
+        WaveformCache::from_peaks(self.peaks, self.sample_count, sample_rate)
+    }
+}
+
 #[derive(Deserialize, Serialize)]
 struct PersistedWaveform {
     version: u32,
@@ -107,7 +152,7 @@ impl SourceStamp {
 }
 
 impl WaveformCache {
-    pub(crate) fn refine_prefix(&mut self, detailed: &[(f32, f32)]) {
+    fn refine_prefix(&mut self, detailed: &[(f32, f32)]) {
         let level = &mut self.levels[0];
         let complete = detailed.len() * BASE_BUCKET / level.samples_per_bucket;
         for (index, peak) in level.peaks.iter_mut().take(complete).enumerate() {
@@ -148,14 +193,12 @@ impl WaveformCache {
     }
     #[cfg(test)]
     fn from_samples(samples: &[f32], sample_rate: u32) -> Self {
-        Self::from_peaks(summarize(samples, BASE_BUCKET), samples.len(), sample_rate)
+        let mut builder = WaveformBuilder::default();
+        builder.push(samples);
+        builder.finish(sample_rate)
     }
 
-    pub(crate) fn from_peaks(
-        mut peaks: Vec<(f32, f32)>,
-        sample_count: usize,
-        sample_rate: u32,
-    ) -> Self {
+    fn from_peaks(mut peaks: Vec<(f32, f32)>, sample_count: usize, sample_rate: u32) -> Self {
         let mut samples_per_bucket = BASE_BUCKET;
         let mut levels = vec![WaveformLevel {
             samples_per_bucket,
@@ -272,20 +315,6 @@ pub(crate) fn save_import_cache(
 }
 
 #[cfg(test)]
-fn summarize(samples: &[f32], bucket: usize) -> Vec<(f32, f32)> {
-    samples
-        .chunks(bucket)
-        .map(|chunk| {
-            chunk
-                .iter()
-                .fold((1.0_f32, -1.0_f32), |(min, max), sample| {
-                    (min.min(*sample), max.max(*sample))
-                })
-        })
-        .collect()
-}
-
-#[cfg(test)]
 pub(crate) fn load_or_build(
     project_path: &Path,
     sources: &[PathBuf],
@@ -367,30 +396,12 @@ fn load_source_waveforms_in(
                 ready(index, &cache.waveform);
                 return Ok(cache.waveform);
             }
-            let mut peaks = Vec::new();
-            let mut current = (f32::INFINITY, f32::NEG_INFINITY);
-            let mut used = 0;
+            let mut builder = WaveformBuilder::default();
             let decoded = crate::audio_io::decode_source_chunks(path, None, |_, samples| {
-                for &sample in samples {
-                    current.0 = current.0.min(sample);
-                    current.1 = current.1.max(sample);
-                    used += 1;
-                    if used == BASE_BUCKET {
-                        peaks.push(current);
-                        current = (f32::INFINITY, f32::NEG_INFINITY);
-                        used = 0;
-                    }
-                }
+                builder.push(samples);
                 Ok(())
             })?;
-            if used != 0 {
-                peaks.push(current);
-            }
-            let waveform = WaveformCache::from_peaks(
-                peaks,
-                decoded.metadata.grid.frame_count as usize,
-                decoded.metadata.grid.sample_rate,
-            );
+            let waveform = builder.finish(decoded.metadata.grid.sample_rate);
             if decoded.metadata != source || SourceStamp::read_source(path)? != stamps[index] {
                 return Err(RenderBlocker(
                     "Source changed while loading waveforms; import again.".into(),
@@ -463,13 +474,65 @@ pub(crate) enum ExampleEvent {
     CancelResize,
 }
 
+fn visible_selection_edges(viewport: &TimelineViewport, width: f32) -> [Option<f32>; 2] {
+    let Some((start, end)) = viewport.selection().filter(|(start, end)| start < end) else {
+        return [None, None];
+    };
+    if !width.is_finite() || width <= 0.0 {
+        return [None, None];
+    }
+    [start, end].map(|time| {
+        let x = viewport.x_for_sample(time, width);
+        (0.0..=width).contains(&x).then_some(x)
+    })
+}
+
+pub(crate) fn draw_selection_edges(
+    frame: &mut canvas::Frame,
+    viewport: &TimelineViewport,
+    color: iced::Color,
+    emphasized: bool,
+) {
+    for x in visible_selection_edges(viewport, frame.width())
+        .into_iter()
+        .flatten()
+    {
+        frame.stroke(
+            &canvas::Path::line(Point::new(x, 0.0), Point::new(x, frame.height())),
+            canvas::Stroke::default()
+                .with_color(color)
+                .with_width(if emphasized { 2.0 } else { 1.0 }),
+        );
+    }
+}
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum WaveformDisplay {
+    Original,
+    Processed,
+    #[default]
+    Both,
+}
+
+impl std::fmt::Display for WaveformDisplay {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Original => "Original",
+            Self::Processed => "Processed",
+            Self::Both => "Both",
+        })
+    }
+}
+
 pub(crate) struct TimelineCanvas<'a, Message> {
+    display: WaveformDisplay,
     revision: u64,
     cache: Option<&'a WaveformCache>,
     viewport: &'a TimelineViewport,
     ruler: bool,
     preview: Option<(&'a AnalysisPreview, usize)>,
     selecting: bool,
+    editing_target: bool,
     on_event: Box<dyn Fn(TimelineEvent) -> Message + 'a>,
     on_context: Option<Box<dyn Fn(Point, u64) -> Message + 'a>>,
     on_selection: Option<Box<SelectionCallback<'a, Message>>>,
@@ -488,12 +551,14 @@ impl<'a, Message: 'a> TimelineCanvas<'a, Message> {
         selecting: bool,
     ) -> Self {
         Self {
+            display: WaveformDisplay::Both,
             revision: 0,
             cache: Some(cache),
             viewport,
             ruler: false,
             preview,
             selecting,
+            editing_target: false,
             on_event: Box::new(on_event),
             on_context: None,
             on_selection: None,
@@ -510,12 +575,14 @@ impl<'a, Message: 'a> TimelineCanvas<'a, Message> {
         on_event: fn(TimelineEvent) -> Message,
     ) -> Self {
         Self {
+            display: WaveformDisplay::Both,
             revision: 0,
             cache: None,
             viewport,
             ruler: true,
             preview: None,
             selecting,
+            editing_target: false,
             on_event: Box::new(on_event),
             on_context: None,
             on_selection: None,
@@ -528,6 +595,16 @@ impl<'a, Message: 'a> TimelineCanvas<'a, Message> {
 }
 
 impl<'a, Message> TimelineCanvas<'a, Message> {
+    pub fn with_display(mut self, display: WaveformDisplay) -> Self {
+        self.display = display;
+        self
+    }
+
+    pub fn with_editing_target(mut self, editing_target: bool) -> Self {
+        self.editing_target = editing_target;
+        self
+    }
+
     pub fn with_examples(
         mut self,
         examples: &'a [crate::ReferenceLabel],
@@ -580,6 +657,7 @@ impl<'a, Message> TimelineCanvas<'a, Message> {
 
 #[derive(Default)]
 pub(crate) struct TimelineCanvasState {
+    display: Cell<Option<WaveformDisplay>>,
     appearance: Cell<Option<crate::appearance::Appearance>>,
     geometry: canvas::Cache,
     revision: Cell<Option<u64>>,
@@ -587,8 +665,10 @@ pub(crate) struct TimelineCanvasState {
     selection_anchor: Option<TimePosition>,
     anchor_x: f32,
     pan_x: Option<f32>,
+    pan_epoch: u64,
     modifiers: keyboard::Modifiers,
     example_drag: Option<(u64, crate::TimeRange, bool)>,
+    hovered_example_handle: Option<(u64, bool)>,
     zoom_drag: Option<ZoomDrag>,
 }
 
@@ -679,6 +759,10 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
         cursor: mouse::Cursor,
     ) -> Option<Action<Message>> {
         let position = cursor.position_in(bounds);
+        // A modal/global release can finish the gesture without delivering this canvas its release.
+        if state.pan_x.is_some() && state.pan_epoch != self.viewport.middle_pan_epoch() {
+            state.pan_x = None;
+        }
         if let canvas::Event::Keyboard(keyboard::Event::ModifiersChanged(modifiers)) = event {
             state.modifiers = *modifiers;
             return None;
@@ -738,6 +822,16 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
             canvas::Event::Keyboard(keyboard::Event::KeyPressed {
                 key: keyboard::Key::Named(keyboard::key::Named::Escape),
                 ..
+            })
+            | canvas::Event::Window(iced::window::Event::Unfocused)
+                if state.pan_x.is_some() =>
+            {
+                state.pan_x = None;
+                Some(Action::publish((self.on_event)(TimelineEvent::PanCancel)).and_capture())
+            }
+            canvas::Event::Keyboard(keyboard::Event::KeyPressed {
+                key: keyboard::Key::Named(keyboard::key::Named::Escape),
+                ..
             }) if state.dragging || state.pan_x.is_some() => {
                 state.dragging = false;
                 state.selection_anchor = None;
@@ -757,7 +851,8 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
             }
             canvas::Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Middle)) => {
                 state.pan_x = Some(position?.x);
-                Some(Action::capture())
+                state.pan_epoch = self.viewport.middle_pan_epoch();
+                Some(Action::publish((self.on_event)(TimelineEvent::PanStart)).and_capture())
             }
             canvas::Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) => {
                 let position = position?;
@@ -875,15 +970,35 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
                     .and_capture(),
                 )
             }
-            canvas::Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Middle)) => {
+            canvas::Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Middle))
+                if state.pan_x.is_some() =>
+            {
                 state.pan_x = None;
-                Some(Action::capture())
+                Some(Action::publish((self.on_event)(TimelineEvent::PanEnd)).and_capture())
+            }
+            canvas::Event::Mouse(mouse::Event::CursorMoved { .. }) => {
+                let handle = position
+                    .and_then(|point| self.example_handle(point, bounds.width))
+                    .map(|(id, _, left)| (id, left));
+                if handle != state.hovered_example_handle {
+                    state.hovered_example_handle = handle;
+                    Some(Action::request_redraw())
+                } else {
+                    None
+                }
             }
             canvas::Event::Mouse(mouse::Event::CursorLeft) => {
                 state.dragging = false;
                 state.selection_anchor = None;
-                state.pan_x = None;
-                None
+                if state.pan_x.take().is_some() {
+                    return Some(
+                        Action::publish((self.on_event)(TimelineEvent::PanCancel)).and_capture(),
+                    );
+                }
+                state
+                    .hovered_example_handle
+                    .take()
+                    .map(|_| Action::request_redraw())
             }
             canvas::Event::Mouse(mouse::Event::WheelScrolled { delta }) => {
                 let position = position?;
@@ -909,16 +1024,19 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
         renderer: &Renderer,
         theme: &Theme,
         bounds: Rectangle,
-        _cursor: mouse::Cursor,
+        cursor: mouse::Cursor,
     ) -> Vec<canvas::Geometry> {
+        let _draw = crate::performance::measure(crate::performance::Metric::WaveformDraw);
         let appearance = crate::appearance::Appearance::from_theme(theme);
         let colors = appearance.colors();
         let revision_changed = state.revision.replace(Some(self.revision)) != Some(self.revision);
         let appearance_changed = state.appearance.replace(Some(appearance)) != Some(appearance);
-        if revision_changed || appearance_changed {
+        let display_changed = state.display.replace(Some(self.display)) != Some(self.display);
+        if revision_changed || appearance_changed || display_changed {
             state.geometry.clear();
         }
         let geometry = state.geometry.draw(renderer, bounds.size(), |frame| {
+            let _build = crate::performance::measure(crate::performance::Metric::WaveformRebuild);
             let center = bounds.height / 2.0;
             if !self.ruler
                 && let Some((preview, track)) = self.preview
@@ -1009,12 +1127,18 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
                         builder.line_to(Point::new(x, center - min * scale));
                     }
                 });
-                frame.stroke(
-                    &original,
-                    canvas::Stroke::default()
-                        .with_width(1.0)
-                        .with_color(colors.original_waveform),
-                );
+                if self.display != WaveformDisplay::Processed
+                    || self
+                        .preview
+                        .is_none_or(|(preview, track)| preview.envelopes.get(track).is_none())
+                {
+                    frame.stroke(
+                        &original,
+                        canvas::Stroke::default()
+                            .with_width(1.0)
+                            .with_color(colors.original_waveform),
+                    );
+                }
                 if let Some((preview, track)) = self.preview
                     && let Some(envelope) = preview.envelopes.get(track)
                 {
@@ -1039,12 +1163,14 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
                             builder.line_to(Point::new(x, center - min * scale));
                         }
                     });
-                    frame.stroke(
-                        &processed,
-                        canvas::Stroke::default()
-                            .with_width(1.4)
-                            .with_color(colors.waveform),
-                    );
+                    if self.display != WaveformDisplay::Original {
+                        frame.stroke(
+                            &processed,
+                            canvas::Stroke::default()
+                                .with_width(1.4)
+                                .with_color(colors.waveform),
+                        );
+                    }
                     let gain_path = canvas::Path::new(|builder| {
                         for x in 0..bounds.width as usize {
                             let sample = self.viewport.sample_at(x as f32, bounds.width);
@@ -1066,6 +1192,23 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
             }
         });
         let mut frame = canvas::Frame::new(renderer, bounds.size());
+        draw_selection_edges(
+            &mut frame,
+            self.viewport,
+            colors.active_label,
+            self.editing_target || self.ruler,
+        );
+        if self.editing_target && !self.ruler {
+            frame.fill_rectangle(
+                Point::ORIGIN,
+                Size::new(3.0, bounds.height),
+                colors.active_label,
+            );
+        }
+        let hovered_handle = cursor
+            .position_in(bounds)
+            .and_then(|point| self.example_handle(point, bounds.width))
+            .map(|(id, _, left)| (id, left));
         for label in self
             .examples
             .iter()
@@ -1133,12 +1276,31 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
                 });
             }
             if selected {
-                for x in [left, right] {
+                for (x, is_left) in [(left, true), (right, false)] {
                     if (0.0..=bounds.width).contains(&x) {
+                        let hovered = hovered_handle == Some((label.id, is_left));
+                        frame.stroke(
+                            &canvas::Path::line(Point::new(x, 0.0), Point::new(x, bounds.height)),
+                            canvas::Stroke::default()
+                                .with_color(color)
+                                .with_width(if hovered { 2.5 } else { 1.5 }),
+                        );
                         frame.fill_rectangle(
-                            Point::new((x - 3.0).max(0.0), 0.0),
-                            Size::new(6.0, bounds.height),
+                            Point::new((x - 3.0).clamp(0.0, (bounds.width - 6.0).max(0.0)), 2.0),
+                            Size::new(6.0, 18.0_f32.min(bounds.height - 2.0).max(0.0)),
                             color,
+                        );
+                        frame.stroke(
+                            &canvas::Path::line(
+                                Point::new(x.clamp(3.0, (bounds.width - 3.0).max(3.0)), 7.0),
+                                Point::new(
+                                    x.clamp(3.0, (bounds.width - 3.0).max(3.0)),
+                                    15.0_f32.min(bounds.height),
+                                ),
+                            ),
+                            canvas::Stroke::default()
+                                .with_color(colors.label_text)
+                                .with_width(1.0),
                         );
                     }
                 }
@@ -1192,6 +1354,196 @@ impl<Message: 'static> canvas::Program<Message> for TimelineCanvas<'_, Message> 
 mod tests {
     use super::*;
     use bwavfile::{WaveFmt, WaveWriter};
+
+    #[test]
+    fn middle_pan_publishes_phases_and_finishes_outside_the_canvas() {
+        use canvas::Program;
+        let viewport = TimelineViewport::new(100 * TICKS_PER_SECOND);
+        let waveform = TimelineCanvas::ruler(&viewport, false, |event| event);
+        let mut state = TimelineCanvasState::default();
+        let bounds = Rectangle::new(Point::new(200.0, 100.0), Size::new(100.0, 80.0));
+        let press = canvas::Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Middle));
+        let release = canvas::Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Middle));
+        let cursor = mouse::Cursor::Available(Point::new(220.0, 140.0));
+        assert!(matches!(
+            waveform
+                .update(&mut state, &press, bounds, cursor)
+                .unwrap()
+                .into_inner()
+                .0,
+            Some(TimelineEvent::PanStart)
+        ));
+        let moved = Point::new(245.0, 140.0);
+        let movement = waveform
+            .update(
+                &mut state,
+                &canvas::Event::Mouse(mouse::Event::CursorMoved { position: moved }),
+                bounds,
+                mouse::Cursor::Available(moved),
+            )
+            .unwrap()
+            .into_inner();
+        assert!(
+            matches!(movement.0, Some(TimelineEvent::Pan { delta_x, width }) if delta_x == 25.0 && width == 100.0)
+        );
+        assert_eq!(movement.2, iced::event::Status::Captured);
+        assert!(matches!(
+            waveform
+                .update(
+                    &mut state,
+                    &release,
+                    bounds,
+                    mouse::Cursor::Available(Point::new(450.0, 300.0))
+                )
+                .unwrap()
+                .into_inner()
+                .0,
+            Some(TimelineEvent::PanEnd)
+        ));
+        assert!(state.pan_x.is_none());
+        assert!(
+            waveform
+                .update(&mut state, &release, bounds, cursor)
+                .is_none()
+        );
+        assert!(state.selection_anchor.is_none());
+
+        let escape = canvas::Event::Keyboard(keyboard::Event::KeyPressed {
+            key: keyboard::Key::Named(keyboard::key::Named::Escape),
+            modified_key: keyboard::Key::Named(keyboard::key::Named::Escape),
+            physical_key: keyboard::key::Physical::Code(keyboard::key::Code::Escape),
+            location: keyboard::Location::Standard,
+            modifiers: keyboard::Modifiers::empty(),
+            text: None,
+            repeat: false,
+        });
+        for cancellation in [
+            escape,
+            canvas::Event::Window(iced::window::Event::Unfocused),
+            canvas::Event::Mouse(mouse::Event::CursorLeft),
+        ] {
+            waveform.update(&mut state, &press, bounds, cursor);
+            assert!(matches!(
+                waveform
+                    .update(&mut state, &cancellation, bounds, cursor)
+                    .unwrap()
+                    .into_inner()
+                    .0,
+                Some(TimelineEvent::PanCancel)
+            ));
+            assert!(state.pan_x.is_none());
+            assert!(
+                waveform
+                    .update(&mut state, &release, bounds, cursor)
+                    .is_none()
+            );
+        }
+    }
+
+    #[test]
+    fn global_middle_pan_cleanup_invalidates_a_canvas_that_missed_release() {
+        use canvas::Program;
+        let mut viewport = TimelineViewport::new(100 * TICKS_PER_SECOND);
+        let mut state = TimelineCanvasState::default();
+        let bounds = Rectangle::with_size(Size::new(100.0, 80.0));
+        let point = Point::new(40.0, 20.0);
+        let cursor = mouse::Cursor::Available(point);
+        TimelineCanvas::ruler(&viewport, false, |event| event).update(
+            &mut state,
+            &canvas::Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Middle)),
+            bounds,
+            cursor,
+        );
+        viewport.begin_middle_pan(crate::timeline::PlaybackScroll::Locked);
+        viewport.cancel_middle_pan(crate::timeline::PlaybackScroll::Locked);
+        let action = TimelineCanvas::ruler(&viewport, false, |event| event).update(
+            &mut state,
+            &canvas::Event::Mouse(mouse::Event::CursorMoved { position: point }),
+            bounds,
+            cursor,
+        );
+        assert!(action.is_none());
+        assert!(state.pan_x.is_none());
+    }
+
+    #[test]
+    fn selection_edges_only_mark_real_boundaries_inside_the_viewport() {
+        let mut viewport = TimelineViewport::new(100 * TICKS_PER_SECOND);
+        viewport.fit_range(40 * TICKS_PER_SECOND, 60 * TICKS_PER_SECOND);
+        assert_eq!(visible_selection_edges(&viewport, 240.0), [None, None]);
+        for (range, expected) in [
+            ((10, 50), [None, Some(120.0)]),
+            ((50, 90), [Some(120.0), None]),
+            ((10, 90), [None, None]),
+            ((38, 62), [Some(0.0), Some(240.0)]),
+            ((50, 50), [None, None]),
+        ] {
+            viewport.set_selection(Some((
+                range.0 * TICKS_PER_SECOND,
+                range.1 * TICKS_PER_SECOND,
+            )));
+            assert_eq!(visible_selection_edges(&viewport, 240.0), expected);
+        }
+        viewport.set_selection(Some((40 * TICKS_PER_SECOND, 60 * TICKS_PER_SECOND)));
+        for width in [0.0, -1.0, f32::NAN, f32::INFINITY] {
+            assert_eq!(visible_selection_edges(&viewport, width), [None, None]);
+        }
+    }
+
+    #[test]
+    fn example_handle_hover_redraws_without_editing_or_continuous_frames() {
+        use canvas::Program;
+        let viewport = TimelineViewport::new(TICKS_PER_SECOND);
+        let labels = [crate::ReferenceLabel {
+            id: 7,
+            range: crate::TimeRange::new(TICKS_PER_SECOND / 4, TICKS_PER_SECOND * 3 / 4).unwrap(),
+            active_speakers: vec![],
+            sources: vec![],
+            reference_track: None,
+        }];
+        let waveform = TimelineCanvas::ruler(&viewport, false, |event| event).with_examples(
+            &labels,
+            Some(7),
+            None,
+            |_| unreachable!(),
+        );
+        let mut state = TimelineCanvasState::default();
+        let bounds = Rectangle::with_size(Size::new(400.0, 80.0));
+        let point = Point::new(100.0, 10.0);
+        let event = canvas::Event::Mouse(mouse::Event::CursorMoved { position: point });
+        let cursor = mouse::Cursor::Available(point);
+        let (message, redraw, capture) = waveform
+            .update(&mut state, &event, bounds, cursor)
+            .unwrap()
+            .into_inner();
+        assert!(message.is_none());
+        assert_eq!(redraw, iced::window::RedrawRequest::NextFrame);
+        assert_eq!(capture, iced::event::Status::Ignored);
+        assert_eq!(
+            waveform.mouse_interaction(&state, bounds, cursor),
+            mouse::Interaction::ResizingHorizontally
+        );
+        assert!(
+            waveform
+                .update(&mut state, &event, bounds, cursor)
+                .is_none()
+        );
+        assert!(
+            waveform
+                .update(
+                    &mut state,
+                    &canvas::Event::Mouse(mouse::Event::CursorLeft),
+                    bounds,
+                    mouse::Cursor::Unavailable
+                )
+                .unwrap()
+                .into_inner()
+                .0
+                .is_none()
+        );
+        assert!(state.example_drag.is_none());
+        assert!(state.selection_anchor.is_none());
+    }
 
     #[test]
     fn alt_drag_fits_without_seek_or_label_and_control_wheel_zooms() {
@@ -1640,6 +1992,60 @@ mod tests {
         let mut frames = writer.audio_frame_writer().unwrap();
         frames.write_frames(samples).unwrap();
         frames.end().unwrap();
+    }
+
+    #[test]
+    fn streaming_waveform_preserves_chunk_boundaries_and_only_refines_complete_buckets() {
+        let mut samples = vec![2.0; 256];
+        samples[255] = 3.0;
+        samples.extend(vec![-2.0; 256]);
+        samples[511] = -3.0;
+        samples.extend([4.0; 3]);
+        let mut builder = WaveformBuilder::default();
+        let mut preview = WaveformCache::from_peaks(vec![(0.0, 0.0); 3], 515, 48_000);
+        let mut start = 0;
+        for end in [255, 256, 257, 511, 515] {
+            builder.push(&samples[start..end]);
+            builder.refine_preview(&mut preview);
+            assert_eq!(
+                preview.levels[0].peaks[0],
+                if end < 256 { (0.0, 0.0) } else { (2.0, 3.0) }
+            );
+            assert_eq!(
+                preview.levels[0].peaks[1],
+                if end < 512 { (0.0, 0.0) } else { (-3.0, -2.0) }
+            );
+            assert_eq!(preview.levels[0].peaks[2], (0.0, 0.0));
+            start = end;
+        }
+        let cache = builder.finish(48_000);
+        assert_eq!(cache.sample_count, 515);
+        assert_eq!(cache.sample_rate, 48_000);
+        assert_eq!(
+            cache.levels[0].peaks,
+            [(2.0, 3.0), (-3.0, -2.0), (4.0, 4.0)]
+        );
+    }
+
+    #[test]
+    fn streaming_waveform_finishes_empty_and_exact_buckets_without_an_extra_tail() {
+        for count in [0, 256, 512] {
+            let mut builder = WaveformBuilder::default();
+            builder.push(&[]);
+            builder.push(&vec![0.25; count]);
+            let cache = builder.finish(44_100);
+            assert_eq!(cache.sample_count, count);
+            assert_eq!(cache.sample_rate, 44_100);
+            assert_eq!(cache.levels[0].peaks, vec![(0.25, 0.25); count / 256]);
+            assert_eq!(
+                cache.levels.last().unwrap().peaks,
+                if count == 0 {
+                    vec![]
+                } else {
+                    vec![(0.25, 0.25)]
+                }
+            );
+        }
     }
 
     #[test]

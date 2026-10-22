@@ -1,10 +1,23 @@
 # Evaluate independent quality and long-session performance
 
-Status: claimed
+Status: done
 Assignee: release_evaluation
 Blocked by: 06, 08, 09, 10, 13
-Spec: ../spec.md
+Spec: ../../offline-supervised-migration/spec.md
 
+## Owner acceptance and closure — 2026-10-20
+
+Owner explicitly requested: "number fourteen, just clear it. The audio quality and performance is fine." Close this ticket on owner acceptance of the current application's audio quality and performance. The owner waives the remaining independent-comparison and formal benchmark acceptance requirements for this ticket; this overrides the earlier requirements to keep it open until those measurements pass. No new benchmark ticket is requested or created. A separately scoped benchmarking effort can be considered later if the owner requests it or a concrete regression warrants it.
+
+The historical frozen-comparison, known quiet-overlap limitation and controlled capacity records below remain evidence, not newly passing tests. Closure does not establish unseen-recording accuracy, a numerical performance guarantee, or stable-release/platform certification, and changes no runtime behavior. Existing known-failure tests remain intact. GUI work continues in 23; ordinary per-release package checks live in docs/branch-workflow.md. No release is published or promoted by this decision.
+
+## Prior gate record — superseded by owner acceptance
+
+Owner use/listening feedback, 2026-10-20: "It sounds really good, and it works really well." This is positive real-use listening and workflow evidence and supersedes historical blanket statements that no owner feedback exists. The owner did not identify the tested build/session, held-out regions or maximum track count/duration in this report; do not infer completion of the independent comparison, known quiet-overlap case or eight-track/two-hour measurements. Retain this feedback when assembling final acceptance rather than asking the owner to repeat ordinary listening already performed.
+
+Still incomplete: frozen independent truth and baseline comparison, wanted/overlap preservation and measurable bleed improvement, representative eight-track/two-hour performance and owner listening/timing approval. The ignored quiet-overlap regression in tests/session_ownership.rs remains a known qualification gap; ordinary tests do not pass this gate. Historical Nemotron measurements below are provenance rather than current acoustic-only qualification.
+
+Integrated editor acceptance and outstanding GUI/import/playback measurement details from 38/39/40 are consolidated in [23](23-gui-frontend-polish.md#current-remaining-work--2026-10-20). Reuse those reports when measuring whole-app performance; retain distinctions among worker timing, GUI delivery, callback samples, complete output buffers and hardware audible onset. Final downloaded-package/Windows qualification remains in 15. None of these gates passed during the tracker audit.
 ## Scope
 
 Latest owner refinement: replace the fixed acoustic phrase bridge with a persisted 10–5000 ms automatic gain gap hold, default 768 ms. Reuse cached ownership when adjusting it. Short automatic attenuation gaps bounded by preserved speech may be ignored, while explicit human room tone and speech/overlap plus protected manual edits retain authority. Remove fixed acoustic temporal bridging so lowering the control actually exposes shorter gaps; invalidate prior fixed-bridge analysis for one explicit reanalysis. Acoustic probabilities and independent hysteresis remain separate from this gain setting. Release qualification remains pending.

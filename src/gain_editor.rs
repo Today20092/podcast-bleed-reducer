@@ -63,6 +63,7 @@ pub(crate) struct GainCanvas<'a, Message> {
     pub automatic: Option<&'a AutomaticEnvelope>,
     pub effective: Option<&'a GainEnvelope>,
     pub editing: bool,
+    pub selected_point: Option<(u64, usize)>,
     pub on_event: Box<dyn Fn(GainEditorEvent) -> Message + 'a>,
 }
 #[derive(Default)]
@@ -73,6 +74,7 @@ pub(crate) struct GainCanvasState {
     dragging: bool,
     modifiers: keyboard::Modifiers,
     zoom_drag: Option<crate::waveform::ZoomDrag>,
+    hovered_point: Option<(u64, usize)>,
 }
 impl<Message: 'static> canvas::Program<Message> for GainCanvas<'_, Message> {
     type State = GainCanvasState;
@@ -106,6 +108,7 @@ impl<Message: 'static> canvas::Program<Message> for GainCanvas<'_, Message> {
                 ..
             }) if state.dragging => {
                 state.dragging = false;
+                state.hovered_point = None;
                 Some(Action::publish((self.on_event)(GainEditorEvent::Cancel)).and_capture())
             }
             canvas::Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) => {
@@ -136,6 +139,7 @@ impl<Message: 'static> canvas::Program<Message> for GainCanvas<'_, Message> {
                 )
             }
             canvas::Event::Mouse(mouse::Event::CursorMoved { .. }) if state.dragging => {
+                state.hovered_point = None;
                 let point = cursor.position_from(bounds.position())?;
                 let time =
                     crate::editor_drawing::visible_boundary(self.viewport, point.x, bounds.width);
@@ -150,11 +154,37 @@ impl<Message: 'static> canvas::Program<Message> for GainCanvas<'_, Message> {
                 if state.dragging =>
             {
                 state.dragging = false;
+                state.hovered_point = None;
                 Some(Action::publish((self.on_event)(GainEditorEvent::End)).and_capture())
             }
             canvas::Event::Mouse(mouse::Event::CursorLeft) if state.dragging => {
                 state.dragging = false;
+                state.hovered_point = None;
                 Some(Action::publish((self.on_event)(GainEditorEvent::Cancel)).and_capture())
+            }
+            canvas::Event::Mouse(mouse::Event::CursorMoved { .. }) => {
+                let hovered = cursor.position_in(bounds).and_then(|point| {
+                    hit_gain_point(
+                        self.constraints,
+                        self.track,
+                        self.viewport,
+                        GainPointer {
+                            x: point.x,
+                            y: point.y,
+                            width: bounds.width,
+                            height: bounds.height,
+                        },
+                    )
+                });
+                if hovered != state.hovered_point {
+                    state.hovered_point = hovered;
+                    Some(Action::request_redraw())
+                } else {
+                    None
+                }
+            }
+            canvas::Event::Mouse(mouse::Event::CursorLeft) => {
+                state.hovered_point.take().map(|_| Action::request_redraw())
             }
             _ => None,
         }
@@ -165,8 +195,9 @@ impl<Message: 'static> canvas::Program<Message> for GainCanvas<'_, Message> {
         renderer: &Renderer,
         theme: &Theme,
         bounds: Rectangle,
-        _cursor: mouse::Cursor,
+        cursor: mouse::Cursor,
     ) -> Vec<canvas::Geometry> {
+        let _draw = crate::performance::measure(crate::performance::Metric::GainDraw);
         let appearance = crate::appearance::Appearance::from_theme(theme);
         let colors = appearance.colors();
         let revision_changed = state.revision.replace(Some(self.revision)) != Some(self.revision);
@@ -175,6 +206,7 @@ impl<Message: 'static> canvas::Program<Message> for GainCanvas<'_, Message> {
             state.geometry.clear();
         }
         let geometry = state.geometry.draw(renderer, bounds.size(), |frame| {
+            let _build = crate::performance::measure(crate::performance::Metric::GainRebuild);
             let start = self.viewport.start().max(0.0) as u64;
             let end = (self.viewport.start() + self.viewport.visible_samples()).ceil() as u64;
             for (automatic, color, width) in [
@@ -309,9 +341,84 @@ impl<Message: 'static> canvas::Program<Message> for GainCanvas<'_, Message> {
             }
         });
         let mut overlay = canvas::Frame::new(renderer, bounds.size());
+        crate::waveform::draw_selection_edges(
+            &mut overlay,
+            self.viewport,
+            colors.active_label,
+            self.selected_point.is_some(),
+        );
+        let hovered = if self.editing && !state.modifiers.alt() && cursor.is_over(bounds) {
+            state.hovered_point
+        } else {
+            None
+        };
+        for (target, selected) in [(hovered, false), (self.selected_point, true)] {
+            let Some((id, index)) = target else { continue };
+            let Some(point) = self
+                .constraints
+                .manual_edits
+                .iter()
+                .find(|edit| edit.id == id && edit.source.track == self.track)
+                .and_then(|edit| edit.points.get(index))
+            else {
+                continue;
+            };
+            let x = self.viewport.x_for_sample(point.time, bounds.width);
+            if !(0.0..=bounds.width).contains(&x) {
+                continue;
+            }
+            let position = Point::new(x, gain_y(point.gain, bounds.height));
+            overlay.fill(&canvas::Path::circle(position, 6.5), colors.panel);
+            overlay.fill(&canvas::Path::circle(position, 4.5), colors.manual_gain);
+            overlay.stroke(
+                &canvas::Path::circle(position, 6.5),
+                canvas::Stroke::default()
+                    .with_color(if selected {
+                        colors.text
+                    } else {
+                        colors.manual_gain
+                    })
+                    .with_width(1.5),
+            );
+        }
         if let Some(drag) = &state.zoom_drag {
             drag.draw(&mut overlay, bounds.height, theme);
         }
         vec![geometry, overlay.into_geometry()]
+    }
+
+    fn mouse_interaction(
+        &self,
+        state: &Self::State,
+        bounds: Rectangle,
+        cursor: mouse::Cursor,
+    ) -> mouse::Interaction {
+        if !self.editing {
+            return mouse::Interaction::default();
+        }
+        if state.zoom_drag.is_some() || (state.modifiers.alt() && cursor.is_over(bounds)) {
+            return mouse::Interaction::Crosshair;
+        }
+        if state.dragging {
+            return mouse::Interaction::Grabbing;
+        }
+        if cursor.position_in(bounds).is_some_and(|point| {
+            hit_gain_point(
+                self.constraints,
+                self.track,
+                self.viewport,
+                GainPointer {
+                    x: point.x,
+                    y: point.y,
+                    width: bounds.width,
+                    height: bounds.height,
+                },
+            )
+            .is_some()
+        }) {
+            mouse::Interaction::Grab
+        } else {
+            mouse::Interaction::default()
+        }
     }
 }

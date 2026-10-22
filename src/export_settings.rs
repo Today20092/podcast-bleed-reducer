@@ -1,5 +1,5 @@
 use crate::{Project, RenderBlocker};
-use bwavfile::{Bext, CommonFormat, WaveFmt, WaveReader, WaveWriter};
+use bwavfile::{Bext, CommonFormat, WaveFmt, WaveWriter};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -38,10 +38,14 @@ pub(crate) fn source_format(
 ) -> Result<(WaveFmt, Option<Bext>), RenderBlocker> {
     let mut format = WaveFmt::new_pcm_mono(source.metadata.grid.sample_rate, 32);
     format.tag = 3;
-    let Ok(mut reader) = WaveReader::open(&source.path) else {
-        return Ok((format, None));
+    let mut reader = match crate::audio_io::open_wave(&source.path) {
+        Ok(reader) => reader,
+        Err(bwavfile::Error::IOError(error)) => return Err(error.into()),
+        Err(_) => return Ok((format, None)),
     };
-    let native = reader.format()?;
+    let native = reader
+        .format()
+        .map_err(|e| crate::audio_io::wav_error("read source encoding", &source.path, e))?;
     format = WaveFmt::new_pcm_mono(native.sample_rate, native.bits_per_sample);
     if native.common_format() == CommonFormat::IeeeFloatPCM {
         format.tag = 3;
@@ -50,7 +54,12 @@ pub(crate) fn source_format(
             format.tag = 3;
         }
     }
-    Ok((format, reader.broadcast_extension()?))
+    Ok((
+        format,
+        reader
+            .broadcast_extension()
+            .map_err(|e| crate::audio_io::wav_error("read source timing", &source.path, e))?,
+    ))
 }
 
 impl ExportEncoding {

@@ -160,9 +160,10 @@ fn prepare(
     if let Some(cached) = &cached {
         send(sender, Event::Preview(cached.clone()))?;
     }
-    let mut peaks = vec![Vec::new(); sources.len()];
-    let mut extrema = vec![(f32::INFINITY, f32::NEG_INFINITY); sources.len()];
-    let mut used = vec![0; sources.len()];
+    let mut builders: Vec<_> = sources
+        .iter()
+        .map(|_| crate::waveform::WaveformBuilder::default())
+        .collect();
     let mut counts = vec![0_u64; sources.len()];
     let mut last_refinement = Instant::now();
     let decoded =
@@ -170,22 +171,13 @@ fn prepare(
             for (index, samples) in channels.iter().enumerate() {
                 counts[index] += samples.len() as u64;
                 if cached.is_none() {
-                    for &sample in samples {
-                        extrema[index].0 = extrema[index].0.min(sample);
-                        extrema[index].1 = extrema[index].1.max(sample);
-                        used[index] += 1;
-                        if used[index] == 256 {
-                            peaks[index].push(extrema[index]);
-                            extrema[index] = (f32::INFINITY, f32::NEG_INFINITY);
-                            used[index] = 0;
-                        }
-                    }
+                    builders[index].push(samples);
                 }
             }
             if cached.is_none() && last_refinement.elapsed() >= Duration::from_millis(500) {
                 if let Some(overview) = &mut overview {
-                    for (waveform, peaks) in overview.iter_mut().zip(&peaks) {
-                        waveform.refine_prefix(peaks);
+                    for (waveform, builder) in overview.iter_mut().zip(&builders) {
+                        builder.refine_preview(waveform);
                     }
                     let _ = sender.try_send(Event::Preview(overview.clone()));
                 }
@@ -218,19 +210,10 @@ fn prepare(
         ));
     }
     let waveforms = cached.unwrap_or_else(|| {
-        peaks
+        builders
             .into_iter()
-            .enumerate()
-            .map(|(index, mut peaks)| {
-                if used[index] != 0 {
-                    peaks.push(extrema[index]);
-                }
-                WaveformCache::from_peaks(
-                    peaks,
-                    counts[index] as usize,
-                    metadata[index].grid.sample_rate,
-                )
-            })
+            .zip(&metadata)
+            .map(|(builder, metadata)| builder.finish(metadata.grid.sample_rate))
             .collect()
     });
     let validation_ms = started.elapsed().as_millis();
@@ -274,8 +257,10 @@ fn coarse_preview(
     metadata: &[SourceMetadata],
     cancelled: &AtomicBool,
 ) -> Result<Option<Vec<WaveformCache>>, RenderBlocker> {
-    let Ok(mut reader) = bwavfile::WaveReader::open(&sources[0].path) else {
-        return Ok(None);
+    let mut reader = match crate::audio_io::open_wave(&sources[0].path) {
+        Ok(reader) => reader,
+        Err(bwavfile::Error::IOError(error)) => return Err(error.into()),
+        Err(_) => return Ok(None),
     };
     let format = reader.format()?;
     let channels = usize::from(format.channel_count);
@@ -425,6 +410,11 @@ mod tests {
                     assert_eq!(identity.metadata, source.metadata(None).unwrap());
                 }
                 assert!(waveforms.iter().all(|w| w.sample_count == 30_001));
+                let reopened = crate::waveform::load_source_waveforms(&sources, |_, _| {}).unwrap();
+                assert_eq!(
+                    serde_json::to_value(waveforms).unwrap(),
+                    serde_json::to_value(reopened).unwrap()
+                );
             }
         }
         std::fs::remove_dir_all(root).unwrap();

@@ -6,6 +6,30 @@ use std::{
     path::{Path, PathBuf},
 };
 
+pub(crate) fn open_wave(
+    path: &Path,
+) -> Result<WaveReader<std::io::BufReader<crate::storage_io::SourceReader>>, bwavfile::Error> {
+    WaveReader::new(std::io::BufReader::new(
+        crate::storage_io::SourceReader::open(path)?,
+    ))
+}
+
+pub(crate) fn wav_error(
+    operation: &'static str,
+    path: &Path,
+    error: bwavfile::Error,
+) -> RenderBlocker {
+    match error {
+        bwavfile::Error::IOError(error) => {
+            crate::storage_io::context(operation, path, error).into()
+        }
+        error => RenderBlocker(format!(
+            "Could not {operation} '{}': {error}",
+            path.display()
+        )),
+    }
+}
+
 pub(crate) struct AtomicOutput {
     staging: PathBuf,
     destination: PathBuf,
@@ -15,7 +39,8 @@ pub(crate) struct AtomicOutput {
 impl AtomicOutput {
     pub(crate) fn new(destination: &Path) -> Result<Self, RenderBlocker> {
         let parent = destination.parent().unwrap_or_else(|| Path::new("."));
-        fs::create_dir_all(parent)?;
+        fs::create_dir_all(parent)
+            .map_err(|e| crate::storage_io::context("create export parent folder", parent, e))?;
         let name = destination
             .file_name()
             .and_then(|name| name.to_str())
@@ -34,7 +59,14 @@ impl AtomicOutput {
             match fs::create_dir(&path) {
                 Ok(()) => break path,
                 Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
-                Err(error) => return Err(error.into()),
+                Err(error) => {
+                    return Err(crate::storage_io::context(
+                        "create temporary output folder",
+                        &path,
+                        error,
+                    )
+                    .into());
+                }
             }
         };
         Ok(Self {
@@ -48,15 +80,43 @@ impl AtomicOutput {
         self.staging.join(name)
     }
     pub(crate) fn write_report(&self, report: &str) -> Result<(), RenderBlocker> {
-        fs::write(self.path("report.json"), report).map_err(Into::into)
+        let path = self.path("report.json");
+        fs::write(&path, report)
+            .map_err(|e| crate::storage_io::context("write render report", &path, e).into())
     }
+    pub(crate) fn sync_all(&self) -> Result<(), RenderBlocker> {
+        self.sync_with(|path| fs::OpenOptions::new().write(true).open(path)?.sync_all())
+    }
+
+    fn sync_with(
+        &self,
+        mut sync: impl FnMut(&Path) -> std::io::Result<()>,
+    ) -> Result<(), RenderBlocker> {
+        for entry in fs::read_dir(&self.staging)
+            .map_err(|e| crate::storage_io::context("inspect prepared output", &self.staging, e))?
+        {
+            let path = entry?.path();
+            sync(&path)
+                .map_err(|e| crate::storage_io::context("flush completed output", &path, e))?;
+        }
+        Ok(())
+    }
+
     pub(crate) fn commit(mut self) -> Result<(), RenderBlocker> {
         if self.destination.exists() {
             // remove_dir is atomic and refuses a nonempty directory, including a
             // destination filled by another attempt after its initial check.
-            fs::remove_dir(&self.destination)?;
+            fs::remove_dir(&self.destination).map_err(|e| {
+                crate::storage_io::context(
+                    "publish output without replacing existing files",
+                    &self.destination,
+                    e,
+                )
+            })?;
         }
-        fs::rename(&self.staging, &self.destination)?;
+        fs::rename(&self.staging, &self.destination).map_err(|e| {
+            crate::storage_io::context("publish completed output", &self.destination, e)
+        })?;
         self.committed = true;
         Ok(())
     }
@@ -103,7 +163,8 @@ impl AudioSource {
     ) -> Result<SourceMetadata, RenderBlocker> {
         let mut metadata = SourceMetadata::read_cancellable(&self.path, cancelled)?;
         if let Some(channel) = self.channel {
-            WaveReader::open(&self.path)?;
+            open_wave(&self.path)
+                .map_err(|e| wav_error("read WAV channel metadata", &self.path, e))?;
             if channel >= metadata.channels {
                 return Err(RenderBlocker(
                     "Selected WAV channel is out of range.".into(),
@@ -150,7 +211,7 @@ impl AudioSource {
 pub fn wav_channel_sources(path: &Path) -> Result<Vec<AudioSource>, RenderBlocker> {
     use std::io::{Read, Seek};
     struct MetadataReader {
-        file: fs::File,
+        file: crate::storage_io::SourceReader,
         remaining: usize,
     }
     impl Read for MetadataReader {
@@ -169,15 +230,17 @@ pub fn wav_channel_sources(path: &Path) -> Result<Vec<AudioSource>, RenderBlocke
             self.file.seek(position)
         }
     }
-    let mut reader = WaveReader::open(path)?;
-    let format = reader.format()?;
+    let mut reader = open_wave(path).map_err(|e| wav_error("read WAV metadata", path, e))?;
+    let format = reader
+        .format()
+        .map_err(|e| wav_error("read WAV format", path, e))?;
     if format.channel_count == 0 {
         return Err(RenderBlocker("WAV contains no channels.".into()));
     }
     let mut names = vec![None; usize::from(format.channel_count)];
     let mut xml = Vec::new();
     if let Ok(mut reader) = WaveReader::new(MetadataReader {
-        file: fs::File::open(path)?,
+        file: crate::storage_io::SourceReader::open(path)?,
         remaining: 1_048_576,
     }) && reader.read_ixml(&mut xml).is_ok()
         && let Ok(xml) = std::str::from_utf8(&xml)
@@ -243,13 +306,24 @@ impl SourceMetadata {
         cancelled: Option<&std::sync::atomic::AtomicBool>,
     ) -> Result<Self, RenderBlocker> {
         crate::prepared_analysis::check_cancelled(cancelled)?;
-        let Ok(mut reader) = WaveReader::open(path) else {
-            return crate::media::decode(path, cancelled, |_, _| Ok(()));
+        let mut reader = match open_wave(path) {
+            Ok(reader) => reader,
+            Err(bwavfile::Error::IOError(error)) => return Err(error.into()),
+            Err(_) => return crate::media::decode(path, cancelled, |_, _| Ok(())),
         };
-        let format = reader.format()?;
-        let bext = reader.broadcast_extension()?;
+        let format = reader
+            .format()
+            .map_err(|e| wav_error("read WAV format", path, e))?;
+        let bext = reader
+            .broadcast_extension()
+            .map_err(|e| wav_error("read WAV timing metadata", path, e))?;
         Ok(Self {
-            grid: SourceTimebase::new(format.sample_rate, reader.frame_length()?)?,
+            grid: SourceTimebase::new(
+                format.sample_rate,
+                reader
+                    .frame_length()
+                    .map_err(|e| wav_error("read WAV length", path, e))?,
+            )?,
             channels: format.channel_count,
             timing_origin: bext
                 .as_ref()
@@ -355,11 +429,16 @@ pub(crate) fn render_source_encoded(
             decoded.bext.as_ref(),
         )?;
     }
-    let mut writer = WaveWriter::create(destination, format)?;
+    let mut writer = WaveWriter::create(destination, format)
+        .map_err(|e| wav_error("create processed WAV", destination, e))?;
     if let Some(bext) = &decoded.bext {
-        writer.write_broadcast_metadata(bext)?;
+        writer
+            .write_broadcast_metadata(bext)
+            .map_err(|e| wav_error("write WAV timing metadata", destination, e))?;
     }
-    let mut writer = writer.audio_frame_writer()?;
+    let mut writer = writer
+        .audio_frame_writer()
+        .map_err(|e| wav_error("prepare WAV output", destination, e))?;
     let mut frame = 0_u64;
     let mut output = Vec::with_capacity(65_536);
     let actual = decode_source_chunks(source, cancelled, |_, samples| {
@@ -376,7 +455,9 @@ pub(crate) fn render_source_encoded(
             output.push(sample);
             frame += 1;
         }
-        writer.write_frames(&output)?;
+        writer
+            .write_frames(&output)
+            .map_err(|e| wav_error("write processed WAV", destination, e))?;
         Ok(())
     })?;
     if actual.metadata != decoded.metadata || frame != decoded.metadata.grid.frame_count {
@@ -384,7 +465,9 @@ pub(crate) fn render_source_encoded(
             "source changed during native rendering".into(),
         ));
     }
-    writer.end()?;
+    writer
+        .end()
+        .map_err(|e| wav_error("finish processed WAV", destination, e))?;
     Ok(decoded.metadata)
 }
 
@@ -422,24 +505,30 @@ pub(crate) fn decode_recording_chunks(
     }
     let path = &source.path;
     crate::prepared_analysis::check_cancelled(cancelled)?;
-    let Ok(mut reader) = WaveReader::open(path) else {
-        if source.channel.is_some() {
-            return Err(RenderBlocker(
-                "Channel selection requires a WAV source.".into(),
-            ));
+    let mut reader = match open_wave(path) {
+        Ok(reader) => reader,
+        Err(bwavfile::Error::IOError(error)) => return Err(error.into()),
+        Err(_) => {
+            if source.channel.is_some() {
+                return Err(RenderBlocker(
+                    "Channel selection requires a WAV source.".into(),
+                ));
+            }
+            let metadata = crate::media::decode(path, cancelled, |rate, samples| {
+                consume(rate, &[samples.to_vec()])
+            })?;
+            let mut format = WaveFmt::new_pcm_mono(metadata.grid.sample_rate, 32);
+            format.tag = 3; // Decoded non-WAV sources export IEEE-float32 without clipping/quantization.
+            return Ok(DecodedMetadata {
+                metadata,
+                format,
+                bext: None,
+            });
         }
-        let metadata = crate::media::decode(path, cancelled, |rate, samples| {
-            consume(rate, &[samples.to_vec()])
-        })?;
-        let mut format = WaveFmt::new_pcm_mono(metadata.grid.sample_rate, 32);
-        format.tag = 3; // Decoded non-WAV sources export IEEE-float32 without clipping/quantization.
-        return Ok(DecodedMetadata {
-            metadata,
-            format,
-            bext: None,
-        });
     };
-    let native_format = reader.format()?;
+    let native_format = reader
+        .format()
+        .map_err(|e| wav_error("read WAV format", path, e))?;
     let channels = usize::from(native_format.channel_count);
     let channel = usize::from(source.channel.unwrap_or(0));
     let mut format = native_format;
@@ -466,8 +555,12 @@ pub(crate) fn decode_recording_chunks(
             format.tag = 3;
         }
     }
-    let frame_count = reader.frame_length()?;
-    let bext = reader.broadcast_extension()?;
+    let frame_count = reader
+        .frame_length()
+        .map_err(|e| wav_error("read WAV length", path, e))?;
+    let bext = reader
+        .broadcast_extension()
+        .map_err(|e| wav_error("read WAV timing metadata", path, e))?;
     let metadata = SourceMetadata {
         grid: SourceTimebase::new(format.sample_rate, frame_count)?,
         channels: 1,
@@ -500,14 +593,20 @@ pub(crate) fn decode_recording_chunks(
             bext,
         });
     }
-    let mut frames = Some(reader.audio_frame_reader()?);
+    let mut frames = Some(
+        reader
+            .audio_frame_reader()
+            .map_err(|e| wav_error("prepare WAV reader", path, e))?,
+    );
     let block_frames = (65_536 / channels).max(1);
     // Float32 already matches engine samples; avoid a virtual read/conversion per sample.
     let mut raw = if native_format.common_format() == CommonFormat::IeeeFloatPCM
         && native_format.bits_per_sample == 32
     {
         let mut frames = frames.take().unwrap();
-        frames.locate(0)?;
+        frames
+            .locate(0)
+            .map_err(|e| wav_error("seek WAV audio", path, e))?;
         Some(frames.into_inner())
     } else {
         None
@@ -540,7 +639,8 @@ pub(crate) fn decode_recording_chunks(
             frames
                 .as_mut()
                 .unwrap()
-                .read_frames(&mut buffer[..requested * channels])? as usize
+                .read_frames(&mut buffer[..requested * channels])
+                .map_err(|e| wav_error("read WAV audio", path, e))? as usize
         };
         if read == 0 {
             return Err(RenderBlocker(format!(
@@ -588,6 +688,48 @@ pub(crate) fn waveform(path: &Path, bins: usize) -> Result<Vec<(f32, f32)>, Rend
                 })
         })
         .collect())
+}
+
+#[cfg(test)]
+mod output_failure_tests {
+    use super::*;
+    #[test]
+    fn native_pcm_reads_remain_buffered_with_reconnect_support() {
+        let root = super::multichannel_tests::root();
+        let path = root.join("pcm.wav");
+        super::multichannel_tests::write_poly(&path, 1, 16, 48_000);
+        let mut frames = open_wave(&path).unwrap().audio_frame_reader().unwrap();
+        let mut samples = vec![0.0_f32; 48_000 * 3];
+        assert_eq!(frames.read_frames(&mut samples).unwrap(), 48_000);
+        let reads = frames.into_inner().get_ref().read_count();
+        assert!(
+            reads < 1000,
+            "PCM samples must not each cause an unbuffered source read: {reads} reads"
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn disk_full_during_final_flush_never_publishes_or_replaces_previous_output() {
+        let root = super::multichannel_tests::root();
+        let destination = root.join("delivery");
+        fs::create_dir(&destination).unwrap();
+        fs::write(destination.join("accepted.wav"), b"keep").unwrap();
+        let output = AtomicOutput::new(&destination).unwrap();
+        let staging = output.staging.clone();
+        fs::write(output.path("new.wav"), b"unfinished").unwrap();
+        let error = output
+            .sync_with(|_| Err(std::io::ErrorKind::StorageFull.into()))
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("flush completed output") && error.contains("new.wav"));
+        assert!(error.contains("Free space"));
+        drop(output);
+        assert_eq!(fs::read(destination.join("accepted.wav")).unwrap(), b"keep");
+        assert!(!destination.join("new.wav").exists());
+        assert!(!staging.exists());
+        fs::remove_dir_all(root).unwrap();
+    }
 }
 
 #[cfg(test)]

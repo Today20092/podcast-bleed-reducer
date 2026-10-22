@@ -47,7 +47,7 @@ Cancelled or failed jobs, changed sources and corrupt payloads do not replace th
 
 ## Validation and limits
 
-Public tests cover rejected one-class/constant/nonfinite input, insufficient iteration budgets, class-prior-only fitting, positive orientation, persistence tampering, roundtrip prediction, bounded sampling, fixed-evidence reuse and cancellation. Acoustic editor integration tests exercise training every track and prediction beyond reference ranges. Synthetic fixtures establish mechanics, not unseen recording quality. Independent wanted-speech/overlap preservation, measured bleed improvement, listening and long-session qualification remain pending in tickets 14/15.
+Public tests cover rejected one-class/constant/nonfinite input, insufficient iteration budgets, class-prior-only fitting, positive orientation, persistence tampering, roundtrip prediction, bounded sampling, fixed-evidence reuse and cancellation. Acoustic editor integration tests exercise training every track and prediction beyond reference ranges. Synthetic fixtures establish mechanics, not unseen recording quality. The owner accepted current sound/performance and closed 14 on 2026-10-20; remaining formal independent/long-session measurements are unperformed optional future work. Ticket 15's package checks continue in the [per-release checklist](branch-workflow.md#release-checklist), without implying those missing measurements passed.
 
 The earlier recipe that used mapped Nemotron activity is retired. Its implementation and measurements remain in Git history and the [research note](research/nemotron.md); it is not the current Analyze path.
 

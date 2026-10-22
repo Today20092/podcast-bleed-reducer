@@ -1,6 +1,6 @@
 # Add an advanced training panel
 
-Status: needs-triage
+Status: deferred
 Type: task
 Deferred: yes; not authorized for implementation
 Blocked by: 14, 16
@@ -40,5 +40,7 @@ Iced settings UI; project settings/schema defaults; OwnershipTrainingSettings; m
 Implementation now; new classifiers; neural fine-tuning; raw coefficient editing; automatic tuning against held-out release data; new uncertainty review workflows.
 
 ## Comments
+
+2026-10-20 backlog audit: retained as a future proposal outside the active queue. No panel implementation or tuning qualification exists. Reopen for triage only when the owner requests this work, the dependency gates are met, and numerical bounds/threshold scope are settled. The full proposal below remains preserved; this is not completion or rejection.
 
 2026-10-09: Created at the owner's request as deferred work. Do not claim or implement until explicitly authorized and triage settles bounds and decision-control scope. See [the ownership explanation](../../../docs/ownership-explained.md) for labels, bleed calibration, inputs, weights and gain generation.

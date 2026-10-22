@@ -1,0 +1,100 @@
+{
+  "schema_version": 1,
+  "scenario": "integrated-final-idle-analysis-edits-follow-minimized-import-restore",
+  "application_version": "0.1.0-alpha.6",
+  "build_profile": "development",
+  "platform": "windows (x86_64)",
+  "source_commit": "798594260a19c30e2824f197c70c757177d3c6a1",
+  "executable_sha256": "feffb695e346bc303cedc713b3f7ed2b516b3ddfa271445f7606f53331060c7d",
+  "identity_origin": "launch metadata; executable hash must be supplied by the launcher",
+  "elapsed_ms": 650397.684831,
+  "sample_limit_per_metric": 4096,
+  "input_events": 67,
+  "resize_events": 14,
+  "window_logical_size": [
+    1024,
+    900
+  ],
+  "window_scale_factor": null,
+  "observations": {
+    "application_update_elapsed_ms": {
+      "observations": 23765,
+      "retained_samples": 4096,
+      "overwritten_samples": 19669,
+      "median_ms": 0.003282,
+      "p95_ms": 0.004261,
+      "p99_ms": 0.006704,
+      "max_ms": 6.004395
+    },
+    "gain_cache_build_closure_elapsed_ms": {
+      "observations": 9942,
+      "retained_samples": 4096,
+      "overwritten_samples": 5846,
+      "median_ms": 1.6454600000000001,
+      "p95_ms": 2.066114,
+      "p99_ms": 2.258667,
+      "max_ms": 3.149563
+    },
+    "gain_canvas_draw_elapsed_ms": {
+      "observations": 47241,
+      "retained_samples": 4096,
+      "overwritten_samples": 43145,
+      "median_ms": 0.002375,
+      "p95_ms": 0.003353,
+      "p99_ms": 0.004749,
+      "max_ms": 1.864553
+    },
+    "observed_input_to_first_canvas_completion_ms": {
+      "observations": 50,
+      "retained_samples": 50,
+      "overwritten_samples": 0,
+      "median_ms": 5.6665719999999995,
+      "p95_ms": 13333.260233,
+      "p99_ms": 168729.542302,
+      "max_ms": 168729.542302
+    },
+    "redraw_request_interval_ms": {
+      "observations": 20480,
+      "retained_samples": 4096,
+      "overwritten_samples": 16384,
+      "median_ms": 8.378509,
+      "p95_ms": 9.644522,
+      "p99_ms": 10.496236000000001,
+      "max_ms": 168732.58724199998
+    },
+    "waveform_cache_build_closure_elapsed_ms": {
+      "observations": 13269,
+      "retained_samples": 4096,
+      "overwritten_samples": 9173,
+      "median_ms": 3.774153,
+      "p95_ms": 4.382890000000001,
+      "p99_ms": 4.639905,
+      "max_ms": 5.831677
+    },
+    "waveform_canvas_draw_elapsed_ms": {
+      "observations": 77057,
+      "retained_samples": 4096,
+      "overwritten_samples": 72961,
+      "median_ms": 0.017041,
+      "p95_ms": 0.022628000000000002,
+      "p99_ms": 0.045466,
+      "max_ms": 4.029562
+    },
+    "worker_poll_update_elapsed_ms": {
+      "observations": 2548,
+      "retained_samples": 2548,
+      "overwritten_samples": 0,
+      "median_ms": 0.004191,
+      "p95_ms": 0.005727,
+      "p99_ms": 0.008450999999999998,
+      "max_ms": 14.273043
+    }
+  },
+  "unavailable": [
+    "GPU presentation completion, busy time and monitor refresh rate",
+    "physical input-to-photon latency and acoustic onset",
+    "process CPU and working set: collect with a separately labeled OS sampler",
+    "audio callback deadlines: use the separate playback probes",
+    "graphics adapter/backend: use About diagnostics when available"
+  ]
+}

@@ -1,0 +1,312 @@
+{
+  "observed_on": "2026-10-21",
+  "scope": "Installed Windows x64 FabFilter files in Common Files/VST3, Common Files/CLAP, and Program Files/FabFilter; hashes and file metadata, not runtime benchmarks.",
+  "files": [
+    {
+      "path": "C:\\Program Files\\Common Files\\VST3\\FabFilter Micro.vst3",
+      "bytes": 1989632,
+      "version": "1.3.1.30",
+      "sha256": "76abcf4eabf9af5168bce2bf099d88effd960928f1df4c9269b3199b69587180"
+    },
+    {
+      "path": "C:\\Program Files\\Common Files\\VST3\\FabFilter One.vst3",
+      "bytes": 2239488,
+      "version": "3.5.1.48",
+      "sha256": "d999b47b7dad62e1a4fa6de393fa37771ee6e7beeec604eee81504009d76f39b"
+    },
+    {
+      "path": "C:\\Program Files\\Common Files\\VST3\\FabFilter Pro-C 2.vst3",
+      "bytes": 2798592,
+      "version": "2.2.0.45",
+      "sha256": "139f62b90519133847ebc3dd2e461a8c2c767d13d86190b520de37f7409c3fa4"
+    },
+    {
+      "path": "C:\\Program Files\\Common Files\\VST3\\FabFilter Pro-C 3.vst3",
+      "bytes": 4141056,
+      "version": "3.0.1.53",
+      "sha256": "134890ede5a2f3f9786ec2009011ac02d6e3d2247a08c286692ad4157bfac42e"
+    },
+    {
+      "path": "C:\\Program Files\\Common Files\\VST3\\FabFilter Pro-DS.vst3",
+      "bytes": 3234304,
+      "version": "1.3.1.34",
+      "sha256": "ada0d2bd3d8090a078dea1f7da0493d644c64e87b49d541558b13bf65ff0ac51"
+    },
+    {
+      "path": "C:\\Program Files\\Common Files\\VST3\\FabFilter Pro-G.vst3",
+      "bytes": 3509760,
+      "version": "1.4.1.38",
+      "sha256": "944d8eb20824c88fd355240314dea827be998d618f60fbdf49a1e4410232addf"
+    },
+    {
+      "path": "C:\\Program Files\\Common Files\\VST3\\FabFilter Pro-L 2.vst3",
+      "bytes": 3015168,
+      "version": "2.2.5.41",
+      "sha256": "033bc8bce956634336eefc5f57a2ec368e6c5d9cd2c753e450bb071740c1bf0f"
+    },
+    {
+      "path": "C:\\Program Files\\Common Files\\VST3\\FabFilter Pro-MB.vst3",
+      "bytes": 2727424,
+      "version": "1.3.2.28",
+      "sha256": "e104128cdcd51835e2aa7b8d6b8a4413e25b17b785fce0ffe8b038a8fbd1ebf4"
+    },
+    {
+      "path": "C:\\Program Files\\Common Files\\VST3\\FabFilter Pro-Q 4.vst3",
+      "bytes": 4779520,
+      "version": "4.1.1.12",
+      "sha256": "8f4f09d08cb2b495dadf386af90c83f47f44d36841ba66800098da809223fe15"
+    },
+    {
+      "path": "C:\\Program Files\\Common Files\\VST3\\FabFilter Pro-R 2.vst3",
+      "bytes": 3914752,
+      "version": "2.0.5.24",
+      "sha256": "de7ce568fb7acd12abf02cfaf73120d8bba2630f1f280cf77b87435148cf1fee"
+    },
+    {
+      "path": "C:\\Program Files\\Common Files\\VST3\\FabFilter Saturn 2.vst3",
+      "bytes": 3685376,
+      "version": "2.1.2.14",
+      "sha256": "0160e17ca9541f23dc3610c3a179d00096252c7d06f1ba593ca6b5f8cb504b3f"
+    },
+    {
+      "path": "C:\\Program Files\\Common Files\\VST3\\FabFilter Simplon.vst3",
+      "bytes": 2160640,
+      "version": "1.4.1.37",
+      "sha256": "ba336e947ab1a2c44b13dea41d5958409237f046388cf79965909926046358cb"
+    },
+    {
+      "path": "C:\\Program Files\\Common Files\\VST3\\FabFilter Timeless 3.vst3",
+      "bytes": 4139008,
+      "version": "3.0.9.50",
+      "sha256": "086a3ba3aa3df2f12f487558cb52ef0fa0c92210a350966bdd5f8ff065be4b9d"
+    },
+    {
+      "path": "C:\\Program Files\\Common Files\\VST3\\FabFilter Twin 3.vst3",
+      "bytes": 4963328,
+      "version": "3.0.6.65",
+      "sha256": "e33a7a9cc4a461bb511f51bfdf5ee91055920445ea92d477022bd2d90be58c1f"
+    },
+    {
+      "path": "C:\\Program Files\\Common Files\\VST3\\FabFilter Volcano 3.vst3",
+      "bytes": 3866112,
+      "version": "3.0.8.59",
+      "sha256": "f55f64a258dd2580923424263583e5d6bb6b2868ed46a280ffcb9fc65bb31990"
+    },
+    {
+      "path": "C:\\Program Files\\Common Files\\CLAP\\FabFilter Micro.clap",
+      "bytes": 1844736,
+      "version": "1.3.1.30",
+      "sha256": "f6bb060f08545f09d94fdec69ece479e7f0d14a10e9d94a8f636b86d5e607b72"
+    },
+    {
+      "path": "C:\\Program Files\\Common Files\\CLAP\\FabFilter One.clap",
+      "bytes": 2095104,
+      "version": "3.5.1.48",
+      "sha256": "b5a267598afbf5ba8a4f8d4dfce10ea4c75dfac18b623a666002f74b31442f32"
+    },
+    {
+      "path": "C:\\Program Files\\Common Files\\CLAP\\FabFilter Pro-C 2.clap",
+      "bytes": 2654720,
+      "version": "2.2.0.45",
+      "sha256": "f58f44705e34154bb3fd84750239870e627cad7ae1659782dff522dea666c4a7"
+    },
+    {
+      "path": "C:\\Program Files\\Common Files\\CLAP\\FabFilter Pro-C 3.clap",
+      "bytes": 4015616,
+      "version": "3.0.1.53",
+      "sha256": "ffd889689d86471f117b079d9af1a21077171ed96adbe41a43b7f4f116247c9a"
+    },
+    {
+      "path": "C:\\Program Files\\Common Files\\CLAP\\FabFilter Pro-DS.clap",
+      "bytes": 3090432,
+      "version": "1.3.1.34",
+      "sha256": "28af046032f25a72193d9f885f4071b147278d1c2eb1ac4a45142f70c64bcf15"
+    },
+    {
+      "path": "C:\\Program Files\\Common Files\\CLAP\\FabFilter Pro-G.clap",
+      "bytes": 3386880,
+      "version": "1.4.1.38",
+      "sha256": "8a095e5f2803341b30621bad09f58d98ae23cdc19d394f1f36464878cfd9807c"
+    },
+    {
+      "path": "C:\\Program Files\\Common Files\\CLAP\\FabFilter Pro-L 2.clap",
+      "bytes": 2871296,
+      "version": "2.2.5.41",
+      "sha256": "77986da031b122adfe60cd51928bc8445b7cb0e0fcb0eaac150fb19b35ba045e"
+    },
+    {
+      "path": "C:\\Program Files\\Common Files\\CLAP\\FabFilter Pro-MB.clap",
+      "bytes": 2583040,
+      "version": "1.3.2.28",
+      "sha256": "14ce7fc7238bdd0c90eaa380f719ac63d6fd4d17ddf2bb27416192a00a7fc3bb"
+    },
+    {
+      "path": "C:\\Program Files\\Common Files\\CLAP\\FabFilter Pro-Q 4.clap",
+      "bytes": 4636672,
+      "version": "4.1.1.12",
+      "sha256": "5593e5d6958c354db8604c30222a8413f7e70a1f1c1290184a6b3289422bb247"
+    },
+    {
+      "path": "C:\\Program Files\\Common Files\\CLAP\\FabFilter Pro-R 2.clap",
+      "bytes": 3790848,
+      "version": "2.0.5.24",
+      "sha256": "226b3e2325760cb81850f9f8e49e1eada292e61b056f1f254109d631d8f8660a"
+    },
+    {
+      "path": "C:\\Program Files\\Common Files\\CLAP\\FabFilter Saturn 2.clap",
+      "bytes": 3540992,
+      "version": "2.1.2.14",
+      "sha256": "7f7c2676959d8f15d4d785925999485eea6acfef0f9fe563c85230ac52d196df"
+    },
+    {
+      "path": "C:\\Program Files\\Common Files\\CLAP\\FabFilter Simplon.clap",
+      "bytes": 2016256,
+      "version": "1.4.1.37",
+      "sha256": "092b4aa0fca4e7e74f6d63ce9eed14e274558334e81e623f246946778a62fac7"
+    },
+    {
+      "path": "C:\\Program Files\\Common Files\\CLAP\\FabFilter Timeless 3.clap",
+      "bytes": 3995136,
+      "version": "3.0.9.50",
+      "sha256": "d15d35b480976d5b7f2e8588834f3f2fc81013599ed715d725a1abc7f5356148"
+    },
+    {
+      "path": "C:\\Program Files\\Common Files\\CLAP\\FabFilter Twin 3.clap",
+      "bytes": 4827136,
+      "version": "3.0.6.65",
+      "sha256": "50060bc317f3c32827bda33e49313d49e2c0a2d7dd2033d40815f285e55c2618"
+    },
+    {
+      "path": "C:\\Program Files\\Common Files\\CLAP\\FabFilter Volcano 3.clap",
+      "bytes": 3747328,
+      "version": "3.0.8.59",
+      "sha256": "3da3566ebd21bc36325edbcfcab010283c3f0555967c4a6a23aca7706082416a"
+    },
+    {
+      "path": "C:\\Program Files\\FabFilter\\Micro\\FabFilter Micro (Mono).dll",
+      "bytes": 1989632,
+      "version": "1.3.1.30",
+      "sha256": "76abcf4eabf9af5168bce2bf099d88effd960928f1df4c9269b3199b69587180"
+    },
+    {
+      "path": "C:\\Program Files\\FabFilter\\Micro\\FabFilter Micro.dll",
+      "bytes": 1989632,
+      "version": "1.3.1.30",
+      "sha256": "76abcf4eabf9af5168bce2bf099d88effd960928f1df4c9269b3199b69587180"
+    },
+    {
+      "path": "C:\\Program Files\\FabFilter\\One\\FabFilter One.dll",
+      "bytes": 2239488,
+      "version": "3.5.1.48",
+      "sha256": "d999b47b7dad62e1a4fa6de393fa37771ee6e7beeec604eee81504009d76f39b"
+    },
+    {
+      "path": "C:\\Program Files\\FabFilter\\Pro-C 2\\FabFilter Pro-C 2 (Mono).dll",
+      "bytes": 2798592,
+      "version": "2.2.0.45",
+      "sha256": "139f62b90519133847ebc3dd2e461a8c2c767d13d86190b520de37f7409c3fa4"
+    },
+    {
+      "path": "C:\\Program Files\\FabFilter\\Pro-C 2\\FabFilter Pro-C 2.dll",
+      "bytes": 2798592,
+      "version": "2.2.0.45",
+      "sha256": "139f62b90519133847ebc3dd2e461a8c2c767d13d86190b520de37f7409c3fa4"
+    },
+    {
+      "path": "C:\\Program Files\\FabFilter\\Pro-C 3\\FabFilter Pro-C 3 (Mono).dll",
+      "bytes": 4141056,
+      "version": "3.0.1.53",
+      "sha256": "134890ede5a2f3f9786ec2009011ac02d6e3d2247a08c286692ad4157bfac42e"
+    },
+    {
+      "path": "C:\\Program Files\\FabFilter\\Pro-C 3\\FabFilter Pro-C 3.dll",
+      "bytes": 4141056,
+      "version": "3.0.1.53",
+      "sha256": "134890ede5a2f3f9786ec2009011ac02d6e3d2247a08c286692ad4157bfac42e"
+    },
+    {
+      "path": "C:\\Program Files\\FabFilter\\Pro-DS\\FabFilter Pro-DS (Mono).dll",
+      "bytes": 3234304,
+      "version": "1.3.1.34",
+      "sha256": "ada0d2bd3d8090a078dea1f7da0493d644c64e87b49d541558b13bf65ff0ac51"
+    },
+    {
+      "path": "C:\\Program Files\\FabFilter\\Pro-DS\\FabFilter Pro-DS.dll",
+      "bytes": 3234304,
+      "version": "1.3.1.34",
+      "sha256": "ada0d2bd3d8090a078dea1f7da0493d644c64e87b49d541558b13bf65ff0ac51"
+    },
+    {
+      "path": "C:\\Program Files\\FabFilter\\Pro-G\\FabFilter Pro-G (Mono).dll",
+      "bytes": 3509760,
+      "version": "1.4.1.38",
+      "sha256": "944d8eb20824c88fd355240314dea827be998d618f60fbdf49a1e4410232addf"
+    },
+    {
+      "path": "C:\\Program Files\\FabFilter\\Pro-G\\FabFilter Pro-G.dll",
+      "bytes": 3509760,
+      "version": "1.4.1.38",
+      "sha256": "944d8eb20824c88fd355240314dea827be998d618f60fbdf49a1e4410232addf"
+    },
+    {
+      "path": "C:\\Program Files\\FabFilter\\Pro-L 2\\FabFilter Pro-L 2.dll",
+      "bytes": 3015168,
+      "version": "2.2.5.41",
+      "sha256": "033bc8bce956634336eefc5f57a2ec368e6c5d9cd2c753e450bb071740c1bf0f"
+    },
+    {
+      "path": "C:\\Program Files\\FabFilter\\Pro-MB\\FabFilter Pro-MB (Mono).dll",
+      "bytes": 2727424,
+      "version": "1.3.2.28",
+      "sha256": "e104128cdcd51835e2aa7b8d6b8a4413e25b17b785fce0ffe8b038a8fbd1ebf4"
+    },
+    {
+      "path": "C:\\Program Files\\FabFilter\\Pro-MB\\FabFilter Pro-MB.dll",
+      "bytes": 2727424,
+      "version": "1.3.2.28",
+      "sha256": "e104128cdcd51835e2aa7b8d6b8a4413e25b17b785fce0ffe8b038a8fbd1ebf4"
+    },
+    {
+      "path": "C:\\Program Files\\FabFilter\\Pro-Q 4\\FabFilter Pro-Q 4.dll",
+      "bytes": 4779520,
+      "version": "4.1.1.12",
+      "sha256": "8f4f09d08cb2b495dadf386af90c83f47f44d36841ba66800098da809223fe15"
+    },
+    {
+      "path": "C:\\Program Files\\FabFilter\\Pro-R 2\\FabFilter Pro-R 2.dll",
+      "bytes": 3914752,
+      "version": "2.0.5.24",
+      "sha256": "de7ce568fb7acd12abf02cfaf73120d8bba2630f1f280cf77b87435148cf1fee"
+    },
+    {
+      "path": "C:\\Program Files\\FabFilter\\Saturn 2\\FabFilter Saturn 2.dll",
+      "bytes": 3685376,
+      "version": "2.1.2.14",
+      "sha256": "0160e17ca9541f23dc3610c3a179d00096252c7d06f1ba593ca6b5f8cb504b3f"
+    },
+    {
+      "path": "C:\\Program Files\\FabFilter\\Simplon\\FabFilter Simplon.dll",
+      "bytes": 2160640,
+      "version": "1.4.1.37",
+      "sha256": "ba336e947ab1a2c44b13dea41d5958409237f046388cf79965909926046358cb"
+    },
+    {
+      "path": "C:\\Program Files\\FabFilter\\Timeless 3\\FabFilter Timeless 3.dll",
+      "bytes": 4139008,
+      "version": "3.0.9.50",
+      "sha256": "086a3ba3aa3df2f12f487558cb52ef0fa0c92210a350966bdd5f8ff065be4b9d"
+    },
+    {
+      "path": "C:\\Program Files\\FabFilter\\Twin 3\\FabFilter Twin 3.dll",
+      "bytes": 4963328,
+      "version": "3.0.6.65",
+      "sha256": "e33a7a9cc4a461bb511f51bfdf5ee91055920445ea92d477022bd2d90be58c1f"
+    },
+    {
+      "path": "C:\\Program Files\\FabFilter\\Volcano 3\\FabFilter Volcano 3.dll",
+      "bytes": 3866112,
+      "version": "3.0.8.59",
+      "sha256": "f55f64a258dd2580923424263583e5d6bb6b2868ed46a280ffcb9fc65bb31990"
+    }
+  ]
+}
