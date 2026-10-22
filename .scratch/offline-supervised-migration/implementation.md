@@ -20,27 +20,17 @@
 
 ## Current queue — reconciled 2026-10-22
 
-The owner-accepted release is published as alpha.8 after source/package checks, PR 18 promotion and the Windows export acceptance. Release preparation 64 and documentation/captures 20/65/66 are done. There are **6 active tickets and 2 deferred proposals**: four remaining verification/cleanup records (22/23/41/42) and two future feature tickets (60/63). Broader workflow/device checks remain explicitly unclaimed in 23/41/42. Ticket 14 is owner-closed; formal benchmarking remains optional future work. Dated entries below preserve history.
+The owner requested closing implemented work after alpha.8 shipped. There are **3 active tickets and 2 deferred proposals**. GUI polish (23), adjustable shortcuts (41) and Catch up (42) are done on owner acceptance of the implemented release. Their unperformed qualification checks remain recorded in the [recurring editor verification procedure](../../docs/branch-workflow.md#editor-regression-coverage); closure does not claim those checks passed.
 
-| Ticket | Current work | State |
+| Ticket | Remaining work | State |
 | --- | --- | --- |
-| [20](../offline-supervised-editor/issues/20-editor-first-documentation-visuals.md) | Teaching figures and current native gain/preservation screenshots | Done; owner-authorized alpha.7 captures completed |
-| [22](../offline-supervised-editor/issues/22-local-storage-cleanup.md) | Git temporary files removed and integrity verified; only retired recovery-target cleanup remains | Claimed; separate old build target still exists |
-| [23](../offline-supervised-editor/issues/23-gui-frontend-polish.md) | Integrated GUI acceptance plus B and full FabFilter-inspired pass in development; absorbs 38/39/40 | Claimed; reviewed appearance owner-accepted, integration verified; broader workflow/device checks remain |
-| [41](../offline-supervised-editor/issues/41-adjustable-keyboard-shortcuts.md) | Adjustable shortcuts and associated playhead commands/tooltips | Claimed; implementation/review/full checks/build passed, owner GUI acceptance pending |
-| [42](../offline-supervised-editor/issues/42-playhead-catch-up-scroll.md) | Animated edge catch-up with existing middle-drag lock behavior | Claimed; implemented/tested, owner motion feel and full native interaction acceptance pending |
-| [56](../offline-supervised-editor/issues/56-fabfilter-inspired-gui.md) | Owner-selected B and all fourteen FabFilter-inspired GUI proposals in development | Done; owner-approved and merged; 311 tests/build/self-checks passed; temporary branches retired |
-| [57](../offline-supervised-editor/issues/57-fabfilter-control-refinement.md) | Further Q4/R2-inspired controls and specifically requested locked middle-drag behavior | Done and integrated into development at `1235ca1`; combined build ready for owner testing |
-| [58](../offline-supervised-editor/issues/58-lucide-outline-icons.md) | Bundled Lucide outlines in timeline and transport controls | Done and integrated into development at `1235ca1`; upstream notices retained; no shadcn integration |
-| [59](../offline-supervised-editor/issues/59-transport-header-cleanup.md) / [61](../offline-supervised-editor/issues/61-dial-smoothing-waveform-display.md) / [62](../offline-supervised-editor/issues/62-waveform-toolbar-status-hierarchy.md) | Transport/header, dial smoothing, waveform choices and concise timing details | Done and tested on development |
-| [60](../offline-supervised-editor/issues/60-rea-plugin-menu-design.md) | Plugin-informed menu redesign | Ready for future work; outside alpha.8 |
-| [63](../offline-supervised-editor/issues/63-registered-actions-shortcut-contract.md) | Shared action/shortcut registration contract | Ready for future work; outside alpha.8 |
-| [64](../offline-supervised-editor/issues/64-alpha-release-preparation.md) | Alpha.8 source checks, native packages, main promotion and publication | Done; published alpha.8 with checked assets, Windows Sandbox export and host audition acceptance |
-| [65](../offline-supervised-editor/issues/65-user-documentation-refresh.md) / [66](../offline-supervised-editor/issues/66-release-notes-performance-summary.md) | README/help guide, new captures, feature/performance release summary | Done; integrated from documentation worktrees |
+| [22](../offline-supervised-editor/issues/22-local-storage-cleanup.md) | Remove the retired recovery build target; Git cleanup is already verified | Claimed; cleanup remains |
+| [60](../offline-supervised-editor/issues/60-rea-plugin-menu-design.md) | Research plugin menus with REA and redesign the menu | Ready for future work |
+| [63](../offline-supervised-editor/issues/63-registered-actions-shortcut-contract.md) | Register actions once for buttons and customizable shortcuts | Ready for future work |
 
-[17 — Advanced training panel](../offline-supervised-editor/issues/17-advanced-training-panel.md) and [35 — Waveform-overlay editing](../offline-supervised-editor/issues/35-waveform-automation-editor-design.md) are deferred. [14](../offline-supervised-editor/issues/14-independent-release-evaluation.md) is done on explicit owner acceptance; unperformed formal tests are not claimed as passing. **15/25 → [per-release checklist](../../docs/branch-workflow.md#release-checklist), 27 → 20, 38/39/40 → 23**. The owner now authorizes main/release promotion under 64. Ticket 22 retains only the unrelated retired recovery-target cleanup; it is not a release feature.
+[17 — Advanced training panel](../offline-supervised-editor/issues/17-advanced-training-panel.md) and [35 — Waveform-overlay editing](../offline-supervised-editor/issues/35-waveform-automation-editor-design.md) remain deferred.
 
-Earlier audit validation: three read-only agent audits covered all 14 formerly open records; a separate review found no actionable issues. That earlier eight-ticket snapshot passed dependency/link/whitespace assertions; the owner decisions above supersede its count. Ticket 42's unchanged SHA-256 is `cd9e048a9cf97d0048271f793bd556fd24a0e00cf925741436c2739d2aa4bf31`. Application tests/builds and hardware acceptance were not rerun for these tracker decisions. Separate documentation implementation/browser checks are recorded in 20; cleanup integrity checks and rejections are recorded in 22.
+Completed tickets are removed from this active table. Their files retain specifications, source/build evidence and historical limits. Release preparation 64 and documentation/screenshots 20/65/66 are done. Retired 15/25 and qualification carried from 23/41/42 route to the [per-release checklist](../../docs/branch-workflow.md#release-checklist); 27 routes to completed 20, and 38/39/40 retain their implementation history through completed 23. Ticket 14 remains owner-closed. This current queue supersedes earlier dated counts and pending-owner statements above and below. Tracker/link checks only were run for this reconciliation.
 
 ## Historical implementation record
 

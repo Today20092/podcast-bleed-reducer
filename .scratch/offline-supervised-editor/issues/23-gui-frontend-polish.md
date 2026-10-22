@@ -1,9 +1,13 @@
 # Finish integrated editor verification and GUI polish
 
-Status: claimed
+Status: done
 Type: task
 Assignee: Codex
 Blocked by: 16, 21
+
+## Owner closure — 2026-10-22
+
+The owner requested closing implemented work after accepting and shipping alpha.8. GUI polish is implemented, accepted and released; this ticket is done. Remaining unchecked entries below are historical qualification gaps, not passing test evidence. Their complete checklists are retained here and incorporated into the [recurring editor verification procedure](../../../docs/branch-workflow.md#editor-regression-coverage). Earlier instructions to keep this ticket claimed are superseded. No application or hardware checks were rerun for this tracker cleanup.
 
 ## Selected inspector B — 2026-10-21
 

@@ -75,6 +75,16 @@ Owner accepted the current application's sound and performance on 2026-10-20 and
 - [ ] Verify each advertised native package on its own platform before making new platform-qualification claims. Existing experimental packages do not establish fresh cross-platform hardware acceptance.
 - [ ] Get the owner's authorization for promotion/tagging/publication; keep alpha/stable wording aligned with actual evidence. Current owner acceptance does not claim frozen independent comparisons, whole-session benchmarks or absence of the known quiet-overlap limitation. A future benchmark project needs its own requested scope.
 
+### Editor regression coverage
+
+2026-10-22: the owner closed implemented GUI polish (23), adjustable shortcuts (41) and Catch up (42) after accepting the shipped application. The following retained checklists supply recurring, change-appropriate release coverage rather than open feature tickets. Unperformed checks are not passing evidence and do not require recreating the existing release.
+
+- [GUI/import/playback checklist](../.scratch/offline-supervised-editor/issues/23-gui-frontend-polish.md#current-remaining-work--2026-10-20): contrast, themes, narrow/wide/enlarged text, focus and state coverage; import ordering/progress/cache/queue/cancellation/failure isolation; shortcut-reference readability; playback loops, perceived delay, clicks/dropouts and device recovery. This includes the unmet checks carried from 38/39/40.
+- [Shortcut checklist](../.scratch/offline-supervised-editor/issues/41-adjustable-keyboard-shortcuts.md#acceptance-checks): labeling keys and repeat suppression, remapping/capture/conflicts, restart persistence and recovery, context/text ownership, Center/Lock, tooltip placement and the zoom/fit preference matrix.
+- [Catch-up checklist](../.scratch/offline-supervised-editor/issues/42-playhead-catch-up-scroll.md#acceptance-checks): repeated catches and layer alignment, animation interruptions, middle-drag/reanchor/cancellation, mode overrides, narrow/wide/zoom/resize and recording bounds. The later persistent Catch up correction supersedes its original manual-pan-off policy.
+
+Each original unchecked item and its recorded evidence remain in the linked closed ticket. Select relevant checks for a future change, record results in that change's ticket or release receipt, and report omissions honestly.
+
 ## Historical consolidation evidence
 
 Consolidation checks passed with 278 tests, 0 failures and 18 ignored, plus strict Clippy, fixtures, GUI build and native self-checks. At completion the active shared cache measured 4.74 GiB, versus about 95.23 GiB across the previous worktree targets. C: free space increased from 72.45 to 145.50 GiB. These are point-in-time measurements. The recovery folder retains verified scratch material and one unused 12.61 GiB legacy target whose deletion was blocked automatically and offered to the owner manually; it is separate from the active cache.
