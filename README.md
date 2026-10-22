@@ -37,10 +37,10 @@ Choose your platform below. CleanSlate runs locally without Python, a model down
 <!-- downloads:start -->
 | Platform | Download | How to run |
 | --- | --- | --- |
-| Windows 11, 64-bit | [Download v0.1.0-alpha.6](https://github.com/Today20092/podcast-bleed-reducer/releases/download/v0.1.0-alpha.6/CleanSlate-0.1.0-alpha.6-windows-x64.zip) · [SHA-256](https://github.com/Today20092/podcast-bleed-reducer/releases/download/v0.1.0-alpha.6/CleanSlate-0.1.0-alpha.6-windows-x64.zip.sha256) | Extract the entire ZIP, then open `CleanSlate.exe`. Keep the support files together. |
-| Mac, Apple Silicon, macOS 13+ | [Download v0.1.0-alpha.6](https://github.com/Today20092/podcast-bleed-reducer/releases/download/v0.1.0-alpha.6/CleanSlate-0.1.0-alpha.6-macos-arm64.dmg) · [SHA-256](https://github.com/Today20092/podcast-bleed-reducer/releases/download/v0.1.0-alpha.6/CleanSlate-0.1.0-alpha.6-macos-arm64.dmg.sha256) | Open the DMG and drag `CleanSlate.app` to Applications. |
-| Mac, Intel, macOS 13+ | [Download v0.1.0-alpha.6](https://github.com/Today20092/podcast-bleed-reducer/releases/download/v0.1.0-alpha.6/CleanSlate-0.1.0-alpha.6-macos-x64.dmg) · [SHA-256](https://github.com/Today20092/podcast-bleed-reducer/releases/download/v0.1.0-alpha.6/CleanSlate-0.1.0-alpha.6-macos-x64.dmg.sha256) | Open the DMG and drag `CleanSlate.app` to Applications. |
-| Linux, 64-bit x86, glibc 2.35+ | [Download v0.1.0-alpha.6](https://github.com/Today20092/podcast-bleed-reducer/releases/download/v0.1.0-alpha.6/CleanSlate-0.1.0-alpha.6-linux-x64.AppImage) · [SHA-256](https://github.com/Today20092/podcast-bleed-reducer/releases/download/v0.1.0-alpha.6/CleanSlate-0.1.0-alpha.6-linux-x64.AppImage.sha256) | Allow the AppImage to run as a program in its file properties, then open it. |
+| Windows 11, 64-bit | [Download v0.1.0-alpha.8](https://github.com/Today20092/podcast-bleed-reducer/releases/download/v0.1.0-alpha.8/CleanSlate-0.1.0-alpha.8-windows-x64.zip) · [SHA-256](https://github.com/Today20092/podcast-bleed-reducer/releases/download/v0.1.0-alpha.8/CleanSlate-0.1.0-alpha.8-windows-x64.zip.sha256) | Extract the entire ZIP, then open `CleanSlate.exe`. Keep the support files together. |
+| Mac, Apple Silicon, macOS 13+ | [Download v0.1.0-alpha.8](https://github.com/Today20092/podcast-bleed-reducer/releases/download/v0.1.0-alpha.8/CleanSlate-0.1.0-alpha.8-macos-arm64.dmg) · [SHA-256](https://github.com/Today20092/podcast-bleed-reducer/releases/download/v0.1.0-alpha.8/CleanSlate-0.1.0-alpha.8-macos-arm64.dmg.sha256) | Open the DMG and drag `CleanSlate.app` to Applications. |
+| Mac, Intel, macOS 13+ | [Download v0.1.0-alpha.8](https://github.com/Today20092/podcast-bleed-reducer/releases/download/v0.1.0-alpha.8/CleanSlate-0.1.0-alpha.8-macos-x64.dmg) · [SHA-256](https://github.com/Today20092/podcast-bleed-reducer/releases/download/v0.1.0-alpha.8/CleanSlate-0.1.0-alpha.8-macos-x64.dmg.sha256) | Open the DMG and drag `CleanSlate.app` to Applications. |
+| Linux, 64-bit x86, glibc 2.35+ | [Download v0.1.0-alpha.8](https://github.com/Today20092/podcast-bleed-reducer/releases/download/v0.1.0-alpha.8/CleanSlate-0.1.0-alpha.8-linux-x64.AppImage) · [SHA-256](https://github.com/Today20092/podcast-bleed-reducer/releases/download/v0.1.0-alpha.8/CleanSlate-0.1.0-alpha.8-linux-x64.AppImage.sha256) | Allow the AppImage to run as a program in its file properties, then open it. |
 <!-- downloads:end -->
 
 On a Mac, **Apple menu → About This Mac** shows either an Apple chip or an Intel processor. Linux packages target Ubuntu 22.04 or newer and require a working desktop and audio system. If your system cannot mount an AppImage, run it with `--appimage-extract-and-run`.
@@ -71,7 +71,7 @@ The editor after Analyze. Each lane is a microphone track. Gain curves and shadi
 
 ## What's new in alpha.8
 
-The alpha.8 release candidate updates the editor and playback workflow. Alpha.7 passed its source checks but packaging stopped on missing third-party notices; alpha.8 adds the upstream license coverage. The screenshots show the unchanged editor from the alpha.7 preparation build.
+Alpha.8 updates the editor and playback workflow. Alpha.7 passed its source checks but packaging stopped on missing third-party notices; alpha.8 adds the upstream license coverage. The screenshots show the unchanged editor from the alpha.7 preparation build.
 
 - Catch up keeps the timeline still between smooth right-edge scrolls. It stays enabled when you navigate; use the button or customizable `Shift+C` binding to change it.
 - Original, Processed and Both waveform buttons let you inspect the effect of gain independently of the audio you are monitoring.
@@ -80,7 +80,7 @@ The alpha.8 release candidate updates the editor and playback workflow. Alpha.7 
 - Shortcut Settings supports rebinding, clearing and restoring commands. Lock, Center and Catch up have command hints that reflect your bindings.
 - Playback reuses prepared audio, unchanged drawing avoids rebuilding geometry, and minimized windows suspend unnecessary drawing work.
 
-See the [release notes](docs/alpha-release-notes.md) for the full change list, measured performance results and limits. The download table above continues to point to published packages until alpha.8 is published.
+See the [release notes](docs/alpha-release-notes.md) for the full change list, measured performance results and limits, and the [release verification receipt](docs/research/alpha8-release-receipt-2026-10-22.md) for package identities and checks.
 
 ## What it does
 
