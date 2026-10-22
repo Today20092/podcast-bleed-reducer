@@ -1,7 +1,7 @@
 # Register user actions once for buttons and customizable shortcuts
 
-Status: claimed
-Assignee: actions_63
+Status: done
+Assignee: Codex
 Type: task
 Blocked by: None
 Labels: ready-for-agent
@@ -18,16 +18,20 @@ Extend the existing command definitions, binding persistence, context conflict c
 
 ## Acceptance criteria
 
-- [ ] Adding one action declaration exposes its name/context and optional default binding in Settings/reference, uses the shared action handler for mouse and keyboard, and supplies effective-binding hints. Demonstrate this with timeline follow actions end to end.
-- [ ] An action with no default binding appears as Unbound and can be assigned, invoked, reassigned, cleared and restored. Overrides survive restart; old shortcut identifiers/preferences retain their behavior and unknown entries recover safely.
-- [ ] Define an enforceable rule for actionable controls: registered action or an explicit, documented exemption for text/value editing, transient dialog navigation or a context-dependent action that cannot be invoked safely. Audit existing controls, migrate the timeline slice and record any remaining legacy exemptions individually; do not silently exempt all future controls.
-- [ ] A compile-time contract where practical, plus a focused check in the normal local validation path, rejects an unregistered new command/button or an incomplete definition/handler/hint mapping. Demonstrate the guard failing for a deliberately omitted registration, then passing when registered. Avoid source-text heuristics as the sole guarantee.
-- [ ] Disabled/unavailable actions obey the same availability and context rules from mouse and keyboard. Typing, popups, capture mode, repeated key presses and conflicts retain their existing safeguards. Parameterized actions cannot activate stale or unrelated items.
-- [ ] Test one bound action and one initially unbound action through registration, UI enumeration, remapping/persistence, hints and dispatch. Use the standard GUI build/local checks and record a native Settings/button verification before completion.
+- [x] Adding one action declaration exposes its name/context and optional default binding in Settings/reference, uses the shared action handler for mouse and keyboard, and supplies effective-binding hints. Demonstrate this with timeline follow actions end to end.
+- [x] An action with no default binding appears as Unbound and can be assigned, invoked, reassigned, cleared and restored. Overrides survive restart; old shortcut identifiers/preferences retain their behavior and unknown entries recover safely.
+- [x] Define an enforceable rule for actionable controls: registered action or an explicit, documented exemption for text/value editing, transient dialog navigation or a context-dependent action that cannot be invoked safely. Audit existing controls, migrate the timeline slice and record any remaining legacy exemptions individually; do not silently exempt all future controls.
+- [x] A compile-time contract where practical, plus a focused check in the normal local validation path, rejects an unregistered new command/button or an incomplete definition/handler/hint mapping. Demonstrate the guard failing for a deliberately omitted registration, then passing when registered. Avoid source-text heuristics as the sole guarantee.
+- [x] Disabled/unavailable actions obey the same availability and context rules from mouse and keyboard. Typing, popups, capture mode, repeated key presses and conflicts retain their existing safeguards. Parameterized actions cannot activate stale or unrelated items.
+- [x] Bound and initially unbound action tests cover registration, UI enumeration, remapping/persistence, hints and dispatch; standard GUI build/local checks passed. The owner accepted the development UI and explicitly waived further computer control in place of the remaining native Settings/button automation, as recorded below.
 
 ## Boundaries
 
 No macros, multi-step key sequences, automatic allocation of arbitrary default chords, cloud settings or playback-engine changes. Do not perform an unrelated full UI rewrite. This ticket is one complete registration/enforcement slice; any remaining migration must be explicitly inventoried with follow-up scope rather than claimed complete.
+
+## Closure — 2026-10-22
+
+The owner approved the development build and explicitly requested closing this ticket and merging into development without further computer control. The [combined receipt](../../../docs/research/menu-actions-integration-2026-10-22.md) records 356 passing combined tests (20 ignored), strict Clippy, the standard GUI build and final typed-action guard. The three final timeline regressions passed, including initially-unbound discovery, remapping, persistence and shared modal availability. The review's one guard-fixture finding was fixed and re-reviewed. Native Settings remap/restart automation was not completed; the owner accepts closure using the implemented contract, software evidence and their development review. This supersedes pending integration statements below without claiming unperformed physical checks. All software acceptance criteria are complete; remaining native qualification routes to the existing recurring editor verification procedure.
 
 ## Results
 

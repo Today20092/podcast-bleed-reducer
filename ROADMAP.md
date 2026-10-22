@@ -16,7 +16,7 @@ This page is the public overview, last reviewed on 2026-10-22. The [active map](
 
 The integrated editor has customizable shortcuts, rotary sound controls, waveform Original/Processed/Both views, persistent edge Catch up, playhead lock/reanchoring, compact icon transport, themes and collapsible analysis timing details. Drawing reuse, background-work handling and playback resource lifetime have also improved. See the [release notes](docs/alpha-release-notes.md) for behavior, measurements and remaining limits.
 
-The [implementation tracker](.scratch/offline-supervised-migration/implementation.md) records three active tickets: retired-cache cleanup (22), menu redesign (60) and action/shortcut registration (63). GUI polish (23), adjustable shortcuts (41) and Catch up (42) are implemented, released and owner-closed. Two proposals remain deferred: advanced training (17) and waveform-overlay editing (35).
+Menu redesign (60), shared action/shortcut registration (63) and the toolbar icon cleanup (69) are implemented and owner-accepted in development. The [integration receipt](docs/research/menu-actions-integration-2026-10-22.md) records checks and acceptance limits; these changes have not yet shipped in a release. The [implementation tracker](.scratch/offline-supervised-migration/implementation.md) retains retired-cache cleanup (22) in the build queue. GUI polish (23), adjustable shortcuts (41) and Catch up (42) are released and owner-closed. Advanced training (17) and waveform-overlay editing (35) remain deferred; live-plugin discovery is outside the implementation queue.
 
 Check each ticket for its latest status. This list describes agreed work, not a claim that every item is finished or available in a published build.
 

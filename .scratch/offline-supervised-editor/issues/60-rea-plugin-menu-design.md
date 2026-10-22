@@ -1,8 +1,8 @@
 # Research plugin menus with REA and redesign the application menu
 
-Status: claimed
+Status: done
 Type: task
-Assignee: menu_60
+Assignee: Codex
 Blocked by: none
 Related: 36, 57, 58, 59
 
@@ -28,6 +28,10 @@ Related: 36, 57, 58, 59
 - Implement and inspect the menu in context at compact/wide sizes and Dark/Light appearances, including keyboard navigation and disabled states. Check long text and enlarged text where supported.
 - Run relevant menu routing/focus regression tests, scripts/check.ps1 -Local and scripts/gui-dev.ps1. Record source/executable identity, checks, screenshots and remaining limitations before marking done.
 - Owner review determines whether the resulting menu design is accepted; no release publication is authorized.
+
+## Closure — 2026-10-22
+
+The owner approved the development appearance and explicitly requested closure and integration into development, without further computer control. This supersedes pending owner-review language below. The [combined receipt](../../../docs/research/menu-actions-integration-2026-10-22.md) records passing checks, final source/executable identity and review outcome. The full automated suite passed 356 tests (20 ignored); final strict Clippy and formatting passed. Remaining compact/wide, Light/Dark and enlarged-text automation was not completed; owner visual acceptance closes this ticket, with future regression coverage retained in the existing editor verification procedure. No additional native screenshots or plugin runtime evidence are claimed. No release is published by this closure.
 
 ## Implementation record — 2026-10-22
 

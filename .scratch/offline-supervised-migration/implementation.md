@@ -1,5 +1,7 @@
 # Offline supervised editor implementation sequence
 
+2026-10-22 owner-accepted development integration: menu redesign 60, registered actions/shortcuts 63 and toolbar icon cleanup 69 are done. The owner approved the development appearance and explicitly waived further computer control. The [combined receipt](../../docs/research/menu-actions-integration-2026-10-22.md) records software checks, source/executable identity and unperformed native automation. This supersedes their earlier pending-owner/ready states; no release is published.
+
 2026-10-22 alpha.8 shipped: [v0.1.0-alpha.8](https://github.com/Today20092/podcast-bleed-reducer/releases/tag/v0.1.0-alpha.8) publishes annotated tag source `24361a2aa201fb7e22258f44a2a1be4626d58ce1`, promoted by PR 18 into main/development. Source CI run 39741751147 passed all four targets: Windows 353 tests, each Mac/Linux target 349, zero failures and 20 ignored each, strict Clippy, formatting and script fixtures. Packaging run 39742979614 passed every native package/check job. All eight downloaded assets passed checksums and identity against the tested Actions artifacts. Windows Sandbox interactive export and classification save/reopen passed; the host package advanced in all three listening modes without device errors. Ticket 64 is done and removed from the active count; broader qualification/future work remains open.
 
 2026-10-22 packaging amendment: ticket 64 now targets alpha.8. Alpha.7's four source checks passed, but its native package collector correctly rejected missing zune-core/zune-jpeg license texts. Exact upstream Zlib notices now cover both dependencies, verified against all four desktop metadata graphs. Failed alpha.7 source/tag evidence is retained; screenshots and editor behavior remain current.
@@ -20,13 +22,11 @@
 
 ## Current queue — reconciled 2026-10-22
 
-The owner requested closing implemented work after alpha.8 shipped. There are **3 active tickets and 2 deferred proposals**. GUI polish (23), adjustable shortcuts (41) and Catch up (42) are done on owner acceptance of the implemented release. Their unperformed qualification checks remain recorded in the [recurring editor verification procedure](../../docs/branch-workflow.md#editor-regression-coverage); closure does not claim those checks passed.
+The owner requested closing implemented work after alpha.8 shipped, then accepted menu/action/toolbar tickets 60/63/69 for development integration. The build queue retains **1 active implementation ticket and 2 deferred proposals**; live-plugin discovery is outside this queue. GUI polish (23), adjustable shortcuts (41) and Catch up (42) are done on owner acceptance of the implemented release. Unperformed native qualification checks from closed tickets remain recorded in the [recurring editor verification procedure](../../docs/branch-workflow.md#editor-regression-coverage); closure does not claim those checks passed.
 
 | Ticket | Remaining work | State |
 | --- | --- | --- |
 | [22](../offline-supervised-editor/issues/22-local-storage-cleanup.md) | Remove the retired recovery build target; Git cleanup is already verified | Claimed; cleanup remains |
-| [60](../offline-supervised-editor/issues/60-rea-plugin-menu-design.md) | Research plugin menus with REA and redesign the menu | Ready for future work |
-| [63](../offline-supervised-editor/issues/63-registered-actions-shortcut-contract.md) | Register actions once for buttons and customizable shortcuts | Ready for future work |
 
 [17 — Advanced training panel](../offline-supervised-editor/issues/17-advanced-training-panel.md) and [35 — Waveform-overlay editing](../offline-supervised-editor/issues/35-waveform-automation-editor-design.md) remain deferred.
 
