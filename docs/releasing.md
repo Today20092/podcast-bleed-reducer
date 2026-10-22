@@ -1,6 +1,6 @@
 # Desktop releases
 
-For version selection and the next release target, use [Versioning and stability](#versioning-and-stability). The publication record below describes the existing alpha release.
+The owner accepted the current offline workflow as stable and authorized development-to-main promotion as **1.0.0** on 2026-10-22. The [1.0.0 notes](release-notes.md) describe that source and its compatibility promise. Native 1.0.0 packages still require release checks and publication; the download links and publication record below remain alpha.8 until that happens. Follow [Versioning and stability](#versioning-and-stability) for subsequent versions.
 
 The current published prerelease is [v0.1.0-alpha.8](https://github.com/Today20092/podcast-bleed-reducer/releases/tag/v0.1.0-alpha.8), following alpha.6.
 Alpha.7 stopped at the dependency-license packaging gate and was not published.
