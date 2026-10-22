@@ -1,6 +1,7 @@
 # Register user actions once for buttons and customizable shortcuts
 
-Status: ready-for-agent
+Status: claimed
+Assignee: actions_63
 Type: task
 Blocked by: None
 Labels: ready-for-agent
@@ -30,4 +31,12 @@ No macros, multi-step key sequences, automatic allocation of arbitrary default c
 
 ## Results
 
-Planning only. The existing command system already derives Settings/reference and binding conflict behavior from command definitions; the gap is that independently created UI messages/buttons can bypass that catalog. The future contract must close that gap, not merely add a reminder to ask for shortcuts.
+Owner-approved seams: the ticket explicitly requires bound/unbound command registration, UI enumeration, remapping, persisted preferences, effective hints and shared application dispatch; the accepted specification retains the owner-confirmed application behavior boundary. Test these through the existing command/preferences/application interfaces. The typed button activation boundary is the separately required compile-time guard. Native Settings/button behavior is verified separately; these software checks do not claim physical-input acceptance.
+
+Implemented on `codex/ticket-63-actions` from integration base `408848c`. A single typed `commands!` declaration generates the stable command enum and metadata; the exhaustive application dispatch requires every handler. `action_control` supplies shared activation, current availability and effective hints together. Center, Lock, Catch up and Meters use it; Meters is initially Unbound and appears in the existing Settings/reference enumeration. Existing identifiers, defaults, preference recovery and context conflict checks are retained.
+
+The shared button activation methods now require `ButtonAction`, so a raw new `Message` cannot become a button command. The registered adapter is constructed by `action_control`. A closed `LegacyButton` enum individually inventories the remaining existing exceptions with argument types, mappings and reasons; there is no blanket implementation for application messages. The [developer contract and exception/migration inventory](../../../docs/agents/actions-and-shortcuts.md) is linked at the top of the required GUI guide. Existing parameterized exceptions retain their validation and input ownership; this slice does not invent global bindings for transient items or claim their complete registry migration.
+
+TDD/software evidence: the new initially-unbound application/preferences test first failed with E0599 for the missing Meters registration/activation/hint path, then passed. Final selected checks passed 3 `timeline_` tests (including initially-unbound remap/reassign/save/reload/clear/restore and modal availability) and 7 shortcut/input tests (including bound Catch up shared button/key dispatch, old preferences and conflicts). The actual typed activation boundary's small rustc fixture rejected omitted registration with E0277, then accepted explicit registration. `scripts/test-action-contract.ps1` is in the normal check path; formatting and whitespace checks passed. No dependency, audio-engine or host configuration change was made.
+
+Combined integration checks, standard GUI build and native Settings/button verification remain for the integration owner before marking this ticket done. No physical keyboard or native GUI check is claimed by these software results.

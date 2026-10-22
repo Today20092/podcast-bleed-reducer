@@ -1,5 +1,7 @@
 # GUI development
 
+New user commands must follow the [action and shortcut contract](agents/actions-and-shortcuts.md). Declare the command once, handle it through shared dispatch and use `action_control` for its button: Settings, reference entries and effective-binding hints then share its identity. Defaults are optional; an Unbound action remains customizable. Existing editing/dialog/legacy exceptions are individually inventoried rather than automatically inherited by new controls.
+
 ## Transport and waveform display
 
 The transport uses three equal-size icon buttons centered on the full window. Hover for command names and effective shortcuts. The native title bar identifies CleanSlate; the workspace header shows the project name. Preparation and buffering still report actionable status, without a permanent Playback ready label.
