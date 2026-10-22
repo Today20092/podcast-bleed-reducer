@@ -1,5 +1,9 @@
 # Supervised editor workflow
 
+Import aligned microphone tracks, label solo speech and room tone, run Analyze, then compare the result by listening before exporting. This guide describes the alpha.7 editor. See the [release notes](alpha-release-notes.md) for changes and package status.
+
+[Import and storage](#sd-cards-and-working-storage) · [Analysis and editing](#analysis-and-editing) · [Timeline and playback](#timeline-and-playback) · [Keyboard shortcuts](#keyboard-shortcuts) · [Export](#export-settings)
+
 ## SD cards and working storage
 
 Open recordings directly from an SD card or another readable drive. CleanSlate opens originals for reading only; the card can remain write-protected. Keep it connected until processing finishes. A full local copy of the original recordings is not required.
@@ -24,7 +28,7 @@ Channels in one WAV are internally synchronized. Separate mono files may be incl
 
 ## Analysis and editing
 
-![A selected waveform range opens Who is talking, with separate Speaker 1, Speaker 2 and Speaker 3 checkboxes, Save example and Cancel.](images/select-speakers.png)
+![A selected waveform range opens Who is talking with speaker choices and controls to save or cancel the example.](images/alpha7-speaker-selection.png)
 
 Drag a range to open **Who is talking?** Select everyone you hear: one person for solo speech, several for overlap, or nobody for room tone. The selected microphone does not decide the label. This capture shows an unsaved selection; the checked speaker is an example of the control, not a verified annotation. Enter saves; Escape closes without saving.
 
@@ -32,41 +36,78 @@ Compare the [solo, overlap and room-tone examples](ownership-explained.md#1-you-
 
 Analyze is explicit. Several label changes can be collected before one job. Progress identifies the current stage and elapsed time. Preparation, acoustic ownership fitting and temporal decisions use your examples to estimate ownership throughout the timeline. Cancellation, source changes or obsolete label generations prevent installation. Completed fixed evidence can be reused. A failed project save cannot advance the accepted effective-envelope cache.
 
+When analysis finishes, Ready replaces the progress display. Open Details for total analysis time and the separate source-check, audio-preparation, example, speaker-analysis and timeline durations. Details is collapsed by default. Errors, changed sources and stale-analysis guidance remain visible when they need attention.
+
 The previous preview remains visible when stale. Gain-only changes compose immediately and do not rerun Silero, acoustic fitting or ownership training. A gain edit made during Analyze is composed from the latest project when the result installs. The displayed estimates are inspectable model probabilities; they do not promise calibrated certainty. The [model recipe](supervised-ownership-models.md) and [temporal policy](temporal-ownership.md) describe the current acoustic branch.
 
-The waveform displays source peaks and conservative processed bounds. In the compact overview, blue marks human references, gray marks automatic gain, teal marks effective gain, pink marks manual points, and gold marks unity protection. Overview pixels summarize their entire time interval, so a brief owned or uncertain region remains visible. Gain drawing includes per-pixel extrema, including excursions shorter than one pixel.
+The Waveform group at the right of the Timeline toolbar has three icon buttons. Hover for Original, Processed or Both. Original shows source peaks. Processed shows peaks after the effective gain envelope, and Both overlays the two views. Both is the default; the choice lasts for the current application session. It changes drawing only, independently of the audio monitoring selector and exports. Before analysis supplies an envelope, Processed shows the source at full gain.
 
-In the current development layout, the main waveform uses a purple gain curve and muted red backgrounds wherever applied gain is below full volume. A shaded span means reduced volume, not proof that nobody is speaking. The overview retains compact gain and example markers.
+Processed drawing uses conservative bounds. In the compact overview, blue marks human references, gray marks automatic gain, teal marks effective gain, pink marks manual points, and gold marks unity protection. Overview pixels summarize their entire time interval, so a brief owned or uncertain region remains visible. Gain drawing includes per-pixel extrema, including excursions shorter than one pixel.
 
-![Three microphone lanes with curved gain transitions and reduced-volume shading. At the playhead Speaker 1 is inactive at 6 percent, Speaker 2 inactive at 19 percent, and Speaker 3 active at 78 percent.](images/gain-and-speaker-estimates.png)
+The main waveform uses a purple gain curve and muted red backgrounds wherever applied gain is below full volume. A shaded span means reduced volume, not proof that nobody is speaking. Gain curves, shading and speaker examples remain visible in all three waveform views.
 
-The curve shows when volume falls and returns to full level. At the white playhead, each track also shows an **Active / Inactive** estimate and a percentage. These are model estimates of speaker activity, not volume meters or a guarantee of correct detection. Compare the waveform, gain curve and listening result when deciding whether to correct a region. Recording filenames are redacted.
+![Three microphone lanes with gain transitions, reduced-volume shading and speaker activity estimates at the playhead.](images/alpha7-editor-overview.png)
 
-![Sound panel with attenuation at minus 8 decibels, fades to full and reduced volume, Ignore gaps shorter than, and Edit gain points.](images/sound-controls.png)
+The curve shows when volume falls and returns to full level. Each track also shows an **Active / Inactive** estimate and a percentage. Meters moves those estimates between the playhead and the right side of the track. These are model estimates of speaker activity, not volume meters or a guarantee of correct detection. Compare the waveform, gain curve and listening result when deciding whether to correct a region.
 
-**Attenuation** sets the reduced level. The two fade controls set the maximum transition durations. **Ignore gaps shorter than** keeps brief automatic gaps open. On the `codex/fabfilter-controls` review branch these continuous settings use a large attenuation dial and three smaller timing dials, with precise editable numeric values; the screenshot above predates that refinement. Drag or turn the wheel over a dial, hold Shift for fine adjustment, double-click to type, and Ctrl-click (Command-click on macOS) to reset. These are the captured session's settings, not recommended defaults. Enable **Edit gain points** for manual corrections, or select a range and use **Preserve** to keep it at full volume.
+![Rotary attenuation and timing controls with editable numeric values, Mute, Reset and Edit gain points.](images/alpha7-sound-controls.png)
+
+**Attenuation** sets the reduced level. The two fade controls set the maximum transition durations. **Ignore gaps shorter than** keeps brief automatic gaps open. A large attenuation dial and three smaller timing dials sit beside editable numeric values. Drag or turn the wheel over a dial, hold Shift for fine adjustment, double-click to type, and Ctrl-click on Windows/Linux or Command-click on macOS to reset. Indicators animate briefly between values; the sound changes immediately. The screenshot's values are a session example, not recommended defaults. Enable **Edit gain points** for manual corrections, or select a range and use **Preserve** to keep it at full volume.
 
 See the [fade-and-gap plots](effective-envelopes.md) for the difference between shortening fades to fit a gap and keeping a short automatic gap at full volume.
 
-Switch the envelope tool on to drag manual points horizontally for fade duration or vertically for gain. A drag uses a transient draft; release commits one undo command and cancellation restores the saved curve and markers. Arrow keys move a selected point, Delete removes its whole override, and Ctrl+Z/Ctrl+Y undo/redo. Text inputs retain their captured keys. Preserve and Attenuate create region edits. Conflicts require the explicit **Replace entire overlapping overrides and protections** option; it removes the conflicting records as whole records, including the other bindings of a global protection.
+Switch the envelope tool on to drag manual points horizontally for fade duration or vertically for gain. A drag uses a transient draft; release commits one undo command and cancellation restores the saved curve and markers. Arrow keys move a selected point and Delete removes its whole override. Ctrl+Z/Ctrl+Y undo/redo on Windows/Linux; macOS uses Command. Text inputs retain their captured keys. Preserve and Attenuate create region edits. Conflicts require the explicit **Replace entire overlapping overrides and protections** option; it removes the conflicting records as whole records, including the other bindings of a global protection.
 
-Open/close settings specify finite S-shaped fade durations with exact endpoints and zero endpoint slope and curvature. Shared evaluation keeps automatic fades outside preserved speech. Manual gain remains authoritative until removed and retains linear interpolation. All source-time curves stay sparse; native-rate playback and rendering use the same evaluator. Transparent attenuation remains a listening requirement, not a guarantee from the curve alone.
+The fade controls specify finite S-shaped transitions with exact endpoints and zero endpoint slope and curvature. Shared evaluation keeps automatic fades outside preserved speech. Manual gain remains authoritative until removed and retains linear interpolation. All source-time curves stay sparse; native-rate playback and rendering use the same evaluator. Transparent attenuation remains a listening requirement, not a guarantee from the curve alone.
 
 Review the waveform and audition directly. There is no uncertainty review queue. Use labels to improve detection or Preserve/Attenuate and protection to correct gain. Ignore gaps shorter than bridges brief automatic attenuation gaps between speech spans; it does not erase explicit room-tone labels. Original works before analysis. When a preview exists, Original, Processed and Removed preserve transport and seek context while using the current effective envelopes.
 
-![Listening controls with Original selected, Processed and Removed available, and a separate Monitor level slider.](images/listening-controls.png)
+## Timeline and playback
+
+![Fixed-size transport icons, Original/Processed/Removed listening choices and the Monitor level slider.](images/alpha7-listening-controls.png)
+
+The centered transport has fixed-size icons to return to the selection or recording start, play, and stop. Hover for command names and current shortcuts. Space plays or stops. Original playback works before analysis, and a prepared session reuses its audio when you start again.
 
 Compare **Original** with **Processed**, then listen to **Removed** for wanted speech that should remain. **Monitor** changes listening level only. Track-header **Solo** buttons can monitor several tracks together; they do not change exported gain.
 
-The control-refinement branch uses a flat, stable-width listening selector with a persistent selected accent and keyboard focus indication. Its compact Lock, Center and Meters toolbar retains short labels and command tooltips. While Lock is active, middle-drag pans freely without disabling it; release anchors the then-current playhead position on screen. A click without movement preserves the prior anchor, cancellation restores it, and explicit Unlock/Center takes precedence. Playback time, labels, selection, edits and saved project state are unchanged by navigation.
+Catch up is enabled by default. The timeline stays still while the playhead crosses the view, then slides left at the right edge so playback continues near the left side. Panning, seeking, zooming and fitting do not deselect Catch up. Middle-drag suspends following during the gesture and resumes it on release. Turn Catch up off with its button or shortcut when you want a manual view. Choosing Lock selects that separate follow mode instead.
+
+Lock keeps the playhead at a fixed horizontal position. While locked, middle-drag pans freely without disabling Lock; release anchors the then-current playhead position on screen. A click without movement preserves the prior anchor, cancellation restores it, and explicit follow-mode or Center commands take precedence. Center moves the view to the playhead once. Settings has an optional Unlock playhead when zooming preference; it is off by default. Meters changes the placement of the speaker estimates. Panning and follow controls do not seek or edit labels, selection, gain or the saved project.
+
+Minimizing the window suspends unnecessary drawing while audio and background analysis can continue. Restoring refreshes the playhead and visible result. See the [performance report](research/fabfilter-performance-final-review-2026-10-21.md) for measured scenarios and limits; these changes do not promise a particular frame rate or device latency.
 
 Save project persists labels, gain overrides, protections, review states and recipe identities. Opening a project validates sources; Analyze reconstructs its preview using reusable fixed evidence.
 
 Final rendering applies the accepted effective envelopes at each source's native sample rate. Export verifies that accepted render's report, WAV hashes, source identities and saved project identity before encoding the selected delivery. Monitoring gain, Solo controls and comparison mode never enter exported audio. Label/model/source changes require current analysis; gain edits require a fresh render without repeating inference. Both final render and delivery can be cancelled. Incomplete or obsolete private attempts never replace prior deliverables. A published attempt that cannot be accepted remains beside the project as recovery material; deleting it is an explicit file operation.
 
+## Keyboard shortcuts
+
+Open Menu → Settings to change command bindings. Select Change, press the key or chord, review it, then confirm with Enter or Apply. Escape cancels capture. You can unbind an action, restore one default or restore all defaults. Settings saves locally, independently of the project. Same-context conflicts and reserved keys are rejected. The shortcut reference and command hints show the effective bindings.
+
+![Shortcut Settings with command names, current bindings and controls to change, restore or unbind them.](images/alpha7-shortcuts.png)
+
+Common defaults:
+
+| Action | Shortcut |
+| --- | --- |
+| Play or stop | Space |
+| Seek to selection or recording start | Home |
+| Monitor Original / Processed / Removed | 1 / 2 / 3 |
+| Fit recording / fit selection | F / Shift+F |
+| Center playhead | C |
+| Toggle playhead lock | L |
+| Toggle Catch up | Shift+C |
+| Open shortcut reference | Ctrl+/ |
+| Open Menu | Alt+M |
+| Save project | Ctrl+S on Windows/Linux, Command+S on macOS |
+
+In Who is talking?, 1 through 8 toggles speakers, R clears the selected speakers, and S saves the example. Enter also saves; nobody selected means room tone. Popup bindings do not change the workspace monitoring choices. Text fields keep their typing keys, and held keys do not repeatedly toggle commands. Use Settings for the full command list and context rules.
+
+Menu also opens the shortcut reference, Usage documentation, GitHub, Report a bug and About. About provides version information and credits. Dark and Light appearances are available in Settings and persist independently of projects.
+
 ## Export settings
 
-Open Export after checking the current result. The dialog lists track/channel order and original sample rates, offers payload-size estimates, and requires a new or empty destination folder.
+Open Export after checking the current result. The dialog lists track/channel order and original sample rates and offers payload-size estimates. Choose a writable parent location; CleanSlate creates a new export folder inside it without replacing existing files.
 
 | Setting | Behavior |
 | --- | --- |
