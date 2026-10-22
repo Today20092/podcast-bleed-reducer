@@ -21,3 +21,7 @@ The owner accepts development and requests promotion into main as the first stab
 ## Authorization and limits
 
 This request authorizes stable release preparation and main promotion. No new algorithm, plugin, source alignment or unrelated research implementation is included. The compatibility promise and physical-platform/quality limits in docs/releasing.md remain authoritative. No new listening or hardware evidence is implied by the stable label.
+
+## Publication authorization — 2026-10-22
+
+The owner explicitly requested publishing stable 1.0.0 with all download packages and merging the generated README download update after checks pass. The annotated `v1.0.0` tag identifies reviewed main `68198b3703a6fb4ec0aef53b9712acf44a87cacd`. The tagged package workflow is run 39819315222. The earlier build-only preparation run 39816454872 passed all four native packages; its application source tree is identical to the tagged merge commit. Publication will use the final tagged-run assets, with checksums and artifact identity verified before making them public.

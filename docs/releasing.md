@@ -1,8 +1,8 @@
 # Desktop releases
 
-The owner accepted the current offline workflow as stable and authorized development-to-main promotion as **1.0.0** on 2026-10-22. The [1.0.0 notes](release-notes.md) describe that source and its compatibility promise. Native 1.0.0 packages still require release checks and publication; the download links and publication record below remain alpha.8 until that happens. Follow [Versioning and stability](#versioning-and-stability) for subsequent versions.
+The current stable release is [v1.0.0](https://github.com/Today20092/podcast-bleed-reducer/releases/tag/v1.0.0), promoted through [PR 21](https://github.com/Today20092/podcast-bleed-reducer/pull/21) and published on owner authorization. The [1.0.0 notes](release-notes.md) describe the workflow and compatibility promise. Follow [Versioning and stability](#versioning-and-stability) for subsequent versions.
 
-The current published prerelease is [v0.1.0-alpha.8](https://github.com/Today20092/podcast-bleed-reducer/releases/tag/v0.1.0-alpha.8), following alpha.6.
+The preceding published prerelease was [v0.1.0-alpha.8](https://github.com/Today20092/podcast-bleed-reducer/releases/tag/v0.1.0-alpha.8), following alpha.6.
 Alpha.7 stopped at the dependency-license packaging gate and was not published.
 Alpha.8 tag source `24361a2aa201fb7e22258f44a2a1be4626d58ce1` was promoted through
 [PR 18](https://github.com/Today20092/podcast-bleed-reducer/pull/18).

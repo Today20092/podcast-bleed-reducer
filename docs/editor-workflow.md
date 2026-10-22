@@ -1,6 +1,6 @@
 # Supervised editor workflow
 
-Import aligned microphone tracks, label solo speech and room tone, run Analyze, then compare the result by listening before exporting. This guide describes the stable 1.0.0 source workflow. Screenshots remain from alpha.7 preparation; the current source has a newer menu, icon-only Catch up and no Waveform group label. See the [release notes](release-notes.md) for changes and package status. Published downloads remain alpha.8 until 1.0.0 packages are verified and published.
+Import aligned microphone tracks, label solo speech and room tone, run Analyze, then compare the result by listening before exporting. This guide describes stable 1.0.0. Screenshots remain from alpha.7 preparation; the current application has a newer menu, icon-only Catch up and no Waveform group label. See the [release notes](release-notes.md) for changes and package status.
 
 [Import and storage](#sd-cards-and-working-storage) · [Analysis and editing](#analysis-and-editing) · [Timeline and playback](#timeline-and-playback) · [Keyboard shortcuts](#keyboard-shortcuts) · [Export](#export-settings)
 
