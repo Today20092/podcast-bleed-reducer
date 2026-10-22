@@ -11016,7 +11016,6 @@ impl CleanSlateApp {
             );
         }
         let listening = row![
-            text("Listen").size(14),
             listening_modes,
             text(format!("Monitor {:+.1} dB", self.monitor_db)),
             slider(-24.0..=6.0, self.monitor_db, Message::MonitorGain)
