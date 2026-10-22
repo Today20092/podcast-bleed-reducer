@@ -313,6 +313,62 @@ mod tests {
     }
 
     #[test]
+    fn completed_analysis_keeps_timings_in_collapsed_details() {
+        use super::{CleanSlateApp, Message};
+        let (root, project, _audio) = export_fixture::session();
+        let mut app = CleanSlateApp {
+            preview_parameters: project.parameters(),
+            project: Some(project),
+            messages: vec!["Previous informational message".into()],
+            ..Default::default()
+        };
+        let _ = app.update(Message::AnalyzeReferences);
+        app.launch_preview();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+        while app.preview_processing.is_some() {
+            app.poll_processing();
+            assert!(std::time::Instant::now() < deadline);
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        }
+        assert!(app.preview.is_some(), "{:?}", app.preview_error);
+        assert!(app.messages.is_empty());
+        assert!(
+            app.analysis_details
+                .as_ref()
+                .unwrap()
+                .contains("source checks")
+        );
+        assert!(!app.analysis_details_open);
+        let parameters = app.preview_parameters;
+        let _ = app.update(Message::AnalysisDetails(true));
+        assert!(app.analysis_details_open);
+        assert_eq!(app.preview_parameters, parameters);
+        app.reset_project(true);
+        assert!(app.analysis_details.is_none() && !app.analysis_details_open);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn catch_up_control_is_exclusive_with_lock_and_pan_restores_manual_view() {
+        use super::{CleanSlateApp, Message, PlaybackScroll};
+        let mut app = CleanSlateApp::default();
+        assert_eq!(app.playback_scroll, PlaybackScroll::Page);
+        let _ = app.update(Message::LockPlayhead);
+        assert_eq!(app.playback_scroll, PlaybackScroll::Locked);
+        let _ = app.update(Message::ToggleCatchUp);
+        assert_eq!(app.playback_scroll, PlaybackScroll::Page);
+        let _ = app.update(Message::Timeline(crate::timeline::TimelineEvent::Pan {
+            delta_x: -10.0,
+            width: 1000.0,
+        }));
+        assert_eq!(app.playback_scroll, PlaybackScroll::Off);
+        let _ = app.update(Message::ToggleCatchUp);
+        assert_eq!(app.playback_scroll, PlaybackScroll::Page);
+        let _ = app.update(Message::ToggleCatchUp);
+        assert_eq!(app.playback_scroll, PlaybackScroll::Off);
+    }
+
+    #[test]
     fn inspector_emphasis_requires_ready_examples_and_safe_sources() {
         assert!(!super::CleanSlateApp::default().analysis_is_next_action());
         let (root, project, _) = export_fixture::session();
@@ -2413,7 +2469,12 @@ mod tests {
             Message::KeyPressed(Key::Character("f".into()), Modifiers::SHIFT),
         ];
         for unlock in [false, true] {
-            for locked in [false, true] {
+            for mode in [
+                PlaybackScroll::Off,
+                PlaybackScroll::Page,
+                PlaybackScroll::Locked,
+            ] {
+                let locked = mode == PlaybackScroll::Locked;
                 for (index, route) in routes.iter().enumerate() {
                     let mut app = CleanSlateApp {
                         project: Some(crate::Project::open(&path).unwrap()),
@@ -2421,6 +2482,7 @@ mod tests {
                         gain_tool: index == 4,
                         unlock_playhead_when_zooming: unlock,
                         audition_range: Some((t, 2 * t)),
+                        playback_scroll: if locked { PlaybackScroll::Off } else { mode },
                         ..Default::default()
                     };
                     app.timeline.zoom_at(500.0, 1000.0, 1.0);
@@ -2434,8 +2496,10 @@ mod tests {
                         app.playback_scroll,
                         if locked && !unlock {
                             PlaybackScroll::Locked
-                        } else {
+                        } else if locked {
                             PlaybackScroll::Off
+                        } else {
+                            mode
                         },
                         "route {index}, unlock={unlock}, locked={locked}"
                     );
@@ -2625,7 +2689,7 @@ mod tests {
         assert!((app.timeline.x_for_sample(50 * t, 1000.0) - 500.0).abs() < 0.01);
         assert_eq!(app.timeline.playhead(), 50 * t);
         assert_eq!(app.timeline.selection(), Some((t, 2 * t)));
-        assert_eq!(app.playback_scroll, super::PlaybackScroll::Off);
+        assert_eq!(app.playback_scroll, super::PlaybackScroll::Page);
         let _ = app.update(Message::KeyPressed(
             Key::Character("l".into()),
             Modifiers::empty(),
@@ -4847,6 +4911,8 @@ pub struct CleanSlateApp {
     example_draft: Option<TimeRange>,
     gain_menu: Option<(usize, u64, iced::Point)>,
     setup_details: bool,
+    analysis_details: Option<String>,
+    analysis_details_open: bool,
     reference_stale: bool,
     reference_analyze_requested: bool,
     waveforms: Vec<WaveformCache>,
@@ -5001,11 +5067,13 @@ impl Default for CleanSlateApp {
             example_draft: None,
             gain_menu: None,
             setup_details: false,
+            analysis_details: None,
+            analysis_details_open: false,
             reference_stale: false,
             reference_analyze_requested: false,
             waveforms: vec![],
             timeline: TimelineViewport::default(),
-            playback_scroll: PlaybackScroll::default(),
+            playback_scroll: PlaybackScroll::Page,
             meters_at_playhead: true,
             waveform_display: waveform::WaveformDisplay::Both,
             solo_tracks: 0,
@@ -5354,6 +5422,8 @@ enum Message {
     WaveformDisplay(waveform::WaveformDisplay),
     SoloTrack(usize),
     SetupDetails(bool),
+    AnalysisDetails(bool),
+    ToggleCatchUp,
     #[cfg(test)]
     SpeechSensitivity(f32),
     Attenuation(f32),
@@ -6698,6 +6768,8 @@ impl CleanSlateApp {
                 });
             let _ = sender.send((completed, worker));
         });
+        self.analysis_details = None;
+        self.analysis_details_open = false;
         self.preview_processing = Some(PreviewProcessing {
             started_at: Instant::now(),
             feedback,
@@ -7188,7 +7260,8 @@ impl CleanSlateApp {
                             match analysis.install(project, &mut self.effective_cache, None) {
                                 Ok(effective) => {
                                     let timings = &analysis.timings;
-                                    self.messages = vec![format!(
+                                    self.messages.clear();
+                                    self.analysis_details = Some(format!(
                                         "Analysis completed in {:.1}s · source checks {:.1}s · audio preparation {:.1}s · examples {:.1}s · speaker analysis {:.1}s · timeline {:.1}s",
                                         processing.started_at.elapsed().as_secs_f64(),
                                         timings.source_validation_ms / 1000.0,
@@ -7196,7 +7269,7 @@ impl CleanSlateApp {
                                         timings.reference_readiness_ms / 1000.0,
                                         timings.ownership_ms / 1000.0,
                                         (timings.temporal_ms + timings.overview_ms) / 1000.0,
-                                    )];
+                                    ));
                                     let preview = analysis.preview(project, &effective);
                                     if let Some(audition) = &self.audition {
                                         audition.replace_envelopes(preview.envelopes.clone());
@@ -7336,6 +7409,7 @@ impl CleanSlateApp {
             return;
         };
         if audition.failed() {
+            self.timeline.cancel_catch_up();
             self.messages =
                 vec!["Audio output stopped. Check the device and press Play to retry.".into()];
             self.audition = None;
@@ -7349,7 +7423,7 @@ impl CleanSlateApp {
         if self.window_minimized && !audition.is_finished() {
             return;
         }
-        self.timeline.seek(audition.position());
+        self.timeline.advance_playhead(audition.position());
         if self.timeline.follow_playhead(self.playback_scroll) {
             self.drawing_revision = self.drawing_revision.wrapping_add(1);
         }
@@ -7359,6 +7433,7 @@ impl CleanSlateApp {
         if audition.is_finished()
             && let Some(finished) = self.audition.take()
         {
+            self.timeline.cancel_catch_up();
             finished.stop();
             self.idle_audition = Some(finished);
         }
@@ -7377,6 +7452,7 @@ impl CleanSlateApp {
     }
 
     fn stop_audition(&mut self) {
+        self.timeline.cancel_catch_up();
         self.window_visibility_generation = self.window_visibility_generation.wrapping_add(1);
         self.window_minimized = false;
         if self.timeline.is_middle_panning() {
@@ -8393,9 +8469,20 @@ impl CleanSlateApp {
                 self.gain_menu = None;
             }
             Message::SetupDetails(show) => self.setup_details = show,
+            Message::AnalysisDetails(show) => self.analysis_details_open = show,
+            Message::ToggleCatchUp => {
+                self.timeline.override_middle_pan_anchor();
+                self.timeline.cancel_catch_up();
+                self.playback_scroll = if self.playback_scroll == PlaybackScroll::Page {
+                    PlaybackScroll::Off
+                } else {
+                    PlaybackScroll::Page
+                };
+            }
             Message::LockPlayhead => {
                 self.timeline.override_middle_pan_anchor();
                 if self.playback_scroll == PlaybackScroll::Locked {
+                    self.timeline.cancel_catch_up();
                     self.playback_scroll = PlaybackScroll::Off;
                 } else {
                     self.timeline.lock_playhead();
@@ -10729,6 +10816,7 @@ impl CleanSlateApp {
             timeline_content.into()
         };
         let locked = self.playback_scroll == PlaybackScroll::Locked;
+        let catch_up = self.playback_scroll == PlaybackScroll::Page;
         let meter_control = iced::widget::tooltip(
             button(toolbar_label(
                 ToolbarIcon::Meters {
@@ -10755,16 +10843,46 @@ impl CleanSlateApp {
         )
         .delay(Duration::from_millis(600))
         .snap_within_viewport(true);
+        let mut waveform_modes = row![text("Waveform").size(13)]
+            .spacing(4)
+            .align_y(iced::Center);
+        for mode in [
+            waveform::WaveformDisplay::Original,
+            waveform::WaveformDisplay::Processed,
+            waveform::WaveformDisplay::Both,
+        ] {
+            let selected = self.waveform_display == mode;
+            let control = button(container(ToolbarIcon::Waveform(mode).view(None)).center(Fill))
+                .width(32)
+                .height(30)
+                .padding(5)
+                .style(move |theme, status| flat_button(theme, status, selected))
+                .hover_outline(false)
+                .selected(selected)
+                .on_press(Message::WaveformDisplay(mode));
+            waveform_modes = waveform_modes.push(
+                iced::widget::tooltip(
+                    control,
+                    container(text(format!("{mode} waveform")).size(13))
+                        .padding(8)
+                        .style(editor_panel),
+                    iced::widget::tooltip::Position::Bottom,
+                )
+                .delay(Duration::from_millis(600))
+                .snap_within_viewport(true),
+            );
+        }
         let timeline = column![
             row![
                 text("Timeline").size(16).font(iced::Font { weight: iced::font::Weight::Semibold, ..iced::Font::with_name("Segoe UI") }),
-                text("Waveform").size(13),
-                iced::widget::pick_list(
-                    [waveform::WaveformDisplay::Original, waveform::WaveformDisplay::Processed, waveform::WaveformDisplay::Both],
-                    Some(self.waveform_display),
-                    Message::WaveformDisplay,
-                ).text_size(13),
                 Space::new().width(Fill),
+                iced::widget::tooltip(
+                    button(text("Catch up").size(13)).padding([6, 8]).height(34)
+                        .style(move |theme, status| flat_button(theme, status, catch_up))
+                        .hover_outline(false).selected(catch_up).on_press(Message::ToggleCatchUp),
+                    container(text("Follow playback with a quick scroll at the right edge").size(13)).padding(8).style(editor_panel),
+                    iced::widget::tooltip::Position::Bottom,
+                ).delay(Duration::from_millis(600)).snap_within_viewport(true),
                 self.shortcut_control(Command::Lock,
                     button(toolbar_label(ToolbarIcon::Lock { locked }, "Lock"))
                         .padding([6, 8]).height(34)
@@ -10776,6 +10894,8 @@ impl CleanSlateApp {
                         .style(|theme, status| flat_button(theme, status, false))
                         .hover_outline(false).on_press(Message::CenterPlayhead)),
                 crate::gui_controls::shortcut_hint(meter_control, self.shortcut_hint_generation),
+                Space::new().width(12),
+                waveform_modes,
             ].spacing(8).align_y(iced::Center),
             iced::widget::tooltip(
                 text("Drag to mark a speaker example · red shading shows reduced volume")
@@ -10845,8 +10965,30 @@ impl CleanSlateApp {
                 .into()
         } else if self.preview.is_some() {
             row![
-                text("●").size(12).color(self.appearance.colors().success),
-                inspector_heading("Processed audio ready")
+                container(Space::new().width(5).height(5)).style(|theme| container::Style {
+                    background: Some(colors(theme).success.into()),
+                    border: iced::Border {
+                        radius: 3.0.into(),
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                }),
+                text("Ready").size(14).color(self.appearance.colors().muted),
+                Space::new().width(Fill),
+                button(
+                    text(if self.analysis_details_open {
+                        "Details ▾"
+                    } else {
+                        "Details ▸"
+                    })
+                    .size(13)
+                )
+                .style(quiet_button)
+                .on_press_maybe(
+                    self.analysis_details
+                        .as_ref()
+                        .map(|_| Message::AnalysisDetails(!self.analysis_details_open))
+                ),
             ]
             .spacing(8)
             .align_y(iced::Center)
@@ -10903,13 +11045,29 @@ impl CleanSlateApp {
             self.timing_control(SoundParameter::Gap, "Ignore gaps shorter than"),
         ]
         .spacing(12);
-        let inspector_header = column![
-            preview_state,
-            text(self.next_action())
-                .size(14)
-                .color(self.appearance.colors().muted)
-        ]
-        .spacing(6);
+        let mut inspector_header = column![preview_state].spacing(6);
+        if self.preview.is_none()
+            || self.reference_stale
+            || setup_required
+            || self.preview_error.is_some()
+            || self.preview_processing.is_some()
+        {
+            inspector_header = inspector_header.push(
+                text(self.next_action())
+                    .size(14)
+                    .color(self.appearance.colors().muted),
+            );
+        }
+        if self.preview.is_some()
+            && !self.reference_stale
+            && self.preview_processing.is_none()
+            && let Some(details) = &self.analysis_details
+        {
+            inspector_header = inspector_header.push(crate::gui_disclosure::reveal(
+                text(details).size(13).color(self.appearance.colors().muted),
+                self.analysis_details_open,
+            ));
+        }
         let mut inspector_status = column![
             container(scrollable(inspector_header))
                 .max_height(if compact { 110 } else { 150 })

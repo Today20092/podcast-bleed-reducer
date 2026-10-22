@@ -81,7 +81,10 @@ fn playback_follow_pages_at_the_edge_and_locks_without_changing_zoom_or_selectio
     assert!(!viewport.follow_playhead(PlaybackScroll::Page));
     viewport.seek(visible.ceil() as u64);
     assert!(viewport.follow_playhead(PlaybackScroll::Page));
-    assert_eq!(viewport.start(), viewport.playhead() as f64);
+    assert_eq!(
+        viewport.start(),
+        viewport.playhead() as f64 - visible * 0.05
+    );
     assert!(!viewport.follow_playhead(PlaybackScroll::Page));
     viewport.seek(0);
     assert!(viewport.follow_playhead(PlaybackScroll::Page));

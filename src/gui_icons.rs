@@ -6,6 +6,7 @@ use iced::{
 
 #[derive(Clone, Copy)]
 pub(crate) enum ToolbarIcon {
+    Waveform(crate::waveform::WaveformDisplay),
     Lock { locked: bool },
     Center,
     Meters { at_playhead: bool },
@@ -18,6 +19,15 @@ pub(crate) enum ToolbarIcon {
 impl ToolbarIcon {
     pub(crate) fn view<Message: 'static>(self, tint: Option<Color>) -> Element<'static, Message> {
         let bytes: &'static [u8] = match self {
+            Self::Waveform(crate::waveform::WaveformDisplay::Original) => {
+                include_bytes!("../assets/ui/waveform-original.svg")
+            }
+            Self::Waveform(crate::waveform::WaveformDisplay::Processed) => {
+                include_bytes!("../assets/ui/waveform-processed.svg")
+            }
+            Self::Waveform(crate::waveform::WaveformDisplay::Both) => {
+                include_bytes!("../assets/ui/waveform-both.svg")
+            }
             Self::Lock { locked: true } => include_bytes!("../assets/lucide/lock-keyhole.svg"),
             Self::Lock { locked: false } => {
                 include_bytes!("../assets/lucide/lock-keyhole-open.svg")

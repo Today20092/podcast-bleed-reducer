@@ -1,4 +1,5 @@
 use crate::timebase::{TICKS_PER_SECOND, TimePosition};
+use std::time::{Duration, Instant};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum PlaybackScroll {
@@ -11,7 +12,7 @@ impl std::fmt::Display for PlaybackScroll {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(match self {
             Self::Off => "Off",
-            Self::Page => "Page at edge",
+            Self::Page => "Catch up",
             Self::Locked => "Lock playhead",
         })
     }
@@ -28,7 +29,20 @@ pub struct TimelineViewport {
     selection: Option<(TimePosition, TimePosition)>,
     middle_pan: Option<MiddlePan>,
     middle_pan_epoch: u64,
+    catch_up: Option<CatchUp>,
+    reveal_on_follow: bool,
+    followed_mode: PlaybackScroll,
 }
+
+#[derive(Clone, Debug)]
+struct CatchUp {
+    from: f64,
+    target: f64,
+    started: Instant,
+}
+
+const CATCH_DURATION: Duration = Duration::from_millis(250);
+const CATCH_INSET: f64 = 0.05;
 
 #[derive(Clone, Debug)]
 struct MiddlePan {
@@ -54,6 +68,9 @@ impl TimelineViewport {
             selection: None,
             middle_pan: None,
             middle_pan_epoch: 0,
+            catch_up: None,
+            reveal_on_follow: false,
+            followed_mode: PlaybackScroll::Off,
         }
     }
 
@@ -92,6 +109,7 @@ impl TimelineViewport {
     }
 
     pub fn show_range(&mut self, start: TimePosition, end: TimePosition) {
+        self.cancel_catch_up();
         let span = end.saturating_sub(start).max(TICKS_PER_SECOND / 10) as f64;
         self.visible = (span * 3.0).min(self.total_samples as f64);
         self.start = ((start as f64 + end as f64 - self.visible) / 2.0)
@@ -99,6 +117,7 @@ impl TimelineViewport {
     }
 
     pub fn fit_full(&mut self) {
+        self.cancel_catch_up();
         self.start = 0.0;
         self.visible = self.total_samples as f64;
     }
@@ -108,6 +127,7 @@ impl TimelineViewport {
         if start >= end {
             return;
         }
+        self.cancel_catch_up();
         self.visible = ((end - start) as f64 * 1.2)
             .max(TICKS_PER_SECOND as f64)
             .min(self.total_samples as f64);
@@ -116,7 +136,20 @@ impl TimelineViewport {
     }
 
     pub fn seek(&mut self, sample: TimePosition) {
+        self.cancel_catch_up();
+        self.advance_playhead(sample);
+    }
+
+    pub fn advance_playhead(&mut self, sample: TimePosition) {
+        if sample < self.playhead {
+            self.cancel_catch_up();
+        }
         self.playhead = sample.min(self.total_samples.saturating_sub(1));
+    }
+
+    pub fn cancel_catch_up(&mut self) {
+        self.catch_up = None;
+        self.reveal_on_follow = true;
     }
 
     pub fn sample_at(&self, x: f32, width: f32) -> TimePosition {
@@ -134,6 +167,7 @@ impl TimelineViewport {
         if direction == 0.0 {
             return;
         }
+        self.cancel_catch_up();
         let fraction = (cursor_x / width.max(1.0)).clamp(0.0, 1.0) as f64;
         let anchor = self.start + fraction * self.visible;
         let minimum = (TICKS_PER_SECOND as f64 / 10.0).min(self.total_samples as f64);
@@ -144,6 +178,7 @@ impl TimelineViewport {
     }
 
     pub fn pan_by_pixels(&mut self, delta_x: f32, width: f32) {
+        self.cancel_catch_up();
         let previous = self.start;
         self.start = (self.start - delta_x as f64 / width.max(1.0) as f64 * self.visible)
             .clamp(0.0, self.total_samples as f64 - self.visible);
@@ -153,6 +188,7 @@ impl TimelineViewport {
     }
 
     pub(crate) fn begin_middle_pan(&mut self, mode: PlaybackScroll) {
+        self.cancel_catch_up();
         if self.middle_pan.is_none() {
             self.middle_pan = Some(MiddlePan {
                 prior_lock: (mode == PlaybackScroll::Locked).then_some(self.lock_fraction),
@@ -218,10 +254,12 @@ impl TimelineViewport {
     }
 
     pub fn lock_playhead(&mut self) {
+        self.cancel_catch_up();
         self.lock_fraction = ((self.playhead as f64 - self.start) / self.visible).clamp(0.0, 1.0);
     }
 
     pub fn center_playhead(&mut self) {
+        self.cancel_catch_up();
         self.override_middle_pan_anchor();
         self.lock_fraction = 0.5;
         self.start = (self.playhead as f64 - self.visible * self.lock_fraction)
@@ -229,22 +267,60 @@ impl TimelineViewport {
     }
 
     pub fn follow_playhead(&mut self, mode: PlaybackScroll) -> bool {
+        self.follow_playhead_at(mode, Instant::now())
+    }
+
+    pub fn follow_playhead_at(&mut self, mode: PlaybackScroll, now: Instant) -> bool {
+        if self.followed_mode != mode {
+            self.cancel_catch_up();
+            self.followed_mode = mode;
+        }
         if self.middle_pan.is_some() {
             return false;
         }
         let previous = self.start;
         let playhead = self.playhead as f64;
-        let start = match mode {
-            PlaybackScroll::Off => self.start,
-            PlaybackScroll::Locked => playhead - self.visible * self.lock_fraction,
-            PlaybackScroll::Page
-                if playhead < self.start || playhead >= self.start + self.visible =>
-            {
-                playhead
+        let maximum = self.total_samples as f64 - self.visible;
+        if mode != PlaybackScroll::Page || maximum <= 0.0 {
+            self.catch_up = None;
+            if mode == PlaybackScroll::Locked {
+                self.start = (playhead - self.visible * self.lock_fraction).clamp(0.0, maximum);
             }
-            PlaybackScroll::Page => self.start,
-        };
-        self.start = start.clamp(0.0, self.total_samples as f64 - self.visible);
+        } else {
+            let outside = playhead < self.start || playhead >= self.start + self.visible;
+            if self.reveal_on_follow && outside || playhead < self.start {
+                self.catch_up = None;
+                self.start = (playhead - self.visible * CATCH_INSET).clamp(0.0, maximum);
+            } else if let Some(catch) = &self.catch_up {
+                let progress = (now.saturating_duration_since(catch.started).as_secs_f64()
+                    / CATCH_DURATION.as_secs_f64())
+                .min(1.0);
+                let eased = 1.0 - (1.0 - progress).powi(3);
+                self.start = (catch.from + (catch.target - catch.from) * eased)
+                    .min((playhead - self.visible * CATCH_INSET).max(0.0))
+                    .clamp(0.0, maximum);
+                if progress >= 1.0 {
+                    self.catch_up = None;
+                    // A stalled frame can outlive an entire view; reveal current audio time once.
+                    if playhead >= self.start + self.visible {
+                        self.start = (playhead - self.visible * CATCH_INSET).clamp(0.0, maximum);
+                    }
+                }
+            } else if playhead >= self.start + self.visible {
+                // Predict the advancing playhead at completion, keeping one stable animation target.
+                let target = (playhead + CATCH_DURATION.as_secs_f64() * TICKS_PER_SECOND as f64
+                    - self.visible * CATCH_INSET)
+                    .clamp(0.0, maximum);
+                if target > self.start {
+                    self.catch_up = Some(CatchUp {
+                        from: self.start,
+                        target,
+                        started: now,
+                    });
+                }
+            }
+        }
+        self.reveal_on_follow = false;
         self.start != previous
     }
 }
@@ -268,6 +344,196 @@ pub(crate) enum TimelineEvent {
     PanStart,
     PanEnd,
     PanCancel,
+}
+
+#[cfg(test)]
+mod catch_up_tests {
+    use super::*;
+
+    fn viewport(now: Instant) -> TimelineViewport {
+        let mut viewport = TimelineViewport::new(100 * TICKS_PER_SECOND);
+        viewport.visible = 10.0 * TICKS_PER_SECOND as f64;
+        viewport.set_selection(Some((TICKS_PER_SECOND, 2 * TICKS_PER_SECOND)));
+        viewport.follow_playhead_at(PlaybackScroll::Page, now);
+        viewport
+    }
+
+    fn catching(now: Instant) -> TimelineViewport {
+        let mut viewport = viewport(now);
+        viewport.advance_playhead(10 * TICKS_PER_SECOND);
+        assert!(!viewport.follow_playhead_at(PlaybackScroll::Page, now));
+        assert!(viewport.catch_up.is_some());
+        viewport
+    }
+
+    #[test]
+    fn edge_catch_is_stationary_then_eased_and_rearms_after_completion() {
+        let now = Instant::now();
+        let mut viewport = viewport(now);
+        viewport.advance_playhead(10 * TICKS_PER_SECOND - 1);
+        assert!(!viewport.follow_playhead_at(PlaybackScroll::Page, now));
+        assert!(viewport.catch_up.is_none());
+        viewport.advance_playhead(10 * TICKS_PER_SECOND);
+        assert!(!viewport.follow_playhead_at(PlaybackScroll::Page, now));
+        let target = viewport.catch_up.as_ref().unwrap().target;
+        viewport.advance_playhead(10 * TICKS_PER_SECOND + TICKS_PER_SECOND / 10);
+        assert!(
+            viewport.follow_playhead_at(PlaybackScroll::Page, now + Duration::from_millis(100))
+        );
+        assert!(viewport.start() > 0.0 && viewport.start() < target);
+        assert_eq!(viewport.catch_up.as_ref().unwrap().target, target);
+        viewport.advance_playhead(10 * TICKS_PER_SECOND + TICKS_PER_SECOND / 4);
+        assert!(viewport.follow_playhead_at(PlaybackScroll::Page, now + CATCH_DURATION));
+        assert!(viewport.catch_up.is_none());
+        assert!((viewport.x_for_sample(viewport.playhead(), 1000.0) - 50.0).abs() < 0.001);
+        let resting = viewport.start();
+        viewport.advance_playhead(11 * TICKS_PER_SECOND);
+        assert!(!viewport.follow_playhead_at(PlaybackScroll::Page, now + Duration::from_secs(1)));
+        assert_eq!(viewport.start(), resting);
+        viewport.advance_playhead((resting + viewport.visible).ceil() as u64);
+        viewport.follow_playhead_at(PlaybackScroll::Page, now + Duration::from_secs(10));
+        assert!(viewport.catch_up.is_some());
+        assert_eq!(viewport.start(), resting);
+        assert_eq!(
+            viewport.selection(),
+            Some((TICKS_PER_SECOND, 2 * TICKS_PER_SECOND))
+        );
+        assert_eq!(viewport.visible_samples(), 10.0 * TICKS_PER_SECOND as f64);
+    }
+
+    #[test]
+    fn delayed_frame_finishes_once_and_reveals_current_time_without_replaying_pages() {
+        let now = Instant::now();
+        let mut viewport = catching(now);
+        viewport.advance_playhead(35 * TICKS_PER_SECOND);
+        assert!(viewport.follow_playhead_at(PlaybackScroll::Page, now + Duration::from_secs(25)));
+        assert!(viewport.catch_up.is_none());
+        assert!((viewport.x_for_sample(viewport.playhead(), 1000.0) - 50.0).abs() < 0.001);
+        assert!(!viewport.follow_playhead_at(PlaybackScroll::Page, now + Duration::from_secs(26)));
+        assert_eq!(viewport.playhead(), 35 * TICKS_PER_SECOND);
+    }
+
+    #[test]
+    fn viewport_navigation_and_stop_cancel_pending_catches() {
+        let now = Instant::now();
+        let operations: [fn(&mut TimelineViewport); 8] = [
+            TimelineViewport::cancel_catch_up,
+            TimelineViewport::center_playhead,
+            TimelineViewport::fit_full,
+            |v| v.fit_range(20 * TICKS_PER_SECOND, 25 * TICKS_PER_SECOND),
+            |v| v.show_range(20 * TICKS_PER_SECOND, 25 * TICKS_PER_SECOND),
+            |v| v.zoom_at(100.0, 1000.0, 1.0),
+            |v| v.pan_by_pixels(-10.0, 1000.0),
+            TimelineViewport::lock_playhead,
+        ];
+        for operation in operations {
+            let mut viewport = catching(now);
+            viewport.follow_playhead_at(PlaybackScroll::Page, now + Duration::from_millis(100));
+            operation(&mut viewport);
+            assert!(viewport.catch_up.is_none());
+            let start = viewport.start();
+            assert!(
+                !viewport.follow_playhead_at(PlaybackScroll::Off, now + Duration::from_secs(1))
+            );
+            assert_eq!(viewport.start(), start);
+            assert_eq!(viewport.playhead(), 10 * TICKS_PER_SECOND);
+            assert_eq!(
+                viewport.selection(),
+                Some((TICKS_PER_SECOND, 2 * TICKS_PER_SECOND))
+            );
+        }
+    }
+
+    #[test]
+    fn seek_loop_wrap_and_mode_changes_discard_the_old_target() {
+        let now = Instant::now();
+        let mut viewport = catching(now);
+        viewport.seek(50 * TICKS_PER_SECOND);
+        viewport.follow_playhead_at(PlaybackScroll::Page, now + Duration::from_millis(10));
+        assert!(viewport.catch_up.is_none());
+        assert!((viewport.x_for_sample(viewport.playhead(), 1000.0) - 50.0).abs() < 0.001);
+        viewport.advance_playhead(TICKS_PER_SECOND);
+        viewport.follow_playhead_at(PlaybackScroll::Page, now + Duration::from_millis(20));
+        assert!((viewport.x_for_sample(viewport.playhead(), 1000.0) - 50.0).abs() < 0.001);
+        let mut viewport = catching(now);
+        viewport.follow_playhead_at(PlaybackScroll::Locked, now + Duration::from_millis(20));
+        assert!(viewport.catch_up.is_none());
+        assert_eq!(viewport.x_for_sample(viewport.playhead(), 1000.0), 500.0);
+        let mut viewport = catching(now);
+        viewport.begin_middle_pan(PlaybackScroll::Page);
+        assert!(viewport.catch_up.is_none());
+        let start = viewport.start();
+        assert!(!viewport.follow_playhead_at(PlaybackScroll::Page, now + CATCH_DURATION));
+        assert_eq!(viewport.start(), start);
+        viewport.finish_middle_pan(PlaybackScroll::Off);
+        assert!(!viewport.is_middle_panning());
+    }
+
+    #[test]
+    fn recording_end_full_fit_and_pixel_resize_do_not_overscroll_or_repeat() {
+        let now = Instant::now();
+        for total in [0, 1, TICKS_PER_SECOND] {
+            let mut viewport = TimelineViewport::new(total);
+            viewport.advance_playhead(total);
+            assert!(!viewport.follow_playhead_at(PlaybackScroll::Page, now));
+            assert!(viewport.catch_up.is_none());
+            assert_eq!(viewport.start(), 0.0);
+        }
+        let mut viewport = catching(now);
+        viewport.total_samples = 11 * TICKS_PER_SECOND;
+        viewport.advance_playhead(viewport.total_samples - 1);
+        viewport.follow_playhead_at(PlaybackScroll::Page, now + CATCH_DURATION);
+        assert_eq!(viewport.start(), TICKS_PER_SECOND as f64);
+        assert!(!viewport.follow_playhead_at(PlaybackScroll::Page, now + Duration::from_secs(2)));
+        assert!(viewport.catch_up.is_none());
+        let mut viewport = catching(now);
+        viewport.advance_playhead(10 * TICKS_PER_SECOND + TICKS_PER_SECOND / 4);
+        viewport.follow_playhead_at(PlaybackScroll::Page, now + CATCH_DURATION);
+        for width in [640.0, 2048.0] {
+            assert!(
+                (viewport.x_for_sample(viewport.playhead(), width) / width - 0.05).abs() < 0.0001
+            );
+        }
+    }
+
+    #[test]
+    fn minimum_zoom_keeps_the_advancing_playhead_visible_throughout_the_catch() {
+        let now = Instant::now();
+        let mut viewport = viewport(now);
+        viewport.visible = TICKS_PER_SECOND as f64 / 10.0;
+        viewport.advance_playhead(TICKS_PER_SECOND / 10);
+        viewport.follow_playhead_at(PlaybackScroll::Page, now);
+        let target = viewport.catch_up.as_ref().unwrap().target;
+        let mut prior_start = viewport.start();
+        for milliseconds in [25, 50, 100, 200, 250] {
+            viewport
+                .advance_playhead(TICKS_PER_SECOND / 10 + TICKS_PER_SECOND * milliseconds / 1000);
+            viewport.follow_playhead_at(
+                PlaybackScroll::Page,
+                now + Duration::from_millis(milliseconds),
+            );
+            assert!(viewport.start() >= prior_start);
+            prior_start = viewport.start();
+            let x = viewport.x_for_sample(viewport.playhead(), 1000.0);
+            assert!((0.0..=1000.0).contains(&x), "{milliseconds}ms: {x}");
+            if let Some(catch) = &viewport.catch_up {
+                assert_eq!(catch.target, target);
+            }
+        }
+        assert!(viewport.catch_up.is_none());
+        assert!((viewport.x_for_sample(viewport.playhead(), 1000.0) - 50.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn replacing_recording_bounds_cancels_the_previous_catch_and_resets_the_view() {
+        let now = Instant::now();
+        let mut viewport = catching(now);
+        viewport.set_total_samples(3 * TICKS_PER_SECOND);
+        assert!(viewport.catch_up.is_none());
+        assert_eq!(viewport.visible_samples(), 3.0 * TICKS_PER_SECOND as f64);
+        assert_eq!(viewport.start(), 0.0);
+        assert!(!viewport.follow_playhead_at(PlaybackScroll::Page, now + CATCH_DURATION));
+    }
 }
 
 #[cfg(test)]

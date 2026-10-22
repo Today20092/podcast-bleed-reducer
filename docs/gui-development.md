@@ -4,7 +4,11 @@
 
 The transport uses three equal-size icon buttons centered on the full window. Hover for command names and effective shortcuts. The native title bar identifies CleanSlate; the workspace header shows the project name. Preparation and buffering still report actionable status, without a permanent Playback ready label.
 
-The Timeline toolbar's Waveform selector shows Original source peaks, Processed peaks after the effective gain envelope, or Both (the default). It changes drawing only, independently of Original/Processed/Removed audition. Gain curves, attenuation shading and speaker examples remain visible. Before an envelope is available, Processed shows the source at unity. The choice lasts for the current application session; it does not change saved projects or exports.
+The right side of the Timeline toolbar groups three Waveform icon buttons: Original source peaks, Processed peaks after the effective gain envelope, or Both (the default). Hover for each view's name. It changes drawing only, independently of Original/Processed/Removed audition. Gain curves, attenuation shading and speaker examples remain visible. Before an envelope is available, Processed shows the source at unity. The choice lasts for the current application session; it does not change saved projects or exports.
+
+Completed analysis shows a quiet Ready indicator. Details expands the timing breakdown; normal audition/export instructions are omitted. Analysis progress, cancellation, source/stale blockers and errors remain visible.
+
+Catch up is the default ordinary playback-follow mode, with a toggle beside Lock. The viewport stays still until the playhead reaches its right edge, then makes a 250 ms eased leftward slide, aiming to leave the advancing playhead 5% from the left. Near the recording end, valid bounds take precedence. Stop, seek, zoom, fit, Center and manual pan cancel an old animation; manual pan disables Catch up. Lock remains a separate mutually exclusive follow mode, including the existing middle-drag reanchor behavior. The [installed Pro-L 2 investigation](research/pro-l2-edge-scroll-2026-10-22.md) records the reference and its evidence limits.
 
 Sound dials apply values immediately and animate their indicators to the new value over 110 ms. Repeated steps retarget from the current visual position; settled dials request no animation redraws. Wheel step sizes, fine adjustment, typing and reset behavior are unchanged.
 

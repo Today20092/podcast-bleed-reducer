@@ -1,8 +1,8 @@
 # Add animated catch-up scrolling at the timeline edge
 
-Status: ready-for-agent
+Status: claimed
 Type: task
-Assignee: unassigned
+Assignee: Codex
 Blocked by: 34
 Spec: #accepted-design
 
@@ -41,7 +41,19 @@ FabFilter's Fast, Slow, Infinite and Off metering modes; new audio meters; conti
 
 ## Results
 
-Not implemented. No GUI, playback, timing or visual acceptance checks have been run for this ticket.
+2026-10-22 owner explicitly requested implementation while reviewing the development GUI, with REA inspection of FabFilter Pro-L 2. Claimed before editing on development; dependency 34 is done. Existing middle-drag/reanchor work is integrated and will be retained; this pass implements the outstanding edge-catch behavior and its controls. Scoped checks and owner feel acceptance remain pending.
+
+Implemented the Page/Catch up viewport state with controlled elapsed-time updates, one stable 250 ms cubic ease-out target and a 5% left inset. The app starts in Catch up and exposes a mutually exclusive toggle beside Lock. Only audio-frame updates use advance_playhead; explicit navigation retains seek/reveal behavior. Stop, failure/completion, seek/loop wrap, pan, zoom/fit, Center and mode changes cancel stale targets. Existing middle-drag lock semantics remain intact. Bounds and extreme zoom prevent overscroll or moving ahead of the real playhead; delayed frames complete once rather than replaying missed catches.
+
+[REA findings](../../../docs/research/pro-l2-edge-scroll-2026-10-22.md) confirm the installed Pro-L 2.25 shipped-help description and local CHM reference. This is static evidence, not measured plugin animation or copied rendering code. Duration/easing/inset are CleanSlate design constants.
+
+Final scripts/check.ps1 -Local passed: 352 tests, zero failures, 20 existing ignored across 38 targets, plus formatting, strict all-target/all-feature Clippy and script fixtures. Seven new controlled-time viewport tests cover edge progress/rearming, delayed frames, interruptions, bounds reset, loops, end/full-fit/resize and minimum zoom. Existing middle-pan tests pass. The app follow-mode test and expanded seven-route zoom matrix cover Manual/Catch up/Lock and both unlock preferences. One initial old-default test expectation was corrected by expanding mode coverage before the final passing run. Native checks and owner feel acceptance follow below; status stays claimed until remaining required acceptance is recorded.
+
+Native development verification: played more than six viewport widths with Catch up enabled, observing repeated right-edge catches on a roughly 6.6-second view. Ruler, waveforms, gain curves and playhead remained aligned. Stop left playback at 00:44.410 and the viewport at about 40.6–47.2 seconds, unchanged through subsequent menu/theme checks. Compact 1026×932 and wide 2560×1392 layouts fit; wide Light/Dark rendering was checked. Temporary selection was dismissed without saving; the existing 18 examples and gain parameters were retained.
+
+A 30-second video-only capture is retained outside the repo at C:/Users/User/Documents/Codex/Builds/CleanSlate-ticket-42-62-20261022/catch-up.mp4 (1280×684, 898 frames); an extracted frame was visually verified. This is CleanSlate evidence, not a Pro-L runtime timing comparison. Build from development base 8c6a151 plus these working changes: C:/Users/User/AppData/Local/CleanSlate/BuildCache/debug/rust-app.exe, SHA256 8EE855EAFA695F2D35D6946D31A3923CF41FA8637CC1E07E812DA9DF6504AA7C.
+
+Status remains claimed: owner verification of motion feel and the complete native interruption/middle-drag/boundary matrix above remain open. Controlled-time and app regression coverage passed, but does not replace those physical checks. The rebuilt app is open for that review; no source audio/project edits were saved.
 
 ## Comments
 
