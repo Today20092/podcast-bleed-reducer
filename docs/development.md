@@ -41,7 +41,7 @@ Automated checks do not establish independent recording quality or owner listeni
 
 Future version tags build a Windows 11 x64 portable ZIP, separate macOS Apple Silicon and Intel DMGs, and a Linux x64 AppImage. Each package includes the application, required runtime files, MIT application license, dependency notices, quick-start instructions and build checksums. Packages exclude local recordings, projects, caches and research assets.
 
-See [the release guide](releasing.md) for native package commands, platform checks and future version tags that prepare GitHub draft prereleases for manual publication. Package checks do not establish listening approval or long-session qualification; those remain pending in the release evaluation tracker.
+See [the release guide](releasing.md) for native package commands, platform checks and version tags that prepare GitHub draft prereleases for manual publication. Package checks do not establish fresh physical listening or long-session qualification. Current sound/performance is owner-accepted; unperformed measurements remain unclaimed, and release checks follow the [per-release checklist](branch-workflow.md#release-checklist).
 
 The removed Nemotron implementation remains a [research idea](research/nemotron.md) and is recoverable through Git history.
 
