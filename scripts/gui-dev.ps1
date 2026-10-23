@@ -1,7 +1,8 @@
 param(
     [string]$Project,
     [string]$TargetDir,
-    [switch]$BuildOnly
+    [switch]$BuildOnly,
+    [switch]$UpdaterFixture
 )
 
 $ErrorActionPreference = 'Stop'
@@ -9,6 +10,11 @@ $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $settings = & (Join-Path $PSScriptRoot 'local-build-settings.ps1') -TargetDir $TargetDir
 $TargetDir = $settings.TargetDir
 $cargoArguments = $settings.CargoArguments
+if ($UpdaterFixture) {
+    if (-not $BuildOnly) { throw 'Updater fixture builds are BuildOnly and must never open an owner project.' }
+    $cargoArguments += @('--features', 'updater-test-key')
+    Write-Output 'TEST KEY BUILD: disposable updater fixtures only; never distribute this executable.'
+}
 $exe = Join-Path $TargetDir 'debug/rust-app.exe'
 if (Get-Process -Name rust-app -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $exe }) {
     throw 'Save your edits and close the development window before rebuilding.'

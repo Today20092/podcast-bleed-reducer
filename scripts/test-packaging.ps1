@@ -27,10 +27,11 @@ try {
             $path = Join-Path $package $_
             New-Item -ItemType Directory -Path (Split-Path -Parent $path) -Force | Out-Null
             [IO.File]::WriteAllText($path, 'package fixture')
-            @{ path = $_; sha256 = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant() }
+            @{ path = $_; sha256 = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant(); bytes = (Get-Item -LiteralPath $path -Force).Length }
         })
         $manifestPath = Join-Path $package 'package-manifest.json'
-        $original = @{ platform = $platform; version = '0.1.0-alpha.1'; files = $inventory } | ConvertTo-Json -Depth 5
+        $entrypoint = if ($platform -eq 'windows-x64') { 'CleanSlate.exe' } elseif ($platform -like 'macos-*') { 'CleanSlate.app/Contents/MacOS/CleanSlate' } else { 'usr/bin/CleanSlate' }
+        $original = @{ schema = 1; product = 'CleanSlate'; entrypoint = $entrypoint; platform = $platform; version = '0.1.0-alpha.1'; files = $inventory } | ConvertTo-Json -Depth 5
         [IO.File]::WriteAllText($manifestPath, $original)
         & "$PSScriptRoot/check-package.ps1" -Package $package -IntegrityOnly | Out-Null
 

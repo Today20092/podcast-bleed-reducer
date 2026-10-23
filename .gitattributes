@@ -1,0 +1,3 @@
+# Minisign authenticates exact bytes; Git must not rewrite signed fixtures.
+tests/fixtures/updater-descriptor*.json -text
+tests/fixtures/updater-descriptor*.json.minisig -text -diff

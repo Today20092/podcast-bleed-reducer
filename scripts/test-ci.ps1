@@ -65,7 +65,8 @@ function Test-DraftPreparation([string]$Tag, [string]$Existing, [string]$Failure
     if ($metadata -notcontains '--draft' -or $metadata -notcontains "--prerelease=$($isPrerelease.ToString().ToLowerInvariant())" -or $metadata -notcontains $notes) { throw "Incorrect draft metadata for $Tag ($Existing)" }
     $upload = if ($Existing -eq 'draft') { $calls[-1] } else { $metadata }
     $assets = @($upload | Where-Object { $_ -like 'release-assets/*' })
-    if ($assets.Count -ne 8 -or ($Existing -eq 'draft' -and $upload[1] -ne 'upload')) { throw 'All four packages and checksums must be attached' }
+    if ($assets.Count -ne 9 -or ($Existing -eq 'draft' -and $upload[1] -ne 'upload')) { throw 'All four packages, checksums and Windows update descriptor must be attached' }
+    if ($assets -notcontains "release-assets/CleanSlate-$($Tag.Substring(1))-windows-x64.zip.update.json") { throw 'Missing Windows update descriptor argument' }
     foreach ($suffix in @('windows-x64.zip', 'macos-arm64.dmg', 'macos-x64.dmg', 'linux-x64.AppImage')) {
         $asset = "release-assets/CleanSlate-$($Tag.Substring(1))-$suffix"
         if ($assets -notcontains $asset -or $assets -notcontains "$asset.sha256") { throw "Missing asset arguments: $asset" }

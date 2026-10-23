@@ -3,6 +3,14 @@
 New user commands must follow the [action and shortcut contract](agents/actions-and-shortcuts.md). Declare the command once, handle it through shared dispatch and use `action_control` for its button: Settings, reference entries and effective-binding hints then share its identity. Defaults are optional; an Unbound action remains customizable. Existing editing/dialog/legacy exceptions are individually inventoried rather than automatically inherited by new controls.
 
 ## Transport and waveform display
+Ticket 73 adds registered Menu → Check for updates and dialog actions using shared
+dispatch, availability and shortcut hints. Updates are manual; no network task runs
+at startup. Ordinary close and update restart share Save/Discard/Cancel and refuse
+to exit while tracked workers remain alive, including after cancellation requests.
+Package acceptance uses `gui-dev.ps1 -BuildOnly -UpdaterFixture` on synthetic roots;
+this test-key feature cannot compile in release profiles and must not be distributed.
+The normal final BuildOnly embeds the production public key. See [update signing](update-signing.md).
+
 
 The transport uses three equal-size icon buttons centered on the full window. Hover for command names and effective shortcuts. The native title bar identifies CleanSlate; the workspace header shows the project name. Preparation and buffering still report actionable status, without a permanent Playback ready label.
 
@@ -80,6 +88,8 @@ These are observed build times on this machine, not a controlled clean-build spe
 Validation: 23 applicable app tests passed, one opt-in ignored; strict all-target/all-feature Clippy, formatting, diff and PowerShell parser checks passed. Launch produced a responding native development window. The saved owner project remained byte-identical, the separate development project initially matched it, and rebuilding while that window was open was correctly rejected. Physical playback/opening latency and listening were not measured.
 
 ## App menu
+
+Development follow-up (ticket 72): Menu also includes Purchase CleanSlate. Its optional purchase dialog links to Ko-fi, GitHub Sponsors and the roadmap, keeps Continue immediately available, and selects Don't show again on first launch. Dismissal persists that preference through the existing atomic JSON writer; a save failure keeps the editor usable and reports it. Tab/Shift+Tab or Up/Down selects controls; Enter activates them and Escape continues. About adds a keyboard-reachable purchase entry. New support/link actions use the shared command registry with no default bindings. No startup network request or payment details enter the app. Existing 1.0.0 packages do not contain this follow-up.
 
 The top-bar Menu offers Settings, Keyboard shortcuts, Help, GitHub, Report a bug and About. `Alt+M` opens it; Tab or Up/Down selects an entry, Enter activates it, and Escape closes it. `Ctrl+/` still opens the reference, and `Alt+H` retains Help → Keyboard shortcuts. About shows the compiled version and application license. Copy version info explicitly queries the active graphics backend/adapter and current window scale, then displays and copies those fields with the app/build/platform information. Unavailable values remain explicit; display refresh is unavailable through the current GUI API. Hardware names are bounded, control characters and unexpected paths are removed, and no project/audio paths or recording contents enter this report. Closing/reopening About cancels acceptance of older hardware/clipboard replies. Tab switches between Copy and Close, while Page Up/Down and Home/End scroll the credits. Settings and About retain the workspace behind centered dialogs. Browser links open only after an explicit menu action; Report a bug opens the issue chooser for the user to complete.
 

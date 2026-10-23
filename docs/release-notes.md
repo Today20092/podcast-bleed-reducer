@@ -1,4 +1,21 @@
-# CleanSlate 1.0.0
+# CleanSlate 1.1.0
+
+This compatible update adds manual update checking and optional purchases. Existing projects, preferences, source media and exports retain their formats and behavior.
+
+## Changes in 1.1.0
+
+- Check for updates from the application. Stable releases are selected by default; prereleases can be included for an individual check.
+- Clean, unmodified Windows x64 portable installations on supported NTFS storage can install a verified whole-package update. Signed metadata, archive and file hashes are checked before replacement; backup, rollback and recovery protect interrupted updates. Unsaved work must be saved or explicitly discarded, and background workers exit before replacement.
+- Modified or mixed folders, unsupported storage and Mac/Linux installations receive manual download guidance. Update checks and downloads require an explicit action; audio processing stays offline.
+- Optional purchases support the project without changing access to the editor or its audio features.
+
+The Windows update descriptor is signed with the pinned release Minisign key. This authenticates updater metadata; Windows executables remain without Authenticode signing. macOS packages remain ad-hoc signed and not notarized. Native CI and package self-checks do not establish fresh physical audio, listening or Mac/Linux desktop qualification.
+
+**Updating from 1.0.0:** download and extract the complete 1.1.0 package into a new folder, then launch it. The 1.0.0 application predates the updater. Keep personal files outside the application folder so future supported Windows updates can replace that folder safely.
+
+The [updater delivery receipt](research/portable-updater-delivery-2026-10-23.md) records 370 passing tests, strict Clippy and nine disposable Windows installer cases, including recovery, locked files and permission denial. The [signing guide](update-signing.md) describes release verification and owner-held keys.
+
+## First stable release: 1.0.0
 
 CleanSlate's first stable release delivers the accepted offline podcast workflow: import synchronized microphone tracks, label speaker examples, analyze, audition and edit gain, save the project, then export processed WAVs. The owner approved promotion and publication on 2026-10-22.
 

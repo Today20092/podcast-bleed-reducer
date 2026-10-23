@@ -333,7 +333,7 @@ impl AuditionPreparation {
         let cancelled = Arc::new(AtomicBool::new(false));
         let worker_cancelled = Arc::clone(&cancelled);
         let (sender, result) = mpsc::channel();
-        std::thread::spawn(move || {
+        crate::worker_lifetime::spawn(move || {
             // A cancelled warm request may still return its validated PCM to the cache.
             // Generation checks prevent that result from starting playback.
             let prepared = (|| {
