@@ -62,7 +62,7 @@ Complete these steps under the release-specific ticket before publishing 1.0:
 
 1. Select the reviewed source and set Cargo.toml, Cargo.lock and candidate packaging inputs to the same unused version. Keep existing published tags and assets intact. Completion: source metadata and package identities agree.
 2. Update current README/status/help/package wording and release notes to describe the stable workflow and concrete limitations. Preserve historical alpha receipts and notes. Completion: current release copy agrees on version/status and platform claims match recorded evidence.
-3. Review the release automation against the intended status. `portable-release.yml` defaults to v1.0.0 and keeps every release a draft: tags with a prerelease suffix use the prerelease flag and historical alpha notes; plain stable versions clear that flag and use `docs/release-notes.md`. A draft rerun refreshes its metadata before uploading checked assets; a published release cannot be replaced. Completion: the draft has the intended assets and release notes, its prerelease flag matches the selected status, and a stable release is selected as the latest release when published. See [GitHub release settings](https://docs.github.com/en/repositories/releasing-projects-on-github/managing-releases-in-a-repository).
+3. Review the release automation against the intended status. `portable-release.yml` defaults to v1.1.0 and keeps every release a draft: tags with a prerelease suffix use the prerelease flag and historical alpha notes; plain stable versions clear that flag and use `docs/release-notes.md`. A draft rerun refreshes its metadata before uploading checked assets; a published release cannot be replaced. Completion: the draft has the intended assets and release notes, its prerelease flag matches the selected status, and a stable release is selected as the latest release when published. See [GitHub release settings](https://docs.github.com/en/repositories/releasing-projects-on-github/managing-releases-in-a-repository).
 4. Complete the [per-release checklist](branch-workflow.md#release-checklist), record actual results and omissions, and obtain the owner's authorization for promotion/tagging/publication. Completion: the ticket identifies the tested source and final packages, records support limits and authorization, and verifies public downloads after publication.
 
 The existing development → main merge promotion and four-platform draft/package verification process remains in place. A version-policy decision alone does not change the published downloads or establish new platform qualification.
@@ -80,8 +80,8 @@ The existing development → main merge promotion and four-platform draft/packag
 3. Commit the reviewed source and docs. Build from that commit:
 
    ```powershell
-   pwsh -File scripts/package.ps1 -Version 1.0.0
-   pwsh -File scripts/check-package.ps1 -Package dist/CleanSlate-1.0.0-windows-x64
+   pwsh -File scripts/package.ps1 -Version 1.1.0
+   pwsh -File scripts/check-package.ps1 -Package dist/CleanSlate-1.1.0-windows-x64
    ```
 
 Run the same `pwsh -File scripts/package.ps1 -Version VERSION` command natively on
@@ -145,8 +145,8 @@ does not already exist before creating it:
 
 ```powershell
 git fetch origin
-git tag -a v1.0.0 origin/main -m "CleanSlate 1.0.0"
-git push origin v1.0.0
+git tag -a v1.1.0 origin/main -m "CleanSlate 1.1.0"
+git push origin v1.1.0
 ```
 
 `.github/workflows/portable-release.yml` runs on version tags. It installs the pinned
@@ -169,7 +169,7 @@ real device enumeration and listening still require a Windows GUI check.
 
 Download and clean-test the actual GitHub packages before publication: their binaries can
 differ from the local build. In GitHub's Releases page, review the draft's version,
-assets, checksum and limitations. For stable 1.0.0, clear **Set as a pre-release**
+assets, checksum and limitations. For stable versions, clear **Set as a pre-release**
 and select it as the latest release; retain the prerelease flag for a suffixed
 candidate. Publish only after package verification and owner authorization.
 Do not move a published tag or replace published assets; select the next version
@@ -182,8 +182,8 @@ the normal executable launch and `--appimage-extract-and-run` fallback. Headless
 CI self-checks verify analysis and delivery, not real sound-device playback.
 
 Release notes must state the attached platforms, signing status, offline acoustic
-workflow and any pending desktop/listening/performance checks. For stable 1.0.0,
-complete the versioning policy's transition and per-release checks, retain known
+workflow and any pending desktop/listening/performance checks. For stable versions,
+complete the versioning policy's per-release checks, retain known
 limits and identify actual package/hardware evidence without treating omitted
 qualification as passing.
 Owner-closed 14 and retired 15/25 are historical evidence, not tickets to reopen.
