@@ -27,7 +27,7 @@ try {
             $path = Join-Path $package $_
             New-Item -ItemType Directory -Path (Split-Path -Parent $path) -Force | Out-Null
             [IO.File]::WriteAllText($path, 'package fixture')
-            @{ path = $_; sha256 = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant(); bytes = (Get-Item -LiteralPath $path).Length }
+            @{ path = $_; sha256 = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant(); bytes = (Get-Item -LiteralPath $path -Force).Length }
         })
         $manifestPath = Join-Path $package 'package-manifest.json'
         $entrypoint = if ($platform -eq 'windows-x64') { 'CleanSlate.exe' } elseif ($platform -like 'macos-*') { 'CleanSlate.app/Contents/MacOS/CleanSlate' } else { 'usr/bin/CleanSlate' }

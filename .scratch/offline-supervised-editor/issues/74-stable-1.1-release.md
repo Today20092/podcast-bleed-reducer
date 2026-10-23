@@ -19,3 +19,7 @@ Related: 68, 71, 72, 73
 - [ ] Merge the checked generated download update, synchronize development and record source/package identities.
 
 The encrypted private key and its password stay outside the repository and CI. The owner enters the password only in their own terminal. No audio algorithm or unrelated research implementation is included.
+
+## Native CI correction
+
+The first promotion run exposed a fixture-only hidden-file lookup: the Linux `.DirIcon` inventory used `Get-Item` without `-Force`, which fails on Unix hosts. Add `-Force` to match the production inventory/checker; the existing four-platform fixture directly exercises the correction. No package content or editor behavior changes.
