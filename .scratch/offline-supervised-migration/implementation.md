@@ -1,5 +1,7 @@
 # Offline supervised editor implementation sequence
 
+2026-10-23 purchase-stage integration: owner-accepted [72](../offline-supervised-editor/issues/72-project-sponsorship-donations.md) is committed to development after 359 passing tests (20 ignored), strict Clippy, script fixtures, GUI build and executable self-check. The [receipt](../../docs/research/support-purchase-delivery-2026-10-23.md) records source/build identity and appearance acceptance. The later savings stage and unperformed checks keep the whole ticket open. No version bump or publication is included.
+
 2026-10-22 stable publication: ticket 71 is done after main promotion, all four tagged native packages, artifact/checksum verification and explicit owner authorization. Stable v1.0.0 is public; the publication-triggered README update is merged only after required checks. The [receipt](../../docs/research/stable1-release-receipt-2026-10-22.md) records identities and limits. Cleanup 22 remains the only active implementation item in this queue; proposals/discovery remain separate. This supersedes earlier pending-release statements and counts.
 
 2026-10-22 owner-authorized stable preparation: [71](../offline-supervised-editor/issues/71-stable-1.0-main-promotion.md) is claimed for stable 1.0.0 metadata/docs/automation and a checked development-to-main merge PR. It adds one active release task to the existing cleanup queue. The earlier menu/action acceptance and owner instruction against further computer control remain in force; public package status must remain factual.

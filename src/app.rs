@@ -4656,6 +4656,93 @@ mod app_menu_tests {
     use super::*;
 
     #[test]
+    fn purchase_dialog_preserves_work_and_reports_preference_and_browser_failures() {
+        let dir =
+            std::env::temp_dir().join(format!("cleanslate-purchase-dialog-{}", std::process::id()));
+        let path = dir.join("preferences.json");
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut app = CleanSlateApp {
+            preferences_path: Some(path.clone()),
+            ..Default::default()
+        };
+        app.timeline.set_selection(Some((1, 2)));
+        let _ = app.update(menu_action(6));
+        assert_eq!(app.app_dialog, Some(AppDialog::Support));
+        assert_eq!(app.timeline.selection(), Some((1, 2)));
+        let _ = app.update(Message::LinkOpened(
+            AppLink::Purchase,
+            Err("No browser".into()),
+        ));
+        assert!(
+            app.app_feedback
+                .as_ref()
+                .unwrap()
+                .contains(AppLink::Purchase.url())
+        );
+        let _ = app.update(Message::KeyPressed(
+            keyboard::Key::Named(keyboard::key::Named::Enter),
+            keyboard::Modifiers::empty(),
+        ));
+        assert!(app.app_dialog.is_none());
+        assert_eq!(appearance::load_support_intro(&path), (Some(true), None));
+        let _ = app.update(Message::InvokeAction(Command::Support));
+        let _ = app.update(Message::HideSupportIntro(false));
+        let _ = app.update(Message::CloseHelp);
+        assert_eq!(appearance::load_support_intro(&path), (Some(false), None));
+        std::fs::write(&path, "{").unwrap();
+        let _ = app.update(Message::Support);
+        let _ = app.update(Message::CloseHelp);
+        assert!(app.app_dialog.is_none());
+        assert!(
+            app.appearance_error
+                .as_ref()
+                .unwrap()
+                .contains("could not be saved")
+        );
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "{");
+        assert_eq!(app.timeline.selection(), Some((1, 2)));
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn purchase_dialog_keyboard_reopens_from_about_and_honors_dismissal_choice() {
+        let mut app = CleanSlateApp::default();
+        let _ = app.update(Message::About);
+        let tab = || {
+            Message::KeyPressed(
+                keyboard::Key::Named(keyboard::key::Named::Tab),
+                keyboard::Modifiers::empty(),
+            )
+        };
+        let enter = || {
+            Message::KeyPressed(
+                keyboard::Key::Named(keyboard::key::Named::Enter),
+                keyboard::Modifiers::empty(),
+            )
+        };
+        let _ = app.update(tab());
+        let _ = app.update(tab());
+        let _ = app.update(enter());
+        assert_eq!(app.app_dialog, Some(AppDialog::Support));
+        let _ = app.update(Message::KeyPressed(
+            keyboard::Key::Named(keyboard::key::Named::Tab),
+            keyboard::Modifiers::SHIFT,
+        ));
+        assert_eq!(app.support_selected, 4);
+        let _ = app.update(enter());
+        assert!(!app.hide_support_intro);
+        assert_eq!(AppLink::Purchase.url(), "https://ko-fi.com/ayoubab1");
+        assert_eq!(
+            AppLink::Sponsor.url(),
+            "https://github.com/sponsors/Today20092"
+        );
+        for appearance in [Appearance::Dark, Appearance::Light] {
+            app.appearance = appearance;
+            let _ = app.view();
+        }
+    }
+
+    #[test]
     fn version_copy_is_allowlisted_and_failures_stay_actionable() {
         assert_eq!(
             version_info("1.2.3", None, "windows", "x86_64"),
@@ -4904,6 +4991,7 @@ mod app_menu_tests {
 enum AppDialog {
     Settings,
     About,
+    Support,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -4911,11 +4999,19 @@ enum AppLink {
     Help,
     GitHub,
     ReportBug,
+    Purchase,
+    Sponsor,
+    Roadmap,
 }
 
 impl AppLink {
     fn url(self) -> &'static str {
         match self {
+            Self::Purchase => "https://ko-fi.com/ayoubab1",
+            Self::Sponsor => "https://github.com/sponsors/Today20092",
+            Self::Roadmap => {
+                "https://github.com/Today20092/podcast-bleed-reducer/blob/main/ROADMAP.md"
+            }
             Self::Help => {
                 "https://github.com/Today20092/podcast-bleed-reducer/blob/main/docs/editor-workflow.md"
             }
@@ -4928,6 +5024,9 @@ impl AppLink {
 }
 
 fn menu_action(index: usize) -> Message {
+    if index == 6 {
+        return Message::InvokeAction(Command::Support);
+    }
     crate::button_action::message(legacy_menu_action(index))
 }
 
@@ -5038,7 +5137,9 @@ pub struct CleanSlateApp {
     menu_open: bool,
     menu_selected: usize,
     app_dialog: Option<AppDialog>,
-    about_copy_selected: bool,
+    about_selected: usize,
+    support_selected: usize,
+    hide_support_intro: bool,
     copy_request: Option<Arc<()>>,
     version_details: Option<String>,
     app_feedback: Option<String>,
@@ -5201,7 +5302,9 @@ impl Default for CleanSlateApp {
             menu_open: false,
             menu_selected: 0,
             app_dialog: None,
-            about_copy_selected: true,
+            about_selected: 0,
+            support_selected: 0,
+            hide_support_intro: true,
             copy_request: None,
             version_details: None,
             app_feedback: None,
@@ -5553,6 +5656,8 @@ enum Message {
     Settings,
     About,
     OpenLink(AppLink),
+    Support,
+    HideSupportIntro(bool),
     LinkOpened(AppLink, Result<(), String>),
     CopyVersion,
     CopyProjectPath,
@@ -5833,6 +5938,12 @@ fn startup(project: Option<PathBuf>) -> CleanSlateApp {
             app.shortcuts = shortcuts;
             app.unlock_playhead_when_zooming = unlock;
             app.appearance_error = app.appearance_error.or(error);
+            let (hidden, error) = appearance::load_support_intro(&path);
+            app.appearance_error = app.appearance_error.or(error);
+            app.hide_support_intro = hidden.unwrap_or(true);
+            if hidden != Some(true) {
+                app.app_dialog = Some(AppDialog::Support);
+            }
             app.preferences_path = Some(path);
         }
         Err(error) => app.appearance_error = Some(error),
@@ -7377,31 +7488,34 @@ impl CleanSlateApp {
         self.rebuild_effective();
     }
 
-    fn handle_edit_key(&mut self, key: &keyboard::Key, modifiers: keyboard::Modifiers) -> bool {
+    fn handle_edit_key(
+        &mut self,
+        key: &keyboard::Key,
+        modifiers: keyboard::Modifiers,
+    ) -> Option<Task<Message>> {
         use keyboard::{Key, key::Named};
         if self.sound_menu.is_some() || self.gain_menu.is_some() {
             if *key == Key::Named(Named::Escape) {
                 self.sound_menu = None;
                 self.gain_menu = None;
             }
-            return true;
+            return Some(Task::none());
         }
         let popup = self.reference_menu.is_some();
         if *key == Key::Named(Named::Escape) {
             if popup {
                 self.close_reference_menu();
-                return true;
+                return Some(Task::none());
             }
             if self.gain_tool && self.gain_drag.is_some() {
                 self.gain_drag = None;
                 self.rebuild_effective();
-                return true;
+                return Some(Task::none());
             }
-            return false;
+            return None;
         }
         if popup && *key == Key::Named(Named::Enter) && modifiers.is_empty() {
-            self.dispatch_shortcut(Command::SaveExample);
-            return true;
+            return Some(self.dispatch_shortcut(Command::SaveExample));
         }
         let context = if popup {
             Context::Popup
@@ -7411,16 +7525,15 @@ impl CleanSlateApp {
             Context::Labels
         };
         if let Some(command) = self.shortcuts.resolve(key, modifiers, context) {
-            self.dispatch_shortcut(command);
-            return true;
+            return Some(self.dispatch_shortcut(command));
         }
-        popup
+        popup.then(Task::none)
     }
 
-    fn dispatch_shortcut(&mut self, command: Command) {
+    fn dispatch_shortcut(&mut self, command: Command) -> Task<Message> {
         use Command::*;
         if !self.action_available(command) {
-            return;
+            return Task::none();
         }
         let message = match command {
             SaveExample => Some(Message::ContextReference(
@@ -7469,6 +7582,10 @@ impl CleanSlateApp {
             CatchUp => Some(Message::ToggleCatchUp),
             Meters => Some(Message::ToggleMeterPlacement),
             Help => Some(Message::Help),
+            Support => Some(Message::Support),
+            Purchase => Some(Message::OpenLink(AppLink::Purchase)),
+            Sponsor => Some(Message::OpenLink(AppLink::Sponsor)),
+            Roadmap => Some(Message::OpenLink(AppLink::Roadmap)),
             Menu => Some(Message::Menu),
             Reference => Some(Message::KeyboardShortcuts),
             SaveProject => Some(Message::SaveProject),
@@ -7521,7 +7638,9 @@ impl CleanSlateApp {
             }
         };
         if let Some(message) = message {
-            let _ = self.update(message);
+            self.update(message)
+        } else {
+            Task::none()
         }
     }
 
@@ -8074,10 +8193,13 @@ impl CleanSlateApp {
     }
 
     fn update(&mut self, message: Message) -> Task<Message> {
+        if let Message::HideSupportIntro(hidden) = message {
+            self.hide_support_intro = hidden;
+            return Task::none();
+        }
         match message {
             Message::InvokeAction(command) => {
-                self.dispatch_shortcut(command);
-                return Task::none();
+                return self.dispatch_shortcut(command);
             }
             Message::CheckWindowVisibility => {
                 self.update_playback_position();
@@ -8250,6 +8372,19 @@ impl CleanSlateApp {
             match &message {
                 Message::CloseHelp
                 | Message::KeyPressed(keyboard::Key::Named(keyboard::key::Named::Escape), _) => {
+                    if self.app_dialog == Some(AppDialog::Support)
+                        && let Err(error) = self
+                            .preferences_path
+                            .as_ref()
+                            .ok_or_else(|| "No valid user configuration directory.".to_string())
+                            .and_then(|path| {
+                                appearance::save_support_intro(path, self.hide_support_intro)
+                            })
+                    {
+                        self.appearance_error = Some(format!(
+                            "You can keep using CleanSlate, but the purchase-message preference could not be saved. {error}"
+                        ));
+                    }
                     self.menu_open = false;
                     self.app_dialog = None;
                     self.copy_request = None;
@@ -8263,13 +8398,36 @@ impl CleanSlateApp {
                             self.menu_selected = if *key == Named::ArrowUp
                                 || (*key == Named::Tab && modifiers.shift())
                             {
-                                (self.menu_selected + 6) % 7
+                                (self.menu_selected + 7) % 8
                             } else {
-                                (self.menu_selected + 1) % 7
+                                (self.menu_selected + 1) % 8
                             };
                         }
                         Named::Tab if self.app_dialog == Some(AppDialog::About) => {
-                            self.about_copy_selected = !self.about_copy_selected
+                            self.about_selected =
+                                (self.about_selected + if modifiers.shift() { 2 } else { 1 }) % 3;
+                        }
+                        Named::Tab | Named::ArrowDown | Named::ArrowUp
+                            if self.app_dialog == Some(AppDialog::Support) =>
+                        {
+                            self.support_selected = if *key == Named::ArrowUp
+                                || (*key == Named::Tab && modifiers.shift())
+                            {
+                                (self.support_selected + 4) % 5
+                            } else {
+                                (self.support_selected + 1) % 5
+                            };
+                        }
+                        Named::Enter | Named::Space
+                            if self.app_dialog == Some(AppDialog::Support) =>
+                        {
+                            return self.update(match self.support_selected {
+                                1 => Message::OpenLink(AppLink::Purchase),
+                                2 => Message::OpenLink(AppLink::Sponsor),
+                                3 => Message::OpenLink(AppLink::Roadmap),
+                                4 => Message::HideSupportIntro(!self.hide_support_intro),
+                                _ => Message::CloseHelp,
+                            });
                         }
                         Named::Tab | Named::ArrowDown | Named::ArrowUp
                             if self.app_dialog == Some(AppDialog::Settings) =>
@@ -8299,9 +8457,15 @@ impl CleanSlateApp {
                         }
                         Named::Enter
                             if self.app_dialog == Some(AppDialog::About)
-                                && self.about_copy_selected =>
+                                && self.about_selected == 0 =>
                         {
                             return self.update(Message::CopyVersion);
+                        }
+                        Named::Enter
+                            if self.app_dialog == Some(AppDialog::About)
+                                && self.about_selected == 2 =>
+                        {
+                            return self.update(Message::Support);
                         }
                         Named::Enter => return self.update(Message::CloseHelp),
                         Named::PageDown | Named::ArrowDown | Named::PageUp | Named::ArrowUp => {
@@ -8337,6 +8501,7 @@ impl CleanSlateApp {
                 Message::Settings
                 | Message::Appearance(_)
                 | Message::About
+                | Message::Support
                 | Message::KeyboardShortcuts
                 | Message::OpenLink(_)
                 | Message::LinkOpened(_, _)
@@ -8403,7 +8568,10 @@ impl CleanSlateApp {
                 {
                     return self.update(Message::KeyboardShortcuts);
                 }
-                Message::KeyboardShortcuts | Message::Tick | Message::PlaybackFrame => {}
+                Message::KeyboardShortcuts
+                | Message::Support
+                | Message::Tick
+                | Message::PlaybackFrame => {}
                 _ => return Task::none(),
             }
         }
@@ -8519,7 +8687,9 @@ impl CleanSlateApp {
         }
         let previous_parameters = self.preview_parameters;
         match message {
-            Message::InvokeAction(_) => unreachable!("actions dispatch before input routing"),
+            Message::InvokeAction(_) | Message::HideSupportIntro(_) => {
+                unreachable!("actions dispatch before input routing")
+            }
             Message::ImportChannel(index, selected) => {
                 if let Some(choice) = self.import_choices.get_mut(index) {
                     choice.selected = selected;
@@ -9088,8 +9258,8 @@ impl CleanSlateApp {
                     }
                     return Task::none();
                 }
-                if self.handle_edit_key(&key, modifiers) {
-                    return Task::none();
+                if let Some(task) = self.handle_edit_key(&key, modifiers) {
+                    return task;
                 }
                 if key == keyboard::Key::Named(keyboard::key::Named::Escape) {
                     self.selected_gain_point = None;
@@ -9347,7 +9517,9 @@ impl CleanSlateApp {
                 self.menu_selected = 0;
                 self.app_feedback = None;
             }
-            Message::Settings | Message::About => {
+            Message::Settings | Message::About | Message::Support => {
+                self.help_open = false;
+                self.shortcuts_open = false;
                 self.copy_request = None;
                 self.version_details = None;
                 self.settings_selected = if self.appearance == Appearance::Dark {
@@ -9358,10 +9530,13 @@ impl CleanSlateApp {
                 self.menu_open = false;
                 self.app_dialog = Some(if matches!(message, Message::Settings) {
                     AppDialog::Settings
+                } else if matches!(message, Message::Support) {
+                    AppDialog::Support
                 } else {
                     AppDialog::About
                 });
-                self.about_copy_selected = true;
+                self.about_selected = 0;
+                self.support_selected = 0;
                 self.app_feedback = None;
             }
             Message::OpenLink(link) => {
@@ -9842,23 +10017,40 @@ impl CleanSlateApp {
             return responsive(|size| {
                 let content: Element<'_, Message> = if self.menu_open {
                     let mut items = column![container(text("Menu").size(20)).padding([4, 12])].spacing(4).width(Fill);
-                    for (index, label) in ["Settings", "Keyboard shortcuts", "Help", "GitHub", "Report a bug", "About", "Close"].into_iter().enumerate() {
+                    for (index, label) in ["Settings", "Keyboard shortcuts", "Help", "GitHub", "Report a bug", "About", "Purchase CleanSlate", "Close"].into_iter().enumerate() {
                         if matches!(index, 2 | 5 | 6) {
                             items = items.push(container(iced::widget::rule::horizontal(1)).padding([6, 12]));
                         }
                         let hint = match index {
                             1 => self.shortcuts.hint(Command::Reference),
-                            6 => "Esc".into(),
+                            6 => self.shortcuts.hint(Command::Support),
+                            7 => "Esc".into(),
                             _ => String::new(),
                         };
                         let selected = index == self.menu_selected;
-                        items = items.push(button(row![text(label).width(Fill), text(hint).size(14)].spacing(16).align_y(iced::Center))
+                        let item = button(row![text(label).width(Fill), text(hint).size(14)].spacing(16).align_y(iced::Center))
                             .width(Fill).padding([10, 12]).keyboard_enabled(false).selected(selected)
-                            .style(move |theme, status| flat_button(theme, status, selected))
-                            .on_press(legacy_menu_action(index)));
+                            .style(move |theme, status| flat_button(theme, status, selected));
+                        items = items.push(if index == 6 { item.on_press(RegisteredButton(Command::Support)) } else { item.on_press(legacy_menu_action(index)) });
                     }
                     if let Some(feedback) = &self.app_feedback { items = items.push(container(text(feedback).size(14)).padding([6, 12])); }
                     container(scrollable(items).id("app-dialog")).max_height((size.height - 80.0).max(120.0)).into()
+                } else if self.app_dialog == Some(AppDialog::Support) {
+                    let selected = self.support_selected;
+                    let mut body = column![
+                        text("Purchase CleanSlate").size(24),
+                        text("Free to use. Yours to support.").size(18),
+                        text("CleanSlate is free and open source. If it helps your podcast, an optional one-time purchase supports development and maintenance. The full application stays free, whether you pay or not."),
+                        text("What your purchase supports").size(18),
+                        text("Work on microphone bleed reduction, a usable editor, testing and reliable packages. See the roadmap for current work and proposals; a purchase is for the value available today and does not promise future features."),
+                    ].spacing(14);
+                    for (index, label, command) in [(1, "Purchase on Ko-fi · choose an amount", Command::Purchase), (2, "Support on GitHub Sponsors · one-time or monthly", Command::Sponsor), (3, "View roadmap", Command::Roadmap)] {
+                        body = body.push(button(text(format!("{}{}", if selected == index { "› " } else { "" }, label))).width(Fill).keyboard_enabled(false).selected(selected == index).style(secondary_button).on_press(RegisteredButton(command)));
+                    }
+                    body = body.push(text("Opens the provider in your browser. Payment is optional; no payment details enter CleanSlate.").size(14))
+                        .push(iced::widget::checkbox(self.hide_support_intro).label(if selected == 4 { "› Don't show again" } else { "Don't show again" }).on_toggle(Message::HideSupportIntro));
+                    if let Some(feedback) = &self.app_feedback { body = body.push(text(feedback).size(14)); }
+                    column![scrollable(body).id("app-dialog").height((size.height - 220.0).clamp(140.0, 560.0)), button(if selected == 0 { "› Continue    Esc" } else { "Continue    Esc" }).keyboard_enabled(false).selected(selected == 0).style(primary_button).on_press(LegacyButton::CloseHelp)].spacing(16).into()
                 } else {
                     let about = self.app_dialog == Some(AppDialog::About);
                     let mut body = column![text(if about { "About CleanSlate" } else { "Settings" }).size(24)].spacing(14).width(Fill).padding([0, 12]);
@@ -9866,6 +10058,7 @@ impl CleanSlateApp {
                         body = body.push(text(self.version_details.clone().unwrap_or_else(|| version_info(env!("CARGO_PKG_VERSION"), None, std::env::consts::OS, std::env::consts::ARCH))))
                             .push(text("License: MIT · Copyright © 2026 CleanSlate contributors"))
                             .push(text("CleanSlate is a local, non-destructive podcast automixer."))
+                            .push(button(if self.about_selected == 2 { "› Purchase CleanSlate · optional one-time payment" } else { "Purchase CleanSlate · optional one-time payment" }).keyboard_enabled(false).on_press(RegisteredButton(Command::Support)))
                             .push(text("Credits & references").size(18))
                             .push(text("Interface: Iced. Audio playback: Rodio. Decoding: Symphonia and bwavfile. Resampling: Rubato. Ownership models: Linfa, nalgebra and ndarray. Serialization: Serde. Integrity: SHA-2."))
                             .push(text("Speech detection: embedded Silero VAD, used through ONNX Runtime (ort). Silero VAD and ONNX Runtime carry MIT licenses. Bundled runtime notices and each component's licenses remain authoritative; CleanSlate's MIT license does not relicense dependencies."))
@@ -9907,8 +10100,8 @@ impl CleanSlateApp {
                         }
                     }
                     let mut actions = row![].spacing(12);
-                    if about { actions = actions.push(button(if self.about_copy_selected { "› Copy version info" } else { "Copy version info" }).on_press_maybe(self.copy_request.is_none().then_some(LegacyButton::CopyVersion))); }
-                    actions = actions.push(button(if (about && !self.about_copy_selected) || (!about && self.settings_selected == 4 + DEFINITIONS.len() * 3) { "› Close    Esc" } else { "Close    Esc" }).on_press(LegacyButton::CloseHelp));
+                    if about { actions = actions.push(button(if self.about_selected == 0 { "› Copy version info" } else { "Copy version info" }).on_press_maybe(self.copy_request.is_none().then_some(LegacyButton::CopyVersion))); }
+                    actions = actions.push(button(if (about && self.about_selected == 1) || (!about && self.settings_selected == 4 + DEFINITIONS.len() * 3) { "› Close    Esc" } else { "Close    Esc" }).on_press(LegacyButton::CloseHelp));
                     let mut panel = column![scrollable(body).id("app-dialog").width(Fill).height((size.height - 220.0).clamp(140.0, 560.0)), actions].spacing(16).width(Fill);
                     if let Some(feedback) = &self.app_feedback { panel = panel.push(text(feedback).size(14)); }
                     panel.into()

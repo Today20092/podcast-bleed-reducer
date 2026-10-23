@@ -6,6 +6,8 @@ This page is the public overview, last reviewed on 2026-10-22. The [active map](
 
 ## Current priorities
 
+- **Optional purchase and project support (72):** an owner-accepted development change adds Ko-fi/GitHub Sponsors, first-launch dismissal and Menu/About access while keeping the full app free. Purchases help sustain maintenance, usability, testing and reliable packages. These changes are not in the published 1.0.0 downloads; savings feedback remains future work.
+
 - **Stable 1.0.0 is published** for all four desktop targets after owner approval and package verification. The [release notes](docs/release-notes.md) describe the workflow; the [versioning and stability policy](docs/releasing.md#versioning-and-stability) defines compatibility and patch/minor/major selection. Historical alpha releases retain their original identities.
 - The owner accepts current sound and performance; [evaluation ticket 14](.scratch/offline-supervised-editor/issues/14-independent-release-evaluation.md) is closed. Formal benchmarking is optional future work, with no new ticket requested. This does not assert that independent comparisons or long-session measurements passed.
 - Use the [recurring editor verification procedure](docs/branch-workflow.md#editor-regression-coverage) for change-appropriate appearance, import, shortcut and playback checks. Implemented feature tickets are closed; bug reports and UI/UX feedback can identify new actionable work.

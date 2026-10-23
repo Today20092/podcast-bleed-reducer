@@ -41,17 +41,24 @@ fn path_for(
 }
 pub(crate) fn load(path: &Path) -> (Appearance, Option<String>) {
     match std::fs::read(path) {
-        Ok(bytes) => match serde_json::from_slice::<serde_json::Value>(&bytes)
-            .and_then(|value| serde_json::from_value::<Appearance>(value["appearance"].clone()))
-        {
-            Ok(appearance) => (appearance, None),
-            Err(error) => (
-                Appearance::Dark,
-                Some(format!(
-                    "Could not read appearance preferences; using Dark. {error}"
-                )),
-            ),
-        },
+        Ok(bytes) => {
+            match serde_json::from_slice::<serde_json::Map<String, serde_json::Value>>(&bytes)
+                .and_then(|value| {
+                    value
+                        .get("appearance")
+                        .cloned()
+                        .map(serde_json::from_value::<Appearance>)
+                        .unwrap_or(Ok(Appearance::Dark))
+                }) {
+                Ok(appearance) => (appearance, None),
+                Err(error) => (
+                    Appearance::Dark,
+                    Some(format!(
+                        "Could not read appearance preferences; using Dark. {error}"
+                    )),
+                ),
+            }
+        }
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => (Appearance::Dark, None),
         Err(error) => (
             Appearance::Dark,
@@ -82,6 +89,21 @@ fn read_preferences(path: &Path) -> Result<serde_json::Map<String, serde_json::V
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(Default::default()),
         Err(error) => Err(format!("Could not read {}. {error}", path.display())),
     }
+}
+
+pub(crate) fn load_support_intro(path: &Path) -> (Option<bool>, Option<String>) {
+    match read_preferences(path) {
+        Ok(preferences) => match preferences.get("hide_support_intro") {
+            None => (None, None),
+            Some(serde_json::Value::Bool(hidden)) => (Some(*hidden), None),
+            _ => (Some(true), Some("Invalid purchase-message preference; open Purchase CleanSlate from Menu. Change Don't show again to save a valid preference.".into())),
+        },
+        Err(error) => (Some(true), Some(error)),
+    }
+}
+
+pub(crate) fn save_support_intro(path: &Path, hidden: bool) -> Result<(), String> {
+    update_preferences(path, [("hide_support_intro", hidden.into())])
 }
 
 fn update_preferences<const N: usize>(
@@ -433,7 +455,7 @@ mod tests {
         assert_eq!(load(&path), (Appearance::Light, None));
         save(&path, Appearance::Dark).unwrap();
         assert_eq!(load(&path), (Appearance::Dark, None));
-        for invalid in ["{", "{}", "{\"appearance\":\"unknown\"}"] {
+        for invalid in ["{", "{\"appearance\":\"unknown\"}"] {
             std::fs::write(&path, invalid).unwrap();
             let (appearance, error) = load(&path);
             assert_eq!(appearance, Appearance::Dark);
@@ -441,6 +463,32 @@ mod tests {
             assert_eq!(std::fs::read_to_string(&path).unwrap(), invalid);
         }
         assert!(save(&path.join("invalid.json"), Appearance::Light).is_err());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn support_intro_defaults_persists_and_preserves_other_preferences() {
+        let dir = std::env::temp_dir().join(format!("cleanslate-support-{}", std::process::id()));
+        let path = dir.join("preferences.json");
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(load_support_intro(&path), (None, None));
+        save_support_intro(&path, true).unwrap();
+        assert_eq!(load(&path), (Appearance::Dark, None));
+        save(&path, Appearance::Light).unwrap();
+        save_support_intro(&path, true).unwrap();
+        assert_eq!(load_support_intro(&path), (Some(true), None));
+        assert_eq!(load(&path), (Appearance::Light, None));
+        save_support_intro(&path, false).unwrap();
+        assert_eq!(load_support_intro(&path), (Some(false), None));
+        std::fs::write(&path, r#"{"hide_support_intro":"invalid"}"#).unwrap();
+        let (hidden, error) = load_support_intro(&path);
+        assert_eq!(hidden, Some(true));
+        assert!(error.is_some());
+        std::fs::write(&path, "{").unwrap();
+        assert!(load_support_intro(&path).1.is_some());
+        assert!(save_support_intro(&path, true).is_err());
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "{");
+        assert!(save_support_intro(&path.join("invalid.json"), true).is_err());
         std::fs::remove_dir_all(dir).unwrap();
     }
 }

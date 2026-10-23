@@ -9,6 +9,12 @@
 
 CleanSlate is an offline microphone bleed-reduction tool for multitrack podcasts. It uses a supervised algorithm to learn from a few examples of who is speaking, then attenuate each microphone when its assigned person is silent. Listen to the result and adjust the gain where needed.
 
+## Purchase CleanSlate
+
+CleanSlate is free and open source. If it helps your podcast, [make an optional one-time purchase on Ko-fi](https://ko-fi.com/ayoubab1), choosing an amount that works for you. The complete application stays free whether you pay or not. You can also [support the project through GitHub Sponsors](https://github.com/sponsors/Today20092), with one-time and monthly options.
+
+Purchases help sustain maintenance, usability improvements, testing and reliable packages. See the [roadmap](ROADMAP.md) for shipped features, current work and proposals. Support is for the value available today; it does not promise future features or a delivery date.
+
 <p align="center">
   <a href="docs/releasing.md#versioning-and-stability"><img alt="Release: stable 1.0.0" src="https://img.shields.io/badge/Release-Stable%201.0.0-C4A7E7?style=for-the-badge&amp;logo=github&amp;labelColor=493267"></a>
   <a href="#download"><img alt="Release targets: Windows, macOS and Linux" src="https://img.shields.io/badge/Targets-Windows%20%7C%20macOS%20%7C%20Linux-B5DFE8?style=for-the-badge&amp;labelColor=29626B"></a>

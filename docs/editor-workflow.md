@@ -4,6 +4,14 @@ Import aligned microphone tracks, label solo speech and room tone, run Analyze, 
 
 [Import and storage](#sd-cards-and-working-storage) · [Analysis and editing](#analysis-and-editing) · [Timeline and playback](#timeline-and-playback) · [Keyboard shortcuts](#keyboard-shortcuts) · [Export](#export-settings)
 
+## Optional purchase
+
+The purchase dialog is in development and is not included in the published 1.0.0 packages.
+
+Menu → Purchase CleanSlate opens the optional purchase message; About also links to it. Ko-fi is the primary one-time payment route, with GitHub Sponsors alongside it. Browser links open only after you choose them. The full app remains free, with no activation, feature gate or payment details handled by CleanSlate.
+
+The message appears on first launch. Continue or Escape returns to the editor, with Don't show again selected by default. Uncheck it before continuing to request the message on later launches. If saving that preference fails, the editor stays usable and reports the error. Reopen the message from Menu at any time. Tab/Shift+Tab or Up/Down selects its controls; Enter activates the selection. The roadmap link separates available work from future proposals; purchases carry no promise of future features or delivery dates.
+
 ## SD cards and working storage
 
 Open recordings directly from an SD card or another readable drive. CleanSlate opens originals for reading only; the card can remain write-protected. Keep it connected until processing finishes. A full local copy of the original recordings is not required.
