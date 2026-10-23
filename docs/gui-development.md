@@ -3,6 +3,14 @@
 New user commands must follow the [action and shortcut contract](agents/actions-and-shortcuts.md). Declare the command once, handle it through shared dispatch and use `action_control` for its button: Settings, reference entries and effective-binding hints then share its identity. Defaults are optional; an Unbound action remains customizable. Existing editing/dialog/legacy exceptions are individually inventoried rather than automatically inherited by new controls.
 
 ## Transport and waveform display
+Ticket 73 adds registered Menu → Check for updates and dialog actions using shared
+dispatch, availability and shortcut hints. Updates are manual; no network task runs
+at startup. Ordinary close and update restart share Save/Discard/Cancel and refuse
+to exit while tracked workers remain alive, including after cancellation requests.
+Package acceptance uses `gui-dev.ps1 -BuildOnly -UpdaterFixture` on synthetic roots;
+this test-key feature cannot compile in release profiles and must not be distributed.
+The normal final BuildOnly embeds the production public key. See [update signing](update-signing.md).
+
 
 The transport uses three equal-size icon buttons centered on the full window. Hover for command names and effective shortcuts. The native title bar identifies CleanSlate; the workspace header shows the project name. Preparation and buffering still report actionable status, without a permanent Playback ready label.
 

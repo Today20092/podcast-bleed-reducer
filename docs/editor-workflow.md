@@ -12,6 +12,18 @@ Menu → Purchase CleanSlate opens the optional purchase message; About also lin
 
 The message appears on first launch. Continue or Escape returns to the editor, with Don't show again selected by default. Uncheck it before continuing to request the message on later launches. If saving that preference fails, the editor stays usable and reports the error. Reopen the message from Menu at any time. Tab/Shift+Tab or Up/Down selects its controls; Enter activates the selection. The roadmap link separates available work from future proposals; purchases carry no promise of future features or delivery dates.
 
+## Application updates
+
+This development feature is not in the published 1.0.0 packages. Menu → Check for updates manually contacts GitHub, shows installed/offered versions and release notes, and defaults to stable releases. Include prereleases applies only to that check. Offline startup makes no request. The complete app and updates remain free.
+
+On Windows x64, a clean portable package on writable local fixed NTFS storage can **Download and verify**, then **Restart and install**. Both choices are deliberate. Signed metadata, the complete ZIP, paths, sizes and exact manifest inventory are verified before staging. Finish/cancel edits and wait for analysis, export, import and download workers. Save/Discard/Cancel protects closing; a failed save leaves the session open. Download cancellation may wait for the bounded network timeout before acknowledgment.
+
+The helper waits for the actual parent exit, retains the previous package and journals moves. Offline self-check and empty GUI startup must succeed before committing; testing never opens or migrates a real project. Keep the displayed helper and `RECOVERY.txt` path: two renames cannot make the whole swap atomic across power loss. If the usual app path is absent, run the retained helper with `--update-recover` and the displayed transaction directory. For file locks, close the blocking process and resume recovery; the updater never elevates or kills unrelated apps.
+
+After success, **Remove retained previous version** acknowledges the end of rollback and removes verified package/download files. Interrupted cleanup can be retried; unrelated retained files are preserved and reported. Resolve/clean the previous transaction before another update. Failed-attempt diagnostics remain for inspection.
+
+Mixed/modified folders, legacy manifests, development builds, removable/network storage, macOS and Linux use manual download. Choose the named OS/architecture package and extract/open the complete package into a new location. Leave the old mixed folder intact; do not delete recordings to qualify. Missing signatures also use manual download. Public 1.0.0 needs one manual replacement with the trusted bootstrap build. [Signing setup](update-signing.md) describes the owner-held private key.
+
 ## SD cards and working storage
 
 Open recordings directly from an SD card or another readable drive. CleanSlate opens originals for reading only; the card can remain write-protected. Keep it connected until processing finishes. A full local copy of the original recordings is not required.

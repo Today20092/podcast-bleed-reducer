@@ -101,6 +101,7 @@ jobs:
             dist/*.dmg
             dist/*.AppImage
             dist/*.sha256
+            dist/*.update.json
           if-no-files-found: error
       - name: Trim Windows build cache
         if: always() && runner.os == 'Windows'
@@ -150,6 +151,11 @@ jobs:
             if (-not (Test-Path -LiteralPath $asset) -or -not (Test-Path -LiteralPath "$asset.sha256")) { throw "Missing checked asset: $asset" }
             $assets += @($asset, "$asset.sha256")
           }
+          # Sign outside CI after reviewing the checked packages. Never publish a private key here.
+          $descriptor = "release-assets/CleanSlate-$version-windows-x64.zip.update.json"
+          if (-not (Test-Path -LiteralPath $descriptor)) { throw 'Missing Windows update descriptor' }
+          $assets += $descriptor
+          # Unsigned drafts are manual-download only. The owner attaches the verified .minisig before publication.
           $existing = gh release view $tag --json isDraft 2>$null
           if ($LASTEXITCODE -eq 0) {
             if (-not ($existing | ConvertFrom-Json).isDraft) { throw 'Refusing to replace a published release' }

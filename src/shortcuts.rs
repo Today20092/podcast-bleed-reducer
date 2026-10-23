@@ -9,6 +9,8 @@ pub(crate) enum Context {
     Gain,
     Popup,
     Project,
+    Updates,
+    WorkspaceAndUpdates,
 }
 impl Context {
     fn mask(self) -> u8 {
@@ -18,6 +20,8 @@ impl Context {
             Self::Gain => 2,
             Self::Popup => 4,
             Self::Project => 7,
+            Self::Updates => 8,
+            Self::WorkspaceAndUpdates => 11,
         }
     }
     pub(crate) fn name(self) -> &'static str {
@@ -27,6 +31,8 @@ impl Context {
             Self::Gain => "Workspace · gain editing on",
             Self::Popup => "Who is talking? popup",
             Self::Project => "Workspace or speaker popup (no text entry)",
+            Self::Updates => "Updates dialog",
+            Self::WorkspaceAndUpdates => "Workspace or Updates dialog",
         }
     }
 }
@@ -72,6 +78,14 @@ commands! {
     Purchase => ("Purchase on Ko-fi", Workspace, []),
     Sponsor => ("Support on GitHub Sponsors", Workspace, []),
     Roadmap => ("View project roadmap", Workspace, []),
+    CheckUpdates => ("Check for updates", WorkspaceAndUpdates, []),
+    DownloadUpdate => ("Download and verify update", Updates, []),
+    RestartUpdate => ("Restart and install update", Updates, []),
+    CancelUpdate => ("Cancel update download", Updates, []),
+    CloseUpdate => ("Close update dialog", Updates, []),
+    ManualUpdate => ("Download update manually", Updates, []),
+    ResumeUpdateRecovery => ("Resume update recovery", Updates, []),
+    CleanupUpdate => ("Remove retained previous version", Updates, []),
     SaveProject => ("Save project", Project, ["Cmd+s"]),
     UndoLabels => ("Undo labels", Labels, ["Cmd+z"]),
     RedoLabels => ("Redo labels", Labels, ["Cmd+Shift+z", "Cmd+y"]),

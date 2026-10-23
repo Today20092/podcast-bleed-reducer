@@ -3,6 +3,7 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $Package = (Resolve-Path -LiteralPath $Package).Path
 $manifest = Get-Content -LiteralPath (Join-Path $Package 'package-manifest.json') -Raw | ConvertFrom-Json
+if ($manifest.schema -ne 1 -or $manifest.product -ne 'CleanSlate') { throw 'Unsupported package schema/product' }
 if ($manifest.platform -notin @('windows-x64', 'macos-arm64', 'macos-x64', 'linux-x64') -or $manifest.version -notmatch '^\d+\.\d+\.\d+(?:-[0-9A-Za-z]+(?:\.[0-9A-Za-z]+)*)?$') { throw 'Invalid package identity' }
 switch ($manifest.platform) {
     'windows-x64' {
@@ -22,6 +23,7 @@ switch ($manifest.platform) {
     }
 }
 $required += @("${resources}LICENSE", "${resources}README.txt", "${resources}THIRD-PARTY-NOTICES.txt")
+if ($manifest.entrypoint -ne $(if ($manifest.platform -eq 'linux-x64') { 'usr/bin/CleanSlate' } else { $executable })) { throw 'Package entrypoint mismatch' }
 $expected = @($manifest.files.path)
 if (@($expected | Sort-Object -Unique).Count -ne $expected.Count) { throw 'Duplicate manifest paths' }
 foreach ($file in $required) { if ($file -notin $expected) { throw "Package missing $file" } }
@@ -32,6 +34,7 @@ foreach ($file in $manifest.files) {
     $path = [IO.Path]::GetFullPath((Join-Path $Package $file.path))
     if (-not $path.StartsWith($Package + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) { throw 'Manifest path escaped package' }
     $item = Get-Item -LiteralPath $path -Force
+    if ($file.bytes -ne $item.Length) { throw "Integrity failure: size of $($file.path)" }
     if ($item.LinkTarget) {
         $resolved = $item.ResolveLinkTarget($true)
         if (-not $resolved -or -not $resolved.FullName.StartsWith($Package + [IO.Path]::DirectorySeparatorChar, [StringComparison]::Ordinal)) { throw 'Package symlink escaped package' }

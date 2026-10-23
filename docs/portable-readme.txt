@@ -9,7 +9,7 @@ it. You can also use chmod +x CleanSlate-*.AppImage and run ./CleanSlate-*.AppIm
 The Linux build targets Ubuntu 22.04 or newer with glibc 2.35 or newer. It requires
 a working desktop/audio system. If FUSE is unavailable, run the AppImage with
 --appimage-extract-and-run.
-No installation, Python, model download or internet connection is required.
+No installation, Python, model download or internet connection is required for editing.
 Acoustic analysis uses your reference labels and the embedded Silero VAD.
 
 The 1.0 stable workflow supports aligned tracks, speaker examples, editable gain,
@@ -37,5 +37,22 @@ analysis stage timings. The online usage guide explains editing and export:
 https://github.com/Today20092/podcast-bleed-reducer/blob/main/docs/editor-workflow.md
 
 Application source: https://github.com/Today20092/podcast-bleed-reducer
+Updates: Menu > Check for updates contacts GitHub only when requested. Stable is
+the default; Include prereleases applies to one check. App and updates remain free.
+Download and verify stages the COMPLETE Windows ZIP and verifies signed metadata.
+Restart and install is a separate choice. Finish/cancel edits and wait for workers;
+Save/Discard/Cancel protects close. Only clean portable folders on local fixed NTFS
+can install in place. Mixed/modified folders, development builds, removable/network
+storage, macOS and Linux use manual download. Extract the matching complete new
+package into a NEW folder; leave the old mixed folder and recordings intact.
+Missing signatures require manual download. Existing public 1.0.0 needs one manual
+replacement with the trusted bootstrap build.
+Keep the displayed RECOVERY.txt/helper location before restarting. If interruption
+leaves the usual app path absent, run that retained helper with --update-recover
+and the displayed transaction directory. Do not delete pending recovery files.
+Self-check/startup failure restores the old package; file locks retain actionable
+recovery instructions. After success, Remove retained previous version explicitly
+ends rollback and cleans verified package files. Failed diagnostics remain for
+inspection. Projects, recordings, exports, preferences and caches are preserved.
 Application license: LICENSE (MIT). Dependency notices: THIRD-PARTY-NOTICES.txt.
 Model and runtime license texts are included in licenses/.

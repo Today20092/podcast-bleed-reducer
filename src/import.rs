@@ -88,7 +88,7 @@ impl Job {
         self.status = "Sampling whole-recording preview".into();
         let sources = self.sources.clone();
         let cancelled = self.cancelled.clone();
-        std::thread::spawn(move || {
+        crate::worker_lifetime::spawn(move || {
             let result = prepare(&sources, &cancelled, &sender).map_err(|e| e.to_string());
             let _ = sender.send(Event::Finished(result));
         });

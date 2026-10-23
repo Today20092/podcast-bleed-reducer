@@ -4994,8 +4994,87 @@ enum AppDialog {
     Support,
 }
 
+#[derive(Debug, Clone)]
+enum UpdateOutcome {
+    Cleaned(Result<PathBuf, String>),
+    Checked(Option<crate::updater::Offer>, Result<PathBuf, String>),
+    Downloaded(crate::updater::Prepared),
+}
+struct UpdateDialog {
+    offer: Option<crate::updater::Offer>,
+    prepared: Option<crate::updater::Prepared>,
+    previous: Option<crate::updater::Prepared>,
+    prereleases: bool,
+    status: Arc<Mutex<String>>,
+    cancel: Arc<AtomicBool>,
+    busy: bool,
+    eligibility: Result<PathBuf, String>,
+    recovery_requested: bool,
+}
+impl Default for UpdateDialog {
+    fn default() -> Self {
+        Self {
+            offer: None,
+            prepared: None,
+            previous: None,
+            prereleases: false,
+            status: Arc::new(Mutex::new(
+                "Choose Check now. No requests run at startup.".into(),
+            )),
+            cancel: Arc::new(AtomicBool::new(false)),
+            busy: false,
+            eligibility: Err("Checking installation eligibility…".into()),
+            recovery_requested: false,
+        }
+    }
+}
+
+#[cfg(test)]
+mod update_close_tests {
+    use super::*;
+    #[test]
+    fn customized_update_dialog_shortcuts_reuse_the_registered_action() {
+        let mut app = CleanSlateApp {
+            update_dialog: Some(UpdateDialog::default()),
+            ..CleanSlateApp::default()
+        };
+        let key = keyboard::Key::Character("u".into());
+        let binding = Binding::capture(&key, keyboard::Modifiers::CTRL).unwrap();
+        app.shortcuts
+            .assign(Command::CloseUpdate, Some(binding))
+            .unwrap();
+        let _ = app.update(Message::KeyPressed(key, keyboard::Modifiers::CTRL));
+        assert!(app.update_dialog.is_none());
+    }
+    #[test]
+    fn close_waits_for_export_acknowledgment_and_updater_completion() {
+        let mut app = CleanSlateApp::default();
+        let (_sender, result) = mpsc::channel();
+        app.exporting = Some(ExportProcessing {
+            cancelled: Arc::new(AtomicBool::new(false)),
+            result,
+        });
+        assert!(app.close_workers_busy());
+        let _ = app.update(Message::RequestClose(false));
+        assert!(app.exporting.is_some());
+        app.exporting = None;
+        app.update_dialog = Some(UpdateDialog {
+            busy: true,
+            ..UpdateDialog::default()
+        });
+        let _ = app.update(Message::UpdateAction(Command::CancelUpdate));
+        assert!(
+            app.close_workers_busy(),
+            "cancel request is not worker acknowledgment"
+        );
+        let _ = app.update(Message::UpdateFinished(Err("cancelled".into())));
+        assert!(!app.update_dialog.as_ref().unwrap().busy);
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 enum AppLink {
+    Releases,
     Help,
     GitHub,
     ReportBug,
@@ -5007,6 +5086,7 @@ enum AppLink {
 impl AppLink {
     fn url(self) -> &'static str {
         match self {
+            Self::Releases => crate::updater::RELEASES,
             Self::Purchase => "https://ko-fi.com/ayoubab1",
             Self::Sponsor => "https://github.com/sponsors/Today20092",
             Self::Roadmap => {
@@ -5024,6 +5104,9 @@ impl AppLink {
 }
 
 fn menu_action(index: usize) -> Message {
+    if index == 7 {
+        return Message::InvokeAction(Command::CheckUpdates);
+    }
     if index == 6 {
         return Message::InvokeAction(Command::Support);
     }
@@ -5126,6 +5209,7 @@ struct ReferenceAudition {
 }
 
 pub struct CleanSlateApp {
+    update_dialog: Option<UpdateDialog>,
     shortcuts: Shortcuts,
     shortcut_capture: Option<(Command, Option<Binding>)>,
     shortcut_hint_generation: u64,
@@ -5284,6 +5368,7 @@ impl SoundParameter {
 impl Default for CleanSlateApp {
     fn default() -> Self {
         Self {
+            update_dialog: None,
             appearance: Appearance::Dark,
             shortcuts: Shortcuts::default(),
             shortcut_capture: None,
@@ -5643,6 +5728,11 @@ impl Drop for PreviewProcessing {
 
 #[derive(Debug, Clone)]
 enum Message {
+    RequestClose(bool),
+    UpdateAction(Command),
+    UpdatePrereleases(bool),
+    UpdateFinished(Result<UpdateOutcome, String>),
+    UpdateHealth,
     InvokeAction(Command),
     CaptureShortcut(Command),
     ApplyShortcut,
@@ -5916,6 +6006,7 @@ pub fn run() -> iced::Result {
         Subscription::batch([app.subscription(), observations])
     })
     .window(window::Settings {
+        exit_on_close_request: false,
         icon: Some(
             window::icon::from_rgba(include_bytes!("../assets/cleanslate.rgba").to_vec(), 64, 64)
                 .expect("embedded CleanSlate icon is 64 by 64 RGBA"),
@@ -5931,6 +6022,9 @@ pub fn run() -> iced::Result {
 
 fn startup(project: Option<PathBuf>) -> CleanSlateApp {
     let mut app = CleanSlateApp::default();
+    if crate::updater::health_mode() {
+        return app;
+    }
     match appearance::preference_path() {
         Ok(path) => {
             (app.appearance, app.appearance_error) = appearance::load(&path);
@@ -6569,7 +6663,7 @@ impl CleanSlateApp {
         }
         let (sender, events) = mpsc::channel();
         let (publish, accepted) = mpsc::channel();
-        std::thread::spawn(move || {
+        crate::worker_lifetime::spawn(move || {
             let result =
                 load_sources(request, project, parameters, &sender).and_then(|mut loaded| {
                     // Preparation cannot change the saved project. Only the window's
@@ -6736,7 +6830,7 @@ impl CleanSlateApp {
                     .as_ref()
                     .map_or_else(Vec::new, Project::source_paths);
                 paths.extend(additions.iter().cloned());
-                std::thread::spawn(move || {
+                crate::worker_lifetime::spawn(move || {
                     let inputs = additions
                         .into_iter()
                         .map(|path| {
@@ -6913,7 +7007,7 @@ impl CleanSlateApp {
         let worker_cancel = cancelled.clone();
         let worker_progress = progress.clone();
         let worker_snapshot = snapshot.clone();
-        std::thread::spawn(move || {
+        crate::worker_lifetime::spawn(move || {
             let completed = (|| {
                 let private = crate::prepare_supervised_float_render(
                     &project,
@@ -6958,7 +7052,7 @@ impl CleanSlateApp {
         let cancelled = Arc::new(AtomicBool::new(false));
         let worker_cancel = cancelled.clone();
         let (sender, result) = mpsc::channel();
-        std::thread::spawn(move || {
+        crate::worker_lifetime::spawn(move || {
             let completed = (|| {
                 let private = crate::prepare_export_in_order(
                     &project,
@@ -7142,7 +7236,7 @@ impl CleanSlateApp {
         let feedback = Arc::new(Mutex::new("Starting analysis".into()));
         let worker_feedback = feedback.clone();
         let (sender, result) = mpsc::channel();
-        std::thread::spawn(move || {
+        crate::worker_lifetime::spawn(move || {
             let completed = worker
                 .analyze_with_feedback(
                     &source_project,
@@ -7586,6 +7680,10 @@ impl CleanSlateApp {
             Purchase => Some(Message::OpenLink(AppLink::Purchase)),
             Sponsor => Some(Message::OpenLink(AppLink::Sponsor)),
             Roadmap => Some(Message::OpenLink(AppLink::Roadmap)),
+            CheckUpdates | DownloadUpdate | RestartUpdate | CancelUpdate | CloseUpdate
+            | CleanupUpdate | ManualUpdate | ResumeUpdateRecovery => {
+                Some(Message::UpdateAction(command))
+            }
             Menu => Some(Message::Menu),
             Reference => Some(Message::KeyboardShortcuts),
             SaveProject => Some(Message::SaveProject),
@@ -8126,6 +8224,35 @@ impl CleanSlateApp {
     }
 
     fn action_available(&self, command: Command) -> bool {
+        use Command::*;
+        match command {
+            CheckUpdates => {
+                return self
+                    .update_dialog
+                    .as_ref()
+                    .is_none_or(|d| !d.busy && d.prepared.is_none());
+            }
+            DownloadUpdate => {
+                return self.update_dialog.as_ref().is_some_and(|d| {
+                    !d.busy && d.offer.is_some() && d.prepared.is_none() && d.eligibility.is_ok()
+                });
+            }
+            RestartUpdate | ResumeUpdateRecovery => {
+                return self
+                    .update_dialog
+                    .as_ref()
+                    .is_some_and(|d| !d.busy && d.prepared.is_some());
+            }
+            CleanupUpdate => {
+                return self
+                    .update_dialog
+                    .as_ref()
+                    .is_some_and(|d| !d.busy && d.previous.is_some());
+            }
+            CancelUpdate => return self.update_dialog.as_ref().is_some_and(|d| d.busy),
+            CloseUpdate => return self.update_dialog.as_ref().is_some_and(|d| !d.busy),
+            _ => {}
+        }
         if matches!(
             command,
             Command::Center | Command::Lock | Command::CatchUp | Command::Meters
@@ -8192,7 +8319,254 @@ impl CleanSlateApp {
         }
     }
 
+    fn close_workers_busy(&self) -> bool {
+        crate::worker_lifetime::active()
+            || self.processing.is_some()
+            || self.exporting.is_some()
+            || self.preview_processing.is_some()
+            || self.preview_pending.is_some()
+            || self.sources_busy()
+            || self.audition_preparation.is_busy()
+            || self.update_dialog.as_ref().is_some_and(|d| d.busy)
+    }
+    fn update_status(&mut self, status: String) {
+        self.app_feedback = Some(status.clone());
+        if let Some(dialog) = &self.update_dialog {
+            *dialog.status.lock().unwrap_or_else(|p| p.into_inner()) = status.clone();
+        }
+        self.messages.push(status);
+    }
+    fn request_safe_close(&mut self, restart: bool) -> Task<Message> {
+        if self.close_workers_busy() {
+            self.update_status("The application is still working. Wait for analysis, export, import and update work to finish, or use their Cancel controls and wait for completion before closing/restarting.".into());
+            return Task::none();
+        }
+        if self.sound_draft.is_some()
+            || self.track_name_draft.is_some()
+            || self.example_draft.is_some()
+            || self.gain_drag.is_some()
+            || self.calibrating
+            || self.selecting_range
+            || self.import_dialog
+            || self.export_dialog.is_some()
+        {
+            self.update_status("Finish or cancel the current edit/dialog before closing or restarting. Your session remains open.".into());
+            return Task::none();
+        }
+        if self.project.is_some() {
+            let choice=rfd::MessageDialog::new().set_title("Close CleanSlate")
+                .set_description("Save the editable project before closing? Discard closes without another save. Previously saved work is retained. Cancel keeps this session open.")
+                .set_buttons(rfd::MessageButtons::YesNoCancelCustom("Save".into(),"Discard".into(),"Cancel".into())).show();
+            match choice {
+                rfd::MessageDialogResult::Custom(ref label) if label == "Save" => {
+                    if let Err(error) = self.project.as_ref().unwrap().save() {
+                        self.update_status(format!(
+                            "Project was not saved; session remains open: {error}"
+                        ));
+                        return Task::none();
+                    }
+                }
+                rfd::MessageDialogResult::Custom(ref label) if label == "Discard" => {}
+                _ => return Task::none(),
+            }
+        }
+        if restart {
+            let Some(prepared) = self
+                .update_dialog
+                .as_ref()
+                .and_then(|d| d.prepared.as_ref())
+            else {
+                return Task::none();
+            };
+            let recover = self
+                .update_dialog
+                .as_ref()
+                .is_some_and(|d| d.recovery_requested);
+            let result = if recover {
+                crate::updater::launch_recovery(prepared)
+            } else {
+                crate::updater::launch(prepared)
+            };
+            if let Err(error) = result {
+                self.update_status(error);
+                return Task::none();
+            }
+        }
+        self.stop_audition();
+        iced::exit()
+    }
+    fn update_action(&mut self, command: Command) -> Task<Message> {
+        use Command::*;
+        if command == CloseUpdate {
+            if let Some(dialog) = &self.update_dialog
+                && dialog.busy
+            {
+                self.update_status(
+                    "Cancel the update and wait for completion before closing this dialog.".into(),
+                );
+                return Task::none();
+            }
+            self.update_dialog = None;
+            return Task::none();
+        }
+        if command == ManualUpdate {
+            return self.update(Message::OpenLink(AppLink::Releases));
+        }
+        if command == RestartUpdate {
+            if let Some(dialog) = &mut self.update_dialog {
+                dialog.recovery_requested = false;
+            }
+            return self.request_safe_close(true);
+        }
+        if command == CancelUpdate {
+            if let Some(dialog) = &self.update_dialog {
+                dialog.cancel.store(true, Ordering::Relaxed);
+            }
+            return Task::none();
+        }
+        if command == ResumeUpdateRecovery {
+            if let Some(dialog) = &mut self.update_dialog {
+                dialog.recovery_requested = true;
+            }
+            return self.request_safe_close(true);
+        }
+        self.menu_open = false;
+        self.app_dialog = None;
+        self.help_open = false;
+        self.shortcuts_open = false;
+        let dialog = self.update_dialog.get_or_insert_with(UpdateDialog::default);
+        if dialog.busy {
+            return Task::none();
+        }
+        if command == CheckUpdates
+            && dialog.prepared.is_none()
+            && let Ok(Some(prepared)) = crate::updater::pending()
+        {
+            *dialog.status.lock().unwrap_or_else(|p|p.into_inner())="A verified update is already staged. Restart to install it, or resume recovery to retain the current version.".into();
+            dialog.prepared = Some(prepared);
+            return Task::none();
+        }
+        let offer = dialog.offer.clone();
+        if command == CheckUpdates {
+            dialog.previous = crate::updater::previous().ok().flatten();
+        }
+        let previous = dialog.previous.clone();
+        if command==CleanupUpdate && (previous.is_none() || rfd::MessageDialog::new().set_title("Remove previous version?").set_description("The current package passed startup health checks. Remove the retained previous version and staged download? This ends rollback to that version. Projects, recordings, preferences and caches are retained.").set_buttons(rfd::MessageButtons::YesNo).show()!=rfd::MessageDialogResult::Yes) {return Task::none();}
+        if command == DownloadUpdate && offer.is_none() {
+            return Task::none();
+        }
+        dialog.busy = true;
+        dialog.cancel = Arc::new(AtomicBool::new(false));
+        let cancel = dialog.cancel.clone();
+        let status = dialog.status.clone();
+        let prereleases = dialog.prereleases;
+        let (sender, receiver) = iced::futures::channel::oneshot::channel();
+        crate::worker_lifetime::spawn(move || {
+            let result = if command == CleanupUpdate {
+                crate::updater::cleanup(&previous.unwrap())
+                    .map(|()| UpdateOutcome::Cleaned(crate::updater::eligible()))
+            } else if command == DownloadUpdate {
+                crate::updater::download(&offer.unwrap(), &cancel, &mut |message| {
+                    *status.lock().unwrap_or_else(|p| p.into_inner()) = message;
+                })
+                .map(UpdateOutcome::Downloaded)
+            } else {
+                *status.lock().unwrap_or_else(|p| p.into_inner()) =
+                    "Checking GitHub releases…".into();
+                let eligibility = crate::updater::eligible();
+                crate::updater::check(env!("CARGO_PKG_VERSION"), prereleases, &cancel)
+                    .map(|offer| UpdateOutcome::Checked(offer, eligibility))
+            };
+            let _ = sender.send(result);
+        });
+        Task::perform(
+            async move {
+                receiver.await.unwrap_or_else(|_| {
+                    Err("Update worker stopped. The installed application was retained.".into())
+                })
+            },
+            Message::UpdateFinished,
+        )
+    }
     fn update(&mut self, message: Message) -> Task<Message> {
+        if matches!(message, Message::RequestClose(_)) {
+            return self.request_safe_close(matches!(message, Message::RequestClose(true)));
+        }
+        if let Message::UpdateAction(command) = message {
+            return self.update_action(command);
+        }
+        if let Message::UpdatePrereleases(value) = message {
+            if let Some(dialog) = &mut self.update_dialog
+                && !dialog.busy
+            {
+                dialog.prereleases = value;
+                dialog.offer = None;
+            }
+            return Task::none();
+        }
+        if let Message::UpdateFinished(result) = message {
+            if let Some(dialog) = &mut self.update_dialog {
+                dialog.busy = false;
+                let status = match result {
+                    Ok(UpdateOutcome::Cleaned(eligibility)) => {
+                        dialog.previous = None;
+                        dialog.eligibility = eligibility;
+                        "Retained previous package and staged download removed. Current application verified.".into()
+                    }
+                    Ok(UpdateOutcome::Checked(offer, eligibility)) => {
+                        let message = if let Some(offer) = &offer {
+                            format!("CleanSlate {} is available.", offer.version)
+                        } else {
+                            "You are up to date for this channel.".into()
+                        };
+                        dialog.eligibility = eligibility;
+                        dialog.offer = offer;
+                        message
+                    }
+                    Ok(UpdateOutcome::Downloaded(prepared)) => {
+                        let status = format!(
+                            "Verified {}. Restart is your choice. Recovery helper: {}",
+                            prepared.version,
+                            prepared.recovery.display()
+                        );
+                        dialog.prepared = Some(prepared);
+                        status
+                    }
+                    Err(error) => error,
+                };
+                *dialog.status.lock().unwrap_or_else(|p| p.into_inner()) = status;
+            }
+            return Task::none();
+        }
+        if matches!(message, Message::UpdateHealth) {
+            if let Err(error) = crate::updater::health_acknowledge() {
+                self.messages.push(error);
+                return iced::exit();
+            }
+            return Task::none();
+        }
+        if self.update_dialog.is_some() {
+            if let Message::KeyPressed(key, modifiers) = &message
+                && let Some(command) = self.shortcuts.resolve(key, *modifiers, Context::Updates)
+            {
+                return self.dispatch_shortcut(command);
+            }
+            match &message {
+                Message::KeyPressed(keyboard::Key::Named(keyboard::key::Named::Escape), _) => {
+                    return self.update_action(Command::CloseUpdate);
+                }
+                Message::KeyPressed(keyboard::Key::Named(keyboard::key::Named::Tab), modifiers) => {
+                    return crate::gui_controls::focus_next(modifiers.shift());
+                }
+                Message::Tick
+                | Message::PlaybackFrame
+                | Message::ShortcutHintInput
+                | Message::LinkOpened(_, _)
+                | Message::OpenLink(_)
+                | Message::InvokeAction(_) => {}
+                _ => return Task::none(),
+            }
+        }
         if let Message::HideSupportIntro(hidden) = message {
             self.hide_support_intro = hidden;
             return Task::none();
@@ -8398,9 +8772,9 @@ impl CleanSlateApp {
                             self.menu_selected = if *key == Named::ArrowUp
                                 || (*key == Named::Tab && modifiers.shift())
                             {
-                                (self.menu_selected + 7) % 8
+                                (self.menu_selected + 8) % 9
                             } else {
-                                (self.menu_selected + 1) % 8
+                                (self.menu_selected + 1) % 9
                             };
                         }
                         Named::Tab if self.app_dialog == Some(AppDialog::About) => {
@@ -9107,6 +9481,11 @@ impl CleanSlateApp {
                 self.poll_exporting();
             }
             Message::PlaybackFrame
+            | Message::RequestClose(_)
+            | Message::UpdateAction(_)
+            | Message::UpdatePrereleases(_)
+            | Message::UpdateFinished(_)
+            | Message::UpdateHealth
             | Message::CheckWindowVisibility
             | Message::WindowVisibilityChecked(_, _)
             | Message::Appearance(_)
@@ -9542,7 +9921,7 @@ impl CleanSlateApp {
             Message::OpenLink(link) => {
                 self.app_feedback = Some("Opening in your browser…".into());
                 let (sender, receiver) = iced::futures::channel::oneshot::channel();
-                std::thread::spawn(move || {
+                crate::worker_lifetime::spawn(move || {
                     let _ = sender.send(open_app_link(link));
                 });
                 return Task::perform(
@@ -9715,6 +10094,7 @@ impl CleanSlateApp {
             || self.preview_processing.is_some()
             || self.preview_pending.is_some()
             || self.audition_preparation.is_busy()
+            || self.update_dialog.as_ref().is_some_and(|d| d.busy)
         {
             let interval = if self.preview_processing.is_some()
                 || self.preview_pending.is_some()
@@ -9802,6 +10182,8 @@ impl CleanSlateApp {
             Subscription::none()
         };
         Subscription::batch([
+            window::close_requests().map(|_| Message::RequestClose(false)),
+            window::open_events().map(|_| Message::UpdateHealth),
             pan_cleanup,
             shortcut_hints,
             drops,
@@ -10013,25 +10395,86 @@ impl CleanSlateApp {
     }
 
     fn view(&self) -> Element<'_, Message> {
+        if let Some(dialog) = &self.update_dialog {
+            let status = dialog
+                .status
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .clone();
+            let mut body = column![
+                text("CleanSlate updates").size(24),
+                text(format!("Installed: {}", env!("CARGO_PKG_VERSION"))),
+                text(status),
+                iced::widget::checkbox(dialog.prereleases)
+                    .label("Include prereleases for this check")
+                    .on_toggle(Message::UpdatePrereleases)
+            ]
+            .spacing(14);
+            if let Some(offer) = &dialog.offer {
+                body = body
+                    .push(text(format!("Available: {}", offer.version)))
+                    .push(text(offer.page()))
+                    .push(text(
+                        crate::updater::manual_asset(&offer.version).map_or_else(
+                            || "No native package is advertised for this architecture.".into(),
+                            |name| format!("Manual package: {name}"),
+                        ),
+                    ))
+                    .push(scrollable(text(&offer.notes)).height(180));
+            }
+            if let Some(prepared) = &dialog.prepared {
+                body = body.push(text(format!(
+                    "Recovery instructions: {}",
+                    prepared.transaction.join("RECOVERY.txt").display()
+                )));
+            }
+            let installable = &dialog.eligibility;
+            if let Err(reason) = &installable {
+                body = body.push(text(format!("Manual update: {reason}")));
+            }
+            for (label, command) in [
+                ("Check now", Command::CheckUpdates),
+                ("Download and verify", Command::DownloadUpdate),
+                ("Restart and install", Command::RestartUpdate),
+                (
+                    "Resume recovery / keep previous version",
+                    Command::ResumeUpdateRecovery,
+                ),
+                ("Cancel download/check", Command::CancelUpdate),
+                ("Remove retained previous version", Command::CleanupUpdate),
+                ("Manual download", Command::ManualUpdate),
+                ("Close", Command::CloseUpdate),
+            ] {
+                body = body.push(self.action_control(
+                    command,
+                    button(text(label)).width(Fill).style(secondary_button),
+                ));
+            }
+            return container(scrollable(container(body).padding(24).max_width(680)))
+                .center_x(Fill)
+                .center_y(Fill)
+                .into();
+        }
         if self.menu_open || self.app_dialog.is_some() {
             return responsive(|size| {
                 let content: Element<'_, Message> = if self.menu_open {
                     let mut items = column![container(text("Menu").size(20)).padding([4, 12])].spacing(4).width(Fill);
-                    for (index, label) in ["Settings", "Keyboard shortcuts", "Help", "GitHub", "Report a bug", "About", "Purchase CleanSlate", "Close"].into_iter().enumerate() {
+                    for (index, label) in ["Settings", "Keyboard shortcuts", "Help", "GitHub", "Report a bug", "About", "Purchase CleanSlate", "Check for updates", "Close"].into_iter().enumerate() {
                         if matches!(index, 2 | 5 | 6) {
                             items = items.push(container(iced::widget::rule::horizontal(1)).padding([6, 12]));
                         }
                         let hint = match index {
                             1 => self.shortcuts.hint(Command::Reference),
                             6 => self.shortcuts.hint(Command::Support),
-                            7 => "Esc".into(),
+                            7 => self.shortcuts.hint(Command::CheckUpdates),
+                            8 => "Esc".into(),
                             _ => String::new(),
                         };
                         let selected = index == self.menu_selected;
                         let item = button(row![text(label).width(Fill), text(hint).size(14)].spacing(16).align_y(iced::Center))
                             .width(Fill).padding([10, 12]).keyboard_enabled(false).selected(selected)
                             .style(move |theme, status| flat_button(theme, status, selected));
-                        items = items.push(if index == 6 { item.on_press(RegisteredButton(Command::Support)) } else { item.on_press(legacy_menu_action(index)) });
+                        items = items.push(if index == 6 { item.on_press(RegisteredButton(Command::Support)) } else if index==7 {item.on_press(RegisteredButton(Command::CheckUpdates))} else { item.on_press(legacy_menu_action(index)) });
                     }
                     if let Some(feedback) = &self.app_feedback { items = items.push(container(text(feedback).size(14)).padding([6, 12])); }
                     container(scrollable(items).id("app-dialog")).max_height((size.height - 80.0).max(120.0)).into()

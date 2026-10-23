@@ -39,9 +39,11 @@ mod supervised_render;
 mod temporal_ownership;
 mod timebase;
 pub mod timeline;
+pub mod updater;
 mod vad;
 mod wav_delivery;
 mod waveform;
+mod worker_lifetime;
 
 pub use acoustic_transfer::AcousticEstimatorComparison;
 pub use acoustics::*;

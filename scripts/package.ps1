@@ -116,9 +116,9 @@ try {
     $dirty = & git -C $root status --porcelain -- Cargo.toml Cargo.lock src assets scripts tests docs .github LICENSE README.md
     if ($LASTEXITCODE -ne 0) { throw 'Cannot read working-tree state' }
     $inventory = @(Get-ChildItem -LiteralPath $stage -File -Recurse -Force | Sort-Object FullName | ForEach-Object {
-        @{ path = [IO.Path]::GetRelativePath($stage, $_.FullName).Replace('\', '/'); sha256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant() }
+        @{ path = [IO.Path]::GetRelativePath($stage, $_.FullName).Replace('\', '/'); sha256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant(); bytes = $_.Length }
     })
-    @{ version = $Version; platform = $platform; commit = "$commit"; dirty = [bool]$dirty; rustc = "$rustc"; cargo_lock_sha256 = (Get-FileHash -LiteralPath (Join-Path $root 'Cargo.lock') -Algorithm SHA256).Hash.ToLowerInvariant(); files = $inventory } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $stage 'package-manifest.json') -Encoding utf8
+    @{ schema = 1; product = 'CleanSlate'; package_kind = $(if ($IsWindows) { 'portable-zip' } else { $extension }); entrypoint = $executable; version = $Version; platform = $platform; commit = "$commit"; dirty = [bool]$dirty; rustc = "$rustc"; cargo_lock_sha256 = (Get-FileHash -LiteralPath (Join-Path $root 'Cargo.lock') -Algorithm SHA256).Hash.ToLowerInvariant(); files = $inventory } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $stage 'package-manifest.json') -Encoding utf8
     & (Join-Path $PSScriptRoot 'check-package.ps1') -Package $stage
     $archive = Join-Path $stageRoot "$name.$extension"
     if ($IsWindows) {
@@ -168,6 +168,9 @@ try {
     }
     Move-Item -LiteralPath $archive -Destination "$package.$extension" -Force
     "$archiveHash  $name.$extension" | Set-Content -LiteralPath "$package.$extension.sha256" -Encoding ascii
+    if ($IsWindows) {
+        & (Join-Path $PSScriptRoot 'update-metadata.ps1') -Package $package -Archive "$package.$extension"
+    }
     Write-Output "$package.$extension"
 } finally {
     if (-not ([IO.Path]::GetFullPath($stageRoot)).StartsWith($dist + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) { throw 'Staging path escaped dist' }
