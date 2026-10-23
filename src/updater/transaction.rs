@@ -1047,8 +1047,9 @@ mod tests {
     }
     #[test]
     fn preparation_write_failure_never_publishes_a_dangling_installation_index() {
-        let parent =
-            std::env::temp_dir().join(format!("cleanslate-prepare-failure-{}", nonce().unwrap()));
+        let parent = fs::canonicalize(std::env::temp_dir())
+            .unwrap()
+            .join(format!("cleanslate-prepare-failure-{}", nonce().unwrap()));
         fs::create_dir(&parent).unwrap();
         let root = parent.join("CleanSlate-1.0.0-windows-x64");
         fixture(&root, "1.0.0");
@@ -1060,15 +1061,18 @@ mod tests {
         .unwrap();
         assert!(prepare(&root, &tx, &d, &AtomicBool::new(false)).is_err());
         assert!(!index(&root).unwrap().exists());
-        assert!(package::validate_tree(&root, None).is_ok());
+        package::validate_tree(&root, None).unwrap();
         fs::remove_dir_all(parent).unwrap();
     }
     #[test]
     fn cleanup_preserves_unrelated_files_and_retries_an_interrupted_acknowledgment() {
-        let parent = std::env::temp_dir().join(format!("cleanslate-cleanup-{}", nonce().unwrap()));
+        let parent = fs::canonicalize(std::env::temp_dir())
+            .unwrap()
+            .join(format!("cleanslate-cleanup-{}", nonce().unwrap()));
         fs::create_dir(&parent).unwrap();
         let root = parent.join("CleanSlate-1.0.0-windows-x64");
         fixture(&root, "1.0.1");
+        package::validate_tree(&root, None).unwrap();
         let tx = fresh(&parent).unwrap();
         fixture(&tx.join("backup"), "1.0.0");
         fixture(&tx.join("helper"), "1.0.0");

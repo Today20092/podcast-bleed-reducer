@@ -23,3 +23,5 @@ The encrypted private key and its password stay outside the repository and CI. T
 ## Native CI correction
 
 The first promotion run exposed a fixture-only hidden-file lookup: the Linux `.DirIcon` inventory used `Get-Item` without `-Force`, which fails on Unix hosts. Add `-Force` to match the production inventory/checker; the existing four-platform fixture directly exercises the correction. No package content or editor behavior changes.
+
+The next Mac run reached Rust tests and rejected transaction fixtures beneath the host's linked temporary-directory ancestry. Canonicalize fixture temporary roots before exercising package validation, preparation and cleanup; keep production rejection of linked installation ancestors unchanged. Assert the intact cleanup fixture validates before mutation, and surface validation errors directly. Native reruns must confirm this diagnosis.

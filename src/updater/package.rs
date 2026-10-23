@@ -450,8 +450,9 @@ mod tests {
     #[test]
     fn extraction_rejects_links_aliases_truncation_and_resource_overruns_without_live_writes() {
         use zip::write::SimpleFileOptions;
-        let parent =
-            std::env::temp_dir().join(format!("cleanslate-archive-tests-{}", std::process::id()));
+        let parent = fs::canonicalize(std::env::temp_dir())
+            .unwrap()
+            .join(format!("cleanslate-archive-tests-{}", std::process::id()));
         fs::create_dir_all(&parent).unwrap();
         let cancel = AtomicBool::new(false);
         let bytes = include_bytes!("../../tests/fixtures/updater-descriptor.json");
