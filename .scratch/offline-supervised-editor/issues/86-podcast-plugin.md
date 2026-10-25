@@ -1,7 +1,7 @@
 # CleanSlate Podcast: supervised multitrack post-production plugin
 
 Status: open
-Readiness: ready-for-agent
+Implementation readiness: coordination umbrella; execute scoped leaves 95/96 and existing 80–83 after their dependencies
 Type: task
 Blocked by: 87
 Related: 67, 75, 76, 77, 78, 80, 81, 82, 83, 84, 85
@@ -17,6 +17,8 @@ Development belongs to `codex/plugin-podcast` in its own worktree. The existing 
 Ticket 84 completed scoped navigation checks; 77 supplies actual-format headless hosts. These remain valid evidence, not whole-product acceptance. Ticket 80 is still claimed with sound/export/PDC/save/reopen acceptance outstanding. Tickets 81–83 remain blocked by 80 until it is done; this product ticket does not clear those dependencies. Finish the existing Session candidate's checks before continuing that implementation sequence.
 
 ## Implementation order
+
+Executable leaves: [95 identity](95-podcast-product-identity.md), [96 workflow/acceptance](96-podcast-workflow-and-acceptance.md), then existing 80 acceptance and its 81–83 dependents. Shared 88/89/90/97/99 supply guarded execution, research/design and host coverage. See the [runbook](../../../docs/plugin-overnight-plan.md); do not treat this whole product as one unlimited overnight task.
 
 1. Preserve and qualify 80's current Session build, then introduce a separate Podcast package/name/stable format IDs/state, with explicit legacy probe coexistence rather than silently changing saved projects.
 2. Complete 81 shared defaults/per-track sound edits, host automation/dirty-state notifications and envelope reuse.

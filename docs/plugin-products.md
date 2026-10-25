@@ -34,4 +34,6 @@ FL Studio is the current tested prototype host. Resolve/Fairlight (Podcast) and 
 
 ## Workspace receipt
 
+[Overnight planning](plugin-overnight-plan.md) adds scoped agent tickets 88–99, renewed static reference investigation and a mandatory tested memory guard/checkpoint runner before unattended heavy work. Desktop/update residuals have their own audit; no repeated updater implementation or new desktop feature scope is implied.
+
 [Reorganization ticket 87](../.scratch/offline-supervised-editor/issues/87-separate-plugin-products-workspaces.md) records exact local paths, source commits and checks. This plan makes no new release, audio-quality or platform claim.

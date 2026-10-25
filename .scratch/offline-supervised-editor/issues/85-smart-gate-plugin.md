@@ -1,7 +1,7 @@
 # CleanSlate Smart Gate: single-input live plugin
 
 Status: open
-Readiness: ready-for-agent
+Implementation readiness: coordination umbrella; execute scoped leaf tickets 91–94 after their dependencies
 Type: task
 Blocked by: 87
 Related: 67, 77, 79, 86
@@ -13,6 +13,8 @@ One independent plugin for one microphone in live production: detect wanted spee
 Development belongs to `codex/plugin-smart-gate` in its own worktree. Start from the preserved 0.0.6 prototype for reusable adapter, editor, safety and test infrastructure. The prototype's Session/legacy modes are historical scaffolding, not the finished product. Do not require another instance, a session group, a whole recording, or the desktop app to be running.
 
 ## Implementation order
+
+Executable leaves: [91 identity](91-smart-gate-product-identity.md), [92 causal detector](92-single-input-detector-feasibility.md), [93 DSP](93-smart-gate-realtime-engine.md), [94 interface](94-smart-gate-interface.md). Shared prerequisites/research are 88/89/90/97/99; see the [runbook](../../../docs/plugin-overnight-plan.md). Do not claim this whole product as one unlimited overnight task.
 
 1. Establish a distinct plugin package, stable format identities, presets/state schema, product name, build/test output and development links. Preserve the old probe's identity and reopening behavior; no silent replacement in saved projects.
 2. Separate single-input speech evidence from attenuation policy. Reuse maintained Rust components where appropriate; evaluate their causal/lookahead requirements before adapting them. Multimicrophone ownership training does not establish a single-mic gate's accuracy. Document the chosen detector, any calibration and the actual latency budget before enabling attenuation.

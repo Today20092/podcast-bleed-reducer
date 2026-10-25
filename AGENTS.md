@@ -1,5 +1,9 @@
 # CleanSlate
 
+## Product workspace scope
+
+This is the `codex/plugin-smart-gate` worktree. Read [PLUGIN-WORKSPACE.md](PLUGIN-WORKSPACE.md) first. Select only unblocked Smart Gate leaf tickets (91–94 subject to actual dependencies); do not claim unrelated desktop work from this checkout. Shared guard/research/design prerequisites are coordinated from development. Product umbrella 85 is not one executable unlimited task. The global resource policy in [the overnight plan](docs/plugin-overnight-plan.md) applies across all worktrees; independent folders do not authorize parallel heavy builds.
+
 ## Active work
 
 Before planning or implementation, read [.scratch/offline-supervised-migration/map.md](.scratch/offline-supervised-migration/map.md) and the [accepted specification](.scratch/offline-supervised-migration/spec.md). This is the sole active roadmap. The implementation sequence and dependencies live in [.scratch/offline-supervised-migration/implementation.md](.scratch/offline-supervised-migration/implementation.md); build tickets live in `.scratch/offline-supervised-editor/issues/`.

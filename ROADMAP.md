@@ -18,6 +18,8 @@ The checked Windows 0.0.6 probe is a development baseline, not either finished p
 
 ## Current priorities
 
+- **Prepared overnight work (88–99):** reference investigation, separate plugin identities/UI/DSP, host coverage and a desktop/updater audit have scoped dependency tickets. [The overnight plan](docs/plugin-overnight-plan.md) requires a tested global memory guard and resumable coordinator first: one heavy task at a time, no routine DAW, bounded REA and durable checkpoints. It is prepared, not scheduled or started; completion in one night is not guaranteed.
+
 - **Optional purchase and project support (72):** an owner-accepted development change adds Ko-fi/GitHub Sponsors, first-launch dismissal and Menu/About access while keeping the full app free. Purchases help sustain maintenance, usability, testing and reliable packages. These changes are not in the published 1.0.0 downloads; savings feedback remains future work.
 
 - **Optional purchase and project support (72):** the complete app remains free. Ko-fi is the primary optional one-time purchase route, with GitHub Sponsors alongside it. Menu/About access, a first-launch message and roadmap links are in development; these changes are not part of the published 1.0.0 packages. Purchases help sustain maintenance, usability, testing and reliable packaging. No measured time-savings or revenue figures are claimed.
@@ -35,7 +37,7 @@ The checked Windows 0.0.6 probe is a development baseline, not either finished p
 
 The stable source has customizable shortcuts, rotary sound controls, waveform Original/Processed/Both views, persistent edge Catch up, playhead lock/reanchoring, compact icon transport, themes and collapsible analysis timing details. Drawing reuse, background-work handling and playback resource lifetime have also improved. See the [release notes](docs/release-notes.md) for behavior, measurements and remaining limits.
 
-Menu redesign (60), shared action/shortcut registration (63) and the toolbar icon cleanup (69) are complete and included in the 1.0.0 source promotion. The [integration receipt](docs/research/menu-actions-integration-2026-10-22.md) records checks and acceptance limits; these additions are absent from the older alpha.8 download. The [implementation tracker](.scratch/offline-supervised-migration/implementation.md) retains retired-cache cleanup (22) in the build queue. GUI polish (23), adjustable shortcuts (41) and Catch up (42) are released and owner-closed. Advanced training (17) and waveform-overlay editing (35) remain deferred; live-plugin discovery is outside the implementation queue.
+Menu redesign (60), shared action/shortcut registration (63) and the toolbar icon cleanup (69) are complete and included in the 1.0.0 source promotion. The [integration receipt](docs/research/menu-actions-integration-2026-10-22.md) records checks and acceptance limits; these additions are absent from the older alpha.8 download. The [implementation tracker](.scratch/offline-supervised-migration/implementation.md) retains retired-cache cleanup (22) in the build queue, with its unresolved deletion restriction. GUI polish (23), adjustable shortcuts (41) and Catch up (42) are released and owner-closed. Advanced training (17) and waveform-overlay editing (35) remain deferred. Plugin implementation now has its own product workspaces and scoped queue above.
 
 Check each ticket for its latest status. This list describes agreed work, not a claim that every item is finished or available in a published build.
 
