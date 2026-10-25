@@ -1,0 +1,159 @@
+{
+  "schema_version": 1,
+  "status": "prepared_not_started",
+  "canonical_tracker": ".scratch/offline-supervised-editor/issues",
+  "max_active_tickets": 1,
+  "max_heavy_process_trees": 1,
+  "requires_before_unattended_execution": [
+    87,
+    88,
+    99
+  ],
+  "memory_policy": {
+    "min_available_gib_before_heavy": 14,
+    "min_available_gib_while_running": 8,
+    "max_owned_heavy_tree_commit_gib": 6,
+    "sample_interval_seconds": 1,
+    "task_timeout_minutes": 30,
+    "max_resource_retries": 1,
+    "unenforceable_deep_rea": "skip_and_checkpoint"
+  },
+  "tasks": [
+    {
+      "id": 88,
+      "ticket": "88-memory-bounded-execution.md",
+      "lane": "desktop",
+      "blocked_by": [
+        87
+      ],
+      "execution": "on_explicit_start_after_dependencies"
+    },
+    {
+      "id": 99,
+      "ticket": "99-overnight-checkpoint-runner.md",
+      "lane": "desktop",
+      "blocked_by": [
+        88
+      ],
+      "execution": "on_explicit_start_after_dependencies"
+    },
+    {
+      "id": 89,
+      "ticket": "89-plugin-reference-rea.md",
+      "lane": "desktop",
+      "blocked_by": [
+        88
+      ],
+      "execution": "on_explicit_start_after_dependencies"
+    },
+    {
+      "id": 90,
+      "ticket": "90-plugin-ui-design-contract.md",
+      "lane": "desktop",
+      "blocked_by": [
+        89
+      ],
+      "execution": "on_explicit_start_after_dependencies"
+    },
+    {
+      "id": 97,
+      "ticket": "97-plugin-format-host-coverage.md",
+      "lane": "desktop",
+      "blocked_by": [
+        88
+      ],
+      "execution": "on_explicit_start_after_dependencies"
+    },
+    {
+      "id": 98,
+      "ticket": "98-desktop-update-readiness.md",
+      "lane": "desktop",
+      "blocked_by": [
+        88
+      ],
+      "execution": "on_explicit_start_after_dependencies"
+    },
+    {
+      "id": 95,
+      "ticket": "95-podcast-product-identity.md",
+      "lane": "podcast",
+      "blocked_by": [
+        87,
+        88
+      ],
+      "execution": "on_explicit_start_after_dependencies"
+    },
+    {
+      "id": 91,
+      "ticket": "91-smart-gate-product-identity.md",
+      "lane": "smart-gate",
+      "blocked_by": [
+        87,
+        88
+      ],
+      "execution": "on_explicit_start_after_dependencies"
+    },
+    {
+      "id": 92,
+      "ticket": "92-single-input-detector-feasibility.md",
+      "lane": "smart-gate",
+      "blocked_by": [
+        91
+      ],
+      "execution": "on_explicit_start_after_dependencies"
+    },
+    {
+      "id": 93,
+      "ticket": "93-smart-gate-realtime-engine.md",
+      "lane": "smart-gate",
+      "blocked_by": [
+        92
+      ],
+      "execution": "on_explicit_start_after_dependencies"
+    },
+    {
+      "id": 94,
+      "ticket": "94-smart-gate-interface.md",
+      "lane": "smart-gate",
+      "blocked_by": [
+        90,
+        93
+      ],
+      "execution": "on_explicit_start_after_dependencies"
+    },
+    {
+      "id": 96,
+      "ticket": "96-podcast-workflow-and-acceptance.md",
+      "lane": "podcast",
+      "blocked_by": [
+        90,
+        95
+      ],
+      "execution": "on_explicit_start_after_dependencies"
+    }
+  ],
+  "non_executable_umbrellas": [
+    85,
+    86
+  ],
+  "existing_podcast_dependencies": {
+    "80": "native_sound_export_acceptance_pending",
+    "81": [
+      80
+    ],
+    "82": [
+      80
+    ],
+    "83": [
+      80
+    ]
+  },
+  "excluded_actions": [
+    "vendor_installation_activation",
+    "unattended_native_daw",
+    "private_release_signing",
+    "push_tag_release",
+    "installed_link_retarget",
+    "destructive_cleanup"
+  ]
+}
