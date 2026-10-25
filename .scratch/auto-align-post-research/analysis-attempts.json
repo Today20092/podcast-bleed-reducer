@@ -1,0 +1,52 @@
+{
+  "target_sha256": "1b3c52650e4e307f5c9b61a2d75c9bcee464d8d292f45553504b3774ee621c5f",
+  "classification": "Analyst summary of actual REA failures; not a successful native Evidence record",
+  "attempts": [
+    {
+      "route": "MCP binary_overview",
+      "provider": "Ghidra 12.1.4",
+      "analysis_profile_digest": "189821c22f9a3c65d594fc3eda7b5a03806941e5d6504c95c1b268b890a7c7ff",
+      "run_id": "b969c7a7-d864-4e92-aa51-47e615480675",
+      "startup_deadline_ms": 330000,
+      "result": "provider_timeout",
+      "complete": false
+    },
+    {
+      "route": "CLI search strings with snapshot destination",
+      "provider": "Ghidra 12.1.4",
+      "analysis_profile_digest": "60cad537d9c29d790468947a31c7a550a1595a90e65d8a5035091c397a81c040",
+      "run_id": "34a8df70-d710-46a8-83fa-f45c4a3199ff",
+      "startup_deadline_ms": 900000,
+      "disabled_analyzers": [
+        "Decompiler Switch Analysis",
+        "Stack",
+        "Windows x86 PE Exception Handling"
+      ],
+      "result": "execution_failure",
+      "failure_cause": "ERR_REA_WINDOWS_NATIVE; Win32 1450; insufficient system resources while observing bridge-endpoint.json",
+      "complete": false
+    }
+  ],
+  "scope": "Temporary environment settings only; installed DLL unchanged; no target execution",
+  "supplementary_byte_entropy": [
+    {
+      "section": ".text",
+      "offset": 1536,
+      "bytes": 28583936,
+      "bits_per_byte_rounded": 8
+    },
+    {
+      "section": ".rdata",
+      "offset": 28585472,
+      "bytes": 5060096,
+      "bits_per_byte_rounded": 6.8748
+    },
+    {
+      "section": ".guard",
+      "offset": 36920832,
+      "bytes": 7496192,
+      "bits_per_byte_rounded": 7.2273
+    }
+  ],
+  "entropy_limitation": "High entropy is consistent with packing/protection but does not identify a scheme or establish encryption."
+}
