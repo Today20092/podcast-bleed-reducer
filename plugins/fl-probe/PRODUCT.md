@@ -1,0 +1,11 @@
+# CleanSlate Session plugin prototype
+
+The accepted contract is `.scratch/offline-supervised-migration/plugin-modes-interview.md` (Q1–Q19). Session comes first: prerecorded synchronized dedicated microphones, capture before analysis, persistent source-time history across loops/seeks, retrospective room/solo/overlap labels, explicit Analyze and shared instance control. Live Mic is a separate later speech gate.
+
+The 0.0.5 candidate implements disk-backed capture for up to eight mono/stereo inserts, exact PCM identity/label fingerprints, persistent coarse waveform records, bounded queues and shared labels/settings. It calls the maintained desktop library without duplicating its detector, acoustic features, training or gain generation. Analysis selects input channel 1 and applies one envelope to both channels.
+
+The editor inherits the application palette and waveform-first hierarchy. Any participant can navigate/label and Analyze. Version 0.0.6 adds pointer-anchored wheel zoom, middle pan, Alt-range zoom, fit selection, keyboard/context navigation, a viewport navigator and optional DAW-playhead following. Retain the last visible snapshot during capture-worker contention; aggregate peaks and batch geometry rather than scanning/drawing every stored bin on each input. Display gaps/readiness truthfully. Shared sound edits invalidate envelopes and require Analyze; they persist as Session fields. Host automation and per-track overrides remain explicit follow-ups, rather than silently modifying another instance's host parameters.
+
+Initial analysis requires one common verified contiguous interval containing all labels. Unknown, stale, missing or incompatible evidence preserves original audio. Reopening retains display/cache references/examples but needs source revalidation and fresh analysis. Unplayed DAW edits cannot be detected.
+
+README.md carries bounds and owner instructions. Keep binary identity, preserve checked old output, and let old states open the legacy probe before opting into Session. Native FL editor, delay compensation, quiet/overlapping speech and export remain owner checks. Software checks are distinct from listening quality and unmeasured long-session resources.

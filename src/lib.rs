@@ -1,48 +1,67 @@
 mod acoustic_transfer;
 mod acoustics;
 mod analysis_audio;
+#[cfg(feature = "desktop-ui")]
 pub mod app;
+// Core builds retain mixed cache/display modules; their desktop-only helpers have no callers.
+#[cfg_attr(not(feature = "desktop-ui"), allow(dead_code))]
 mod appearance;
 mod audio_io;
+#[cfg_attr(not(feature = "desktop-ui"), allow(dead_code))]
 mod audition;
+#[cfg(feature = "desktop-ui")]
 mod button_action;
 mod calibration;
 pub mod detector_quality;
 mod editor_benchmark;
+#[cfg_attr(not(feature = "desktop-ui"), allow(dead_code))]
 mod editor_drawing;
 mod editor_workflow;
 mod effective_envelope;
 mod engine;
 mod export;
 mod export_settings;
+#[cfg(feature = "desktop-ui")]
 mod gain_editor;
+#[cfg(feature = "desktop-ui")]
 mod gui_controls;
+#[cfg(feature = "desktop-ui")]
 mod gui_disclosure;
+#[cfg(feature = "desktop-ui")]
 mod gui_icons;
+#[cfg(feature = "desktop-ui")]
 mod import;
 mod joint_detector;
 mod media;
 mod ownership_model;
 mod package_check;
+#[cfg(feature = "desktop-ui")]
 mod parameter_dial;
+#[cfg_attr(not(feature = "desktop-ui"), allow(dead_code))]
 pub mod performance;
 mod prepared_analysis;
+#[cfg_attr(not(feature = "desktop-ui"), allow(dead_code))]
 mod project;
 mod references;
 pub mod release_gate;
 mod review;
 mod session_ownership;
+#[cfg_attr(not(feature = "desktop-ui"), allow(dead_code))]
 mod shortcuts;
+#[cfg_attr(not(feature = "desktop-ui"), allow(dead_code))]
 mod storage;
 mod storage_io;
 mod supervised_render;
 mod temporal_ownership;
 mod timebase;
+#[cfg_attr(not(feature = "desktop-ui"), allow(dead_code))]
 pub mod timeline;
 pub mod updater;
 mod vad;
 mod wav_delivery;
+#[cfg_attr(not(feature = "desktop-ui"), allow(dead_code))]
 mod waveform;
+#[cfg_attr(not(feature = "desktop-ui"), allow(dead_code))]
 mod worker_lifetime;
 
 pub use acoustic_transfer::AcousticEstimatorComparison;
@@ -65,6 +84,7 @@ pub use effective_envelope::*;
 pub use engine::*;
 pub use export::*;
 pub use export_settings::*;
+#[cfg(feature = "desktop-ui")]
 pub use gain_editor::{GainEditorEvent, GainPointer, hit_gain_point};
 pub use ownership_model::*;
 pub use package_check::package_self_check;

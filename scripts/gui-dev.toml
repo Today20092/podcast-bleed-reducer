@@ -9,12 +9,13 @@ debug = false
 [profile.dev.package.rust-app]
 opt-level = 1
 debug = 0
-codegen-units = 256
+# Bound concurrent LLVM work; the combined analysis/plugin build exhausted memory at 256.
+codegen-units = 16
 
 [profile.test.package.rust-app]
 opt-level = 1
 debug = 0
-codegen-units = 256
+codegen-units = 16
 
 [profile.dev.package.sha2]
 opt-level = 2

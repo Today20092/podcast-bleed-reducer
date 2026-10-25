@@ -2,13 +2,27 @@
 
 CleanSlate focuses on offline bleed reduction for podcasters with a dedicated microphone per speaker. Tracks must already be synchronized. The goal is a useful supervised first pass, followed by listening, label corrections and manual gain edits before delivery.
 
-This page is the public overview, last reviewed on 2026-10-22. The [active map](.scratch/offline-supervised-migration/map.md), [accepted specification](.scratch/offline-supervised-migration/spec.md) and [implementation tracker](.scratch/offline-supervised-migration/implementation.md) remain authoritative for scope, dependencies and acceptance. Dates and ticket numbers do not imply delivery deadlines.
+This page is the public overview, last reviewed on 2026-10-25. The [active map](.scratch/offline-supervised-migration/map.md), [accepted specification](.scratch/offline-supervised-migration/spec.md) and [implementation tracker](.scratch/offline-supervised-migration/implementation.md) remain authoritative for scope, dependencies and acceptance. Dates and ticket numbers do not imply delivery deadlines.
+
+## Three separate products
+
+| Product | Purpose | Development |
+| --- | --- | --- |
+| **CleanSlate Desktop** | Existing standalone Rust GUI for supervised offline bleed reduction | `development` |
+| **CleanSlate Smart Gate** | Single microphone speech gating for live production; OBS is an intended host | `codex/plugin-smart-gate`, [ticket 85](.scratch/offline-supervised-editor/issues/85-smart-gate-plugin.md) |
+| **CleanSlate Podcast** | Desktop-style multitrack labeling, analysis and bleed reduction inside a DAW; FL Studio and Resolve/Fairlight are intended hosts | `codex/plugin-podcast`, [ticket 86](.scratch/offline-supervised-editor/issues/86-podcast-plugin.md) |
+
+Each plugin has its own workspace, product interface and future binary identity. They share maintained Rust processing where appropriate. Smart Gate initially means gating, not automatic volume leveling; Podcast prioritizes post-production, not live multitrack recording. See the [product boundaries and workspace plan](docs/plugin-products.md).
+
+The checked Windows 0.0.6 probe is a development baseline, not either finished product. VST3/CLAP are primary targets; VST2 remains desired legacy coverage pending adapter/licensing review. macOS/Linux and each intended host require their own checks. AAX/AU remain deferred.
 
 ## Current priorities
 
 - **Optional purchase and project support (72):** an owner-accepted development change adds Ko-fi/GitHub Sponsors, first-launch dismissal and Menu/About access while keeping the full app free. Purchases help sustain maintenance, usability, testing and reliable packages. These changes are not in the published 1.0.0 downloads; savings feedback remains future work.
 
+- **Optional purchase and project support (72):** the complete app remains free. Ko-fi is the primary optional one-time purchase route, with GitHub Sponsors alongside it. Menu/About access, a first-launch message and roadmap links are in development; these changes are not part of the published 1.0.0 packages. Purchases help sustain maintenance, usability, testing and reliable packaging. No measured time-savings or revenue figures are claimed.
 - **Windows package updating (73):** implemented and tested in development for clean portable installations, with signed whole-package verification, safe restart, rollback and explicit cleanup. Mixed/modified folders and macOS/Linux use manual downloads. Published 1.0.0 is unchanged and will need a trusted manual bootstrap replacement; see the [delivery receipt](docs/research/portable-updater-delivery-2026-10-23.md).
+- **Two independent plugin products (85/86):** Smart Gate and Podcast now continue on separate branches/workspaces. Podcast inherits persistent source-time waveform capture, labels and maintained offline analysis from the probe; its outstanding sound/export acceptance and shared-control/cache/recovery work remain open. Smart Gate needs a separate causal single-input detector/gain path and live-host qualification. The [split plan](docs/plugin-products.md) supersedes the combined-mode direction in discovery 67.
 
 - **Stable 1.0.0 is published** for all four desktop targets after owner approval and package verification. The [release notes](docs/release-notes.md) describe the workflow; the [versioning and stability policy](docs/releasing.md#versioning-and-stability) defines compatibility and patch/minor/major selection. Historical alpha releases retain their original identities.
 - The owner accepts current sound and performance; [evaluation ticket 14](.scratch/offline-supervised-editor/issues/14-independent-release-evaluation.md) is closed. Formal benchmarking is optional future work, with no new ticket requested. This does not assert that independent comparisons or long-session measurements passed.
@@ -27,7 +41,7 @@ Check each ticket for its latest status. This list describes agreed work, not a 
 
 ## Future possibilities
 
-These ideas need investigation and an agreed specification before implementation. They have no delivery date and are not release requirements. [Live/DAW plugin discovery (67)](.scratch/offline-supervised-editor/issues/67-live-clap-vst3-discovery.md) is an active design interview and feasibility investigation, including OBS broadcast output and single/multiple microphones. It does not authorize plugin implementation or change the offline application's scope. The [product opportunities research](docs/research/podcast-bleed-product-opportunities-2026-10-22.md) records additional proposals for discussion.
+These ideas need investigation and an agreed specification before implementation. They have no delivery date and are not release requirements. [Plugin discovery 67](.scratch/offline-supervised-editor/issues/67-live-clap-vst3-discovery.md) is retained as history; its continuing work now belongs to the accepted Smart Gate and Podcast product tickets above. The [product opportunities research](docs/research/podcast-bleed-product-opportunities-2026-10-22.md) records additional proposals for discussion.
 
 The [feature idea table](docs/roadmap-ideas.md) captures the owner's proposals and interview decisions. I05–I14 and initial settings/help/themes now have accepted scoped specifications and build tickets listed above, with overlay editing separated for design. Independent-source synchronization and drift correction are deferred by owner decision. Plugin exploration and later customization still require decisions before implementation commitments.
 

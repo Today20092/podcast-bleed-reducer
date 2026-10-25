@@ -20,6 +20,8 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Clippy failed' }
     cargo test --all-targets @cargoArguments -- --nocapture
     if ($LASTEXITCODE -ne 0) { throw 'Tests failed' }
+    cargo test -p cleanslate-ownership-model @cargoArguments
+    if ($LASTEXITCODE -ne 0) { throw 'Shared ownership model tests failed' }
 } finally {
     Pop-Location
 }

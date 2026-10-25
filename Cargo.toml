@@ -5,7 +5,14 @@ license = "MIT"
 edition = "2024"
 
 [features]
+default = ["desktop-ui"]
+desktop-ui = []
 updater-test-key = []
+
+[[bin]]
+name = "rust-app"
+path = "src/main.rs"
+required-features = ["desktop-ui"]
 
 [dependencies]
 bwavfile = "2.0.1"
@@ -23,9 +30,7 @@ zip = { version = "=9.0.5", default-features = false, features = ["deflate-flate
 getrandom = "0.3"
 
 nalgebra = { version = "=0.35.0", default-features = false, features = ["std"] }
-linfa = { version = "=0.8.1", default-features = false }
-linfa-logistic = "=0.8.1"
-ndarray = "=0.16.1"
+cleanslate-ownership-model = { path = "crates/ownership-model" }
 rubato = "=0.16.2"
 symphonia = { version = "=0.6.1", default-features = false, features = ["aiff", "wav", "pcm", "flac", "mp3", "isomp4", "aac", "alac", "ogg", "vorbis"] }
 
