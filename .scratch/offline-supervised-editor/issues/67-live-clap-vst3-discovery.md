@@ -1,10 +1,15 @@
 # Explore live and DAW CLAP/VST3 bleed reduction
 
-Status: claimed
+Status: superseded
+Consolidated into: 85-smart-gate-plugin.md, 86-podcast-plugin.md
 Type: grilling
 Assignee: Codex
 Blocked by: none
-Implementation readiness: needs-info
+Implementation readiness: continuing product scope and outstanding checks are owned by 85/86
+
+2026-10-25 owner-approved split: [85](85-smart-gate-plugin.md) continues single-input live gating; [86](86-podcast-plugin.md) continues multitrack post-production. [87](87-separate-plugin-products-workspaces.md) preserves the prototype in independent product workspaces. Keep this discovery and its results as history; superseded does not mean outstanding acceptance passed. Existing 80 and blocked 81–83 remain open under Podcast. This replaces the combined Session/Live Mic product direction, not prior safety requirements.
+
+2026-10-24 target refinement: the owner chooses broad desktop coverage first: VST3 and CLAP on Windows/macOS/Linux, retaining VST2 as a legacy follow-up subject to adapter/licensing verification. AAX/Pro Tools and AU/Logic are outside the current scope and can be considered if future users request them. [77](77-headless-plugin-checks.md) owns lightweight autonomous headless validation so routine work does not require a full DAW or repeated owner attendance. Cross-platform native packages/checks are still required before claiming those platforms work.
 
 ## Owner request — 2026-10-22
 
@@ -65,17 +70,58 @@ These recommendations are pending, not implementation requirements. Questions no
 
 **Q8 — Broadcast delay.** Is up to 100 ms of additional processing delay a reasonable initial prototype target, provided audio/video synchronization is addressed? Recommendation: yes as a tentative budget to test, not a promised measured result. No low-latency performer-monitoring requirement is implied. If this is too much or more is acceptable, record the owner's bound before designing lookahead and gap handling.
 
+## Round 2 — owner clarification, 2026-10-23
+
+The owner separates two products/workflows rather than asking for the offline engine to become a live multitrack processor:
+
+- **Solo OBS:** one plugin on one microphone is a smart voice gate for livestreaming.
+- **DAW podcast:** multiple instances on separate tracks (example: three in DaVinci Resolve) should provide the application's reference-section labeling and multitrack algorithm. Full-recording analysis is acceptable because this is post-production; live processing is not required for this mode.
+- No numerical latency bound was accepted. The earlier 100 ms suggestion remains unanswered for OBS and does not constrain offline DAW analysis.
+- Do not interpret this answer as accepting source separation during simultaneous speech, continuous noise removal while talking, a particular host format, automatic inter-instance access, or an audio-capture workflow. Those details require factual investigation and the next design round.
+
+Updated design branches: (1) solo OBS gate installation/calibration/preservation/latency; (2) offline DAW source acquisition, instance grouping, shared references/analysis, source-change invalidation and playback/bounce parity. Prioritization remains open.
+
 ## Factual investigation — in progress
 
-A delegated read-only investigation is checking current code dependencies and official plugin/host documentation. Findings and source links will be recorded here. Format support, routing and realtime throughput are not established merely by naming a plugin format.
+The [2026-10-23 feasibility report](../../../docs/research/live-plugin-feasibility-2026-10-23.md) records official host/API sources and graph/source inspection. OBS direct filtering needs a separate integration path; VST3/CLAP alone does not supply it. DAW instances do not automatically gain all-track/full-file access. Reference-local supervised fitting appears feasible to extract, but existing APIs still prepare full recordings, and identical playback/seek results remain unproven.
+
+### Round 3 — owner clarification, 2026-10-23
+
+The owner wants **both** prototype directions, without selecting a first priority. An hour-long acquisition pass is undesirable. For DAW work, use the existing host waveforms to find and play representative sections, capture those sections and label who is speaking. The plugin need not duplicate the DAW timeline/waveform display. The owner expressed uncertainty about the best mechanism; this is a workflow preference, not acceptance of a specific capture/inference design.
+
+The next technical proof is a reference-fit/inference split plus synchronized evidence across instance callbacks during ordinary playback/render. Never wait inside one audio callback for another instance: host scheduling can be serial. Matching block/timeline identity, bounded scheduling skew, reset/preroll after seeks and missing-instance behavior need measured host evidence. Do not treat short calibration capture as complete analysis, or claim the unmodified offline pipeline already works this way. Optional host-fast acquisition is an alternative to investigate, not a mandatory realtime hour-long pass.
+
+### Confirmed workflow summary — 2026-10-23
+
+The owner explicitly confirmed: OBS gets a solo speech-aware gate; DAW users use host waveforms to play and label short examples, grouped instances share calibration, and processing runs during ordinary playback/render without a required hour-long capture pass. Preserve the original audio when valid synchronized evidence is unavailable. Both prototypes remain goals, subject to measured host feasibility.
+
+This confirms the workflow, not a framework, format/platform matrix, measured latency or completed implementation design. Bounded next proofs: (1) solo-gate callback/preservation/latency in direct OBS integration; (2) reference-only fit plus bounded timestamped cross-instance delivery, seeks and offline bounce in the target DAW. Require explicit session groups, whole-group reset/invalidation, fail-open missing evidence and no callback wait on another instance. Do not silently substitute file selection or full realtime capture when the desired workflow cannot be supported.
+
+The delegated factual investigation is recorded in the linked report. Format support, routing and realtime throughput still require implementation proofs; documentation research alone does not establish them.
 
 ## Completion criteria
 
-- [ ] Record primary-source format/host/routing findings and graph-backed current-engine streaming constraints.
-- [ ] Record owner answers round by round; advance only decisions whose prerequisites are settled.
+### Renewed feasibility discussion — 2026-10-24
+
+The owner wants to advance toward a working plugin and asks what it requires and whether the current algorithm can work. Existing confirmed OBS and DAW workflows remain goals. The next-proof report is [here](../../../docs/research/live-plugin-next-proof-2026-10-24.md); its prototype suggestions are proposals, not accepted host/framework/latency choices.
+
+Current source inspection confirms that reference-based ownership fitting is reusable in principle, but `analyze_acoustic_with_feedback` still couples fitting to full-source acoustic/VAD preparation. `SessionAcoustics::features_at` requires same-time competing-track levels and pair evidence; `JointFacts::prepare_blocks` uses 256 ms blocks and neighboring frames, while automatic envelope opening depends on future preserved speech. A plugin therefore needs a separate calibration/application boundary and a bounded processing/seek policy; unchanged callback use is unsuitable. Exact desktop result parity and realtime throughput remain unproven.
+
+Proposed DAW experience: explicitly group instances, assign each microphone's speaker, capture synchronized short room/solo/overlap examples while using the host timeline, fit off the audio thread, then process playback/render with reduction meters and Original/Processed/Removed audition. Missing or mismatched group evidence preserves original samples at the declared processing delay. Do not silently substitute a full realtime acquisition pass or file selection.
+
+The first host proof should establish grouped input timestamps, callback scheduling and bounded delivery during playback, seek/loop and offline bounce before substantial plugin UI or DSP extraction. A single multichannel instance can simplify synchronized input acquisition, but changes the requested per-track workflow and remains an alternative rather than an accepted replacement. Host for the first working test is requested from the owner; both product goals remain open.
+
+Attenuation-only ownership cannot isolate another speaker's bleed from wanted speech mixed into the same microphone samples during overlap. Solo OBS gating can reuse speech detection and gain-transition concepts, but lacks the multitrack ownership evidence and needs separate qualification. No plugin code, dependency or measured compatibility is claimed by this update.
+
+The owner selected **FL Studio on Windows** for the first working plugin test. OBS and other DAW targets remain goals. Scope the first host proof to two grouped pass-through inserts on separate mixer tracks, measuring timestamp alignment and bounded delivery through playback, seeks, loops, smart disable, and offline export. Then connect short-reference calibration and ownership inference after the delivery contract is established. This selects the first test host; plugin format/framework and numerical latency remain unsettled.
+
+The owner subsequently authorized building that first prototype and selected **VST2, VST3 and CLAP** as audio-plugin product targets. [Ticket 75](75-fl-studio-plugin-prototype.md) claims the unblocked Windows FL pass-through proof, using pinned nice-plug 0.4.2 for VST3/CLAP. VST2 needs a separate adapter and verified licensing path; no VST2 support is claimed. This authorization supersedes the earlier discovery-only boundary for ticket 75's explicit scope, not the later ML/calibration or other-host scope. The owner requests to perform FL Studio testing themselves; further native host automation is not part of this delivery.
+
+- [x] Record primary-source format/host/routing findings and graph-backed current-engine streaming constraints.
+- [x] Record owner answers round by round; advance only decisions whose prerequisites are settled.
 - [ ] Agree on routing, calibration, latency, preservation, failure and host/platform requirements.
 - [ ] Define a bounded prototype and measurable go/no-go checks, without claiming unmeasured realtime performance.
-- [ ] Owner confirms shared understanding before implementation planning or implementation.
+- [x] Owner confirms shared understanding before implementation planning or implementation. Confirmed workflow above; detailed prototype contracts/host proofs remain outstanding.
 
 ## Comments
 

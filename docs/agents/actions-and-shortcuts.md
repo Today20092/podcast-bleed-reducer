@@ -1,5 +1,7 @@
 # Actions and shortcuts
 
+The standalone FL probe uses a separate egui editor and cannot dispatch desktop Iced actions. Its waveform navigation commands are declared once in `plugins/fl-probe/src/session_editor.rs` (`Navigation::control`/`navigate`), shared by buttons, focused keyboard handling and the context menu. This source now lives in the independent plugin worktrees described in [product boundaries](../plugin-products.md); it is absent from the desktop checkout. Its source/range canvas gestures, navigator and Follow mode are local viewport editing controls; they do not seek the host, modify source audio or register global desktop shortcuts. Host transport remains in the DAW. Customizable plugin shortcuts are not currently provided.
+
 New user commands must be registered before they can be attached to a button.
 
 1. Add one entry to `commands!` in [shortcuts.rs](../../src/shortcuts.rs), supplying its stable identifier, name, activation context and default bindings. Use `[]` when no default is appropriate. Never rename an existing identifier: it is a saved-preferences key.

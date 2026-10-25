@@ -583,6 +583,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "cleanslate-ownership-model"
+version = "0.1.0"
+dependencies = [
+ "linfa",
+ "linfa-logistic",
+ "ndarray",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "clipboard-win"
 version = "5.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3573,14 +3584,12 @@ name = "rust-app"
 version = "1.1.0"
 dependencies = [
  "bwavfile",
+ "cleanslate-ownership-model",
  "getrandom 0.3.4",
  "iced",
  "iced_tiny_skia",
- "linfa",
- "linfa-logistic",
  "minisign-verify",
  "nalgebra",
- "ndarray",
  "ort",
  "rfd",
  "rodio",
