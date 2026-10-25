@@ -24,7 +24,7 @@ Common preserved source commit: `44cbf432c84de90168cbb6c25b386d40142d3f75`, base
 
 - Podcast: `C:/Users/User/.codex/worktrees/plugin-podcast/podcast-automix-rust-gui`, branch `codex/plugin-podcast`.
 - Smart Gate: `C:/Users/User/.codex/worktrees/plugin-smart-gate/podcast-automix-rust-gui`, branch `codex/plugin-smart-gate`.
-- Canonical desktop/tracker: `C:/Users/User/Documents/podcast-automix-rust-gui`, still `development`; unrelated 70/72/74/release/research work is not staged or committed by this split.
+- Canonical desktop/tracker: `C:/Users/User/Documents/podcast-automix-rust-gui`, still `development`; unrelated release/research working changes are not staged or committed in the desktop split commit. Two read-only historical research records (70 and its report) are additionally carried into the product snapshots so map links resolve; their primary originals remain untouched and untracked.
 
 Before relocation, verified all 23 plugin source/build-script files against the baseline Git blobs from each worktree. Both worktrees passed `cargo metadata --locked --offline --no-deps` for `cleanslate-fl-probe` 0.0.6. No recompilation was required for unchanged source. Original plugin source and its three build/link/host-test scripts are retained outside desktop at `C:/Users/User/AppData/Local/CleanSlate/Recovery/2026-10-25-plugin-product-split`; live source is in the two committed worktrees. The shared ownership-model crate, root library boundaries and common check scripts remain with desktop.
 
