@@ -1,6 +1,7 @@
 # Choose and validate the causal single-input speech detector
 
-Status: open
+Status: claimed
+Assignee: Codex (Gate detector feasibility)
 Readiness: ready-for-agent
 Type: task
 Blocked by: 91
@@ -19,5 +20,20 @@ Acceptance:
 
 ## Results
 
-Not started. Readiness describes specification only; all listed dependencies must be done before claiming.
+Claimed after 91 qualification on `dda8505`; canonical claim commit `7721337`.
+See [bounded detector decision/checkpoint](../../../docs/research/smart-gate-detector-92.md).
+The separate `plugins/gate-detector` prototype reuses the exact embedded Silero
+v5 bytes and pinned ort runtime, with causal rational-rate FIR, recurrent reset,
+immutable copied events and an offline source-bound measurement harness.
+
+Public streaming/reset tests were written first; initial compilation failed at
+the missing Detector API. The guarded job later stopped an owned lingering MSVC
+helper on low commit reserve, with verified cleanup. After implementation, the
+standard 14/8/6 test preflight refused below 14 GiB; no green test or measurement
+execution is claimed. Noncompiling formatting and lock generation passed under
+explicit small bounds. No Gate audio, probe, installed links or candidate output
+changed. Source remains a reviewable checkpoint; 92 is claimed and 93 blocked
+until actual all-target tests, causal measurements and a usable-detector decision.
+Human category/listening gaps are explicitly recorded; artificial scaled/cropped/
+mixed development speech does not replace missing real-category labels.
 
