@@ -18,13 +18,25 @@ On this 31.9 GiB machine use conservative configurable starting defaults: at lea
 For low-memory/timeout/budget failure, stop only the owned task tree, keep logs and last-good outputs, release its lock, mark resource-blocked and let other independent lightweight work proceed. Resume no more than once after memory recovers; repeated failures require a checkpoint, not an infinite retry loop. Never kill Codex/ChatGPT, browsers, speech services or user hosts to reclaim RAM.
 
 Acceptance:
-- [ ] Small disposable-process tests cover competing workspaces, descendant accounting, low-memory refusal, budget crossing, timeout, crash and lock cleanup, and preserved output.
+- [x] Small disposable-process tests cover competing workspaces, descendant accounting, low-memory refusal, budget crossing, timeout, crash and lock cleanup, and preserved output.
 - [ ] Existing build/check entry points use the guard without nested-lock deadlock; direct unguarded heavy invocations are rejected by the overnight runner.
 - [ ] Record peak memory/time, guard reason, source commit and artifact hash for a representative sequential plugin and desktop check.
-- [ ] Explain that OS sampling is not a hard whole-machine RAM guarantee. Deep REA calls in a shared MCP server are skipped unattended unless that exact provider's resource ownership/limits can be enforced without killing unrelated server work.
-- [ ] Fetch current platform/API documentation before implementation, and retain useful test/build failures without wiping caches.
+- [x] Explain that OS sampling is not a hard whole-machine RAM guarantee. Deep REA calls in a shared MCP server are skipped unattended unless that exact provider's resource ownership/limits can be enforced without killing unrelated server work.
+- [x] Fetch current platform/API documentation before implementation, and retain useful test/build failures without wiping caches.
 
 ## Results
 
 Claimed 2026-10-26 under the owner's implement-spec instruction. Ticket 87 is done. Implementation uses a temporary scoped worktree and integrates into development. Initial available physical memory is 6.99 GiB of 31.92 GiB; heavy checks remain refused below the accepted 14 GiB start threshold. Disposable lightweight guard tests may proceed within an explicit smaller budget. No unrelated process termination or cache cleanup is authorized by this claim.
+
+### Guard implementation and lightweight evidence — 2026-10-26
+
+`scripts/resource-guard.ps1` and its small native C# helper provide the global mutex, suspended child launch before Job Object assignment/resume, hard aggregate commit cap, owned-tree accounting/cleanup, one-second physical/commit sampling, bounded timeout and JSON/log receipts. Nested calls verify actual job membership before reusing outer containment/receipt. GUI builds and local checks use the guard without changing shared Cargo flags. Hosted cross-platform checks retain their existing behavior. [Guard usage and platform sources](../../../docs/resource-guard.md) describe the limits, explicit disposable-test budgets and unattended shared-REA exclusion.
+
+Red/green: initial missing-guard test failed before implementation; low-memory refusal then passed. Actual allocation testing exposed .NET GC's earlier refusal before a kernel limit attempt; the fixture now uses the native allocator under a 128 MiB job cap. This rejection and all earlier receipts are preserved. Native peak-job accounting may include a rejected charge, so the check distinguishes that metric from sampled private/working-set bytes.
+
+Passed `scripts/test-resource-guard.ps1`: no launch on impossible start threshold; successful output capture; descendant accounting; timeout cleanup; exit-code propagation; running-pressure stop; native job-budget rejection; nested working directory/containment; competing-workspace rejection; descendant termination after controller death; abandoned-lock recovery; preservation of last-good output. Evidence: `%TEMP%/cleanslate-guard-6d4d4ace-3175-40d2-b2fd-93348b6ea2cf/`. Longest individual fixture was 4.15 seconds; maximum sampled owned private bytes 75,415,552, working set 181,723,136. The deliberately rejected 128 MiB allocation fixture reported native peak-job commit 160,952,320; this is not a resident-memory measurement.
+
+CI/workflow, local-build-settings, packaging, release-status and action-contract script fixtures pass; all PowerShell scripts parse; `git diff --check` passes. Public entrypoint validation caught and corrected duplicate executable resolution from multiple Cargo installations. `gui-dev.ps1 -BuildOnly` and `check.ps1 -Local` now refuse safely before Cargo launches with only about 6.18 GiB available. Refusal receipts: `%LOCALAPPDATA%/CleanSlate/BuildReceipts/20261026-071200-2ed64b6c0fff4510915ec7d327d9c3bb.json` and `20261026-071201-8af4380d94ac42dd8e237071071cc61d.json`.
+
+Remaining before done: merger integration into both plugin branches and their product build/check scripts; representative sequential plugin/desktop guarded checks with source/artifact provenance; ticket 99 owns rejecting unguarded commands in the runner. No heavy build was launched or threshold relaxed, no unrelated application was terminated, no cache was deleted. Keep this ticket claimed until the remaining scoped evidence is recorded.
 
