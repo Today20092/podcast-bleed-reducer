@@ -4,21 +4,18 @@ Set-StrictMode -Version Latest
 $root = Split-Path -Parent $PSScriptRoot
 $manifest = Join-Path $root 'plugins/fl-probe/Cargo.toml'
 $settings = & (Join-Path $PSScriptRoot 'local-build-settings.ps1')
+function Invoke-ProbeCargo([string[]]$Arguments) {
+    & (Join-Path $PSScriptRoot 'resource-guard.ps1') -FilePath (Get-Command cargo -CommandType Application | Select-Object -First 1).Source -ArgumentList $Arguments -WorkingDirectory $root
+}
 if ($Fetch) {
-    & cargo fetch --manifest-path $manifest --locked
-    if ($LASTEXITCODE -ne 0) { throw 'Plugin dependency fetch failed.' }
+    Invoke-ProbeCargo (@('fetch', '--manifest-path', $manifest, '--locked'))
 }
 $cargoArgs = $settings.CargoArguments
-& cargo fmt --manifest-path $manifest -- --check
-if ($LASTEXITCODE -ne 0) { throw 'Plugin formatting failed.' }
-& cargo test --manifest-path $manifest @cargoArgs
-if ($LASTEXITCODE -ne 0) { throw 'Plugin tests failed.' }
-& cargo clippy --manifest-path $manifest --all-targets @cargoArgs -- -D warnings
-if ($LASTEXITCODE -ne 0) { throw 'Plugin Clippy failed.' }
-& cargo build --manifest-path $manifest @cargoArgs
-if ($LASTEXITCODE -ne 0) { throw 'Plugin build failed.' }
-& cargo build --manifest-path $manifest --examples @cargoArgs
-if ($LASTEXITCODE -ne 0) { throw 'Plugin test-host build failed.' }
+Invoke-ProbeCargo (@('fmt', '--manifest-path', $manifest, '--', '--check'))
+Invoke-ProbeCargo (@('test', '--manifest-path', $manifest) + $cargoArgs)
+Invoke-ProbeCargo (@('clippy', '--manifest-path', $manifest, '--all-targets') + $cargoArgs + @('--', '-D', 'warnings'))
+Invoke-ProbeCargo (@('build', '--manifest-path', $manifest) + $cargoArgs)
+Invoke-ProbeCargo (@('build', '--manifest-path', $manifest, '--examples') + $cargoArgs)
 $output = Join-Path $root 'dist/fl-probe-candidate'
 $bundle = Join-Path $output 'CleanSlate FL Probe.vst3/Contents/x86_64-win'
 New-Item -ItemType Directory -Path $bundle -Force | Out-Null
