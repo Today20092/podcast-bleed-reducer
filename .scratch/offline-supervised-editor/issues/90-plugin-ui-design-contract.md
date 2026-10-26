@@ -1,6 +1,7 @@
 # Waveform and live-gate UI design contracts
 
-Status: open
+Status: claimed
+Assignee: Codex
 Readiness: ready-for-agent
 Type: task
 Blocked by: 89
@@ -21,5 +22,5 @@ Acceptance:
 
 ## Results
 
-Not started. Readiness describes specification only; all listed dependencies must be done before claiming.
+Claimed 2026-10-26 after ticket 89 completed at 10a1ebe. Scope is an implementable design contract and original compact/full mockups, with deterministic DPI inspection where possible; no product GUI implementation, framework replacement or heavy build is included in this design pass.
 
