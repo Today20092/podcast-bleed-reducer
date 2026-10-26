@@ -43,6 +43,8 @@ Every successful build creates a new `dist/smart-gate-candidates/<unique-id>/`
 with `CleanSlate Smart Gate.clap`,
 `CleanSlate Smart Gate.vst3/Contents/x86_64-win/CleanSlate Smart Gate.vst3`
 and a hash/source receipt. Earlier candidates and installed paths are untouched.
+The entrypoint rejects linked or non-directory output parents before build setup
+and rechecks them before creating candidate outputs.
 These are development candidates, not a distributable signed installer.
 
 `scripts/test-smart-gate-hosts.ps1 -PluginDirectory <candidate>` reuses the

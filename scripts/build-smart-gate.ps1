@@ -4,6 +4,20 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 if ([Environment]::OSVersion.Platform -ne 'Win32NT') { throw 'This candidate script currently targets Windows x64 only.' }
 $root = Split-Path -Parent $PSScriptRoot
+$parent = Join-Path $root 'dist/smart-gate-candidates'
+function Assert-GateOutputParents {
+    foreach ($directory in @($root, (Join-Path $root 'dist'), $parent)) {
+        try { $item = Get-Item -LiteralPath $directory -Force -ErrorAction Stop }
+        catch [System.Management.Automation.ItemNotFoundException] { continue }
+        if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+            throw "Smart Gate output must not follow a link: $directory"
+        }
+        if (-not $item.PSIsContainer) {
+            throw "Smart Gate output parent must be a directory: $directory"
+        }
+    }
+}
+Assert-GateOutputParents
 $manifest = Join-Path $root 'plugins/smart-gate/Cargo.toml'
 $settings = & (Join-Path $PSScriptRoot 'local-build-settings.ps1') -TargetDir $TargetDir
 function Invoke-GateCargo([string[]]$Arguments) {
@@ -14,7 +28,7 @@ Invoke-GateCargo (@('fmt', '--manifest-path', $manifest, '--all', '--', '--check
 Invoke-GateCargo (@('test', '--manifest-path', $manifest, '--all-targets') + $settings.CargoArguments)
 Invoke-GateCargo (@('clippy', '--manifest-path', $manifest, '--all-targets') + $settings.CargoArguments + @('--', '-D', 'warnings'))
 Invoke-GateCargo (@('build', '--manifest-path', $manifest, '--lib', '--examples') + $settings.CargoArguments)
-$parent = Join-Path $root 'dist/smart-gate-candidates'
+Assert-GateOutputParents
 New-Item -ItemType Directory -Path $parent -Force | Out-Null
 $candidate = Join-Path $parent ([Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $candidate | Out-Null
