@@ -66,7 +66,7 @@ function Command-Spec($Command, [string]$Workspace) {
     if ($Command.ContainsKey('policy')) { throw 'Caller-selected resource policies are not accepted by the coordinator.' }
     # Disposable fixtures have a fixed shipped implementation, never caller-provided shell code.
     if ($Command.kind -eq 'fixture') {
-        if ($Command.operation -notin @('pass','fail','wait','memory-refusal','mutate-tracked','mutate-untracked','mutate-branch','mutate-head')) { throw 'Unknown disposable fixture operation.' }
+        if ($Command.operation -notin @('pass','fail','wait','memory-refusal','mutate-tracked','mutate-untracked','mutate-branch','mutate-head','mutate-external-input')) { throw 'Unknown disposable fixture operation.' }
         $fixture = Join-Path $PSScriptRoot 'fixtures/overnight-command.ps1'
         $operation=if ($Command.operation -eq 'memory-refusal') { 'pass' } else { $Command.operation }
         $minimum=if ($Command.operation -eq 'memory-refusal') { 1048576 } else { 2 }
@@ -206,7 +206,6 @@ try {
                 $command=$step.commands[$i];$spec=$specs[$i]
                 $record=if ($checkpoint.commands.Count -gt $i) { $checkpoint.commands[$i] } else { $null }
                 if ($record) { $executionStarted=$true }
-                $spec=Command-Spec $command $path
                 if ($record -and $record.status -eq 'passed') {
                     foreach ($artifact in $record.artifacts_after) { if (-not $artifact.sha256 -or (File-Hash $artifact.path) -ne $artifact.sha256) { throw 'A completed command artifact changed; do not repeat it blindly.' } }
                     continue
@@ -227,6 +226,14 @@ try {
                 if (-not (Same-Review $checkpoint $record.before_review)) {
                     $record.status='review-required';$checkpoint.status='review-required'
                     $entry.status='blocked';$entry.reason='reviewed-identity-changed';$entry.next_action='Review observed source/plan changes; the selected baseline is unchanged and no command was launched.'
+                    $checkpoint.next_action=$entry.next_action;$checkpoint.updated_utc=[DateTime]::UtcNow.ToString('o');$summary.stopped=$true
+                    Save-State $checkpointPath $checkpoint
+                    break
+                }
+                try { $spec=Command-Spec $command $path; $record.execution=$spec }
+                catch {
+                    $record.error=$_.Exception.Message;$record.status='review-required';$checkpoint.status='review-required'
+                    $entry.status='blocked';$entry.reason='command-identity-changed';$entry.next_action='Review the rejected executable/input identity; the command was not launched.'
                     $checkpoint.next_action=$entry.next_action;$checkpoint.updated_utc=[DateTime]::UtcNow.ToString('o');$summary.stopped=$true
                     Save-State $checkpointPath $checkpoint
                     break

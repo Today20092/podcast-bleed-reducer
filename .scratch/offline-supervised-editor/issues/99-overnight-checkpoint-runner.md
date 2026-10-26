@@ -53,3 +53,11 @@ The reviewed checkpoint source now stays unchanged. Each launch and completion c
 
 Maximum guarded fixture duration 5.15 seconds; sampled owned private bytes 35,819,520, working set 100,155,392 and native peak job commit 39,440,384. No threshold was relaxed, no resource retry was needed and no real product build, DAW or deep REA ran. Tests used the single guarded execution slot after design-render processes exited. This focused correction supersedes the earlier brief review's no-blocker conclusion; no native/listening/release acceptance is added.
 
+### Durable rejected command identity — 2026-10-26
+
+The runner already revalidated commands inside its per-command loop; a changed pinned external input was rejected before launch. Follow-up review and a fixed marked-temp regression identified the narrower gap: that rejection stopped the current invocation but left the ticket checkpoint at the previous command's `checks-passed` state. Red evidence `%TEMP%/cleanslate-source-review-febabbc4-daa6-4ccf-aa18-2f8f255ca5ea/` fails specifically because the rejected command lacks a durable review checkpoint, not because an unreviewed executable launched.
+
+Moved the existing `Command-Spec` revalidation after source/control-file validation and artifact preparation, immediately before launch. A validation failure now preserves an unlaunched command record with the rejection message and `review-required` checkpoint, stopping both this invocation and restart. No new executor or arbitrary test hook was added: the regression uses a fixed marked-temp external-input mutation and a pinned copy of the existing disposable helper through the supported script contract.
+
+The expanded focused suite passes external-input rejection/checkpoint/restart plus all four source identity cases: `%TEMP%/cleanslate-source-review-ab1201c5-c889-4447-8ef9-f0d90dafb8b0/`. CI/settings fixtures, recursive PowerShell parsing and diff checks pass. The broader runner suite remains the passing source-fix run recorded above; this follow-up verifies the changed rejection boundary with the focused suite. No build, DAW, deep REA, threshold relaxation or resource retry was performed.
+

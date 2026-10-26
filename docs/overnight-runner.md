@@ -119,6 +119,11 @@ Post-command observations are retained separately in the command record. Even a
 successful command that changes these identities stops the entire queue for
 review; its changes never become a new resume baseline.
 
+Executable/input hashes are also revalidated after preparation, immediately
+before launch. A rejected identity retains an explicit unlaunched
+`review-required` command checkpoint, so a later invocation cannot skip over
+the rejected check and continue independent work.
+
 Missing prerequisites/SDKs or owner/agent work skip to independent ready tickets.
 Resource refusals/timeouts preserve outputs and may also skip to independent
 work. A later explicit resume gets at most one resource retry, and memory-start
@@ -148,3 +153,5 @@ fixed temporary fixtures change tracked source, untracked source, branch or HEAD
 during a successful first command. Each case verifies that the second command
 and later tickets never run, the reviewed/observed identities remain separate,
 and restart cannot accept the changed baseline.
+The external-input case also verifies that an already-rejected pinned-input
+change leaves a durable review checkpoint before the second command launches.
