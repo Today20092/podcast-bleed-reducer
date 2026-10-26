@@ -1,6 +1,7 @@
 # Choose and validate the causal single-input speech detector
 
-Status: open
+Status: claimed
+Assignee: Codex (Gate detector feasibility)
 Readiness: ready-for-agent
 Type: task
 Blocked by: 91
