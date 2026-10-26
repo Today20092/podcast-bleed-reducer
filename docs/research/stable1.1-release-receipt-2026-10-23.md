@@ -16,6 +16,8 @@ The [feature delivery receipt](portable-updater-delivery-2026-10-23.md) records 
 
 [Tagged package run 39983829792](https://github.com/Today20092/podcast-bleed-reducer/actions/runs/39983829792) is the sole final artifact source. Native packaging, downloaded artifact checks, Windows offline self-check and signature verification are pending. Checked downloads will be retained under `C:/Users/User/AppData/Local/CleanSlate/ReleaseChecks/1.1.0/`.
 
+2026-10-26 follow-up: connected GitHub now confirms all four native package jobs and draft preparation succeeded, with four unexpired containers at the recorded source. Actual final download/inner-package/descriptor verification remains pending: the Windows connector returned a file reference, but its guarded local streaming request failed HTTP 403 before any archive was created. See the [artifact access checkpoint](stable1.1-artifact-access-2026-10-26.md) for exact evidence and retained guard receipt. No final package self-check, private signature or publication was performed by that attempt.
+
 ## Signing and compatibility
 
 The pinned release public key is `RWQMaOa5uWhvVOJCDE5I0zi1ybM7aIPZW9D8FZpNyOb7aA6ibb9VsJ0c`. The owner holds its encrypted private key outside the checkout and CI and enters the password privately. The exact checked Windows descriptor must be signed and independently verified before publication. No private-key bytes or password enter the repository or release workflow.
