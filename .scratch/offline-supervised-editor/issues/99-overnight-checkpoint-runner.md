@@ -1,6 +1,6 @@
 # Sequential overnight queue and durable handoffs
 
-Status: claimed
+Status: done
 Assignee: Codex
 Readiness: ready-for-agent
 Type: task
@@ -23,7 +23,7 @@ Acceptance:
 
 ## Results
 
-2026-10-26 review follow-up: reopened for the spec review's source-revalidation finding. Validate the selected branch/commit/fingerprint before every command and preserve unexpected post-command source changes as evidence rather than adopting them as the accepted resume baseline. Add a regression and re-close after focused verification.
+2026-10-26 review follow-up resolved: the selected branch/commit/fingerprint and pinned plan/queue hashes are now checked before each command and after completion. Unexpected source observations are retained separately, never adopted as the reviewed resume baseline. Public regressions and the existing runner suite pass; detailed evidence follows below.
 
 Claimed 2026-10-26 after ticket 88 completed at development a4dc16c. The owner's implement-spec instruction authorizes this sequential implementation run; no automation schedule or unattended DAW launch is created. Disposable runner fixtures use explicit lightweight budgets; product builds retain the accepted resource policy.
 
@@ -42,4 +42,22 @@ Host chat cancellation/context/process loss cannot autonomously resume this agen
 ### Integrated verification — 2026-10-26
 
 Fast-forwarded tested `534c4c956f2644eff33bb5e552f5604d93e5e312` into primary development from `8e612b5b90ef0f0b6413f74024449b6a57311d7c`. The focused disposable suite passed again with 5.48 GiB physical memory available at the initial observation and the unchanged fixed lightweight guard policy. Evidence: `%TEMP%/cleanslate-runner-339d0781-f159-47ba-8bac-106322389eb2/`. CI/local-build settings fixtures, recursive PowerShell parsing and `git diff --check 8e612b5...HEAD` pass. A brief integration review found no scoped acceptance blocker. This verifies the coordinator using disposable commands only; no real queue execution, schedule, build or product branch change was made.
+
+### Source identity review correction — 2026-10-26
+
+The later specification review found that post-command observations overwrote the selected source baseline, allowing command two to run after command one changed tracked/untracked source, branch or HEAD. Reopened the ticket and reproduced this through the public runner: `%TEMP%/cleanslate-source-review-aad9a2c3-870e-4156-a3b7-f738174bb062/` shows a successful tracked-source mutation followed by the second command, causing the regression to fail.
+
+The reviewed checkpoint source now stays unchanged. Each launch and completion compares branch, commit, source fingerprint and pinned plan/queue hashes with that baseline. Before/after observations and command receipts remain separate evidence. A mismatch persists `review-required`, stops the remaining queue and blocks automatic restart. Canonical claim edits remain excluded from source diffs and retain their separate hashes.
+
+`scripts/test-runner-source-identity.ps1` passes four fixed, explicitly marked temporary-repository cases: tracked source, untracked source, branch and HEAD changes during successful first commands. Each proves that command two and later tickets never execute, the original baseline and changed observations are both retained, and restart does not accept or repeat the changed source. Green evidence: `%TEMP%/cleanslate-source-review-785318c5-ecaa-44e7-becd-f6ac00a19241/`. The existing runner suite passed once after this fix: `%TEMP%/cleanslate-runner-65724805-3a66-4d36-b210-22394b5034d1/`. CI/settings fixtures, recursive PowerShell parsing and diff checks also passed.
+
+Maximum guarded fixture duration 5.15 seconds; sampled owned private bytes 35,819,520, working set 100,155,392 and native peak job commit 39,440,384. No threshold was relaxed, no resource retry was needed and no real product build, DAW or deep REA ran. Tests used the single guarded execution slot after design-render processes exited. This focused correction supersedes the earlier brief review's no-blocker conclusion; no native/listening/release acceptance is added.
+
+### Durable rejected command identity — 2026-10-26
+
+The runner already revalidated commands inside its per-command loop; a changed pinned external input was rejected before launch. Follow-up review and a fixed marked-temp regression identified the narrower gap: that rejection stopped the current invocation but left the ticket checkpoint at the previous command's `checks-passed` state. Red evidence `%TEMP%/cleanslate-source-review-febabbc4-daa6-4ccf-aa18-2f8f255ca5ea/` fails specifically because the rejected command lacks a durable review checkpoint, not because an unreviewed executable launched.
+
+Moved the existing `Command-Spec` revalidation after source/control-file validation and artifact preparation, immediately before launch. A validation failure now preserves an unlaunched command record with the rejection message and `review-required` checkpoint, stopping both this invocation and restart. No new executor or arbitrary test hook was added: the regression uses a fixed marked-temp external-input mutation and a pinned copy of the existing disposable helper through the supported script contract.
+
+The expanded focused suite passes external-input rejection/checkpoint/restart plus all four source identity cases: `%TEMP%/cleanslate-source-review-ab1201c5-c889-4447-8ef9-f0d90dafb8b0/`. CI/settings fixtures, recursive PowerShell parsing and diff checks pass. The broader runner suite remains the passing source-fix run recorded above; this follow-up verifies the changed rejection boundary with the focused suite. No build, DAW, deep REA, threshold relaxation or resource retry was performed.
 
