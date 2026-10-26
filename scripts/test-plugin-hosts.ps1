@@ -6,6 +6,13 @@ $root = Split-Path -Parent $PSScriptRoot
 if (-not $PluginDirectory) { $PluginDirectory = Join-Path $root 'dist/fl-probe-candidate' }
 $PluginDirectory = (Resolve-Path -LiteralPath $PluginDirectory).Path
 $settings = & (Join-Path $PSScriptRoot 'local-build-settings.ps1') -TargetDir $TargetDir
+if (-not ('CleanSlate.Build.OwnedTask' -as [type])) { Add-Type -Path (Join-Path $PSScriptRoot 'resource-guard.cs') }
+if (-not [CleanSlate.Build.OwnedTask]::IsContained($env:CLEANSLATE_RESOURCE_JOB)) {
+    & (Join-Path $PSScriptRoot 'resource-guard.ps1') -FilePath (Get-Process -Id $PID).Path `
+        -ArgumentList @('-NoProfile', '-File', $PSCommandPath, '-PluginDirectory', $PluginDirectory, '-TargetDir', $settings.TargetDir) `
+        -WorkingDirectory $root -MinAvailableGiB 2 -ReserveGiB 1 -MaxCommitGiB 0.5 -TimeoutSeconds 90
+    return
+}
 $cases = @(
     @{ Name = 'CLAP'; Host = 'host_check.exe'; Plugin = 'CleanSlate FL Probe.clap' },
     @{ Name = 'VST3'; Host = 'vst3_host_check.exe'; Plugin = 'CleanSlate FL Probe.vst3/Contents/x86_64-win/CleanSlate FL Probe.vst3' }
