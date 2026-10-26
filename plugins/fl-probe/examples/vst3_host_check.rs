@@ -299,6 +299,22 @@ fn main() {
         assert!(factory.countClasses() > 0);
         let mut info: PClassInfo = mem::zeroed();
         assert_eq!(factory.getClassInfo(0, &mut info), kResultOk);
+        #[cfg(cleanslate_podcast)]
+        {
+            assert_eq!(
+                std::ffi::CStr::from_ptr(info.name.as_ptr())
+                    .to_str()
+                    .unwrap(),
+                "CleanSlate Podcast"
+            );
+            let mut expected = *b"CleanSlatePodc01";
+            if cfg!(target_os = "windows") {
+                expected[..4].reverse();
+                expected[4..6].reverse();
+                expected[6..8].reverse();
+            }
+            assert_eq!(info.cid.map(|byte| byte as u8), expected);
+        }
         let instances = [
             Instance::new(&factory, &info.cid, 1),
             Instance::new(&factory, &info.cid, 2),
@@ -375,8 +391,13 @@ fn main() {
         }
         drop(instances);
         drop(factory);
-        let report_dir = std::path::PathBuf::from(std::env::var_os("LOCALAPPDATA").unwrap())
-            .join("CleanSlate/PluginProbe");
+        let report_dir = std::path::PathBuf::from(std::env::var_os("LOCALAPPDATA").unwrap()).join(
+            if cfg!(cleanslate_podcast) {
+                "CleanSlate/Podcast/Reports"
+            } else {
+                "CleanSlate/PluginProbe"
+            },
+        );
         let prefix = format!("probe-{}-", std::process::id());
         let mut ready = 0;
         for file in std::fs::read_dir(report_dir).unwrap() {

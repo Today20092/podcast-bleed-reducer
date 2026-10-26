@@ -307,7 +307,11 @@ fn cache_root() -> PathBuf {
         .or_else(|| std::env::var_os("XDG_CACHE_HOME").map(PathBuf::from))
         .unwrap_or_else(std::env::temp_dir)
         .join("CleanSlate")
-        .join("PluginSessions")
+        .join(if cfg!(cleanslate_podcast) {
+            "Podcast/Sessions/v1"
+        } else {
+            "PluginSessions"
+        })
 }
 fn new_key() -> String {
     let mut digest = Sha256::new();

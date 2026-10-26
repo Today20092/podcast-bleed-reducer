@@ -118,7 +118,7 @@ impl NiceEguiApp for Panel {
             return;
         };
         let setter = context.param_setter();
-        if self.params.session_mode.value() {
+        if cfg!(cleanslate_podcast) || self.params.session_mode.value() {
             self.session_ui
                 .show(ui, &self.params, Some(&setter), &self.state);
             let interval = if self.state.playing.load(Relaxed) {

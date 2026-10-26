@@ -1,0 +1,45 @@
+[package]
+name = "cleanslate-podcast"
+version = "0.0.1"
+edition = "2024"
+license = "MIT"
+publish = false
+build = "../fl-probe/product-build.rs"
+
+[lib]
+path = "../fl-probe/src/lib.rs"
+crate-type = ["cdylib", "rlib"]
+
+[workspace]
+
+[dependencies]
+nice-plug = { version = "=0.4.2", default-features = false, features = ["vst3", "editor", "assert_process_allocs"] }
+crossbeam = "=0.8.4"
+cleanslate-ownership-model = { path = "../../crates/ownership-model" }
+rust-app = { path = "../..", default-features = false }
+nice-plug-egui = "=0.6.0"
+egui = { version = "=0.37.0", default-features = false, features = ["default_fonts"] }
+parking_lot = "=0.12.5"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0"
+sha2 = "0.10"
+
+[dev-dependencies]
+clap-sys = "=0.5.0"
+libloading = "=0.8.9"
+vst3 = "=0.3.0"
+
+[[example]]
+name = "podcast_host_check"
+path = "../fl-probe/examples/host_check.rs"
+
+[[example]]
+name = "podcast_vst3_host_check"
+path = "../fl-probe/examples/vst3_host_check.rs"
+
+[profile.dev]
+opt-level = 1
+incremental = true
+
+[profile.dev.package.rust-app]
+codegen-units = 16

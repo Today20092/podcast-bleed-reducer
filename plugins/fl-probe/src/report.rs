@@ -46,7 +46,11 @@ impl Reporter {
             .map(PathBuf::from)
             .filter(|p| p.is_absolute())
             .ok_or_else(|| io::Error::other("LOCALAPPDATA must be an absolute directory"))?
-            .join("CleanSlate/PluginProbe");
+            .join(if cfg!(cleanslate_podcast) {
+                "CleanSlate/Podcast/Reports"
+            } else {
+                "CleanSlate/PluginProbe"
+            });
         std::fs::create_dir_all(&directory)?;
         let stamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -65,8 +69,8 @@ impl Reporter {
             let mut rows = 0_u64;
             let mut omitted = 0_u64;
             let mut failed = false;
-            let header = format!("# CleanSlate FL Probe {}; pid={}; instance={id}; PCM shared in memory only; no audio logged\ncallback,elapsed_us,group,member,start,frames,rate_hz,playing,offline,epoch,discontinuity,peer_start,peer_frames,status,timing_source,host_api,activation_mode,manual_export,processing_active,share_status,shared_start,paired_frames,audio_queue_dropped,peer_queue_depth\n",
-                env!("CARGO_PKG_VERSION"), std::process::id());
+            let header = format!("# {} {}; pid={}; instance={id}; PCM shared in memory only; no audio logged\ncallback,elapsed_us,group,member,start,frames,rate_hz,playing,offline,epoch,discontinuity,peer_start,peer_frames,status,timing_source,host_api,activation_mode,manual_export,processing_active,share_status,shared_start,paired_frames,audio_queue_dropped,peer_queue_depth\n",
+                <crate::FlProbe as nice_plug::prelude::Plugin>::NAME, env!("CARGO_PKG_VERSION"), std::process::id());
             if writer.write_all(header.as_bytes()).is_err() { return; }
             loop {
                 while let Some(event) = events.pop() {

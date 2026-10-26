@@ -1,0 +1,22 @@
+{
+  "podcast-compact": {
+    "width": 720,
+    "height": 560,
+    "controls": 16
+  },
+  "podcast-full": {
+    "width": 1000,
+    "height": 680,
+    "controls": 16
+  },
+  "gate-compact": {
+    "width": 640,
+    "height": 440,
+    "controls": 5
+  },
+  "gate-full": {
+    "width": 800,
+    "height": 560,
+    "controls": 5
+  }
+}

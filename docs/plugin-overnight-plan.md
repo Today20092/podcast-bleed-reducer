@@ -1,6 +1,6 @@
 # Resource-conscious overnight development plan
 
-2026-10-26 implementation update: [88](../.scratch/offline-supervised-editor/issues/88-memory-bounded-execution.md) is complete, including desktop/plugin entrypoint integration, disposable process tests and representative guarded checks of preserved binaries. Heavy builds refused safely below 14 GiB available; none were launched. [99](../.scratch/offline-supervised-editor/issues/99-overnight-checkpoint-runner.md) remains the prerequisite for resumable unattended queue execution. Historical planning statements below do not describe a running coordinator.
+2026-10-26 implementation update: [88](../.scratch/offline-supervised-editor/issues/88-memory-bounded-execution.md) is complete, including desktop/plugin entrypoint integration, disposable process tests and representative guarded checks of preserved binaries. [99](../.scratch/offline-supervised-editor/issues/99-overnight-checkpoint-runner.md) supplies the [explicit sequential command coordinator](overnight-runner.md), atomic claims/checkpoints and bounded disposable restart/failure tests. Heavy builds refused safely below 14 GiB available; none were launched. No real overnight queue or schedule was started. Historical planning statements below do not describe a running coordinator.
 
 Prepared 2026-10-25; no overnight run is scheduled or launched by this document. Product split: [85 Smart Gate](../.scratch/offline-supervised-editor/issues/85-smart-gate-plugin.md), [86 Podcast](../.scratch/offline-supervised-editor/issues/86-podcast-plugin.md), [87 workspace organization](../.scratch/offline-supervised-editor/issues/87-separate-plugin-products-workspaces.md). The [active map](../.scratch/offline-supervised-migration/map.md) remains authoritative. This is a dependency queue, not a promise that every product will be complete in one night.
 
@@ -16,7 +16,7 @@ One ticket at a time is the default even though the workspaces are separate. Wor
 
 ## Resource contract before unattended execution
 
-[88](../.scratch/offline-supervised-editor/issues/88-memory-bounded-execution.md) is the first implementation prerequisite; [99](../.scratch/offline-supervised-editor/issues/99-overnight-checkpoint-runner.md) is the resumable runner. Both must pass their scoped disposable tests before unattended heavy work. These guards are planned, not implemented by this planning pass.
+[88](../.scratch/offline-supervised-editor/issues/88-memory-bounded-execution.md) implements the resource guard; [99](../.scratch/offline-supervised-editor/issues/99-overnight-checkpoint-runner.md) implements the resumable command runner. Their scoped disposable tests pass. A reviewed execution plan and explicit start select actual work; tickets requiring implementation/review remain with the active agent. Neither tool resumes a lost host chat or schedules itself.
 
 - One global heavy process tree: Rust compile/link/test, deep REA, model profiling or a native host. No overlapping heavy tasks across branches. Default agent concurrency is one.
 - Current build scripts already use Cargo -j1, the shared application-data target, incremental builds and 16 root codegen units. Reuse them; do not wipe caches, run release/LTO by default or run redundant full matrices.

@@ -20,6 +20,75 @@ use std::{
 };
 
 static RESTARTS: AtomicU64 = AtomicU64::new(0);
+
+#[cfg(cleanslate_podcast)]
+struct DelayReference {
+    queue: Vec<[f32; 2]>,
+    cursor: usize,
+    expected: Option<i64>,
+    offline: bool,
+}
+#[cfg(cleanslate_podcast)]
+thread_local! {
+    static REFERENCES: std::cell::RefCell<std::collections::BTreeMap<usize, DelayReference>> = Default::default();
+}
+#[cfg(cleanslate_podcast)]
+unsafe fn reset_reference(plugin: *const clap_plugin, offline: bool) {
+    use clap_sys::ext::latency::*;
+    unsafe {
+        let latency = &*((*plugin).get_extension.unwrap())(plugin, CLAP_EXT_LATENCY.as_ptr())
+            .cast::<clap_plugin_latency>();
+        let samples = (latency.get.unwrap())(plugin) as usize;
+        assert!(samples > 0 && samples < 100_000);
+        REFERENCES.with_borrow_mut(|references| {
+            references.insert(
+                plugin as usize,
+                DelayReference {
+                    queue: vec![[0.0; 2]; samples],
+                    cursor: 0,
+                    expected: None,
+                    offline,
+                },
+            );
+        });
+    }
+}
+
+#[cfg(cleanslate_podcast)]
+fn delayed_reference(
+    plugin: *const clap_plugin,
+    left: &[f32],
+    right: &[f32],
+    start: i64,
+    timing: bool,
+    playing: bool,
+) -> [Vec<f32>; 2] {
+    REFERENCES.with_borrow_mut(|references| {
+        let reference = references.get_mut(&(plugin as usize)).unwrap();
+        let position = timing.then_some(start);
+        if (playing || reference.offline)
+            && position.is_some()
+            && reference.expected.is_some()
+            && position != reference.expected
+        {
+            reference.queue.fill([0.0; 2]);
+            reference.cursor = 0;
+        }
+        let mut output = [
+            Vec::with_capacity(left.len()),
+            Vec::with_capacity(left.len()),
+        ];
+        for (&left, &right) in left.iter().zip(right) {
+            let old = reference.queue[reference.cursor];
+            reference.queue[reference.cursor] = [left, right];
+            reference.cursor = (reference.cursor + 1) % reference.queue.len();
+            output[0].push(old[0]);
+            output[1].push(old[1]);
+        }
+        reference.expected = position.map(|p| p + left.len() as i64);
+        output
+    })
+}
 unsafe extern "C" fn restart(_: *const clap_host) {
     RESTARTS.fetch_add(1, Relaxed);
 }
@@ -103,6 +172,11 @@ unsafe fn load_legacy_state(plugin: *const clap_plugin, member: usize) {
         };
         assert!((state.load.unwrap())(plugin, &input));
         for (index, expected) in [1.0, (member - 1) as f64, 0.0].into_iter().enumerate() {
+            let expected = if cfg!(cleanslate_podcast) {
+                0.0
+            } else {
+                expected
+            };
             let mut info = mem::zeroed();
             assert!((params.get_info.unwrap())(plugin, index as u32, &mut info));
             let mut actual = -1.0;
@@ -110,9 +184,9 @@ unsafe fn load_legacy_state(plugin: *const clap_plugin, member: usize) {
             // The adapter reconstructs stepped values from f32 normalized state (1/7 is inexact).
             assert!(
                 (actual - expected).abs() < 1e-6,
-                "0.0.1 project settings did not migrate: {actual} versus {expected}"
+                "State load did not follow the product policy: {actual} versus {expected}"
             );
-            if index == 1 {
+            if index == 1 && !cfg!(cleanslate_podcast) {
                 let mut display = [0_i8; 32];
                 assert!((params.value_to_text.unwrap())(
                     plugin,
@@ -291,6 +365,9 @@ unsafe fn process(
             CLAP_PROCESS_ERROR
         );
         let result = if in_place { &inputs } else { &outputs };
+        #[cfg(cleanslate_podcast)]
+        let [left, right] =
+            delayed_reference(plugin, &left, &right, start, transport_present, playing);
         for (expected, actual) in [left, right].iter().zip(result).take(channels as usize) {
             assert!(
                 expected
@@ -321,7 +398,19 @@ fn main() {
         let descriptor = &*(factory.get_plugin_descriptor.unwrap())(factory, 0);
         assert_eq!(
             CStr::from_ptr(descriptor.name).to_str().unwrap(),
-            "CleanSlate FL Probe"
+            if cfg!(cleanslate_podcast) {
+                "CleanSlate Podcast"
+            } else {
+                "CleanSlate FL Probe"
+            }
+        );
+        assert_eq!(
+            CStr::from_ptr(descriptor.id).to_str().unwrap(),
+            if cfg!(cleanslate_podcast) {
+                "org.cleanslate.podcast"
+            } else {
+                "org.cleanslate.fl-probe"
+            }
         );
         let host = clap_host {
             clap_version: CLAP_VERSION,
@@ -393,6 +482,8 @@ fn main() {
                         }
                     ));
                     assert!(((*plugin).activate.unwrap())(plugin, rate, 1, 1024));
+                    #[cfg(cleanslate_podcast)]
+                    reset_reference(plugin, offline);
                     assert!(((*plugin).start_processing.unwrap())(plugin));
                 }
                 let mut start = 0;
@@ -420,6 +511,8 @@ fn main() {
                 for start in [0, 8192, 0, -1024] {
                     for &plugin in &plugins {
                         ((*plugin).reset.unwrap())(plugin);
+                        #[cfg(cleanslate_podcast)]
+                        reset_reference(plugin, offline);
                         process(plugin, rate, start, 256, true, false, false, channels);
                         process(plugin, rate, start, 256, true, true, false, channels);
                         checks += 2;
@@ -439,6 +532,8 @@ fn main() {
                 .cast::<clap_plugin_render>();
             assert!((render.set.unwrap())(plugin, CLAP_RENDER_REALTIME));
             assert!(((*plugin).activate.unwrap())(plugin, 48000.0, 1, 1024));
+            #[cfg(cleanslate_podcast)]
+            reset_reference(plugin, false);
             assert!(((*plugin).start_processing.unwrap())(plugin));
             set_parameter(plugin, 2, 1.0);
             assert!((render.set.unwrap())(plugin, CLAP_RENDER_OFFLINE));
@@ -455,8 +550,13 @@ fn main() {
         let _get_factory = library
             .get::<unsafe extern "system" fn() -> *mut c_void>(b"GetPluginFactory\0")
             .expect("VST3 export");
-        let report_dir = std::path::PathBuf::from(std::env::var_os("LOCALAPPDATA").unwrap())
-            .join("CleanSlate/PluginProbe");
+        let report_dir = std::path::PathBuf::from(std::env::var_os("LOCALAPPDATA").unwrap()).join(
+            if cfg!(cleanslate_podcast) {
+                "CleanSlate/Podcast/Reports"
+            } else {
+                "CleanSlate/PluginProbe"
+            },
+        );
         let prefix = format!("probe-{}-", std::process::id());
         let (mut ready, mut offline, mut labelled) = (0, 0, 0);
         for file in std::fs::read_dir(report_dir).unwrap() {
@@ -493,8 +593,13 @@ fn main() {
             }
         }
         assert!(ready > 0 && offline > 0 && labelled > 0);
+        let state_check = if cfg!(cleanslate_podcast) {
+            "foreign probe state disconnected, Podcast state round-trip"
+        } else {
+            "0.0.1 saved-state migration and round-trip"
+        };
         println!(
-            "PASS: {checks} bit-exact mono/stereo blocks; {ready} validated shared PCM windows; 0.0.1 saved-state migration and round-trip; offline activation and manual export label; active render-mode change requests host restart. VST3 factory symbol found (not a VST3 processing test)."
+            "PASS: {checks} bit-exact mono/stereo blocks; {ready} validated shared PCM windows; {state_check}; offline activation and manual export label; active render-mode change requests host restart. VST3 factory symbol found (not a VST3 processing test)."
         );
     }
 }

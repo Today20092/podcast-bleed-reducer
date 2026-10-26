@@ -135,7 +135,15 @@ impl SessionUi {
             };
         }
         ui.horizontal_wrapped(|ui| {
-            ui.label(egui::RichText::new("CleanSlate").size(20.0).strong());
+            ui.label(
+                egui::RichText::new(if cfg!(cleanslate_podcast) {
+                    "CleanSlate Podcast"
+                } else {
+                    "CleanSlate"
+                })
+                .size(20.0)
+                .strong(),
+            );
             ui.label(egui::RichText::new("Session").color(TEAL));
             ui.separator();
             for (mode, title) in [
@@ -151,6 +159,10 @@ impl SessionUi {
                 }
             }
         });
+        #[cfg(cleanslate_podcast)]
+        if *params.product_state_rejected.lock() {
+            ui.colored_label(ERROR, "State was not loaded: this is not supported Podcast state. The instance was disconnected. Reopen the original project with its original plugin; configure Podcast separately.");
+        }
         let mut reassigned = false;
         ui.horizontal_wrapped(|ui| {
             ui.label("Group");

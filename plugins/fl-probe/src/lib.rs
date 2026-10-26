@@ -3,6 +3,8 @@ mod editor;
 #[cfg(test)]
 mod editor_capture;
 mod history;
+#[cfg(cleanslate_podcast)]
+mod podcast;
 mod probe;
 mod report;
 mod runtime;
@@ -13,11 +15,12 @@ mod shared_audio;
 
 use calibration::{SavedCalibration, Session, TrainingTask};
 use nice_plug::editor::dpi::LogicalSize;
+#[cfg(not(cleanslate_podcast))]
 use nice_plug::plugin::ParamValue;
 use nice_plug::prelude::*;
-use nice_plug_egui::{
-    EguiEditor, EguiEditorState, EguiNiceSettings, RepaintNotifier, create_egui_editor,
-};
+use nice_plug_egui::{EguiEditor, EguiEditorState};
+#[cfg(not(cleanslate_podcast))]
+use nice_plug_egui::{EguiNiceSettings, RepaintNotifier, create_egui_editor};
 use probe::{GROUPS_STATE, Probe};
 use report::{Event, Reporter};
 use runtime::{GuiState, RenderSettings, Runtime, RuntimeStatus};
@@ -34,6 +37,12 @@ pub enum ListenMode {
 
 #[derive(Params)]
 pub struct ProbeParams {
+    #[cfg(cleanslate_podcast)]
+    #[persist = "org.cleanslate.podcast.state-version"]
+    product_state_version: parking_lot::Mutex<u32>,
+    #[cfg(cleanslate_podcast)]
+    #[persist = "org.cleanslate.podcast.state-rejected"]
+    product_state_rejected: parking_lot::Mutex<bool>,
     #[id = "probe_group"]
     group: IntParam,
     #[id = "probe_member"]
@@ -91,6 +100,10 @@ impl Default for FlProbe {
     fn default() -> Self {
         Self {
             params: Arc::new(ProbeParams {
+                #[cfg(cleanslate_podcast)]
+                product_state_version: parking_lot::Mutex::new(1),
+                #[cfg(cleanslate_podcast)]
+                product_state_rejected: parking_lot::Mutex::new(false),
                 group: IntParam::new(
                     "Session group (0 = off)",
                     0,
@@ -157,7 +170,11 @@ impl Default for FlProbe {
 }
 
 impl Plugin for FlProbe {
-    const NAME: &'static str = "CleanSlate FL Probe";
+    const NAME: &'static str = if cfg!(cleanslate_podcast) {
+        "CleanSlate Podcast"
+    } else {
+        "CleanSlate FL Probe"
+    };
     const VENDOR: &'static str = "CleanSlate";
     const URL: &'static str = "https://github.com/Today20092/podcast-bleed-reducer";
     const EMAIL: &'static str = "";
@@ -182,6 +199,12 @@ impl Plugin for FlProbe {
         self.params.clone()
     }
 
+    #[cfg(cleanslate_podcast)]
+    fn filter_state(state: &mut PluginState) {
+        podcast::filter_state(state);
+    }
+
+    #[cfg(not(cleanslate_podcast))]
     fn filter_state(state: &mut PluginState) {
         state
             .fields
@@ -220,6 +243,17 @@ impl Plugin for FlProbe {
             .or_insert(ParamValue::Bool(false));
     }
 
+    #[cfg(cleanslate_podcast)]
+    fn editor(&mut self, executor: AsyncExecutor<Self>) -> Option<Self::Editor> {
+        podcast::editor(
+            self.params.clone(),
+            executor,
+            self.gui.clone(),
+            self.editor_state.clone(),
+        )
+    }
+
+    #[cfg(not(cleanslate_podcast))]
     fn editor(&mut self, executor: AsyncExecutor<Self>) -> Option<Self::Editor> {
         create_egui_editor(
             self.editor_state.clone(),
@@ -252,7 +286,9 @@ impl Plugin for FlProbe {
         let channels = layout.main_input_channels.map_or(0, |n| n.get() as usize);
         if !self.runtime.activate(
             config.sample_rate,
-            self.params.enabled.value() || self.params.session_mode.value(),
+            cfg!(cleanslate_podcast)
+                || self.params.enabled.value()
+                || self.params.session_mode.value(),
             channels,
             config.max_buffer_size as usize,
         ) {
@@ -260,8 +296,9 @@ impl Plugin for FlProbe {
         }
         let group = self.params.group.value();
         let member = (self.params.member.value() - 1) as usize;
-        let mode_changed = self.session_mode != self.params.session_mode.value();
-        self.session_mode = self.params.session_mode.value();
+        let requested_session = cfg!(cleanslate_podcast) || self.params.session_mode.value();
+        let mode_changed = self.session_mode != requested_session;
+        self.session_mode = requested_session;
         if (group != self.bound_group
             || member != self.bound_member
             || !self.session_mode
@@ -359,7 +396,7 @@ impl Plugin for FlProbe {
         let active = transport.playing || self.offline;
         let assignment_changed = self.params.group.value() != self.bound_group
             || (self.params.member.value() - 1) as usize != self.bound_member
-            || self.params.session_mode.value() != self.session_mode;
+            || (!cfg!(cleanslate_podcast) && self.params.session_mode.value() != self.session_mode);
         let enabled_changed =
             !self.session_mode && self.params.enabled.value() != self.runtime.enabled;
         let state_changed = self.params.saved.revision.load(SeqCst) != self.saved_revision;
@@ -543,7 +580,11 @@ impl Drop for FlProbe {
 }
 
 impl ClapPlugin for FlProbe {
-    const CLAP_ID: &'static str = "org.cleanslate.fl-probe";
+    const CLAP_ID: &'static str = if cfg!(cleanslate_podcast) {
+        "org.cleanslate.podcast"
+    } else {
+        "org.cleanslate.fl-probe"
+    };
     const CLAP_DESCRIPTION: Option<&'static str> =
         Some("Captured Session analysis for synchronized dedicated microphones.");
     const CLAP_MANUAL_URL: Option<&'static str> = Some(Self::URL);
@@ -557,10 +598,46 @@ impl ClapPlugin for FlProbe {
 }
 
 impl Vst3Plugin for FlProbe {
-    const VST3_CLASS_ID: [u8; 16] = *b"CleanSlateProbe1";
+    const VST3_CLASS_ID: [u8; 16] = if cfg!(cleanslate_podcast) {
+        *b"CleanSlatePodc01"
+    } else {
+        *b"CleanSlateProbe1"
+    };
     const VST3_SUBCATEGORIES: &'static [Vst3SubCategory] =
         &[Vst3SubCategory::Fx, Vst3SubCategory::Tools];
 }
 
 nice_export_clap!(FlProbe);
 nice_export_vst3!(FlProbe);
+
+#[cfg(all(test, not(cleanslate_podcast)))]
+mod identity_tests {
+    use super::*;
+
+    #[test]
+    fn probe_identity_and_legacy_state_remain_compatible() {
+        assert_eq!(FlProbe::NAME, "CleanSlate FL Probe");
+        assert_eq!(FlProbe::CLAP_ID, "org.cleanslate.fl-probe");
+        assert_eq!(FlProbe::VST3_CLASS_ID, *b"CleanSlateProbe1");
+        assert!(
+            !FlProbe::default()
+                .params()
+                .serialize_fields()
+                .contains_key("org.cleanslate.podcast.state-version")
+        );
+        let mut state: PluginState = serde_json::from_str(
+            r#"{"version":"0.0.1","params":{"probe_group":{"i32":1}},"fields":{}}"#,
+        )
+        .unwrap();
+        FlProbe::filter_state(&mut state);
+        assert!(matches!(state.params["probe_group"], ParamValue::I32(1)));
+        assert!(matches!(
+            state.params["session_mode"],
+            ParamValue::Bool(false)
+        ));
+        assert!(matches!(
+            state.params["enable_processing"],
+            ParamValue::Bool(false)
+        ));
+    }
+}

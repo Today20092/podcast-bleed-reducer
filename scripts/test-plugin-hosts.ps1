@@ -1,15 +1,18 @@
 #requires -Version 7.0
-param([string]$PluginDirectory, [string]$TargetDir)
+param([string]$PluginDirectory, [string]$TargetDir,
+    [ValidateSet('Probe', 'Podcast')][string]$Product = 'Probe')
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $root = Split-Path -Parent $PSScriptRoot
-if (-not $PluginDirectory) { $PluginDirectory = Join-Path $root 'dist/fl-probe-candidate' }
+if (-not $PluginDirectory) {
+    $PluginDirectory = Join-Path $root $(if ($Product -eq 'Podcast') { 'dist/podcast-candidate' } else { 'dist/fl-probe-candidate' })
+}
 $PluginDirectory = (Resolve-Path -LiteralPath $PluginDirectory).Path
 $settings = & (Join-Path $PSScriptRoot 'local-build-settings.ps1') -TargetDir $TargetDir
 if (-not ('CleanSlate.Build.OwnedTask' -as [type])) { Add-Type -Path (Join-Path $PSScriptRoot 'resource-guard.cs') }
 if (-not [CleanSlate.Build.OwnedTask]::IsContained($env:CLEANSLATE_RESOURCE_JOB)) {
     & (Join-Path $PSScriptRoot 'resource-guard.ps1') -FilePath (Get-Process -Id $PID).Path `
-        -ArgumentList @('-NoProfile', '-File', $PSCommandPath, '-PluginDirectory', $PluginDirectory, '-TargetDir', $settings.TargetDir) `
+        -ArgumentList @('-NoProfile', '-File', $PSCommandPath, '-PluginDirectory', $PluginDirectory, '-TargetDir', $settings.TargetDir, '-Product', $Product) `
         -WorkingDirectory $root -MinAvailableGiB 2 -ReserveGiB 1 -MaxCommitGiB 0.5 -TimeoutSeconds 90
     return
 }
@@ -17,6 +20,12 @@ $cases = @(
     @{ Name = 'CLAP'; Host = 'host_check.exe'; Plugin = 'CleanSlate FL Probe.clap' },
     @{ Name = 'VST3'; Host = 'vst3_host_check.exe'; Plugin = 'CleanSlate FL Probe.vst3/Contents/x86_64-win/CleanSlate FL Probe.vst3' }
 )
+if ($Product -eq 'Podcast') {
+    $cases = @(
+        @{ Name = 'CLAP'; Host = 'podcast_host_check.exe'; Plugin = 'CleanSlate Podcast.clap' },
+        @{ Name = 'VST3'; Host = 'podcast_vst3_host_check.exe'; Plugin = 'CleanSlate Podcast.vst3/Contents/x86_64-win/CleanSlate Podcast.vst3' }
+    )
+}
 foreach ($case in $cases) {
     $binary = Join-Path $settings.TargetDir "debug/examples/$($case.Host)"
     $plugin = Join-Path $PluginDirectory $case.Plugin
