@@ -1,6 +1,7 @@
 # Resolve VST2 and intended-host integration paths
 
-Status: open
+Status: claimed
+Assignee: Codex
 Readiness: ready-for-agent
 Type: task
 Blocked by: 88
@@ -20,5 +21,5 @@ Acceptance:
 
 ## Results
 
-Not started. Readiness describes specification only; all listed dependencies must be done before claiming.
+Claimed 2026-10-26 after ticket 88 completion. Research uses current primary documentation and read-only installed-version evidence; no host launch, SDK/license acceptance, installation or system configuration change is part of this pass. Unknown compatibility and unavailable VST2 rights remain explicit blockers.
 
