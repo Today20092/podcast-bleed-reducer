@@ -1,6 +1,7 @@
 # Sequential overnight queue and durable handoffs
 
-Status: open
+Status: claimed
+Assignee: Codex
 Readiness: ready-for-agent
 Type: task
 Blocked by: 88
@@ -22,5 +23,5 @@ Acceptance:
 
 ## Results
 
-Not started. Readiness describes specification only; all listed dependencies must be done before claiming.
+Claimed 2026-10-26 after ticket 88 completed at development a4dc16c. The owner's implement-spec instruction authorizes this sequential implementation run; no automation schedule or unattended DAW launch is created. Disposable runner fixtures use explicit lightweight budgets; product builds retain the accepted resource policy.
 
