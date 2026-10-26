@@ -1,6 +1,6 @@
 # Sequential overnight queue and durable handoffs
 
-Status: done
+Status: claimed
 Assignee: Codex
 Readiness: ready-for-agent
 Type: task
@@ -22,6 +22,8 @@ Acceptance:
 - [x] If the host agent cannot reliably resume across tool cancellation/context/process loss, record that limitation and use the supported app automation on explicit owner scheduling rather than inventing a background chat process.
 
 ## Results
+
+2026-10-26 review follow-up: reopened for the spec review's source-revalidation finding. Validate the selected branch/commit/fingerprint before every command and preserve unexpected post-command source changes as evidence rather than adopting them as the accepted resume baseline. Add a regression and re-close after focused verification.
 
 Claimed 2026-10-26 after ticket 88 completed at development a4dc16c. The owner's implement-spec instruction authorizes this sequential implementation run; no automation schedule or unattended DAW launch is created. Disposable runner fixtures use explicit lightweight budgets; product builds retain the accepted resource policy.
 
