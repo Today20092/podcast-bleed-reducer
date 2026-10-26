@@ -1,0 +1,74 @@
+[
+  {
+    "file": "podcast-compact-100.png",
+    "width": 720,
+    "height": 560,
+    "sha256": "f61ae3263121622e5d109125d6c4b486d276d49477ed5dc4f7c02126b2e670be"
+  },
+  {
+    "file": "podcast-compact-150.png",
+    "width": 1080,
+    "height": 840,
+    "sha256": "502a9612f2bcf241614d180e6cab474f1fd571127011664dd4ecde61c5855adc"
+  },
+  {
+    "file": "podcast-compact-200.png",
+    "width": 1440,
+    "height": 1120,
+    "sha256": "55d360ba626e5d1262e4e8c26669c97efcd4dfa323e3adbed0f5986b13a657f4"
+  },
+  {
+    "file": "podcast-full-100.png",
+    "width": 1000,
+    "height": 680,
+    "sha256": "00c69abd30b6d651e86aa226b147bc47698c3883e17f2084d66bc73497a05d67"
+  },
+  {
+    "file": "podcast-full-150.png",
+    "width": 1500,
+    "height": 1020,
+    "sha256": "238d022667199c426b78a9ad021e04e0d6fe4fa64c5d9772517524723899453d"
+  },
+  {
+    "file": "podcast-full-200.png",
+    "width": 2000,
+    "height": 1360,
+    "sha256": "fcde6d1eff9110b719515ed9b96e06f5d766624afb51547188fe398429e7cea8"
+  },
+  {
+    "file": "gate-compact-100.png",
+    "width": 640,
+    "height": 440,
+    "sha256": "b485910364d3e40e7f8a1a54039b4047d9d829514a7f33ae2b910874c998dcf5"
+  },
+  {
+    "file": "gate-compact-150.png",
+    "width": 960,
+    "height": 660,
+    "sha256": "cf50aca1ac9bd4dee67ee558c6daec7c9e969be7fd25e1511a752aa06de68219"
+  },
+  {
+    "file": "gate-compact-200.png",
+    "width": 1280,
+    "height": 880,
+    "sha256": "29407f4e7f67cced50011e4b2e63915174353a17db5ebd752efbec933fdeb47b"
+  },
+  {
+    "file": "gate-full-100.png",
+    "width": 800,
+    "height": 560,
+    "sha256": "a241cb828b918148e126204c097c67b4e78a551c28b2d186e8937cf71922bb3f"
+  },
+  {
+    "file": "gate-full-150.png",
+    "width": 1200,
+    "height": 840,
+    "sha256": "decd952af738b98ac7a5bf6c93179cf119c9e17cde440331a929baeb12063520"
+  },
+  {
+    "file": "gate-full-200.png",
+    "width": 1600,
+    "height": 1120,
+    "sha256": "7f8c6b8a18054407fc1d966c572271a5655a637562ffe72777c01f07e59f67cf"
+  }
+]
