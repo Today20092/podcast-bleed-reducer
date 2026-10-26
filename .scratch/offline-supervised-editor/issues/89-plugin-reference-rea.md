@@ -1,6 +1,7 @@
 # FabFilter and sonible UI/performance reference investigation
 
-Status: open
+Status: claimed
+Assignee: Codex
 Readiness: ready-for-agent
 Type: task
 Blocked by: 88
@@ -27,5 +28,5 @@ Acceptance:
 
 ## Results
 
-Not started. Readiness describes specification only; all listed dependencies must be done before claiming.
+Claimed 2026-10-26 after ticket 88 completion. Reuse prior reports and bound fresh static inspection to the supplied artifacts. Shared-provider deep analysis, native hosts, vendor installation and activation remain excluded from this low-memory run. Record unanswered runtime/motion questions explicitly.
 
