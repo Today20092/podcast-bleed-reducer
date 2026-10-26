@@ -1,6 +1,6 @@
 # Autonomous implementation handoff — 2026-10-26
 
-Six tickets are complete on `development`: 88, 89, 90, 97, 98 and 99. Smart Gate 91 and Podcast 95 have isolated source checkpoints, but remain claimed because their actual Rust/unit/event/ABI acceptance has not run. The remaining dependency graph has not been bypassed.
+Six tickets are complete on `development`: 88, 89, 90, 97, 98 and 99. Smart Gate 91 and Podcast 95 have isolated source checkpoints, but remain claimed because their actual Rust/unit/event/ABI acceptance has not completed. The remaining dependency graph has not been bypassed.
 
 The canonical checkout is `C:/Users/User/Documents/podcast-automix-rust-gui`, branch `development`. The checkpoint before this handoff is `640a5c0`. Permanent product branches remain `codex/plugin-smart-gate` at `3bbda73` and `codex/plugin-podcast` at `cf1cc52`; unqualified identity source was not merged into them or into desktop. `main`, installed development links and release publication were not changed by this run.
 
@@ -33,6 +33,12 @@ An observed pressure snapshot was 2.33 GiB physical / 1.03 GiB commit headroom; 
 Representative owned-job measurements include Gate metadata/lock work at 108 MiB kernel peak commit, 86 MiB sampled private and 119 MiB sampled working set; Podcast scoped metadata/static work at 62.83 MiB kernel peak commit; and the final Gate filesystem regression at 37.7 MiB kernel peak commit / 1.13 seconds. Kernel commit, private memory and working set are different metrics; sampling is not a whole-machine RAM guarantee. Detailed receipts are in the tickets and application-data receipt directories.
 
 The preserved desktop `--package-self-check` and actual CLAP/VST3 probe hosts passed sequentially under explicit lightweight budgets in 88. This is separate from the unrun checks for new product source. Both primary `dist/fl-probe` formats were rehashed after the work and still match SHA256 `94cf0dc682447677e1d942397dfc8aea929c9fe697a5a0035127968dace54aaa`.
+
+### Subsequent bounded compiler measurement
+
+The 14 GiB default is a conservative heavy-work preflight, not a measured minimum compiler requirement. Following the owner's request for further progress, a narrow Gate library type-check was explicitly profiled under 88's smaller-task provision: 4 GiB start threshold, 2 GiB physical/commit reserve, 1.5 GiB hard tree cap, one Cargo job and ten-minute timeout. The normal build scripts/policy were unchanged. See 91 for exact receipts.
+
+Both the initial attempt and the single retry after recovery made real dependency-compilation progress. They stopped on `low-commit-running` after 35.35 / 45.48 seconds, with peak sampled private memory approximately 698 / 870 MiB. Neither hit the hard 1.5 GiB cap; system commit headroom crossed the 2 GiB reserve. Cleanup was verified, completed cache entries were retained and no further identical retry was made. A shared Windows service host was observed holding about 10.5 GiB private committed memory / 8.09 GiB resident. Its individual service allocation was not diagnosed, and it was not stopped. Full Gate type-checking, tests, linking and ABI acceptance are still incomplete. This follow-up supersedes earlier descriptions that only preflight refusal had been attempted.
 
 ## Review results
 

@@ -21,6 +21,16 @@ Acceptance:
 
 ## Results
 
+### Bounded compiler measurement follow-up — 2026-10-26
+
+After the owner's request to investigate further progress, the configurable lower-cost-task provision in 88 was used for a narrow `cargo check --lib` measurement. The standard heavy policy was not changed. This explicit compiler budget used one Cargo job, the existing locked/offline shared cache/profile, 4 GiB physical start threshold, 2 GiB physical/commit reserve, 1.5 GiB hard owned-tree commit cap and 600-second timeout. It was described before execution; it was not labeled a noncompiling or lightweight metadata check.
+
+The first attempt made real dependency-checking progress, then stopped with `low-commit-running` after 35.35 seconds. Peak sampled private bytes were 731,590,656, working set 668,438,528 and kernel peak job commit 727,347,200. Minimum observed physical availability was 2,311,557,120 bytes; commit availability 1,762,484,224. Receipt: `%LOCALAPPDATA%/CleanSlate/BuildReceipts/gate91-bounded-typecheck-aa055f5f0da84bfb84e74177fa7f69cf.json`.
+
+After resource recovery above that budget's start threshold, the single allowed retry reused completed dependency checks and progressed through Windows, egui and into the nice-plug dependencies. It also stopped with `low-commit-running`, after 45.48 seconds. Peak sampled private bytes were 912,064,512, working set 826,511,360 and kernel peak job commit 963,411,968. Minimum observed physical availability was 2,756,050,944 bytes; commit availability 2,075,189,248. Receipt: `%LOCALAPPDATA%/CleanSlate/BuildReceipts/gate91-bounded-typecheck-retry-43fddd656d824f818b26755b5c09b73a.json`. Cleanup was verified for both attempts. The hard commit cap was not reached; the system allocation reserve stopped the work. No further identical retry is permitted without a material resource/state change.
+
+The dependency versions match the preserved probe lockfile; no dependency or compiler-profile change was made. Context7 quota was exhausted, so current official Cargo documentation was consulted: <https://doc.rust-lang.org/cargo/commands/cargo-check.html>. A read-only host snapshot identified one shared Windows service host holding about 10.5 GiB private committed memory / 8.09 GiB resident; no individual hosted service was attributed and no service was stopped. A complete Gate type-check, Rust tests, linking and format/GUI acceptance remain outstanding; status stays claimed.
+
 Claimed 2026-10-26 after 87/88 completion. Implement only the separate pass-through product identity in the Smart Gate lane, preserving probe source/state and installed artifacts. Current available memory remains below the default 14 GiB heavy-work requirement; code and locked metadata may progress, but build/format/state acceptance stays pending until guarded checks can actually run. Do not mark done on static checks alone or enable legacy paired DSP.
 
 ### Isolated source checkpoint and output-parent correction — 2026-10-26
