@@ -2,6 +2,8 @@
 
 ## Current implementation checkpoint — 2026-10-26
 
+Post-reboot update: 91 is done after standard guarded tests/strict Clippy/build and actual CLAP/VST3 identity/state/bypass/pass-through/coexistence plus preserved-probe regression acceptance. Tested source 10180cb and candidate hash/path are in ticket 91. The authorized reboot restored compiler headroom; its one follow-up resumed and was deleted. Gate remains a pass-through prototype; 92 detector feasibility is now unblocked. The earlier claimed/blocking description below is historical for 91; 95 remains claimed.
+
 Completed on development: 88 resource guard, 89 bounded reference ledger, 90 original UI contract/mockups, 97 format/host matrix, 98 desktop/updater audit and 99 resumable command coordinator. See the [handoff](../../docs/research/implementation-progress-2026-10-26.md) and individual tickets for acceptance evidence and limitations.
 
 91 Smart Gate and 95 Podcast have source prepared on their own feature branches, not merged into their permanent product branches. Both stay claimed until actual compilation, unit/event/state and format checks pass under the unchanged resource policy. Thus 92–94 and 96 remain dependency-blocked; 81–83 still require actual completion of 80. Source preparation and successful metadata are not product qualification. 74 artifact verification remains blocked by local transfer HTTP 403, with signing/publication and prior owner-only checks still separate. No real overnight coordinator run or schedule was started.

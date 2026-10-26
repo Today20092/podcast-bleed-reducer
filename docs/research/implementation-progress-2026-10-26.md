@@ -1,5 +1,13 @@
 # Autonomous implementation handoff — 2026-10-26
 
+## Post-reboot update
+
+The owner authorized a normal PC restart to continue tickets. Boot changed to 2026-10-26T15:02:24.5000000Z; available RAM recovered to 18.53 GiB and commit headroom to 20.04 GiB. Saved project settings validated (62 projects), all four source trees were clean and their checkpoints survived. The temporary thread heartbeat successfully resumed work and was deleted. No repeated reboot, forced application closure or service termination occurred.
+
+Ticket **91 is now done**, bringing this batch to seven completed tickets. On clean Gate source 10180cb, the standard build entrypoint passed formatting, 3 unit tests, strict all-target Clippy, library/example compilation, actual CLAP/VST3 state/identity/bypass/unity/coexistence and separate preserved-probe regression checks. Maximum kernel job commit across the build stages was 933.57 MiB, with default heavy guard policy unchanged and cleanup verified. Two lingering MSVC VCTIP helpers were confirmed inside their named build Job Objects after compiler exit and ended individually; test/build guard elapsed includes that wait. No unrelated process was stopped.
+
+Preserved candidate: `C:/Users/User/.codex/worktrees/smart-gate-identity-91/podcast-automix-rust-gui/dist/smart-gate-candidates/ec71fbd055914e61ae74ef1dd9cba37f/`; both formats SHA256 `3f609ef3a211df4c317f9827e7a610c0310edd9dc4c3c627051fcd703208e8e2`. Detailed six receipt IDs are in ticket 91. No installed artifact/link change. Gate is still pass-through; native GUI, speech detection, DSP and sound/DAW/platform qualification remain open. Ticket 92 is unblocked; 95 remains claimed. Earlier blocked/unrun descriptions in this handoff are historical where superseded here.
+
 Six tickets are complete on `development`: 88, 89, 90, 97, 98 and 99. Smart Gate 91 and Podcast 95 have isolated source checkpoints, but remain claimed because their actual Rust/unit/event/ABI acceptance has not completed. The remaining dependency graph has not been bypassed.
 
 The canonical checkout is `C:/Users/User/Documents/podcast-automix-rust-gui`, branch `development`. The checkpoint before this handoff is `640a5c0`. Permanent product branches remain `codex/plugin-smart-gate` at `3bbda73` and `codex/plugin-podcast` at `cf1cc52`; unqualified identity source was not merged into them or into desktop. `main`, installed development links and release publication were not changed by this run.

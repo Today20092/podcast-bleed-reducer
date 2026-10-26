@@ -1,6 +1,6 @@
 # Separate Smart Gate package and state identity
 
-Status: claimed
+Status: done
 Assignee: Codex
 Readiness: ready-for-agent
 Type: task
@@ -12,14 +12,28 @@ Related: 85, 86
 In codex/plugin-smart-gate, establish the separate CleanSlate Smart Gate package/artifact identity and focused editor entry point using the existing adapter patterns. Retain the probe source/state for reopening old projects. Do not enable the legacy paired ownership DSP under a new single-mic name.
 
 Acceptance:
-- [ ] Separate package/crate, product name, unique CLAP ID and VST3 class identity, state version and product-specific build/test/dist/link paths; deterministic IDs documented.
-- [ ] Gate and probe coexist in the actual-format test hosts; probe IDs/state remain unchanged.
-- [ ] Product output is pass-through until 93 is qualified, visibly marked as such; no Session group/capture prerequisite.
-- [ ] Extract/reuse only demonstrated common host/editor helpers without copying the ownership trainer or moving unrelated desktop UI.
-- [ ] Build/check with 88, preserve old artifacts, and verify locked dependency graph, format enumeration, state round trip and bypass.
-- [ ] Package names/signing/version maturity follow docs/releasing.md; no release or installed-link change in this ticket.
+- [x] Separate package/crate, product name, unique CLAP ID and VST3 class identity, state version and product-specific build/test/dist/link paths; deterministic IDs documented.
+- [x] Gate and probe coexist in the actual-format test hosts; probe IDs/state remain unchanged.
+- [x] Product output is pass-through until 93 is qualified, visibly marked as such; no Session group/capture prerequisite.
+- [x] Extract/reuse only demonstrated common host/editor helpers without copying the ownership trainer or moving unrelated desktop UI.
+- [x] Build/check with 88, preserve old artifacts, and verify locked dependency graph, format enumeration, state round trip and bypass.
+- [x] Package names/signing/version maturity follow docs/releasing.md; no release or installed-link change in this ticket.
 
 ## Results
+
+### Post-reboot acceptance — 2026-10-26
+
+Ticket 91 is **done** for the separate Windows pass-through identity. Earlier blocked/unrun statements below are historical. Owner-authorized ordinary reboot changed boot time to 2026-10-26T15:02:24.5000000Z; available RAM recovered to 18.53 GiB and commit headroom to 20.04 GiB. The temporary restart heartbeat resumed this thread and was deleted before compilation. No additional reboot or service termination occurred.
+
+Tested clean source: `10180cb756c4f769c51e5e14df7b5a5516c27907`. Standard `scripts/build-smart-gate.ps1` passed formatting, all-target Rust tests (3 unit tests), strict all-target Clippy, library/examples build and actual CLAP/VST3 hosts. Heavy stages kept the default 14 GiB start / 8 GiB reserve / 6 GiB owned cap, one Cargo job and locked/offline shared cache/profile. Maximum kernel job commit across these stages was 933.57 MiB; cleanup was verified throughout. Test command compilation took 5m14s; its guard elapsed 506.35s includes a lingering MSVC VCTIP helper. Two VCTIP processes were each independently confirmed inside the named CleanSlate Job Object after compiler exit, then ended by exact process identity. No unrelated process, compiler or service was stopped; no guard policy was weakened.
+
+Both actual hosts passed independent Gate/probe factory IDs and state round trips; Gate exact unity, bypass, mono/stereo, 44.1/48/96 kHz and zero latency. CLAP covered in-place/separate buffers; VST3 covered realtime/offline. Hosts took 0.42 / 0.37s, sampled process peak working sets 16.00 / 17.04 MiB. Preserved-probe regression hosts separately passed 1,858 CLAP / 4,048 VST3 bit-exact blocks, legacy state/control and shared-window checks. Exact probe source comparison against the product baseline passed.
+
+Preserved candidate: `C:/Users/User/.codex/worktrees/smart-gate-identity-91/podcast-automix-rust-gui/dist/smart-gate-candidates/ec71fbd055914e61ae74ef1dd9cba37f/`; CLAP and VST3 SHA256 `3f609ef3a211df4c317f9827e7a610c0310edd9dc4c3c627051fcd703208e8e2`. Its build-receipt.json records source/paths/hashes and installed=false. Existing installed probe outputs/links remain unchanged.
+
+Receipts under `%LOCALAPPDATA%/CleanSlate/BuildReceipts/`: fmt `20261026-111221-a1c468c45d0f45eb82483152bb5ca107.json`; tests `20261026-111226-75a6e8a28268423da97f8b559b6ec2ee.json`; Clippy `20261026-112052-0e663f7034544801b59ab380255033f9.json`; build `20261026-112057-ecdde45c90f543b3933e70bc89524579.json`; Gate hosts `20261026-112143-c83a1480283c456e93d2ac1f4344b370.json`; probe regression `20261026-112226-d330bd8b3bd445bab3880bdeb2b968e9.json`.
+
+This unblocks detector feasibility 92, not detector/DSP/UI completion. Native GUI, DAW/listening, non-Windows platforms, installation, signing and release acceptance remain outside this ticket.
 
 ### Bounded compiler measurement follow-up — 2026-10-26
 
