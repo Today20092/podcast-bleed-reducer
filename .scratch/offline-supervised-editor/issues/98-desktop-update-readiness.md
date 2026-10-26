@@ -1,6 +1,7 @@
 # Desktop and updater remaining-work readiness audit
 
-Status: open
+Status: claimed
+Assignee: Codex
 Readiness: ready-for-agent
 Type: task
 Blocked by: 88
@@ -21,5 +22,5 @@ Acceptance:
 
 ## Results
 
-Not started. Readiness describes specification only; all listed dependencies must be done before claiming.
+Claimed 2026-10-26 after ticket 88 completion. Audit source/test coverage and existing release/package evidence without rebuilding, publishing, private-key access or recovery deletion. Preserve owner-only acceptance, needs-info savings claims and older native-host obligations.
 
