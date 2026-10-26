@@ -1,6 +1,7 @@
 # Memory-bounded execution guard
 
-Status: open
+Status: claimed
+Assignee: Codex
 Readiness: ready-for-agent
 Type: task
 Blocked by: 87
@@ -25,5 +26,5 @@ Acceptance:
 
 ## Results
 
-Not started. Readiness describes specification only; all listed dependencies must be done before claiming.
+Claimed 2026-10-26 under the owner's implement-spec instruction. Ticket 87 is done. Implementation uses a temporary scoped worktree and integrates into development. Initial available physical memory is 6.99 GiB of 31.92 GiB; heavy checks remain refused below the accepted 14 GiB start threshold. Disposable lightweight guard tests may proceed within an explicit smaller budget. No unrelated process termination or cache cleanup is authorized by this claim.
 
