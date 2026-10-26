@@ -11,11 +11,11 @@ $releaseMatrix = [regex]::Matches($release, '- platform: ([\w-]+)\s+runner: ([\w
 if ($prMatrix.Count -ne 4 -or (Compare-Object $prMatrix $releaseMatrix)) { throw 'PR checks must cover all native release runners' }
 if ($pr -notmatch '(?m)^  pull_request:$' -or $pr -match 'pull_request_target|contents: write|secrets\.|actions/cache(?:/save)?@|upload-artifact|package.ps1|gh release' -or $pr -notmatch 'persist-credentials: false') { throw 'PR workflow must remain read-only and check-only' }
 $check = Get-Content -LiteralPath "$PSScriptRoot/check.ps1" -Raw
-foreach ($command in @('cargo fmt --all -- --check', 'cargo clippy --all-targets --all-features @cargoArguments -- -D warnings', 'cargo test --all-targets @cargoArguments -- --nocapture', 'cargo test -p cleanslate-ownership-model @cargoArguments')) {
+foreach ($command in @("Invoke-CheckCargo (@('fmt', '--all', '--', '--check'))", "Invoke-CheckCargo (@('clippy', '--all-targets', '--all-features') + `$cargoArguments + @('--', '-D', 'warnings'))", "Invoke-CheckCargo (@('test', '--all-targets') + `$cargoArguments + @('--', '--nocapture'))", "Invoke-CheckCargo (@('test', '-p', 'cleanslate-ownership-model') + `$cargoArguments)")) {
     if (-not $check.Contains($command)) { throw "Missing required check: $command" }
 }
 if (-not $check.Contains('$cargoArguments = @(''--locked'')')) { throw 'Hosted checks must retain locked dependency resolution' }
-if ([regex]::Matches($check, 'if \(\$LASTEXITCODE -ne 0\)').Count -ne 4) { throw 'Every Cargo check must propagate failure' }
+if (-not $check.Contains('resource-guard.ps1') -or -not $check.Contains('if ($LASTEXITCODE -ne 0)')) { throw 'The shared Cargo check must guard local work and propagate hosted failure' }
 Write-Output 'Native PR workflow regression checks: pass'
 
 $downloads = Get-Content -LiteralPath "$root/.github/workflows/release-downloads.yml" -Raw

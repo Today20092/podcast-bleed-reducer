@@ -45,8 +45,8 @@ $timer = [Diagnostics.Stopwatch]::StartNew()
 $previousIncremental = $env:CARGO_INCREMENTAL
 try {
     $env:CARGO_INCREMENTAL = '1'
-    & cargo build --manifest-path (Join-Path $root 'Cargo.toml') --bin rust-app @cargoArguments --timings
-    if ($LASTEXITCODE -ne 0) { throw 'GUI build failed.' }
+    & (Join-Path $PSScriptRoot 'resource-guard.ps1') -FilePath cargo `
+        -ArgumentList (@('build', '--manifest-path', (Join-Path $root 'Cargo.toml'), '--bin', 'rust-app') + $cargoArguments + @('--timings')) -WorkingDirectory $root
 } finally {
     $env:CARGO_INCREMENTAL = $previousIncremental
 }
