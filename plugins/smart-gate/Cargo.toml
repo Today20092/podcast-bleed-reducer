@@ -1,0 +1,28 @@
+[package]
+name = "cleanslate-smart-gate"
+version = "0.0.1"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+# Separate product; never pull the desktop/trainer or legacy probe into this graph.
+[workspace]
+
+[dependencies]
+nice-plug = { version = "=0.4.2", default-features = false, features = ["vst3", "editor", "assert_process_allocs"] }
+nice-plug-egui = "=0.6.0"
+egui = { version = "=0.37.0", default-features = false, features = ["default_fonts"] }
+
+[dev-dependencies]
+serde_json = "1.0"
+clap-sys = "=0.5.0"
+libloading = "=0.8.9"
+vst3 = "=0.3.0"
+
+[profile.dev]
+opt-level = 1
+incremental = true
+codegen-units = 16

@@ -7,3 +7,18 @@ First implementation leaf: [91](.scratch/offline-supervised-editor/issues/91-sma
 Read AGENTS.md, the active map, [product boundaries](docs/plugin-products.md) and [overnight resource plan](docs/plugin-overnight-plan.md) before work. The canonical tracker remains the primary desktop checkout; synchronize its latest planning records before claiming. This workspace contains the preserved 0.0.6 probe as reusable infrastructure, not a finished single-input gate. Do not ship the old paired ownership mode as proof of live-gate quality. Volume leveling is outside the initial gate.
 
 Product-specific code stays on this branch. Shared engine changes need focused integration through development and desktop checks. Do not alter installed probe links, write into the primary checkout's dist, overwrite user projects, or merge the entire plugin branch into desktop. Default to one guarded heavy task globally and no unattended DAW.
+
+## Ticket 91 source checkpoint
+
+`plugins/smart-gate` is a separate 0.0.1 pass-through candidate on the temporary
+`codex/smart-gate-identity-91` branch, based on Gate integration `3bbda73`.
+Planning/design/host-matrix records were selectively synchronized from canonical
+development `bb356cb`; shared guard sources already matched that revision.
+No whole-development merge was used. Canonical ticket ownership stays in the
+primary checkout; copied planning documents are context, not another coordinator.
+
+Use `scripts/build-smart-gate.ps1` and `scripts/test-smart-gate-hosts.ps1` for this
+product. They never activate installed links. Locked offline metadata and
+noncompiling formatting passed, but compilation and actual-format/state/bypass
+checks remain blocked by the 14 GiB available-memory start requirement. Keep 91
+claimed and retain source on its feature branch until those checks really pass.
