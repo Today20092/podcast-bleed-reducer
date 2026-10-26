@@ -1,5 +1,7 @@
 # Resource-conscious overnight development plan
 
+2026-10-26 implementation update: [88](../.scratch/offline-supervised-editor/issues/88-memory-bounded-execution.md) is complete, including desktop/plugin entrypoint integration, disposable process tests and representative guarded checks of preserved binaries. Heavy builds refused safely below 14 GiB available; none were launched. [99](../.scratch/offline-supervised-editor/issues/99-overnight-checkpoint-runner.md) remains the prerequisite for resumable unattended queue execution. Historical planning statements below do not describe a running coordinator.
+
 Prepared 2026-10-25; no overnight run is scheduled or launched by this document. Product split: [85 Smart Gate](../.scratch/offline-supervised-editor/issues/85-smart-gate-plugin.md), [86 Podcast](../.scratch/offline-supervised-editor/issues/86-podcast-plugin.md), [87 workspace organization](../.scratch/offline-supervised-editor/issues/87-separate-plugin-products-workspaces.md). The [active map](../.scratch/offline-supervised-migration/map.md) remains authoritative. This is a dependency queue, not a promise that every product will be complete in one night.
 
 ## Workspaces and ownership
