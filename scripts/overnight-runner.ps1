@@ -48,6 +48,12 @@ function Source-State([string]$Path) {
     if ($untracked) { $extra = @($untracked -split "`n" | ForEach-Object { $_ + ':' + (File-Hash (Join-Path $Path $_)) }) }
     return @{commit=(Git-Text $Path @('rev-parse','HEAD'));branch=(Git-Text $Path @('branch','--show-current'));fingerprint=(Hash-Text ($diff + "`n" + ($extra -join "`n")));dirty=[bool]($diff -or $untracked);edits=(Git-Text $Path @('status','--short','--untracked-files=all','--','.',':(exclude).scratch/offline-supervised-editor/issues/**'))}
 }
+function Review-State([string]$Path) {
+    return @{source=(Source-State $Path);plan_sha256=(File-Hash $PlanPath);queue_sha256=(File-Hash $QueuePath)}
+}
+function Same-Review($Expected, $Observed) {
+    return $Expected.source.commit -eq $Observed.source.commit -and $Expected.source.branch -eq $Observed.source.branch -and $Expected.source.fingerprint -eq $Observed.source.fingerprint -and $Expected.plan_sha256 -eq $Observed.plan_sha256 -and $Expected.queue_sha256 -eq $Observed.queue_sha256
+}
 function Read-Ticket([int]$Id) {
     $files = @(Get-ChildItem -LiteralPath $tracker -Filter '*.md' | Where-Object { $_.Name -match ('^0?' + $Id + '-') })
     if ($files.Count -ne 1) { throw "Ticket $Id must resolve to exactly one canonical file." }
@@ -60,7 +66,7 @@ function Command-Spec($Command, [string]$Workspace) {
     if ($Command.ContainsKey('policy')) { throw 'Caller-selected resource policies are not accepted by the coordinator.' }
     # Disposable fixtures have a fixed shipped implementation, never caller-provided shell code.
     if ($Command.kind -eq 'fixture') {
-        if ($Command.operation -notin @('pass','fail','wait','memory-refusal')) { throw 'Unknown disposable fixture operation.' }
+        if ($Command.operation -notin @('pass','fail','wait','memory-refusal','mutate-tracked','mutate-untracked','mutate-branch','mutate-head','mutate-external-input')) { throw 'Unknown disposable fixture operation.' }
         $fixture = Join-Path $PSScriptRoot 'fixtures/overnight-command.ps1'
         $operation=if ($Command.operation -eq 'memory-refusal') { 'pass' } else { $Command.operation }
         $minimum=if ($Command.operation -eq 'memory-refusal') { 1048576 } else { 2 }
@@ -142,7 +148,7 @@ try {
         # Persisted failed or unknown command outcomes stop the whole run, even if a later claim changed.
         foreach ($file in @(Get-ChildItem -LiteralPath $runDirectory -Filter 'ticket-*.json' | Where-Object Name -match '^ticket-\d+\.json$')) {
             $prior=Get-Content -LiteralPath $file.FullName -Raw | ConvertFrom-Json -AsHashtable
-            if ($prior.status -in @('running','failed')) { $summary.stopped=$true }
+            if ($prior.status -in @('running','failed','review-required')) { $summary.stopped=$true }
         }
     }
     foreach ($task in $queue.tasks) {
@@ -200,7 +206,6 @@ try {
                 $command=$step.commands[$i];$spec=$specs[$i]
                 $record=if ($checkpoint.commands.Count -gt $i) { $checkpoint.commands[$i] } else { $null }
                 if ($record) { $executionStarted=$true }
-                $spec=Command-Spec $command $path
                 if ($record -and $record.status -eq 'passed') {
                     foreach ($artifact in $record.artifacts_after) { if (-not $artifact.sha256 -or (File-Hash $artifact.path) -ne $artifact.sha256) { throw 'A completed command artifact changed; do not repeat it blindly.' } }
                     continue
@@ -214,8 +219,25 @@ try {
                 }
                 $attempt=if ($record) { $record.attempts+1 } else { 1 }
                 $receiptPath=Join-Path $runDirectory ("ticket-$($task.id)-command-$i-attempt-$attempt.json")
-                $record=@{index=$i;status='running';attempts=$attempt;started_utc=[DateTime]::UtcNow.ToString('o');finished_utc=$null;execution=$spec;command_sha256=(Hash-Text ($command | ConvertTo-Json -Depth 10 -Compress));receipt_path=$receiptPath;log_path=[IO.Path]::ChangeExtension($receiptPath,'.log');before_source=(Source-State $path);artifacts_before=(Artifact-State $command['artifacts'] (Join-Path $runDirectory "last-good/$($task.id)/$i"));artifacts_after=@();metrics=$null;error=$null}
+                $record=@{index=$i;status='running';attempts=$attempt;started_utc=[DateTime]::UtcNow.ToString('o');finished_utc=$null;execution=$spec;command_sha256=(Hash-Text ($command | ConvertTo-Json -Depth 10 -Compress));receipt_path=$receiptPath;log_path=[IO.Path]::ChangeExtension($receiptPath,'.log');before_source=$null;before_review=$null;after_review=$null;artifacts_before=(Artifact-State $command['artifacts'] (Join-Path $runDirectory "last-good/$($task.id)/$i"));artifacts_after=@();metrics=$null;error=$null}
                 if ($checkpoint.commands.Count -gt $i) { $checkpoint.commands[$i]=$record } else { $checkpoint.commands+=,$record }
+                $record.before_review=Review-State $path
+                $record.before_source=$record.before_review.source
+                if (-not (Same-Review $checkpoint $record.before_review)) {
+                    $record.status='review-required';$checkpoint.status='review-required'
+                    $entry.status='blocked';$entry.reason='reviewed-identity-changed';$entry.next_action='Review observed source/plan changes; the selected baseline is unchanged and no command was launched.'
+                    $checkpoint.next_action=$entry.next_action;$checkpoint.updated_utc=[DateTime]::UtcNow.ToString('o');$summary.stopped=$true
+                    Save-State $checkpointPath $checkpoint
+                    break
+                }
+                try { $spec=Command-Spec $command $path; $record.execution=$spec }
+                catch {
+                    $record.error=$_.Exception.Message;$record.status='review-required';$checkpoint.status='review-required'
+                    $entry.status='blocked';$entry.reason='command-identity-changed';$entry.next_action='Review the rejected executable/input identity; the command was not launched.'
+                    $checkpoint.next_action=$entry.next_action;$checkpoint.updated_utc=[DateTime]::UtcNow.ToString('o');$summary.stopped=$true
+                    Save-State $checkpointPath $checkpoint
+                    break
+                }
                 $checkpoint.status='running';$checkpoint.next_action='An interrupted command requires receipt/source/artifact review before resumption.';Save-State $checkpointPath $checkpoint
                 $failure=$null
                 $policy=$spec.policy
@@ -226,8 +248,12 @@ try {
                 $record.metrics=$metrics;$record.error=$failure
                 $record.finished_utc=[DateTime]::UtcNow.ToString('o')
                 $record.artifacts_after=Artifact-State $command['artifacts'] ''
-                $checkpoint.source=Source-State $path
-                if ($metrics -and $metrics.status -eq 'done' -and $metrics.cleanup_verified -and -not $failure -and -not @($record.artifacts_after | Where-Object { -not $_.sha256 }).Count) {
+                $record.after_review=Review-State $path
+                if (-not (Same-Review $checkpoint $record.after_review)) {
+                    $record.status='review-required';$checkpoint.status='review-required'
+                    $entry.status='blocked';$entry.reason='reviewed-identity-changed';$entry.next_action='Review the observed post-command source/plan changes; they are evidence, never a new accepted baseline.'
+                    $checkpoint.next_action=$entry.next_action;$summary.stopped=$true
+                } elseif ($metrics -and $metrics.status -eq 'done' -and $metrics.cleanup_verified -and -not $failure -and -not @($record.artifacts_after | Where-Object { -not $_.sha256 }).Count) {
                     $record.status='passed';$checkpoint.status='checks-passed';$checkpoint.next_action='Review ticket acceptance; command success never marks the ticket done.'
                 } elseif ($metrics -and $metrics.status -eq 'resource-blocked' -and $metrics.cleanup_verified) {
                     $record.status='resource-blocked';$entry.status='resource-blocked';$entry.reason=$metrics.reason;$entry.next_action='Resume the same plan after resources recover; at most one retry.';$checkpoint.status='resource-blocked';$checkpoint.next_action=$entry.next_action

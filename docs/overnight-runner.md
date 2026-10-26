@@ -67,8 +67,9 @@ Supported commands are deliberately narrow:
 - An existing, hash-pinned `rust-app.exe --package-self-check` is supported.
   Direct plugin-host executables are excluded in favor of their maintained runner.
 - The fixed shipped `fixture` commands (`pass`, `fail`, `wait`, `memory-refusal`)
-  are disposable test seams. They accept only a temporary evidence directory,
-  never arbitrary shell code, and cannot represent product acceptance.
+  are disposable test seams. Additional source-mutation fixtures require an
+  explicitly marked temporary repository. Fixtures accept no arbitrary shell
+  code and cannot represent product acceptance.
 
 No command-string shell execution, caller-selected memory policy, DAW/vendor
 installation, shared-server deep REA, private signing, push/tag/release or installed
@@ -111,6 +112,18 @@ review rather than repeating a possibly completed build. A failed test also stop
 the entire run, including later invocations of the same run. No ticket becomes
 `done` automatically; `checks-passed` means its acceptance still needs review.
 
+The source snapshot selected at claim time remains the reviewed baseline. Before
+every command and after it returns, the runner checks branch, commit, tracked and
+untracked source fingerprint, and pinned plan/queue hashes against that baseline.
+Post-command observations are retained separately in the command record. Even a
+successful command that changes these identities stops the entire queue for
+review; its changes never become a new resume baseline.
+
+Executable/input hashes are also revalidated after preparation, immediately
+before launch. A rejected identity retains an explicit unlaunched
+`review-required` command checkpoint, so a later invocation cannot skip over
+the rejected check and continue independent work.
+
 Missing prerequisites/SDKs or owner/agent work skip to independent ready tickets.
 Resource refusals/timeouts preserve outputs and may also skip to independent
 work. A later explicit resume gets at most one resource retry, and memory-start
@@ -134,3 +147,11 @@ memory refusal, retained retry, maximum retry count, last-good backups, forbidde
 Cargo budget/override paths and competing coordinator exclusion. Evidence and
 failure receipts remain in the printed temporary directory. No real product is
 built or ticket claimed by these fixtures.
+
+`scripts/test-runner-source-identity.ps1` is the focused source-review regression:
+fixed temporary fixtures change tracked source, untracked source, branch or HEAD
+during a successful first command. Each case verifies that the second command
+and later tickets never run, the reviewed/observed identities remain separate,
+and restart cannot accept the changed baseline.
+The external-input case also verifies that an already-rejected pinned-input
+change leaves a durable review checkpoint before the second command launches.
