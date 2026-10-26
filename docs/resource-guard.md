@@ -5,6 +5,15 @@
 cross-platform behavior. Locked/offline dependencies, the shared Cargo target,
 incremental compilation and one Cargo job remain in `local-build-settings.ps1`.
 
+The independent Podcast and Smart Gate workspaces also guard every Cargo command
+in `scripts/build-fl-probe.ps1`. Their `scripts/test-plugin-hosts.ps1` runner wraps
+the existing sequential CLAP/VST3 hosts in an explicit lightweight 0.5 GiB job,
+requiring 2 GiB available before start and retaining 1 GiB while running, with a
+90-second outer timeout. Each native host still has its own 30-second deadline
+and isolated child cache. These smaller budgets apply to existing test binaries;
+plugin compilation keeps the default heavy policy. See [ticket 88's measured
+integration checks](../.scratch/offline-supervised-editor/issues/88-memory-bounded-execution.md).
+
 The guard acquires the machine-wide `Global\CleanSlate.HeavyTask.v1` mutex,
 refuses existing compiler/analyzer work, and checks available physical memory
 and system commit headroom. Defaults are 14 GiB available before launch,
