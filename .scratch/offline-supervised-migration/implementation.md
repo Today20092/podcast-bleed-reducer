@@ -1,5 +1,7 @@
 # Offline supervised editor implementation sequence
 
+2026-10-26 implementation follow-up: [100 — Project save location and parameter presets](../offline-supervised-editor/issues/100-project-save-location-and-parameter-presets.md) is implemented and claimed by Codex for remaining native acceptance. Full local checks: 378 passed / 20 existing ignored; strict Clippy, fixtures, GUI build and executable self-check passed. Standard Save / Save As preserves independent recovery and protects against forged destination metadata; factory/custom four-control presets share validation and undo. The extension guide and ticket record evidence. Computer-use permission is pending; complete or explicitly waive the unchecked native matrix before marking done.
+
 ## Current implementation checkpoint — 2026-10-26
 
 Podcast 95 also passed its standard guarded qualification: 62 tests, strict Clippy/build and actual CLAP/VST3 hosts against the independent artifact on clean source 70f3340. Both 91 and 95 are now done in their separate permanent product lanes (dda8505 and da9b297), for eight completed tickets in this batch. 92 and 96 are unblocked. Their dependent detector/DSP/UI and native sound/export/PDC/save/listening work remain separate; prior claimed/blocked descriptions below are historical for 91/95.

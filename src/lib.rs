@@ -48,9 +48,11 @@ mod review;
 mod session_ownership;
 #[cfg_attr(not(feature = "desktop-ui"), allow(dead_code))]
 mod shortcuts;
+mod sound;
 #[cfg_attr(not(feature = "desktop-ui"), allow(dead_code))]
 mod storage;
 mod storage_io;
+pub use sound::SoundSettings;
 mod supervised_render;
 mod temporal_ownership;
 mod timebase;
