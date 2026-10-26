@@ -19,6 +19,7 @@ primary checkout; copied planning documents are context, not another coordinator
 
 Use `scripts/build-smart-gate.ps1` and `scripts/test-smart-gate-hosts.ps1` for this
 product. They never activate installed links. Locked offline metadata and
-noncompiling formatting passed, but compilation and actual-format/state/bypass
-checks remain blocked by the 14 GiB available-memory start requirement. Keep 91
-claimed and retain source on its feature branch until those checks really pass.
+noncompiling formatting passed. After the authorized reboot, standard guarded
+compilation, tests, strict Clippy and actual CLAP/VST3 state/bypass/coexistence
+checks passed on clean source 10180cb. Ticket 91 is done; its candidate and hashes
+are recorded in the ticket. Continue with unblocked detector feasibility 92.
