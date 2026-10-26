@@ -2,6 +2,8 @@
 
 ## Current implementation checkpoint — 2026-10-26
 
+Podcast 95 also passed its standard guarded qualification: 62 tests, strict Clippy/build and actual CLAP/VST3 hosts against the independent artifact on clean source 70f3340. Both 91 and 95 are now done in their separate permanent product lanes (dda8505 and da9b297), for eight completed tickets in this batch. 92 and 96 are unblocked. Their dependent detector/DSP/UI and native sound/export/PDC/save/listening work remain separate; prior claimed/blocked descriptions below are historical for 91/95.
+
 Post-reboot update: 91 is done after standard guarded tests/strict Clippy/build and actual CLAP/VST3 identity/state/bypass/pass-through/coexistence plus preserved-probe regression acceptance. Tested source 10180cb and candidate hash/path are in ticket 91. The authorized reboot restored compiler headroom; its one follow-up resumed and was deleted. Gate remains a pass-through prototype; 92 detector feasibility is now unblocked. The earlier claimed/blocking description below is historical for 91; 95 remains claimed.
 
 Completed on development: 88 resource guard, 89 bounded reference ledger, 90 original UI contract/mockups, 97 format/host matrix, 98 desktop/updater audit and 99 resumable command coordinator. See the [handoff](../../docs/research/implementation-progress-2026-10-26.md) and individual tickets for acceptance evidence and limitations.
