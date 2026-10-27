@@ -1,5 +1,11 @@
 # Autonomous implementation handoff — 2026-10-26
 
+## Continued plugin implementation
+
+Ticket 92 has a tested, independently reviewed source checkpoint at `2f117f893510d7d98eb650945156f75653af68cc` on `codex/smart-gate-detector-92`. Public streaming/reset tests, strict Clippy, fixture-identity red/green and two 165-run measurements passed; probability arrays match exactly. The [decision/evidence](smart-gate-detector-92.md) records measured memory/timing, room-annotation disagreement and natural-category gaps. Standards review found no actionable issues; Spec review found no code mismatch but retained the incomplete natural-category acceptance. Therefore 92 stays claimed and 93 remains blocked; source is not yet advanced into the permanent product lane. A bounded primary-source fixture/license investigation is underway, with no new owner media or labels invented.
+
+Ticket 96 is claimed on `codex/podcast-workflow-96`, based on Podcast integration `da9b297`, in the existing preserved Podcast worktree. Its immediate gaps are clipped eight-lane actions, missing explicit analysis cancellation, contradictory label replacement and stronger machine/actual-format workflow qualification. Work uses accepted design tokens/contract and one guarded compiler/profile job globally. Tickets 80/81/82/83 retain their native acceptance/dependency boundaries; unrelated desktop ticket 100 and its files are untouched by this plugin run.
+
 ## Post-reboot update
 
 Qualified identity candidates are additionally preserved outside managed worktrees for later safe cleanup: `%LOCALAPPDATA%/CleanSlate/VerifiedBuilds/plugin-products/SmartGate/10180cb-3f609ef3/` and `Podcast/70f3340-c30df7f5/`. Every source candidate file was SHA256-compared to its preserved copy (5 Gate / 8 Podcast files). The original candidate directories and installed probe outputs remain intact.
