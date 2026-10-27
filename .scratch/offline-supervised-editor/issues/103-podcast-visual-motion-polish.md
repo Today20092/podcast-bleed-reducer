@@ -1,6 +1,7 @@
 # Podcast visual, motion and performance refinement
 
-Status: open
+Status: claimed
+Assignee: Codex (Podcast UI refinement)
 Readiness: ready-for-agent
 Type: task
 Blocked by: 96, 102
@@ -19,4 +20,4 @@ Implement the owner's FabFilter/sonible quality target in the existing Podcast e
 
 ## Results
 
-Not started. 96's corrected regression, final Clippy/build/captures and integration must finish first. 102 supplies a design target only; no measured vendor-equivalent performance or native animation qualification exists.
+Claimed 2026-10-27 after 96 completed and integrated at `13e6dfd`. Scoped `codex/podcast-ui-polish-103` starts at that exact permanent Podcast tip in the retained Podcast worktree. One initial unrun public egui/Session Catch up regression is prepared for the accepted 250 ms progression, selection preservation and unchanged host transport. No production implementation yet; 93 owns the compiler slot until explicit handoff. 102 supplies the original design target, not measured vendor-equivalent performance or native animation qualification.
