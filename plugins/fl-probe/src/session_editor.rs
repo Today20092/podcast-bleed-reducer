@@ -74,6 +74,7 @@ pub struct SessionUi {
     follow: u8,
     manual_navigation: Option<Instant>,
     catch_up: Option<CatchUp>,
+    reduced_motion: bool,
 }
 
 struct CatchUp {
@@ -244,12 +245,14 @@ impl SessionUi {
                 self.set_viewport(rate, position - (end - start) / 2, end - start);
             } else if self.follow == 1 && self.catch_up.is_none() && (position >= end || position < start) {
                 self.set_viewport(rate, position - (end - start) / 20, end - start);
-                self.catch_up = Some(CatchUp {
-                    began: ui.input(|input| input.time),
-                    from: (start, end),
-                    target: self.viewport.expect("bounded follow target"),
-                });
-                self.viewport = Some((start, end));
+                if !self.reduced_motion {
+                    self.catch_up = Some(CatchUp {
+                        began: ui.input(|input| input.time),
+                        from: (start, end),
+                        target: self.viewport.expect("bounded follow target"),
+                    });
+                    self.viewport = Some((start, end));
+                }
             }
         }
         if let Some(motion) = &self.catch_up {
@@ -416,6 +419,10 @@ impl SessionUi {
             });
             ui.menu_button("Shared sound & cache…", |ui| {
               egui::ScrollArea::vertical().id_salt("session-details").max_height(200.0).show(ui, |ui| {
+                if ui.checkbox(&mut self.reduced_motion, "Reduced motion").on_hover_text("Local display preference. Snap indicators and Catch up; audio and shared sound values are unchanged.").changed() && self.reduced_motion
+                    && let Some(motion) = self.catch_up.take() {
+                        self.viewport = Some(motion.target);
+                    }
                 ui.label("Sound changes take effect after Analyze.");
                 let mut draft = view.settings;
                 for (title, value, min, max, suffix) in [
