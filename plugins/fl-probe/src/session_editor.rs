@@ -354,9 +354,10 @@ impl SessionUi {
                     });
                 });
             });
+            self.replacement = self.replacement.filter(|(start, end, _)| self.selection == Some((*start, *end)));
             if let Some((start, end, mask)) = self.replacement {
                 ui.horizontal_wrapped(|ui| {
-                    ui.label("Replace conflicting examples in this selection?");
+                    ui.label(format!("Replace with {} at {}–{}?", label_name(mask), time(start, view.rate), time(end, view.rate)));
                     if ui.add_enabled(!view.busy, egui::Button::new("Replace examples")).clicked() {
                         self.error = capture.replace_label(start, end, mask).err();
                         self.replacement = None;
@@ -688,6 +689,13 @@ impl SessionUi {
         let lane_height = plot.height() / view.tracks.len() as f32;
         for (index, track) in view.tracks.iter().enumerate() {
             let center = plot.top() + lane_height * (index as f32 + 0.5);
+            let lane = Rect::from_min_max(
+                Pos2::new(rect.left(), center - lane_height / 2.0),
+                Pos2::new(rect.right(), center + lane_height / 2.0),
+            );
+            if !lane.intersects(ui.clip_rect()) {
+                continue;
+            }
             let color = if track.verified {
                 if index % 2 == 0 { TEAL } else { BLUE }
             } else {
@@ -1095,6 +1103,83 @@ mod tests {
         assert_eq!(workspace.selection, Some((800000, 900000)));
     }
 
+    #[test]
+    fn scrolling_lanes_builds_only_visible_geometry_and_retains_history() {
+        let mut view = navigation_view();
+        view.tracks = (0..8)
+            .map(|member| crate::session_mode::TrackView {
+                member,
+                present: true,
+                verified: true,
+                peaks: (0..1000)
+                    .map(|column| crate::session_mode::WavePeak {
+                        start: view.start + column * 2880,
+                        end: view.start + (column + 1) * 2880,
+                        min: -0.5,
+                        max: 0.5,
+                    })
+                    .collect(),
+            })
+            .collect();
+        for (offset, expected_first) in [(0.0, "Mic 1"), (400.0, "Mic 6")] {
+            let context = egui::Context::default();
+            let mut workspace = SessionUi {
+                selection: Some((800000, 900000)),
+                ..Default::default()
+            };
+            let mut content_height = 0.0;
+            let mut output = context.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(720.0, 190.0))),
+                    ..Default::default()
+                },
+                |ui| {
+                    let scroll = egui::ScrollArea::vertical()
+                        .max_height(160.0)
+                        .vertical_scroll_offset(offset)
+                        .show(ui, |ui| workspace.waveforms(ui, &view, 564.0));
+                    content_height = scroll.content_size.y;
+                },
+            );
+            let vertices: usize = output
+                .shapes
+                .iter()
+                .map(|shape| match &shape.shape {
+                    // Each source lane has 1,000 peak quads; exclude scrollbar/selection chrome.
+                    egui::Shape::Mesh(mesh) if mesh.vertices.len() == 1000 * 4 => {
+                        mesh.vertices.len()
+                    }
+                    _ => 0,
+                })
+                .sum();
+            let names = output
+                .shapes
+                .iter()
+                .filter_map(|shape| match &shape.shape {
+                    egui::Shape::Text(text) if text.galley.job.text.starts_with("Mic ") => {
+                        Some(text.galley.job.text.clone())
+                    }
+                    _ => None,
+                })
+                .collect::<Vec<_>>();
+            output.textures_delta.clear();
+            assert!(
+                vertices > 0 && vertices <= 3 * 1000 * 4,
+                "Offscreen peak meshes must not be built: {vertices}"
+            );
+            assert!(!names.is_empty());
+            assert_eq!(names[0], expected_first);
+            assert!(
+                names.len() <= 3,
+                "Offscreen lane names must not be drawn: {names:?}"
+            );
+            assert!(content_height >= 564.0);
+            assert_eq!(workspace.selection, Some((800000, 900000)));
+            assert_eq!(view.tracks.len(), 8);
+            assert!(view.tracks.iter().all(|track| track.peaks.len() == 1000));
+        }
+    }
+
     fn navigation_view() -> SessionView {
         SessionView {
             rate: 48000,
@@ -1474,6 +1559,27 @@ mod tests {
             1
         );
         assert_eq!(workspace.replacement, Some((2000, 6000, 2)));
+        click(&mut workspace, "Select visible");
+        assert!(
+            workspace.replacement.is_none(),
+            "A different selection must discard the old replacement proposal"
+        );
+        assert!(
+            !frame(&mut workspace, vec![])
+                .iter()
+                .any(|widget| widget.0 == "Replace examples")
+        );
+        assert_eq!(
+            fixture.engine().view(None, None, 32).unwrap().labels,
+            vec![crate::session_analysis::LabelRange {
+                start: 0,
+                end: 4000,
+                mask: 1
+            }]
+        );
+        workspace.selection = Some((2000, 6000));
+        click(&mut workspace, "Label selection…");
+        click(&mut workspace, "Mic 2 only");
         click(&mut workspace, "Replace examples");
         assert_eq!(
             fixture.engine().view(None, None, 32).unwrap().labels[1].mask,
