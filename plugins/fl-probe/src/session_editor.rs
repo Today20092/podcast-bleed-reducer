@@ -1033,6 +1033,42 @@ mod tests {
     }
 
     #[test]
+    fn catch_up_reduced_motion_snaps_and_stop_cancels_a_slide() {
+        use crate::session_mode::integration_tests::{Fixture, direct_capture};
+        let fixture = Fixture::new(2);
+        for member in 0..2 { direct_capture(fixture.engine(), member, 0, 160000, false); }
+        let state = GuiState::new();
+        *state.capture.lock() = Some(fixture.engine().clone());
+        let probe = crate::FlProbe::default();
+        let context = egui::Context::default();
+        crate::editor::style(&context);
+        let mut workspace = SessionUi::default();
+        workspace_frame(&context, &mut workspace, &probe.params, &state, vec![]);
+        click_control(&context, &mut workspace, &probe.params, &state, "Shared sound & cache…");
+        click_control(&context, &mut workspace, &probe.params, &state, "Reduced motion");
+        // Close the details popup without changing the user's selected range.
+        workspace_frame(&context, &mut workspace, &probe.params, &state, vec![egui::Event::Key { key: egui::Key::Escape, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::NONE }]);
+        click_control(&context, &mut workspace, &probe.params, &state, "Catch up");
+        workspace.viewport = Some((0, 80000));
+        workspace.selection = Some((20000, 30000));
+        state.playing.store(true, std::sync::atomic::Ordering::Relaxed);
+        state.position.store(150000, std::sync::atomic::Ordering::Relaxed);
+        workspace_frame(&context, &mut workspace, &probe.params, &state, vec![]);
+        assert_eq!(workspace.viewport, Some((146000, 226000)), "Reduced motion repositions immediately");
+        click_control(&context, &mut workspace, &probe.params, &state, "Shared sound & cache…");
+        click_control(&context, &mut workspace, &probe.params, &state, "Reduced motion");
+        workspace_frame(&context, &mut workspace, &probe.params, &state, vec![egui::Event::Key { key: egui::Key::Escape, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::NONE }]);
+        workspace.viewport = Some((0, 80000));
+        workspace_frame(&context, &mut workspace, &probe.params, &state, vec![]);
+        assert_eq!(workspace.viewport, Some((0, 80000)));
+        state.playing.store(false, std::sync::atomic::Ordering::Relaxed);
+        for _ in 0..30 { workspace_frame(&context, &mut workspace, &probe.params, &state, vec![]); }
+        assert_eq!(workspace.viewport, Some((0, 80000)), "Stop cancels the old target");
+        assert_eq!(workspace.selection, Some((20000, 30000)));
+        assert_eq!(state.position.load(std::sync::atomic::Ordering::Relaxed), 150000);
+    }
+
+    #[test]
     fn center_follow_and_fit_controls_preserve_examples_and_host_transport() {
         use crate::session_mode::integration_tests::{Fixture, direct_capture};
         let fixture = Fixture::new(2);
@@ -1067,6 +1103,12 @@ mod tests {
         // Let the existing one-second manual-navigation suspension expire.
         std::thread::sleep(Duration::from_millis(1050));
         workspace_frame(&context, &mut workspace, &probe.params, &state, vec![]);
+        let now = context.input(|input| input.time);
+        let mut output = context.run_ui(
+            egui::RawInput { time: Some(now + 0.250), screen_rect: Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(720.0, 560.0))), ..Default::default() },
+            |ui| workspace.show(ui, &probe.params, None, &state),
+        );
+        output.textures_delta.clear();
         assert_eq!(workspace.viewport, Some((146000, 226000)));
         click_control(
             &context,
