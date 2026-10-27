@@ -313,7 +313,7 @@ impl SessionUi {
                 }
                 ui.label(egui::RichText::new(format!("{} – {}", time(view.start, view.rate), time(view.end, view.rate))).small().color(MUTED));
             });
-            let reserved = if self.replacement.is_some() { 295.0 } else { 255.0 };
+            let reserved = if self.replacement.is_some() { 325.0 } else { 285.0 };
             let height = (ui.available_height() - reserved).clamp(140.0, 390.0);
             egui::ScrollArea::vertical().id_salt("session-lanes").max_height(height).scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysVisible).scroll_source(egui::scroll_area::ScrollSource { scroll_bar: true, drag: egui::scroll_area::DragScroll::Never, mouse_wheel: false }).auto_shrink([false; 2]).show(ui, |ui| {
                 self.waveforms(ui, &view, (view.tracks.len() as f32 * 64.0 + 52.0).max(height));
@@ -422,6 +422,21 @@ impl SessionUi {
             }
                 ui.label(egui::RichText::new(&view.message).small().color(MUTED));
             });
+            let mut draft = view.settings;
+            ui.horizontal_wrapped(|ui| {
+                ui.strong("Shared sound").on_hover_text("Sound changes take effect after Analyze; settings apply to the whole session.");
+                for (title, value, min, max, suffix) in [
+                    ("Reduction", &mut draft.reduction_db, -48.0, 0.0, " dB"),
+                    ("Fade in", &mut draft.attack_ms, 5.0, 80.0, " ms"),
+                    ("Fade out", &mut draft.release_ms, 10.0, 150.0, " ms"),
+                ] {
+                    ui.label(title);
+                    ui.add(egui::DragValue::new(value).range(min..=max).suffix(suffix).fixed_decimals(1).speed(0.1));
+                }
+            });
+            if draft != view.settings {
+                self.error = capture.set_settings(draft).err();
+            }
             ui.menu_button("Shared sound & cache…", |ui| {
               egui::ScrollArea::vertical().id_salt("session-details").max_height(200.0).show(ui, |ui| {
                 if ui.checkbox(&mut self.reduced_motion, "Reduced motion").on_hover_text("Local display preference. Snap indicators and Catch up; audio and shared sound values are unchanged.").changed() && self.reduced_motion
@@ -429,20 +444,6 @@ impl SessionUi {
                         self.viewport = Some(motion.target);
                     }
                 ui.label("Sound changes take effect after Analyze.");
-                let mut draft = view.settings;
-                for (title, value, min, max, suffix) in [
-                    ("Reduction", &mut draft.reduction_db, -48.0, 0.0, " dB"),
-                    ("Fade in", &mut draft.attack_ms, 5.0, 80.0, " ms"),
-                    ("Fade out", &mut draft.release_ms, 10.0, 150.0, " ms"),
-                ] {
-                    ui.horizontal(|ui| {
-                        ui.label(title);
-                        ui.add(egui::Slider::new(value, min..=max).suffix(suffix));
-                    });
-                }
-                if draft != view.settings {
-                    self.error = capture.set_settings(draft).err();
-                }
                 ui.label(egui::RichText::new("Session sound is shared; host automation is not supported in this prototype.").small().color(MUTED));
                 ui.label(egui::RichText::new("Analysis uses input channel 1; the same gain is applied to both stereo channels.").small().color(MUTED));
                 ui.label(egui::RichText::new("Blank spans have no captured audio. Replayed audio verifies or updates the cache. Unverified regions preserve original audio.").small().color(MUTED));
@@ -1866,10 +1867,19 @@ mod tests {
         crate::editor::style(&context);
         let mut workspace = SessionUi::default();
         let widgets = workspace_frame(&context, &mut workspace, &probe.params, &state, vec![]);
-        for expected in ["Shared sound", "Reduction", "-18.0 dB", "Fade in", "22.0 ms", "Fade out", "120.0 ms", "Analyze session"] {
+        for expected in ["Shared sound", "Reduction", "Fade in", "Fade out", "Analyze session"] {
             let (_, bounds, clip) = widgets.iter().find(|(text, _, _)| text.replace('−', "-") == expected)
-                .unwrap_or_else(|| panic!("Actual shared control must be visible without opening a menu: {expected}"));
+                .unwrap_or_else(|| panic!("Actual shared control must be visible without opening a menu: {expected}; visible text: {:?}", widgets.iter().map(|widget| &widget.0).collect::<Vec<_>>()));
             assert!(clip.contains_rect(*bounds), "Shared control must remain reachable at720×560: {expected}");
+        }
+        // egui paints the editable number and its unit as adjacent text atoms.
+        for (value, unit) in [("-18.0", " dB"), ("22.0", " ms"), ("120.0", " ms")] {
+            let pair = widgets.windows(2).find(|pair| pair[0].0.replace('−', "-") == value && pair[1].0 == unit)
+                .unwrap_or_else(|| panic!("Shared value and unit must be visible together: {value}{unit}"));
+            for (_, bounds, clip) in pair {
+                assert!(clip.contains_rect(*bounds), "Shared value must remain reachable: {value}{unit}");
+            }
+            assert!((pair[0].1.center().y - pair[1].1.center().y).abs() < 2.0);
         }
         let (_, bounds, clip) = widgets.iter().find(|(text, _, _)| text.contains("Sound settings changed. Analyze again"))
             .expect("The actual stale-analysis reason must remain visible beside the controls");
