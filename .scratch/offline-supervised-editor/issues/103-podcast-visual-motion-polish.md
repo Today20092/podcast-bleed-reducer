@@ -20,6 +20,17 @@ Implement the owner's FabFilter/sonible quality target in the existing Podcast e
 
 ## Results
 
+Post-app-recovery source `da703a556360f2862abc9f7ac27c0ea8d0bdbf7d` exposes real
+shared sound numeric controls inline and reserves compact footer space. Semantic
+RED was observed; all 73 library tests now pass, including value/unit clipping,
+actual stale-analysis readiness and compact/full/DPI layout. Formatting, targeted
+strict Clippy and six actual-widget CPU captures pass. Receipts, guarded-memory
+measurements and a preserved test-only executable are recorded in the checkpoint
+report. The compact 100% PNG was visually inspected. Status remains claimed;
+broader motion/gain/performance/native acceptance and independent reviews remain
+open. No permanent-lane integration or native host qualification is claimed.
+
+
 Current machine-green motion source `671c4b5c556bef51a6b1ccb53055f09e2943f274`: all 72 tests, formatting and targeted strict normal Clippy pass in receipt `20261027-105758-d786de06357743d2bef92408eb328502`. The finite 250 ms slide, local Reduced motion snap/stop behavior and existing navigation timing case are verified. The owner-authorized warm profile is fixed at 8 GiB start / 3 GiB running reserve / 2.5 GiB owned cap / 600 seconds, with immediate native physical >=8 / commit >=6 GiB preflight; script defaults are unchanged. Peak owned commit 1,801,764,864 bytes, minimum physical 11,908,128,768 bytes, minimum commit headroom 8,564,899,840 bytes, exit 0 and cleanup verified. A prior linker failure was repaired by reversible quarantine of the exact failed Podcast test incremental leaf, preserving other caches/dependencies and tested binaries; exact paths and receipts are in the report. The green test executable/source hash is preserved outside the worktree. This is not a normal plugin build or 103 completion. The heavy slot was released to 93; no further compiler/renderer/packaging work follows without coordinator grant.
 
 Remaining: hidden/seek/interruption completion, 110 ms indicators, actual visual refinement preserving the full 96 workflow, final comparable performance/captures, relevant format checks and independent review. Status remains claimed and all broader acceptance unchecked; permanent base is still `13e6dfd`. Native 80 and blocked 81–83 remain unchanged. Historical checkpoints below are retained rather than rewritten.

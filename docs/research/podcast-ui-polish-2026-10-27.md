@@ -1,5 +1,53 @@
 # Podcast visual refinement checkpoint
 
+## Post-recovery inline controls — latest checkpoint
+
+Source `da703a556360f2862abc9f7ac27c0ea8d0bdbf7d` includes the functional change
+`90d30da` and its formatting. Shared Reduction/Fade in/Fade out numeric drag
+controls now stay visible beside actual analysis readiness without opening the
+details menu. Existing shared settings, ranges and explicit Analyze semantics
+are retained. Cache/destructive actions and reduced motion remain in details.
+The lane viewport reserves footer space, preserving readable scrolling lanes.
+
+After protected app recovery the old controller was absent; new main controller
+24244 started at 2026-10-27T17:54:59.1792370Z. Native available physical/commit
+were 19,582,443,520 / 21,485,105,152 bytes; Node count/private bytes were
+35 / 3,094,908,928. Exact ledger survivors were reused PID mismatches; none
+were killed. The one-shot recovery heartbeat was deleted.
+
+The prepared public UI test produced semantic RED (missing Shared sound) in
+`20261027-135915-b10c040a3082478d908da2aeffdbd035`. Sliders exposed compact
+overflow in the full suite; numeric drag controls resolved it. The test checks
+egui's separately painted numeric/unit atoms, clipping, shared scope, Analyze
+and the actual stale reason. All **73 library tests passed** in
+`20261027-140436-fa6b56986eda415d8726bd59387cf6af`; peak owned commit was
+1,763,151,872 bytes, minimum physical/commit 17,350,369,280 / 18,737,098,752.
+Formatting, strict Clippy (`--lib --tests -D warnings`) and the actual workspace
+capture test passed in `20261027-140622-50b3fa8feb0a4b0ab078d9ced91d46cf`.
+That run applied formatting to the 90d30da tree, now committed as da703a5;
+no behavior changed during formatting. Peak owned commit was 1,814,155,264 bytes,
+minimum physical/commit 17,580,679,168 / 18,735,747,072; cleanup verified.
+Both runs retained the fixed 8/3/2.5 GiB, 600-second profile, immediate >=8/6 GiB
+native preflight, pinned locked/offline shared cache and Cargo -j1. Only exact
+named-job-owned VCTIP helpers were stopped after compiler exit. No compiler remains.
+
+Six actual-widget CPU PPM/PNG captures are preserved in
+`C:/Users/User/AppData/Local/CleanSlate/Podcast/Workflow103Captures/90d30da-inline-values/`:
+`session-workspace-{100,150,200}` and `session-workspace-compact-{100,150,200}`.
+The compact 100% PNG was visually inspected: controls/readiness fit and two
+readable lanes remain visible. PNG conversion is lossless with bounded ImageMagick
+memory; these are CPU captures, not native DAW screenshots or presented FPS.
+
+Test-only executable preserved at
+`C:/Users/User/AppData/Local/CleanSlate/VerifiedBuilds/plugin-products/Podcast/da703a5-inline-values-tests/cleanslate-podcast-tests.exe`,
+40,088,576 bytes, SHA256
+`00eee3dc5a8e1b010e5072df0aeea3ed97300d24135d112f28fb1d94da50579f`.
+It must not be installed or distributed as a plugin. Earlier normal artifacts
+remain intact. Ticket 103 is claimed/unmerged: bounded Analysis gain, interruption
+coverage, 110 ms indicators, final performance comparisons/native presentation,
+normal plugin qualification and independent reviews remain open. This checkpoint
+does not close 80 or unblock 81–83, and changes no Gate 93/94 acceptance.
+
 Current green motion source: `671c4b5c556bef51a6b1ccb53055f09e2943f274`. All 72 unit/event tests, targeted strict normal Clippy (`--lib --tests`) and formatting pass. This verifies the finite 250 ms Catch up slide, local reduced-motion snap/stop behavior and the adjusted existing navigation case. It is **not** completion of 103: visual refinement, hidden/seek/interruption completion, 110 ms indicators, comparable final performance/captures and independent review remain open. Nothing has been merged into the permanent Podcast lane.
 
 Ticket 103 is claimed on `codex/podcast-ui-polish-103`, from exact permanent Podcast tip `13e6dfd3781a3371e429f9760a9f7f30fc77df90`. Only the required ticket, premium contract amendment and original 102 visual-study sources/frames were imported from the primary tracker; no desktop branch was merged. Existing egui/Session seams remain the test boundaries. Context7 resolution returned its monthly quota error; pinned egui 0.37 source documents `RawInput.time`, viewport visibility and repaint APIs.
