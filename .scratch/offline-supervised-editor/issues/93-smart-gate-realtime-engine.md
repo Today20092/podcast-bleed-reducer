@@ -18,8 +18,13 @@ Acceptance:
 - [ ] Report actual latency/tail consistently to each adapter and validate sample alignment/PDC in the lightweight hosts.
 - [ ] Deterministic envelope tests cover silence, short speech, quiet starts/tails, chatter, rapid parameter changes and mono/stereo; actual CLAP/VST3 hosts exercise lifecycle/state/automation/offline processing.
 - [ ] Record memory/deadline/audio-integrity evidence and remaining subjective listening needs. Do not advertise OBS/VST2 support until 97 verifies the integration path.
+- [ ] Inspect the inference-linked artifact's actual native imports, stage verified runtime prerequisites/applicable notices, and validate CLAP/VST3 loading/inference from candidate paths without Cargo-cache, developer PATH or incidental host-module assistance. Embedded model bytes alone do not make the native runtime self-contained.
 
 ## Results
+
+2026-10-27 bounded deployment audit is complete; no implementation/source change. [Verified runtime findings](../../../docs/research/gate93-runtime-packaging-2026-10-27.md) establish static ORT 1.22.0 in the retained 92 build, with ordinary DirectML/MSVC imports and no onnxruntime.dll import. The model is already embedded. The preserved detector executable folder lacks DirectML.dll; hash preservation is not standalone deployment qualification. Current pass-through Gate is not linked to ORT and remains unaffected. The current Gate staging script omits the future native prerequisites and existing model/runtime/dependency notices. DirectML-specific redistribution terms and actual DAW DLL search behavior remain unverified; no dependency/link strategy was selected and no GPU-provider execution is claimed.
+
+The latest default guard readiness attempt refused startup before launching any process: `20261027-093309-2983749bfe4e46f383b2142619d5ba65.json`, 3.59 GiB available physical / 1.30 GiB commit headroom, cleanup verified. No compiler, native host, deep engine/index, heavy retry, service restart or additional reboot ran. Retain `codex/smart-gate-realtime-93` at doc-only `d734bbd`; resume test-first state/arming, worker/DSP and isolated packaging checks only when safe resources permit. 93 stays claimed and 94 stays blocked.
 
 Claimed 2026-10-27 after 92 acceptance, scoped branch
 `codex/smart-gate-realtime-93` from permanent Gate `c7513c8` in the retained Gate

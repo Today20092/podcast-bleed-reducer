@@ -21,6 +21,8 @@ Acceptance:
 
 ## Results
 
+2026-10-27 latest resumption: source remains `6070569`; no code changed. Default guard readiness receipt `20261027-093309-2983749bfe4e46f383b2142619d5ba65.json` refused startup before a process launched, at 3.59 GiB available physical / 1.30 GiB commit headroom; cleanup verified. The corrected focused regression, final Clippy/build/captures and integration remain unchecked. No retry loop, threshold relaxation, service restart or additional reboot occurred. This supersedes older resource observations only; prior source-specific passing evidence remains unchanged.
+
 Claimed 2026-10-26 after 90/95 completion, based on Podcast integration da9b297. Scoped branch codex/podcast-workflow-96 reuses the preserved Podcast worktree and candidate; no whole-desktop merge. Implementation is queued behind the single active Gate detector compiler/measurement job to keep local RAM low.
 
 Existing 95 evidence supplies 62 passing Session/event tests and basic format/state/latency coverage, not this ticket's complete acceptance. Confirmed gaps include labeling/sound actions clipped by eight lanes, the accepted independently scrolling lane viewport and compact/full/DPI interactions, and actual-format cached-envelope versus offline-render/changed-source/monitoring qualification. Keep every unchecked item open until demonstrated. Native listening, real-host PDC/save/export and ticket 80 remain separate; no owner source or installed output will be changed.
