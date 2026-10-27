@@ -1,6 +1,6 @@
 # Compare open-source plugin GUI frameworks and identify vendor UI stacks
 
-Status: done
+Status: claimed
 Assignee: Codex
 Readiness: ready-for-agent
 Type: research
@@ -22,6 +22,14 @@ Compare options against the existing Rust egui/nice-plug editor, accepted CleanS
 - [x] Deliver a cited comparison and practical recommendation: improve the existing implementation, or propose one small representative prototype with explicit acceptance criteria before any migration. Preserve current DSP, source validation, state/format identities and installed artifacts.
 
 ## Results
+
+### Owner-requested extension — 2026-10-27
+
+The owner added explicit research targets [Clay](https://github.com/nicbarker/clay) and [Raven](https://github.com/oscar-soirey/Raven), and points to sonible packages in Downloads for REA. The initial research below remains complete; this ticket is reopened only for the added scope. No framework migration or vendor installation/activation is implied.
+
+- [ ] Compare Clay and Raven using current source/docs/licences: distinguish layout engines, widget systems, renderers and native window/format adapters; verify Rust/C integration, threading, DPI/input/accessibility, platform and maturity/test boundaries, and resource claims versus measurements.
+- [ ] Reconcile the actual sonible files in Downloads with retained source/extraction identities. Reuse matching REA evidence and shipped/manual GUI references; inspect only concrete new gaps with bounded static operations. Keep native/active-renderer claims distinct and serialize any heavy work behind the compiler.
+- [ ] Update the recommendation and representative prototype proposal with these two candidates and the Downloads evidence; preserve the existing implementation and leave unsupported claims explicit.
 
 Completed 2026-10-27 at the requested research boundary. The [cited framework comparison](../../../docs/research/plugin-gui-frameworks-101.md) covers egui/nice-plug, Iced/nice-plug-iced, DPF/DGL, iPlug2/IGraphics, VSTGUI, JUCE 9 and Slint. The [vendor stack report](../../../docs/research/plugin-vendor-ui-stacks-101.md) retains exact identities, offsets, REA evidence and confidence boundaries.
 
