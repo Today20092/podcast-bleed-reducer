@@ -2,6 +2,8 @@
 
 ## Post-reboot update
 
+Qualified identity candidates are additionally preserved outside managed worktrees for later safe cleanup: `%LOCALAPPDATA%/CleanSlate/VerifiedBuilds/plugin-products/SmartGate/10180cb-3f609ef3/` and `Podcast/70f3340-c30df7f5/`. Every source candidate file was SHA256-compared to its preserved copy (5 Gate / 8 Podcast files). The original candidate directories and installed probe outputs remain intact.
+
 **Podcast 95 also completed:** standard build passed 62 unit/Session/egui event tests, strict Clippy, library/examples and actual CLAP/VST3 hosts on clean source 70f3340. Both new identity tickets are now done, for eight completed tickets in this batch. Their permanent product lanes advanced locally with ancestry checks: Gate dda8505 and Podcast da9b297. Desktop receives tracker/evidence only. No product source was merged into desktop.
 
 Podcast preserved candidate: `C:/Users/User/.codex/worktrees/podcast-identity-95/podcast-automix-rust-gui/dist/podcast-candidate/8929f581a41f41ee864f98aec8e6f1ef/`; both formats SHA256 `c30df7f54f9f97040c74cbd63423a41d80c2f7270ee41e9b76379342ea4bdb55`. Compiling stages retained the default guard policy, reached 1,742.98 MiB peak kernel job commit and at least 11.69 GiB physical headroom, and verified cleanup. Two more lingering VCTIP helpers were confirmed inside their named build jobs after compiler exit and stopped individually. Detailed six receipts are in ticket 95. Earlier all-platform metadata's missing nix package did not prevent locked/offline Windows qualification; non-Windows remains unchecked. 96 is now unblocked, with 80's native sound/export/PDC/save/listening checks still open.
