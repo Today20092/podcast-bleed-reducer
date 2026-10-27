@@ -1,5 +1,11 @@
 # Local Windows resource guard
 
+## Owner-authorized bounded plugin profile — 2026-10-27
+
+The owner explicitly asks to continue 93/103 and permits reducing the commit reserve. For these resumed plugin checks, use an outer guarded compiler job with `-MinAvailableGiB 10 -ReserveGiB 5 -MaxCommitGiB 4 -TimeoutSeconds 1200`, Cargo `-j1`, the pinned shared development profile and existing global mutex. This is a compiler budget, not a lightweight-test classification. The preceding stopped compiler peaked at 1.65 GiB owned commit; initial measurement for this resumption was 14.05 GiB free physical / 11.74 GiB commit headroom. Require at least 9 GiB commit headroom before starting this profile (4 GiB cap plus 5 GiB reserve); a low preflight is a stop, not a polling loop.
+
+Keep this profile fixed for the attempt. A resource-limit/pressure failure ends compilation until a new resource state or deliberate scoped adjustment is reviewed; do not repeatedly lower limits to force a pass. Log the actual policy/peak/minima and cleanup in the existing receipt. Script defaults remain 14/8/6 GiB for other callers. Native hosts keep their existing separate bounded policy. Do not change paging, services, unrelated applications or reboot as part of this authorization.
+
 `scripts/gui-dev.ps1` and `scripts/check.ps1 -Local` run Cargo through
 `scripts/resource-guard.ps1`. Hosted `check.ps1` checks retain their existing
 cross-platform behavior. Locked/offline dependencies, the shared Cargo target,
