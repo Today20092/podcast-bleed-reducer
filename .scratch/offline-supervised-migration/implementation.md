@@ -1,5 +1,7 @@
 # Offline supervised editor implementation sequence
 
+2026-10-27 Gate claim: 93 has only a read-only design/claim checkpoint `d734bbd` on `codex/smart-gate-realtime-93`; no implementation or heavy work. Resume with state restore/default-bypass/explicit-arm tests before bounded inference and gain policy once resources permit. Permanent Gate remains `c7513c8`; 94 is still blocked. No ORT deployment or live speech preservation qualification is implied.
+
 2026-10-27 resource checkpoint: 96 stays claimed at `6070569`; reviewed source fix `47e83bb` is not merged into the permanent Podcast lane pending its corrected focused regression, Clippy, build and refreshed captures. The final guard attempt launched no process at 13.82 GiB physical RAM (<14 GiB start). Prior 69-test/ABI/driver evidence and external artifacts remain valid for their identified earlier source only. No further heavy retry or reboot; resume the [recorded checks](../../docs/research/podcast-workflow-acceptance-2026-10-27.md) when policy permits, then review/integrate. 80/81–83 and Gate 93/94 retain their dependencies/qualification limits.
 
 2026-10-27 extension closure: 101 is done with pinned Clay/Raven source, licences and integration risks, plus seven exact Downloads-to-extracted-artifact identity chains and verified manual UI references. Keep current egui work; possible Iced comparison remains conditional on a concrete limitation. No framework build, migration or comparative performance/native-host acceptance occurred. The reopened status below is superseded; 96 remains independent.
