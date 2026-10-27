@@ -1,7 +1,7 @@
 # Podcast visual, motion and performance refinement
 
 Status: claimed
-Assignee: Codex (Podcast UI refinement)
+Assignee: Codex
 Readiness: ready-for-agent
 Type: task
 Blocked by: 96, 102
@@ -20,4 +20,10 @@ Implement the owner's FabFilter/sonible quality target in the existing Podcast e
 
 ## Results
 
-Claimed 2026-10-27 after 96 completed and integrated at `13e6dfd`. Scoped `codex/podcast-ui-polish-103` starts at that exact permanent Podcast tip in the retained Podcast worktree. One initial unrun public egui/Session Catch up regression is prepared for the accepted 250 ms progression, selection preservation and unchanged host transport. No production implementation yet; 93 owns the compiler slot until explicit handoff. 102 supplies the original design target, not measured vendor-equivalent performance or native animation qualification.
+Final resource checkpoint for this pass: clean scoped tip `bb9ceb3a7e3f79e48661b3a93fe78bb27d002a81`, based on permanent Podcast `13e6dfd`. The first targeted Catch up GREEN and varied-fixture baseline are preserved in `d2b30c91fa5a7f078ca75cdbf6999defc69ed513`; separate `603fc7e91d0c5aa3cc5f04644a3d1bf5c131b7cf` holds unexecuted reduced-motion/stop and navigation test changes. The tip is not integration-ready and acceptance stays unchecked. [Allocation observability findings](../../../docs/research/podcast103-allocation-observability-2026-10-27.md) confirm the current public allocator hooks do not provide GUI allocation bytes/call counts; mesh capacities are scoped geometry-storage observations only. Do not weaken the shipping callback allocation guard to claim this measurement.
+
+Claimed 2026-10-27 from permanent Podcast tip 13e6dfd after 96 integration and 102 completion. Scope uses the existing egui/Session seams and shared visual contract; no framework migration. Gate 93 owns the sole heavy slot: only document/source inspection and one first RED test may be prepared until the coordinator grants execution. No production implementation or renderer/compiler execution has started. Native ticket 80 and dependencies 81–83 remain unchanged.
+
+Coordinator subsequently granted the sole heavy slot. First public-egui/Session Catch up test produced semantic RED (instant jump) then GREEN for a finite 250 ms eased slide with selection/host transport unchanged. Comparable eight-track generated native-PCM baseline records cold and 40 warm query/draw/tessellation samples, p50/p95/p99, mesh counts/capacity at compact/full sizes. No visual refinement, reduced-motion implementation, gain/processing change or native/FPS qualification has landed. Context7 quota was exhausted; pinned egui 0.37 source supplied API documentation.
+
+The next reduced-motion/stop regression could not execute: unchanged guard `20261027-102017-498887ecffda405da9a8ede99fe30316.json` stopped compilation on low system commit headroom (7.74 GiB, below 8 GiB running reserve), with cleanup verified. No semantic RED or GREEN is claimed for that test, and no reduced-motion implementation followed. No retry or threshold relaxation occurred. Keep all acceptance unchecked; finite-motion checkpoint still needs interruption/seek/hidden/reduced-motion completion, formatting, full relevant checks, visual slices and comparisons, final artifacts/captures and independent review. [Checkpoint and raw baseline](../../../docs/research/podcast-ui-polish-2026-10-27.md).
