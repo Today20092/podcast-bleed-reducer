@@ -1,0 +1,62 @@
+{
+  "schema": 1,
+  "provenance_level": "uploader_clip_description",
+  "sample_rate": 48000,
+  "channels": 1,
+  "pcm_format": "f32le",
+  "selection": "First decoded channel; first at most 15 seconds selected before inference; no probability-based trimming or normalization.",
+  "conversion": {
+    "launcher_sha256": "2f6c0a67ec46955e1308ff8740bb44ca742bc6590ae110f2833e7f1d6ccbf649",
+    "version": "ffmpeg 9.0.2-full_build-www.gyan.dev",
+    "arguments": ["-nostdin", "-v", "error", "-n", "-threads", "1", "-filter_threads", "1", "-i", "SOURCE", "-map", "0:a:0", "-t", "15", "-af", "pan=mono|c0=c0", "-ar", "48000", "-c:a", "pcm_f32le", "-threads", "1", "-f", "f32le", "OUTPUT"]
+  },
+  "limits": "Representative category smoke cases, not per-frame speech masks, calibrated confidence, independent accuracy or subjective preservation/listening acceptance.",
+  "fixtures": [
+    {
+      "case": "public-recorded-whisper",
+      "file": "Whispering-example.f32",
+      "bytes": 492636,
+      "sha256": "a6dea42b04d2c1143627c189fc2df27c372a8bd03a0365103efcdb0a05bf96d5",
+      "category": "quiet speech representative: actual whispered word",
+      "author": "Mx. Granger",
+      "source_url": "https://commons.wikimedia.org/wiki/File:Whispering-example.ogg",
+      "download_url": "https://upload.wikimedia.org/wikipedia/commons/e/e8/Whispering-example.ogg",
+      "license": "CC0-1.0",
+      "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "original_bytes": 30283,
+      "original_sha1": "cc3b98f93353cf6ed8bb453669987afe7dd748bd",
+      "original_sha256": "bbdbe95dfe4742e27845c03fba3a8caf9f0f5ad65e34e512fd5609d155e6304e"
+    },
+    {
+      "case": "public-recorded-yes",
+      "file": "En-nz-yes.f32",
+      "bytes": 118984,
+      "sha256": "bbad4bc4dd5fbb1d5f4d0121ebbe37f372402a6b92cfd51ff1713abea7626546",
+      "category": "short affirmative/interjection representative: spoken yes",
+      "author": "Mattadjwic; caption: Codymator Adjwic",
+      "source_url": "https://commons.wikimedia.org/wiki/File:En-nz-yes.ogg",
+      "download_url": "https://upload.wikimedia.org/wikipedia/commons/2/27/En-nz-yes.ogg",
+      "license": "CC-BY-4.0",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "original_bytes": 12589,
+      "original_sha1": "4b92cad9d19926659e4f1470341cc6ca51abf00e",
+      "original_sha256": "0b7911b4e4c20d741d9bd560c50da9f467a52c9a6ecd7ac8ad9f7b73be097c51",
+      "attribution": "En-nz-yes.ogg — Mattadjwic (caption: Codymator Adjwic), https://commons.wikimedia.org/wiki/File:En-nz-yes.ogg — CC BY 4.0, https://creativecommons.org/licenses/by/4.0/. Decoded, first channel selected and resampled to mono 48 kHz float32; no normalization."
+    },
+    {
+      "case": "public-recorded-laughter",
+      "file": "Laughter.f32",
+      "bytes": 2879772,
+      "sha256": "69b42ce2ea35222395ca11fb16d8a5a1311c4a66397dba3b7679d520a8aeb9b7",
+      "category": "human laughter recorded during a story",
+      "author": "ezwa; Commons transfer: Fæ",
+      "source_url": "https://commons.wikimedia.org/wiki/File:Laughter.ogg",
+      "download_url": "https://upload.wikimedia.org/wikipedia/commons/c/c6/Laughter.ogg",
+      "license": "Author public-domain dedication (Commons record; not CC0)",
+      "license_url": "https://commons.wikimedia.org/wiki/File:Laughter.ogg",
+      "original_bytes": 395993,
+      "original_sha1": "e46f1ee739d737af4efa4ddf639eb94bc00e7f08",
+      "original_sha256": "20177435ff9d7a64b778ab731a7d5b60375ae5274ad341a6ca28220468b260cd"
+    }
+  ]
+}

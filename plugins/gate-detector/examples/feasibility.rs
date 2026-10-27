@@ -17,6 +17,10 @@ static ALLOCATIONS: AtomicU64 = AtomicU64::new(0);
 // This bounded experiment uses reviewed reference IDs/bindings, not arbitrary project annotations.
 const REFERENCE_PROJECT_SHA256: &str =
     "cb1180b1e8bcbeb1d136d6480a2227549407fad75f66769d8f81270bf2680d78";
+const OVERLAP_PROJECT_SHA256: &str =
+    "20bb912825964a2ba9b717525477f6af365abb3e434084cf7836e6b5725cbd98";
+const PUBLIC_CATEGORIES: &str = include_str!("../fixtures/public-categories-v1.json");
+type Case = (String, Vec<f32>, serde_json::Value);
 unsafe impl GlobalAlloc for CountAlloc {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         ALLOCATIONS.fetch_add(1, Ordering::Relaxed);
@@ -77,10 +81,125 @@ fn excerpt(path: &Path, start: f64, duration: f64) -> Result<Vec<f32>, Box<dyn s
     }
 }
 
+fn file_sha256(path: &Path) -> Result<String, Box<dyn std::error::Error>> {
+    let mut file = File::open(path)?;
+    let mut digest = Sha256::new();
+    let mut buffer = [0; 65_536];
+    loop {
+        let read = file.read(&mut buffer)?;
+        if read == 0 {
+            break;
+        }
+        digest.update(&buffer[..read]);
+    }
+    Ok(format!("{:x}", digest.finalize()))
+}
+
+fn public_categories(root: &Path) -> Result<Vec<Case>, Box<dyn std::error::Error>> {
+    let manifest: serde_json::Value = serde_json::from_str(PUBLIC_CATEGORIES)?;
+    let mut cases = Vec::new();
+    for fixture in manifest["fixtures"]
+        .as_array()
+        .ok_or("missing public fixtures")?
+    {
+        let expected = fixture["bytes"].as_u64().ok_or("missing fixture length")?;
+        let path = root.join(fixture["file"].as_str().ok_or("missing fixture file")?);
+        let mut bytes = Vec::with_capacity(expected as usize + 1);
+        File::open(path)?
+            .take(expected + 1)
+            .read_to_end(&mut bytes)?;
+        let hash = format!("{:x}", Sha256::digest(&bytes));
+        if bytes.len() as u64 != expected
+            || bytes.len() % 4 != 0
+            || fixture["sha256"].as_str() != Some(&hash)
+        {
+            return Err("public fixture PCM identity mismatch".into());
+        }
+        let samples: Vec<_> = bytes
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|b| f32::from_le_bytes(*b))
+            .collect();
+        if samples.iter().any(|s| !s.is_finite()) {
+            return Err("public fixture contains nonfinite PCM".into());
+        }
+        cases.push((fixture["case"].as_str().ok_or("missing fixture case")?.into(), samples,
+            json!({"fixture":fixture,"manifest_sha256":format!("{:x}",Sha256::digest(PUBLIC_CATEGORIES.as_bytes())),"provenance_level":manifest["provenance_level"],"selection":manifest["selection"],"conversion":manifest["conversion"],"limits":manifest["limits"]})));
+    }
+    Ok(cases)
+}
+
+fn recorded_overlap(root: &Path) -> Result<Case, Box<dyn std::error::Error>> {
+    let root = root.join("quick-test-10min");
+    let project_bytes = std::fs::read(root.join("261005-quick-test.cleanslate"))?;
+    if format!("{:x}", Sha256::digest(&project_bytes)) != OVERLAP_PROJECT_SHA256 {
+        return Err("reviewed overlap project identity mismatch".into());
+    }
+    let project: serde_json::Value = serde_json::from_slice(&project_bytes)?;
+    let mut verified = Vec::new();
+    for source in project["sources"]
+        .as_array()
+        .ok_or("missing overlap sources")?
+    {
+        let track = source["track_id"].as_u64().ok_or("missing overlap track")?;
+        let hash = file_sha256(&root.join(format!("261005-channel-{track}-10min.wav")))?;
+        if source["fingerprint"].as_str() != Some(&hash) {
+            return Err("overlap source binding mismatch".into());
+        }
+        verified.push(json!({"track":track,"sha256":hash}));
+    }
+    let reference = project["references"]
+        .as_array()
+        .ok_or("missing overlap references")?
+        .iter()
+        .find(|r| r["id"] == 7)
+        .ok_or("overlap reference7 missing")?;
+    if reference["active_speakers"] != json!([1, 2]) {
+        return Err("overlap reference speaker set changed".into());
+    }
+    for binding in reference["sources"]
+        .as_array()
+        .ok_or("missing overlap binding")?
+    {
+        if !verified
+            .iter()
+            .any(|s| s["track"] == binding["track"] && s["sha256"] == binding["fingerprint"])
+        {
+            return Err("overlap reference source binding mismatch".into());
+        }
+    }
+    let ticks = project["ticks_per_second"]
+        .as_f64()
+        .ok_or("missing overlap clock")?;
+    let start = reference["range"]["start"]
+        .as_f64()
+        .ok_or("missing overlap start")?
+        / ticks;
+    let duration = (reference["range"]["end"]
+        .as_f64()
+        .ok_or("missing overlap end")?
+        - reference["range"]["start"]
+            .as_f64()
+            .ok_or("missing overlap start")?)
+        / ticks;
+    if !(0.0..=3.0).contains(&duration) || duration == 0.0 {
+        return Err("overlap excerpt exceeds reviewed bound".into());
+    }
+    Ok((
+        "owner-recorded-overlap-7".into(),
+        excerpt(&root.join("261005-channel-1-10min.wav"), start, duration)?,
+        json!({"reference_id":7,"project_sha256":OVERLAP_PROJECT_SHA256,"source_file":"261005-channel-1-10min.wav","start_seconds":start,"duration_seconds":duration,"active_speakers":reference["active_speakers"],"source_binding":reference["sources"],"verified_sources":verified,"limits":"recorded natural overlap with saved human active-speaker mask; development reference, not an independent per-sample speech audit"}),
+    ))
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<_> = std::env::args().collect();
-    if args.len() != 3 {
-        return Err("usage: feasibility AUTHORIZED_TEST_AUDIO NEW_REPORT_JSON".into());
+    if ![3, 4].contains(&args.len()) {
+        return Err(
+            "usage: feasibility AUTHORIZED_TEST_AUDIO NEW_REPORT_JSON [PUBLIC_FIXTURE_DIRECTORY]"
+                .into(),
+        );
     }
     let root = Path::new(&args[1]);
     let project_bytes = std::fs::read(root.join("261005-supervised.cleanslate"))?;
@@ -89,28 +208,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Err("reviewed reference project identity mismatch; review bindings before changing this fixture".into());
     }
     let project: serde_json::Value = serde_json::from_slice(&project_bytes)?;
+    // Check every additional PCM/source identity before any model is prepared.
+    let mut category_cases = if args.len() == 4 {
+        let mut cases = public_categories(Path::new(&args[3]))?;
+        cases.push(recorded_overlap(root)?);
+        cases
+    } else {
+        Vec::new()
+    };
     // Verify the selected local files against their human-reference source binding.
     let mut source_hashes = Vec::new();
     for source in project["sources"].as_array().ok_or("missing sources")? {
         let track = source["track_id"].as_u64().ok_or("missing track")?;
         let path = root.join(format!("261005-channel-{track}.wav"));
-        let mut file = File::open(&path)?;
-        let mut digest = Sha256::new();
-        let mut buffer = [0; 65_536];
-        loop {
-            let read = file.read(&mut buffer)?;
-            if read == 0 {
-                break;
-            }
-            digest.update(&buffer[..read]);
-        }
-        let hash = format!("{:x}", digest.finalize());
+        let hash = file_sha256(&path)?;
         if source["fingerprint"].as_str() != Some(&hash) {
             return Err(format!("source binding mismatch: {}", path.display()).into());
         }
         source_hashes.push(json!({"track":track,"sha256":hash}));
     }
-    let mut cases: Vec<(String, Vec<f32>, serde_json::Value)> = Vec::new();
+    let mut cases: Vec<Case> = Vec::new();
     cases.push((
         "synthetic-silence".into(),
         vec![0.0; 48_000],
@@ -181,6 +298,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         overlap,
         json!({"derived_from":[9,12],"limits":"artificial mix; not natural human-labeled overlap"}),
     ));
+    cases.append(&mut category_cases);
     let mut reports = Vec::new();
     for rate in [44_100, 48_000, 96_000] {
         let preparation = Instant::now();
@@ -229,7 +347,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
     }
-    let report = json!({"schema":1,"recipe":RECIPE,"model_sha256":MODEL_SHA256,"project_sha256":project_sha256,"verified_sources":source_hashes,"limits":"synchronous allocating offline feasibility; ORT CPU1 thread; no callback suitability or owner listening; laughter/natural quiet/interjection/overlap unqualified; no EOF padding/inference","runs":reports});
+    let report = json!({"schema":1,"recipe":RECIPE,"model_sha256":MODEL_SHA256,"project_sha256":project_sha256,"verified_sources":source_hashes,"category_fixtures_enabled":args.len()==4,"limits":"synchronous allocating offline feasibility; ORT CPU1 thread; category smoke only, not per-frame quality, callback suitability or owner listening; no EOF padding/inference","runs":reports});
     let file = std::fs::OpenOptions::new()
         .write(true)
         .create_new(true)

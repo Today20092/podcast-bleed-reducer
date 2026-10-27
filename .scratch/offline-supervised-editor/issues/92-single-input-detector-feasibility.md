@@ -20,6 +20,30 @@ Acceptance:
 
 ## Results
 
+### Recorded category coverage, pending re-review
+
+225 actual runs now cover silence/noise, normal recorded speech, actual whispered
+speech, a short human affirmative, human laughter and source-bound natural
+overlap at 44.1/48/96 kHz × five block sizes. The optional fixture directory uses
+a compiled metadata manifest with exact PCM bytes/hashes, authors, licenses and
+fixed pre-inference decoding; no audio is distributed. The owner quick-project
+hash, all three source hashes and saved overlap reference 7 [1,2] bindings are
+verified. Original reference 13 is solo and is not natural-overlap evidence.
+
+Same-size one-byte PCM tampering is rejected before inference/report creation
+with public CLI red/green evidence. All-target causal/reset/fault tests, strict
+Clippy and formatting pass. Runtime took 22.38 s with 56.42 MiB peak private
+memory under explicit 4/2/1 GiB bounds; compilation retained default 14/8/6 and
+one Cargo job. All earlier 165 probability arrays remain exactly unchanged.
+
+See the report's recorded-category section and fixture-acquisition note for
+hashes, attribution, complete receipts and the independent evidence limits.
+Low whisper/laughter probabilities are a strong preservation risk, not an
+accuracy percentage without time masks. The bounded worker/gain prototype
+decision requires default bypass, explicit experimental arming and original
+fallback; production attenuation, per-frame preservation and 85/93 listening are
+not qualified. Keep 92 claimed until independent re-review and integration.
+
 ### Measured follow-up, pending review
 
 Actual all-target tests (public causal/reset/fault contract at 44.1/48/96 kHz),

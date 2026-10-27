@@ -279,3 +279,97 @@ Clippy `20261026-232112-72c2e47ef46a4b0680a39634b2032b4c.json`,
 runtime `20261026-232116-2e1dd22d71704f219cd45d1b4c15bc0d.json`.
 The rebuilt example retained the same detector algorithm; changes were the
 fixture-reader lint fix and reviewed-project trust boundary.
+
+## Recorded category follow-up
+
+This follow-up supplies the missing **bounded category smoke evidence**. It does
+not reinterpret clip-level descriptions as per-frame truth. The
+[fixture acquisition record](smart-gate-detector-fixtures.md#successful-commons-acquisition-and-bounded-execution)
+and [compiled metadata manifest](../../plugins/gate-detector/fixtures/public-categories-v1.json)
+record successful policy-compliant Commons acquisition, licenses/attribution,
+original and decoded hashes and the fixed pre-inference decoding/excerpt recipe.
+Freesound GET 403 remains unresolved; no Freesound bytes are used. No audio is
+distributed or committed, and no owner recording/project was changed.
+
+The optional third CLI argument enables three exact-hash public 48 kHz mono
+float32 fixtures plus a recorded natural-overlap case. Each file is read with an
+expected-length cap, checked for exact bytes/SHA256 and finite PCM before model
+preparation. Arbitrary external manifests cannot replace the compiled identities.
+The pinned owner quick-project identity, all three complete WAV hashes and saved
+reference-source bindings are also checked. Saved human reference 7 has active
+speakers [1,2]; its entire 2.666208 s range from track 1 is used. Original reference
+13 was solo, not overlap. The report retains the exact masks, source bindings,
+project/excerpt hashes and development-data limitations.
+
+At block 257, the representative actual recordings yielded:
+
+| Recorded case | Complete 32 ms frames per rate | Mean probability at 44.1 / 48 / 96 kHz | Frames ≥0.5 at 44.1 / 48 / 96 kHz |
+| --- | ---: | --- | --- |
+| Whispered word, Mx. Granger | 80 | 0.1403 / 0.1398 / 0.1398 | 11 / 11 / 11 |
+| Spoken yes, Mattadjwic/Codymator Adjwic | 19 | 0.7133 / 0.7183 / 0.7047 | 15 / 15 / 14 |
+| Human laughter, ezwa | 468 | 0.0091 / 0.0091 / 0.0073 | 1 / 1 / 1 |
+| Owner recorded overlap reference 7 | 83 | 0.9639 / 0.9640 / 0.9649 | 80 / 80 / 80 |
+
+All five block partitions give exactly the same probabilities after reset at
+each rate. The arbitrary 0.5 column describes the series; it is **not a selected
+gate threshold or an accuracy metric**. Whole clips include unknown silent and
+nonspeech spans. Low whisper/laughter response is a strong wanted-audio
+preservation risk; without time masks it is not a measured false-negative rate.
+The recorded-word case is an elicited affirmative, not a claimed spontaneous
+interruption. The overlap mask is saved human development evidence, not an
+independent acoustic audit. No thresholds, labels or excerpts were retuned to
+hide any result.
+
+**Updated bounded decision:** the existing causal/runtime path supports 93's
+worker/queue/gain engineering experiment. It does not support enabling a
+production gate on this probability alone. Any 93 prototype must default to
+bypass, require explicit experimental arming and retain original fallback for
+invalid/stale/late evidence. Per-frame preservation and owner listening remain
+unqualified; these new categories do not waive 85/93's quiet/laughter/sound gates.
+No newer model, ownership classifier or threshold-only substitute was introduced.
+
+The measurement completed **225 runs** in 22.38 s with 19,890 model calls, peak private
+59,162,624 bytes (56.42 MiB), working set 78,290,944 bytes (74.66 MiB), kernel job
+commit 62,083,072 bytes (59.21 MiB), cleanup verified. Runtime kept explicit
+4 GiB start / 2 GiB reserve / 1 GiB owned cap / 300 s bounds. Minimum observed
+physical/commit headroom was 17,520,459,776 / 16,728,289,280 bytes. Preparation was
+127.156/74.577/73.830 ms, and largest inference-bearing push
+0.501531/0.484978/0.489727 ms at 44.1/48/96 kHz. These single-run wall-clock
+observations remain neither guaranteed deadlines nor plugin PDC. Every earlier
+165 probability array exactly matches the preceding report; the detector model,
+algorithm and current pass-through host latency are unchanged.
+
+All-target public causal/reset/fault tests passed (0.31 s execution), strict
+all-target Clippy and formatting passed, and the example built. Compiling steps
+kept default 14/8/6 GiB bounds, locked/offline shared cache and Cargo -j1. Two
+lingering VCTIP descendants were each proven inside their exact named CleanSlate
+job after cargo/rustc/link exit, then stopped individually by the coordinator;
+guard elapsed includes that wait. No unrelated process or service was stopped.
+The same-size one-byte changed public PCM fixture failed the new public CLI
+boundary red before implementation (old CLI usage rejection); green rejects its
+pinned PCM hash before inference or creating a report. Evidence remains at
+`%LOCALAPPDATA%/CleanSlate/GateDetector92/public-fixture-red-guard.json` and
+`public-fixture-green-guard.json`, plus the private tampered fixture and logs.
+
+Category report:
+`%LOCALAPPDATA%/CleanSlate/GateDetector92/category-feasibility-9da9a89b8d2248ff9a7e34cc972a9568.json`
+(967,353 bytes), SHA256
+`b85b692462f1f2220a2aae122f15d22ede5170facc00f959bad05c4b2936c8be`.
+Compiled metadata-manifest digest in that report:
+`4d850e980aaa6cf31175713a8e58a6aa15ab88ce63366373bc751446744011db`.
+Tested executable SHA256:
+`9cbfc2ab82c10cdd7a957a5df4cd2414833992ab326a80ddc8657137489f3541`,
+hash-preserved at
+`%LOCALAPPDATA%/CleanSlate/VerifiedBuilds/gate-detector/categories-9cbfc2ab/feasibility.exe`.
+Receipts under `%LOCALAPPDATA%/CleanSlate/BuildReceipts/`:
+
+- Build: `20261026-235423-2b919568033d4a66a722d0bbedead655.json`.
+- Category runtime: `20261026-235542-8c9481edf4de4ffd8c63892a40c5f0bc.json`.
+- Strict Clippy: `20261026-235629-070b0fcb483d477fad580ef28ee77979.json`.
+- Formatting: `20261026-235659-2b57457dec354577a52ed56c679ef509.json`.
+- All-target tests: `20261026-235700-d74e271023b343a0a9ca32ce3454f270.json`.
+
+Ticket 92 remains claimed pending independent review/integration. Category-smoke
+coverage is now present, while broader sound/preservation remains an explicit
+93/85 obligation rather than an invented requirement for completing this bounded
+feasibility decision.
