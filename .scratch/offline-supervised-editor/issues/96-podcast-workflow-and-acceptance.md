@@ -1,6 +1,6 @@
 # Podcast workflow parity and autonomous acceptance evidence
 
-Status: claimed
+Status: done
 Assignee: Codex
 Readiness: ready-for-agent
 Type: task
@@ -12,14 +12,33 @@ Related: 85, 86
 Continue Podcast ticket 80's acceptance and UI workflow with a machine-checkable/native split. Apply the UI contract only within the product workspace and preserve 84's navigation regressions. Build a parity checklist against the desktop workflow, fixing demonstrated gaps in capture/label/analyze/review and recovery rather than cloning the whole application shell.
 
 Acceptance:
-- [ ] Test source-time capture, looping/replayed changed/unchanged audio, gaps, labels and fingerprint invalidation, explicit analysis/cancellation and shared participants.
-- [ ] Actual-format hosts verify cached envelope playback versus host offline rendering, first/last sample positions, latency reporting, state restore, changed-source fallback and Original/Processed/Removed output.
-- [ ] Headless compact/full/DPI and interaction tests cover quick selection, zoom/pan/fit/navigator, Center/Catch up/Lock, label edits and actionable errors.
-- [ ] Record exact machine evidence against the unresolved 80 checklist; retain subjective quiet-speech/overlap/transition listening and unavailable native host checks as pending.
-- [ ] Do not mark 80 done or unblock 81–83 merely because synthetic tests pass. If native listening acceptance is the only blocker, checkpoint it and continue independent Gate/research tasks.
-- [ ] No owner source overwrite, project save or export replacement; tests use disposable copies and explicitly named outputs. All heavy steps use 88.
+- [x] Test source-time capture, looping/replayed changed/unchanged audio, gaps, labels and fingerprint invalidation, explicit analysis/cancellation and shared participants.
+- [x] Actual-format hosts verify cached envelope playback versus host offline rendering, first/last sample positions, latency reporting, state restore, changed-source fallback and Original/Processed/Removed output.
+- [x] Headless compact/full/DPI and interaction tests cover quick selection, zoom/pan/fit/navigator, Center/Catch up/Lock, label edits and actionable errors.
+- [x] Record exact machine evidence against the unresolved 80 checklist; retain subjective quiet-speech/overlap/transition listening and unavailable native host checks as pending.
+- [x] Do not mark 80 done or unblock 81–83 merely because synthetic tests pass. If native listening acceptance is the only blocker, checkpoint it and continue independent Gate/research tasks.
+- [x] No owner source overwrite, project save or export replacement; tests use disposable copies and explicitly named outputs. All heavy steps use 88.
 
 ## Results
+
+### Scoped closure and integration — 2026-10-27
+
+The bounded machine workflow/parity scope is complete. Independent Standards and
+Spec reviews cleared both fixes in `47e83bb`; verified clean source `6070569`
+passed 70 tests, strict Clippy, formatting, the normal build/basic actual-format
+hosts and six refreshed CPU captures. Final handoff `512d12ccfe73afe079b412a459db53d6ad38c7cf`
+changes documentation only after that tested source. The merger verified the
+source diff, successful guarded receipts and all eight preserved candidate hashes,
+then fast-forwarded permanent `codex/plugin-podcast` from `da9b297` to that tip.
+No product source changed during closure and no checks were rerun.
+
+Ticket 80 remains open for native DAW PDC/save/export and subjective quiet-speech,
+overlap and transition listening; 81–83 remain blocked. CPU captures and synthetic
+format processing do not qualify those checks. The checked candidate omits
+DirectML; no clean-room runtime/dependency qualification is claimed. No installed
+links, owner projects/audio, release or publication changed. The worktree and
+ignored candidates remain preserved. Earlier claimed, unrun and pending-integration
+statements below are retained history and superseded by this scoped closure.
 
 Claimed 2026-10-26 after 90/95 completion, based on Podcast integration da9b297. Scoped branch codex/podcast-workflow-96 reuses the preserved Podcast worktree and candidate; no whole-desktop merge. Implementation is queued behind the single active Gate detector compiler/measurement job to keep local RAM low.
 
