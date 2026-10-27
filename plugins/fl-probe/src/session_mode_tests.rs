@@ -317,6 +317,32 @@ pub(crate) fn direct_capture(
     }
 }
 
+// Shared deterministic visual/performance fixture: room, distinct speech-like bursts,
+// low background and sharp edges. Generated PCM is not acoustic-quality evidence.
+pub(crate) fn visual_capture(engine: &SessionCapture, member: usize) {
+    for start in (0..64000).step_by(BLOCK) {
+        let mut packet = Packet {
+            member,
+            owner: member as u64 + 1,
+            start: start as i64,
+            count: (64000 - start).min(BLOCK),
+            channels: 1,
+            samples: [[0.0; 2]; BLOCK],
+        };
+        for offset in 0..packet.count {
+            let index = start + offset;
+            let t = index as f32 / 8000.0;
+            let phase = (t * 1.7 + member as f32 * 0.43).fract();
+            let burst = if index >= 8000 && phase < 0.58 {
+                (phase * std::f32::consts::PI / 0.58).sin().powi(2)
+            } else { 0.0 };
+            let carrier = (t * (173.0 + member as f32 * 31.0) * std::f32::consts::TAU).sin();
+            packet.samples[offset][0] = carrier * (0.012 + burst * (0.28 + member as f32 * 0.035));
+        }
+        engine.write_packet(packet).unwrap();
+    }
+}
+
 fn install_constant_analysis(engine: &SessionCapture, samples: &[f32]) {
     assert_eq!(samples.len(), BLOCK);
     let mut bytes = Vec::with_capacity(BLOCK * 4);

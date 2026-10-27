@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>CleanSlate — plugin visual study</title>
+<style>
+:root{font-family:"Segoe UI",sans-serif;color:#e4e7eb;background:#16181c;font-size:14px;color-scheme:dark}
+*{box-sizing:border-box}body{margin:0;padding:28px 24px 36px}main{max-width:1000px;margin:auto}
+h1{font-size:22px;font-weight:600;letter-spacing:-.02em;margin:0 0 8px}p{color:#adb5c0;line-height:1.6;margin:0 0 20px;max-width:78ch}
+button,select,input{font:inherit}button,select{background:#292d33;color:#e4e7eb;border:1px solid #414750;border-radius:4px;padding:9px 14px;cursor:pointer}
+button:hover,select:hover{background:#343940}button[aria-pressed=true]{background:#779bc7;border-color:#779bc7;color:#152233}
+:focus-visible{outline:2px solid #9ac5ff;outline-offset:3px}::selection{background:#779bc7;color:#152233}button:disabled{opacity:.6;cursor:default}*{scrollbar-color:#6b747f #202226;scrollbar-width:thin}.toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:18px}.tabs{display:flex;gap:4px;margin-right:auto}
+.viewer{overflow:auto;background:#202226;border:1px solid #3d434c;border-radius:7px}.viewer svg{display:block;width:100%;min-width:640px;height:auto}.viewer[data-mode=podcast] svg{min-width:720px}
+.controls{display:flex;flex-wrap:wrap;gap:20px 32px;padding:20px 0;border-bottom:1px solid #343940}.controls label{display:flex;flex-direction:column;gap:9px;min-width:155px;flex:1}.controls input{accent-color:#6fbeb7;width:100%;margin:0}
+.row{display:flex;justify-content:space-between;gap:12px}.row output{font-variant-numeric:tabular-nums;color:#e4e7eb}.check{display:flex;gap:8px;align-items:center;color:#adb5c0}
+footer{display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px;color:#adb5c0;font-size:12px;margin-top:16px}#feedback{font-size:12px;margin:12px 0 0}
+@media(max-width:760px){body{padding:20px 12px}.tabs{width:100%}.toolbar{gap:8px}.controls{gap:18px}h1{font-size:20px}}
+@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto}}
+</style>
+<main>
+  <h1>CleanSlate plugin visual study</h1>
+  <p>Original design direction for Smart Gate and Podcast. All signals and readings are generated examples. This is an interactive design study, not a running plugin or an audio-performance measurement.</p>
+  <div class="toolbar">
+    <div class="tabs" role="group" aria-label="Product preview">
+      <button id="gate" aria-pressed="true">Smart Gate</button><button id="podcast" aria-pressed="false">Podcast</button>
+    </div>
+    <button id="play" aria-pressed="false">Animate preview</button>
+    <label>Refresh <select id="rate"><option value="30">30 Hz</option><option value="60">60 Hz</option></select></label>
+    <label class="check"><input id="reduce" type="checkbox"> Reduced motion</label>
+  </div>
+  <div id="viewer" class="viewer" data-mode="gate" aria-label="Generated Smart Gate design preview"></div>
+  <div class="controls" id="controls">
+    <label><span class="row"><span id="amount-label">Threshold</span><output id="amount-value" for="amount">50%</output></span><input id="amount" type="range" min="5" max="95" value="50" step="1"></label>
+    <label><span class="row"><span id="timing-label">Release</span><output id="timing-value" for="timing">180 ms</output></span><input id="timing" type="range" min="40" max="400" value="180" step="10"></label>
+    <label><span class="row"><span>Preview position</span><output id="position-value" for="position">5.0 s</output></span><input id="position" type="range" min="0" max="12" value="5" step="0.1"></label>
+  </div>
+  <p id="feedback" role="status">Preview paused. Controls update immediately.</p>
+  <footer><span>Charcoal surfaces · teal source · purple gain · blue actions</span><span>No audio, external assets, fonts or network requests.</span></footer>
+</main>
+<script>
+'use strict';
+// This renderer is a visual study only; native widgets/DSP retain their own implementation.
+const C={bg:'#202226',panel:'#292d33',plot:'#181b1f',text:'#e4e7eb',muted:'#adb5c0',line:'#3d434c',teal:'#6fbeb7',gain:'#d282f5',blue:'#779bc7',warn:'#d8b579'};
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const n=v=>Number(v).toFixed(2);
+const text=(x,y,s,size=14,color=C.text,extra='')=>`<text x="${n(x)}" y="${n(y)}" font-size="${size}" fill="${color}" ${extra}>${s}</text>`;
+const rect=(x,y,w,h,fill,extra='')=>`<rect x="${n(x)}" y="${n(y)}" width="${n(w)}" height="${n(h)}" fill="${fill}" ${extra}/>`;
+const line=(x,y,x2,y2,color=C.line,extra='')=>`<path d="M${n(x)},${n(y)}L${n(x2)},${n(y2)}" stroke="${color}" fill="none" ${extra}/>`;
+function speech(t){const a=Math.sin(t*1.7+.2),b=Math.sin(t*3.8+1);return clamp((a*.7+b*.3+.25)*1.7,0,1);}
+function signal(t){return (Math.sin(t*92)+.46*Math.sin(t*177+.5))*.62*(.06+.94*speech(t));}
+function previewAttenuation(track,p,amount){return p>=.25&&p<=.43?(track===0?0:amount/100):(1-speech(p*12+track*1.9))*amount/100;}
+function pathFor(count,point){let d='';for(let i=0;i<count;i++){const p=point(i/(count-1));d+=(i?'L':'M')+n(p[0])+','+n(p[1]);}return d;}
+function grid(x,y,w,h){let s='';for(let i=0;i<5;i++)s+=line(x,y+i*h/4,x+w,y+i*h/4,C.line,'opacity=".42"');for(let i=1;i<8;i++)s+=line(x+i*w/8,y,x+i*w/8,y+h,C.line,'opacity=".25"');return s;}
+function chip(x,y,w,label,active=false){return rect(x,y,w,28,active?C.blue:C.panel,'rx="4"')+text(x+w/2,y+19,label,12,active?'#152233':C.muted,'text-anchor="middle"');}
+function knob(x,y,label,value,unit,p,color=C.teal,small=false){
+  const a=(-135+270*clamp(p,0,1))*Math.PI/180,r=small?18:25,px=x+Math.sin(a)*r,py=y-Math.cos(a)*r;
+  return `<circle cx="${x}" cy="${y}" r="${small?23:31}" fill="none" stroke="${C.line}" stroke-width="3"/><circle cx="${x}" cy="${y}" r="${small?18:24}" fill="${C.panel}"/>`+
+    line(x+Math.sin(a)*10,y-Math.cos(a)*10,px,py,color,'stroke-width="3" stroke-linecap="round"')+
+    text(x,y+(small?38:55),label,13,C.muted,'text-anchor="middle"')+text(x,y+(small?61:80),value,24,C.text,'text-anchor="middle"')+text(x,y+(small?78:98),unit,12,C.muted,'text-anchor="middle"');
+}
+function meters(x,y,h,t){let s='';for(let m=0;m<2;m++){const level=clamp(.3+.6*speech(t-m*.08),0,1);s+=rect(x+m*15,y,7,h,C.panel,'rx="2"')+rect(x+m*15,y+h*(1-level),7,h*level,C.teal,'rx="2"');}return s;}
+function renderPanel(mode,t=5,opts={}){
+  const w=clamp(opts.width||1000,mode==='gate'?640:720,1100),compact=w<800,h=mode==='gate'?(compact?440:620):(compact?560:680),amount=clamp(opts.amount??50,5,95),timing=clamp(opts.timing??180,40,400);
+  const x=24,y=112,pw=w-88,end=x+pw;
+  let s=rect(0,0,w,h,C.bg)+rect(0,0,w,69,C.bg)+text(24,33,'CleanSlate',21)+text(24,53,mode==='gate'?'SMART GATE':'PODCAST',12,C.teal,'letter-spacing="1.4"');
+  s+=(mode==='gate'?chip(w-260,22,104,'Original',false)+chip(w-148,22,124,'Gate preview',true):chip(w-348,22,104,'Original',false)+chip(w-236,22,104,'Processed',true)+chip(w-124,22,100,'Removed',false))+line(24,69,w-24,69);
+  if(mode==='gate'){
+    const threshold=amount/100,confidence=speech(t),open=confidence>=threshold;
+    const ch=compact?64:108,cr=ch-18;
+    s+=text(x,96,'Speech confidence',13,C.muted)+text(end,96,open?'Gate open · 0.0 dB':'Attenuated · −14.0 dB',13,open?C.teal:C.gain,'text-anchor="end"');
+    s+=rect(x,y,pw,ch,C.plot,'rx="3"')+grid(x,y,pw,ch);
+    s+=`<path d="${pathFor(256,p=>[x+p*pw,y+ch-9-speech(t-6+p*6)*cr])}" fill="none" stroke="${C.teal}" stroke-width="2"/>`;
+    s+=line(x,y+ch-9-threshold*cr,end,y+ch-9-threshold*cr,C.warn,'stroke-dasharray="5 5" opacity=".8"');
+    s+=text(x,compact?200:251,'Input / output',13,C.muted)+text(end,compact?200:251,'6 seconds',12,C.muted,'text-anchor="end"');
+    const wy=compact?212:264,wh=compact?78:146,mid=wy+wh/2;
+    s+=rect(x,wy,pw,wh,C.plot,'rx="3"')+grid(x,wy,pw,wh);
+    const wave=pathFor(384,p=>[x+p*pw,mid-signal(t-6+p*6)*wh*.39]);
+    const output=pathFor(384,p=>{const at=t-6+p*6,g=speech(at)>=threshold?1:.2;return[x+p*pw,mid-signal(at)*wh*.39*g];});
+    s+=`<path d="${wave}" fill="none" stroke="${C.muted}" stroke-width="1" opacity=".42"/><path d="${output}" fill="none" stroke="${C.teal}" stroke-width="1.4"/>`;
+    s+=line(end,wy,end,wy+wh,C.teal,'opacity=".6"')+meters(w-43,y,wh+wy-y,t);
+    s+=text(w-32,96,'I/O',12,C.muted,'text-anchor="middle"');
+    const ky=compact?334:480,sep=compact?306:432;
+    s+=line(24,sep,w-24,sep)+knob(w*.16,ky,'Threshold',`${amount}`,'%',threshold,C.teal,compact)+knob(w*.39,ky,'Attack','10','ms',.2,C.teal,compact)+knob(w*.62,ky,'Hold','80','ms',.4,C.gain,compact)+knob(w*.85,ky,'Release',`${timing}`,'ms',(timing-40)/360,C.gain,compact);
+    const footerY=compact?h-19:h-29;
+    s+=line(24,footerY,w-24,footerY)+text(24,h-10,'Generated preview · experimental processing stays off by default',12,C.muted);
+  }else{
+    s+=text(24,96,'Session 1',14)+text(107,96,'3 microphones · captured source time',12,C.muted)+chip(w-186,79,78,'Fit',false)+chip(w-100,79,76,'Follow',true);
+    const left=compact?94:112,plotw=w-left-64,top=148,laneH=compact?65:91;
+    s+=rect(left,top,plotw,laneH*3,C.plot,'rx="3"');
+    for(let i=0;i<3;i++){
+      const ly=top+i*laneH,mid=ly+laneH*.54;
+      s+=text(24,ly+32,`Mic ${i+1}`,13)+text(24,ly+51,i===0?'ALEX':i===1?'JAMIE':'MORGAN',12,C.muted,'letter-spacing=".7"')+grid(left,ly,plotw,laneH);
+      let bars='';for(let j=0;j<160;j++){const at=j/159*12+i*1.9,a=(.035+speech(at)*.78)*(.5+.5*Math.abs(Math.sin(j*1.79+i)))*laneH*.36;bars+=line(left+j/159*plotw,mid-a,left+j/159*plotw,mid+a,i===1?'#89a9cb':C.teal,'stroke-width="1.5" opacity=".85"');}
+      s+=bars;
+      const positions=Array.from({length:128},(_,j)=>j/127).concat([.25-.000001,.25,.43,.43+.000001]).sort((a,b)=>a-b);
+      const gain=positions.map((p,j)=>(j?'L':'M')+n(left+p*plotw)+','+n(ly+10+previewAttenuation(i,p,amount)*23)).join('');
+      s+=`<path d="${gain}" fill="none" stroke="${C.gain}" stroke-width="1.5"/>`+line(left,ly+laneH,left+plotw,ly+laneH,C.line);
+    }
+    const a=left+plotw*.25,b=left+plotw*.43,ph=top+laneH*3,head=left+clamp(t/12,0,1)*plotw;
+    s+=rect(a,top,b-a,laneH*3,'#779bc7','opacity=".12"')+line(a,top,a,ph,C.blue)+line(b,top,b,ph,C.blue);
+    s+=chip(a,top-29,b-a,'Alex only',true)+text(left,top-12,'00:00',12,C.muted)+text(left+plotw,top-12,'00:12',12,C.muted,'text-anchor="end"');
+    s+=line(head,top-5,head,ph,C.text,'stroke-width="1.3"')+`<path d="M${head-4},${top-6}L${head+4},${top-6}L${head},${top-1}Z" fill="${C.text}"/>`+meters(w-43,top,laneH*3,t);
+    s+=text(24,compact?374:451,'Selection 00:03.0 — 00:05.2',12,C.muted)+chip(w-204,compact?356:433,180,'Label selection…',false)+line(24,compact?398:479,w-24,compact?398:479);
+    const ky=compact?438:524;
+    s+=knob(w*.15,ky,'Reduction',`${amount}`,'%',amount/100,C.gain,compact)+knob(w*.37,ky,'Fade',`${timing}`,'ms',(timing-40)/360,C.gain,compact);
+    s+=text(w*.57,compact?436:520,'Ready for review',16,C.teal)+text(w*.57,compact?460:544,'4 examples · analysis current',12,C.muted)+chip(w*.57,compact?479:563,compact?210:230,'Analyze session',true);
+    s+=line(24,h-32,w-24,h-32)+text(24,h-11,'Generated preview · original recordings preserved',12,C.muted)+text(w-24,h-11,'Original / Processed / Removed',12,C.muted,'text-anchor="end"');
+  }
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" role="img" aria-labelledby="study-title study-desc" font-family="Segoe UI, sans-serif" font-weight="400"><title id="study-title">CleanSlate ${mode==='gate'?'Smart Gate':'Podcast'} visual study</title><desc id="study-desc">Original design with generated signal, not a running audio plugin. Use the accessible preview controls outside this illustration.</desc>${s}</svg>`;
+}
+function shouldAnimate(playing,reduced,hidden){return playing&&!reduced&&!hidden;}
+globalThis.cleanSlateStudy={renderPanel,pathFor,shouldAnimate,clamp,previewAttenuation};
+if(typeof document!=='undefined'){
+  const $=id=>document.getElementById(id),viewer=$('viewer'),pref=matchMedia('(prefers-reduced-motion: reduce)');
+  let mode='gate',playing=false,reduced=pref.matches,phase=5,last=0,lastDraw=0,raf=0;
+  $('reduce').checked=reduced;
+  function draw(){const width=clamp(viewer.clientWidth,mode==='gate'?640:720,1000);viewer.innerHTML=renderPanel(mode,phase,{width,amount:+$('amount').value,timing:+$('timing').value});}
+  function update(){
+    $('amount-label').textContent=mode==='gate'?'Threshold':'Reduction';$('timing-label').textContent=mode==='gate'?'Release':'Fade';
+    $('amount-value').textContent=$('amount').value+'%';$('timing-value').textContent=$('timing').value+' ms';$('position-value').textContent=phase.toFixed(1)+' s';
+    $('play').textContent=playing?'Pause preview':'Animate preview';$('play').setAttribute('aria-pressed',String(playing));
+    $('play').disabled=reduced;$('feedback').textContent=reduced?'Reduced motion: signal motion is paused. Controls still update immediately.':playing?'Generated signal is moving. Native animation and audio performance are not measured here.':'Preview paused. Controls update immediately.';
+    draw();schedule();
+  }
+  function tick(ts){raf=0;if(!shouldAnimate(playing,reduced,document.hidden))return;const dt=last?Math.min((ts-last)/1000,.1):0;last=ts;phase=(phase+dt)%12;
+    if(ts-lastDraw>=1000/+$('rate').value){lastDraw=ts;draw();$('position').value=phase;$('position-value').textContent=phase.toFixed(1)+' s';}schedule();}
+  function schedule(){if(raf)cancelAnimationFrame(raf);raf=0;if(shouldAnimate(playing,reduced,document.hidden))raf=requestAnimationFrame(tick);else last=0;}
+  for(const id of ['gate','podcast'])$(id).addEventListener('click',()=>{mode=id;viewer.dataset.mode=id;viewer.setAttribute('aria-label',`Generated ${id==='gate'?'Smart Gate':'Podcast'} design preview`);for(const tab of ['gate','podcast'])$(tab).setAttribute('aria-pressed',String(id===tab));update();});
+  $('play').addEventListener('click',()=>{playing=!playing;last=0;update();});
+  $('reduce').addEventListener('change',()=>{reduced=$('reduce').checked;update();});
+  pref.addEventListener('change',e=>{reduced=e.matches;$('reduce').checked=reduced;update();});
+  for(const id of ['amount','timing','position'])$(id).addEventListener('input',()=>{if(id==='position'){phase=+$('position').value;last=0;}update();});
+  $('rate').addEventListener('change',()=>{last=0;lastDraw=0;schedule();});
+  document.addEventListener('visibilitychange',()=>{last=0;schedule();});
+  new ResizeObserver(()=>draw()).observe(viewer);update();
+}
+</script>
+</html>

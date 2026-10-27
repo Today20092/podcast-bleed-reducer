@@ -73,6 +73,13 @@ pub struct SessionUi {
     playhead: Option<i64>,
     follow: u8,
     manual_navigation: Option<Instant>,
+    catch_up: Option<CatchUp>,
+}
+
+struct CatchUp {
+    began: f64,
+    from: (i64, i64),
+    target: (i64, i64),
 }
 
 fn set<P: Param>(setter: Option<&ParamSetter<'_>>, parameter: &P, value: P::Plain) {
@@ -219,7 +226,11 @@ impl SessionUi {
         let columns = (ui.available_width() - 116.0).ceil().clamp(64.0, 2048.0) as usize;
         let position = state.position.load(std::sync::atomic::Ordering::Relaxed);
         self.playhead = (position >= 0).then_some(position);
-        if state.playing.load(std::sync::atomic::Ordering::Relaxed)
+        let playing = state.playing.load(std::sync::atomic::Ordering::Relaxed);
+        if !playing || self.follow != 1 || self.drag_anchor.is_some() || self.pan_anchor.is_some() {
+            self.catch_up = None;
+        }
+        if playing
             && self
                 .manual_navigation
                 .is_none_or(|last| last.elapsed() > Duration::from_secs(1))
@@ -231,8 +242,26 @@ impl SessionUi {
             let rate = last.rate;
             if self.follow == 2 {
                 self.set_viewport(rate, position - (end - start) / 2, end - start);
-            } else if self.follow == 1 && (position >= end || position < start) {
+            } else if self.follow == 1 && self.catch_up.is_none() && (position >= end || position < start) {
                 self.set_viewport(rate, position - (end - start) / 20, end - start);
+                self.catch_up = Some(CatchUp {
+                    began: ui.input(|input| input.time),
+                    from: (start, end),
+                    target: self.viewport.expect("bounded follow target"),
+                });
+                self.viewport = Some((start, end));
+            }
+        }
+        if let Some(motion) = &self.catch_up {
+            let progress = ((ui.input(|input| input.time) - motion.began) / 0.250).clamp(0.0, 1.0);
+            let eased = progress * progress * (3.0 - 2.0 * progress);
+            let start = motion.from.0 + ((motion.target.0 - motion.from.0) as f64 * eased).round() as i64;
+            self.viewport = Some((start, start + motion.from.1 - motion.from.0));
+            if progress >= 1.0 {
+                self.viewport = Some(motion.target);
+                self.catch_up = None;
+            } else {
+                ui.ctx().request_repaint();
             }
         }
         let query = (self.viewport, columns);
@@ -486,6 +515,7 @@ impl SessionUi {
     }
 
     fn navigate(&mut self, action: Navigation, view: &SessionView) {
+        self.catch_up = None;
         match action {
             Navigation::Fit => self.viewport = None,
             Navigation::Selection => {
@@ -558,6 +588,7 @@ impl SessionUi {
     }
 
     fn set_viewport(&mut self, rate: u32, start: i64, width: i64) {
+        self.catch_up = None;
         let total = i64::from(rate.max(1)) * 7200;
         let width = width.clamp((i64::from(rate) / 10).max(1), total);
         let start = start.clamp(0, total - width);
@@ -957,6 +988,48 @@ mod tests {
                 modifiers: egui::Modifiers::NONE,
             }],
         );
+    }
+
+    #[test]
+    fn catch_up_slides_for_250_ms_without_moving_selection_or_host_transport() {
+        use crate::session_mode::integration_tests::{Fixture, direct_capture};
+        let fixture = Fixture::new(2);
+        for member in 0..2 {
+            direct_capture(fixture.engine(), member, 0, 160000, false);
+        }
+        let state = GuiState::new();
+        *state.capture.lock() = Some(fixture.engine().clone());
+        let probe = crate::FlProbe::default();
+        let context = egui::Context::default();
+        crate::editor::style(&context);
+        let mut workspace = SessionUi::default();
+        workspace_frame(&context, &mut workspace, &probe.params, &state, vec![]);
+        workspace.viewport = Some((0, 80000));
+        workspace.selection = Some((20000, 30000));
+        click_control(&context, &mut workspace, &probe.params, &state, "Catch up");
+        state.playing.store(true, std::sync::atomic::Ordering::Relaxed);
+        state.position.store(150000, std::sync::atomic::Ordering::Relaxed);
+        let frame = |workspace: &mut SessionUi, now| {
+            let mut output = context.run_ui(
+                egui::RawInput {
+                    time: Some(now),
+                    screen_rect: Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(720.0, 560.0))),
+                    ..Default::default()
+                },
+                |ui| workspace.show(ui, &probe.params, None, &state),
+            );
+            output.textures_delta.clear();
+        };
+        frame(&mut workspace, 10.0);
+        assert_eq!(workspace.viewport, Some((0, 80000)), "Catch up starts at the visible range instead of jumping");
+        frame(&mut workspace, 10.125);
+        let halfway = workspace.viewport.expect("Catch up retains a viewport");
+        assert!(halfway.0 > 0 && halfway.0 < 146000, "The midpoint must be between the initial range and the 5% inset target: {halfway:?}");
+        assert_eq!(halfway.1 - halfway.0, 80000);
+        frame(&mut workspace, 10.250);
+        assert_eq!(workspace.viewport, Some((146000, 226000)));
+        assert_eq!(workspace.selection, Some((20000, 30000)));
+        assert_eq!(state.position.load(std::sync::atomic::Ordering::Relaxed), 150000);
     }
 
     #[test]
@@ -1454,44 +1527,53 @@ mod tests {
 
     #[test]
     fn waveform_render_work_measurement() {
-        let context = egui::Context::default();
-        let mut workspace = SessionUi::default();
-        let mut view = navigation_view();
-        view.tracks = (0..8)
-            .map(|member| crate::session_mode::TrackView {
-                member,
-                present: true,
-                verified: true,
-                peaks: (0..1000)
-                    .map(|column| crate::session_mode::WavePeak {
-                        start: view.start + (view.end - view.start) * column / 1000,
-                        end: view.start + (view.end - view.start) * (column + 1) / 1000,
-                        min: -0.5,
-                        max: 0.5,
-                    })
-                    .collect(),
-            })
-            .collect();
-        let begin = std::time::Instant::now();
-        let mut count = 0;
-        for _ in 0..40 {
-            let mut output = context.run_ui(
-                egui::RawInput {
-                    screen_rect: Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(1200.0, 440.0))),
-                    ..Default::default()
-                },
-                |ui| workspace.waveforms(ui, &view, 390.0),
-            );
-            count = output.shapes.len();
-            std::hint::black_box(
-                context.tessellate(std::mem::take(&mut output.shapes), output.pixels_per_point),
-            );
-            output.textures_delta.clear();
+        use crate::session_mode::integration_tests::{Fixture, visual_capture};
+        let fixture = Fixture::new(8);
+        for member in 0..8 { visual_capture(fixture.engine(), member); }
+        fixture.engine().label(0, 8000, Some(0)).unwrap();
+        fixture.engine().label(16000, 24000, Some(1)).unwrap();
+        fixture.engine().label(32000, 40000, Some(129)).unwrap();
+        for (width, height) in [(720.0, 560.0), (1000.0, 680.0)] {
+            let context = egui::Context::default();
+            crate::editor::style(&context);
+            let mut workspace = SessionUi { selection: Some((16000, 24000)), playhead: Some(20000), ..Default::default() };
+            let mut samples = Vec::new();
+            for frame in 0..41 {
+                let query_begin = Instant::now();
+                let view = fixture.engine().view(Some(0), Some(64000), 1000).unwrap();
+                let query_us = query_begin.elapsed().as_secs_f64() * 1e6;
+                let draw_begin = Instant::now();
+                let mut output = context.run_ui(
+                    egui::RawInput { screen_rect: Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(width, height))), ..Default::default() },
+                    |ui| {
+                        egui::ScrollArea::vertical().max_height(height - 370.0).show(ui, |ui| workspace.waveforms(ui, &view, 564.0));
+                    },
+                );
+                let draw_us = draw_begin.elapsed().as_secs_f64() * 1e6;
+                let shapes = output.shapes.len();
+                let tess_begin = Instant::now();
+                let meshes = context.tessellate(std::mem::take(&mut output.shapes), output.pixels_per_point);
+                let tess_us = tess_begin.elapsed().as_secs_f64() * 1e6;
+                let (mut vertices, mut indices, mut geometry_bytes) = (0, 0, 0);
+                for primitive in &meshes {
+                    if let egui::epaint::Primitive::Mesh(mesh) = &primitive.primitive {
+                        vertices += mesh.vertices.len();
+                        indices += mesh.indices.len();
+                        geometry_bytes += mesh.vertices.capacity() * std::mem::size_of::<egui::epaint::Vertex>() + mesh.indices.capacity() * std::mem::size_of::<u32>();
+                    }
+                }
+                let sample = serde_json::json!({"frame":frame,"query_us":query_us,"draw_us":draw_us,"tessellation_us":tess_us,"shapes":shapes,"vertices":vertices,"indices":indices,"retained_mesh_capacity_bytes":geometry_bytes});
+                samples.push(sample);
+                output.textures_delta.clear();
+                std::hint::black_box(meshes);
+            }
+            let percentile = |field: &str, p: f64| {
+                let mut values = samples[1..].iter().map(|row| row[field].as_f64().unwrap()).collect::<Vec<_>>();
+                values.sort_by(f64::total_cmp);
+                values[((values.len() - 1) as f64 * p).ceil() as usize]
+            };
+            eprintln!("visual fixture {width}x{height}: {}", serde_json::json!({"fixture":"eight-native-8khz-varied-v1","columns":1000,"warm_frames":40,"cold":samples[0],"query_us_p50_p95_p99":[percentile("query_us",0.5),percentile("query_us",0.95),percentile("query_us",0.99)],"draw_us_p50_p95_p99":[percentile("draw_us",0.5),percentile("draw_us",0.95),percentile("draw_us",0.99)],"tessellation_us_p50_p95_p99":[percentile("tessellation_us",0.5),percentile("tessellation_us",0.95),percentile("tessellation_us",0.99)],"samples":samples}));
         }
-        eprintln!(
-            "waveform CPU draw+tessellate: {:.3} ms/frame; {count} shapes (8 tracks, 1000 columns, 40 frames)",
-            begin.elapsed().as_secs_f64() * 25.0
-        );
     }
 
     #[test]
@@ -1598,10 +1680,10 @@ mod tests {
     }
     #[test]
     fn full_session_workspace_renders_actual_shared_capture_and_controls() {
-        use crate::session_mode::integration_tests::{Fixture, direct_capture};
+        use crate::session_mode::integration_tests::{Fixture, visual_capture};
         let fixture = Fixture::new(8);
         for member in 0..8 {
-            direct_capture(fixture.engine(), member, 0, 8000 * 8, false);
+            visual_capture(fixture.engine(), member);
         }
         fixture.engine().label(0, 8000, Some(0)).unwrap();
         fixture.engine().label(16000, 24000, Some(129)).unwrap();
