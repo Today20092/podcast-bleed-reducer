@@ -35,6 +35,62 @@ fn experimental_arming_is_explicit_temporary_and_cleared_by_reset() {
 }
 
 #[test]
+fn fresh_absence_can_attenuate_but_expiring_evidence_returns_to_original() {
+    use crate::gain::GainPolicy;
+    use cleanslate_gate_detector::Event;
+
+    let mut gain = GainPolicy::new(48_000).unwrap();
+    gain.reset(7);
+    let mut last_available = 0;
+    let mut reduced = 1.0;
+    for position in 0..30_720 {
+        if position > 0 && position % 1536 == 0 {
+            last_available = position;
+            gain.observe(Event {
+                epoch: 7,
+                end_16k: position / 3,
+                available_at: position,
+                probability: 0.0,
+            });
+        }
+        reduced = gain.next_gain(position, true);
+    }
+    // -6 dB is the prototype's finite floor, not a speech-preservation claim.
+    assert!((reduced - 0.501_187_2).abs() < 0.000_01);
+    let expiry = last_available + 4800;
+    for position in 30_720..expiry {
+        gain.next_gain(position, true);
+    }
+    assert_eq!(gain.next_gain(expiry, true), 1.0);
+    assert_eq!(gain.next_gain(expiry + 1, true), 1.0);
+}
+
+#[test]
+fn quiet_confidence_opens_a_previously_attenuated_gate_within_five_ms() {
+    use crate::gain::GainPolicy;
+    use cleanslate_gate_detector::Event;
+
+    let mut gain = GainPolicy::new(48_000).unwrap();
+    gain.reset(7);
+    let mut value = 1.0;
+    for position in 0..30_960 {
+        if position > 0 && position % 1536 == 0 {
+            gain.observe(Event {
+                epoch: 7,
+                end_16k: position / 3,
+                available_at: position,
+                probability: if position < 30_720 { 0.0 } else { 0.14 },
+            });
+        }
+        value = gain.next_gain(position, true);
+        if position == 30_719 {
+            assert!((value - 0.501_187_2).abs() < 0.000_01);
+        }
+    }
+    assert_eq!(value, 1.0);
+}
+
+#[test]
 fn gate_has_distinct_stable_format_and_state_identity() {
     assert_eq!(SmartGate::CLAP_ID, "org.cleanslate.smart-gate");
     assert_eq!(SmartGate::VST3_CLASS_ID, *b"CleanSlateGate01");

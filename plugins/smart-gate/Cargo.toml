@@ -12,6 +12,7 @@ crate-type = ["cdylib", "rlib"]
 [workspace]
 
 [dependencies]
+cleanslate-gate-detector = { path = "../gate-detector" }
 nice-plug = { version = "=0.4.2", default-features = false, features = ["vst3", "editor", "assert_process_allocs"] }
 nice-plug-egui = "=0.6.0"
 egui = { version = "=0.37.0", default-features = false, features = ["default_fonts"] }

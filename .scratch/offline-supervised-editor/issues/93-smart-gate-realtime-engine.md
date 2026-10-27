@@ -22,6 +22,23 @@ Acceptance:
 
 ## Results
 
+### 2026-10-27 bounded gain-policy checkpoint
+
+The next test-first batch adds a public immutable-Event-to-gain module without
+connecting it to the callback. [Policy/checks/limits](../../../docs/research/smart-gate-gain-policy-93.md)
+record actual RED/GREEN evidence: fresh absence reaches a finite -6 dB floor,
+expired evidence is exact unity, and confidence 0.14 opens a previously reduced
+gate within five milliseconds after lowering the demonstrated 0.5 threshold
+failure to 0.10. All eight library tests pass. The owner-authorized fixed warm
+8/3/2.5 GiB, 600-second profile retains one compiler and native same-process
+preflight. The existing 92 path dependency/lock adds no new package identity
+outside its locked graph and changes no existing Gate package versions.
+No worker, callback gain, inference preparation, actual-format/PDC/offline
+processing, loader qualification or UI was implemented. Laughter/whisper
+preservation remains unqualified; default bypass and explicit arming remain.
+This supersedes the description of the gain test as unrun, not the remaining
+acceptance checks. Ticket 93 stays claimed and 94 stays blocked.
+
 ### 2026-10-27 resumed state-safety checkpoint
 
 After the coordinator verified the authorized reboot and granted the sole heavy
