@@ -1,0 +1,72 @@
+{
+  "kind": "Original synthetic design fixtures, not native plugin captures",
+  "generated_from": "renderPanel(mode,5,{width,amount:50,timing:180}) in visual-study.html",
+  "sources": [
+    {
+      "file": "../visual-study.html",
+      "sha256": "9d507ca3655cb7569fc0e1b24132e37086be1487999238e696b6347ade007f1e"
+    },
+    {
+      "file": "../visual-study-check.mjs",
+      "sha256": "0ec32fb56a3d2d6df85157d96a45095532887cbccdd38ce44f1186e2a6ff38e3"
+    }
+  ],
+  "frames": [
+    {
+      "mode": "gate",
+      "size": "compact",
+      "width": 640,
+      "height": 440,
+      "svg": {
+        "file": "gate-compact.svg",
+        "sha256": "1672128aa339217c6dbc3a8d7e2cdf120687b473b98e09220ddbd9c67523ee2c"
+      },
+      "png": {
+        "file": "gate-compact.png",
+        "sha256": "7f8cd60b4f6a2caaafdb688d64e8f785570bb323f1efbafadceec49365a3db64"
+      }
+    },
+    {
+      "mode": "gate",
+      "size": "full",
+      "width": 1000,
+      "height": 620,
+      "svg": {
+        "file": "gate-full.svg",
+        "sha256": "5da5ba5486c52e115bf52f28de51663d2ec628aed2d4cabaeeee18a9d2a9e654"
+      },
+      "png": {
+        "file": "gate-full.png",
+        "sha256": "aa34345a5e2ebe1f0b952facb8f4e4b7d5442edab2720cc9fd7ca28e3a93eb27"
+      }
+    },
+    {
+      "mode": "podcast",
+      "size": "compact",
+      "width": 720,
+      "height": 560,
+      "svg": {
+        "file": "podcast-compact.svg",
+        "sha256": "d593084cc1375b3bd1ae542f4d802767d2a715ab66bec39a398af8ac619abe60"
+      },
+      "png": {
+        "file": "podcast-compact.png",
+        "sha256": "cece33b218a57714cf9e68ccd5f44cec774a208f1a80ee2450cb590190259c1e"
+      }
+    },
+    {
+      "mode": "podcast",
+      "size": "full",
+      "width": 1000,
+      "height": 680,
+      "svg": {
+        "file": "podcast-full.svg",
+        "sha256": "4a938be6dee5fe5c5fb13cb1eda3567f7999d8095b19082b2b6a295cdeade176"
+      },
+      "png": {
+        "file": "podcast-full.png",
+        "sha256": "679e6bf7d95ff827029f352245c2b1431b61279381730d7039dc422be7602995"
+      }
+    }
+  ]
+}

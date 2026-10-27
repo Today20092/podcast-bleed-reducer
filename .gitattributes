@@ -1,3 +1,9 @@
 # Minisign authenticates exact bytes; Git must not rewrite signed fixtures.
 tests/fixtures/updater-descriptor*.json -text
 tests/fixtures/updater-descriptor*.json.minisig -text -diff
+
+# Visual-study source and frozen-frame hashes must survive Windows checkouts.
+docs/design/plugin-ui/visual-study.html text eol=lf
+docs/design/plugin-ui/visual-study-check.mjs text eol=lf
+docs/design/plugin-ui/study-renders/*.svg text eol=lf
+docs/design/plugin-ui/study-renders/manifest.json text eol=lf
