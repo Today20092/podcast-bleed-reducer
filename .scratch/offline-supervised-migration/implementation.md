@@ -1,5 +1,7 @@
 # Offline supervised editor implementation sequence
 
+2026-10-27 extension closure: 101 is done with pinned Clay/Raven source, licences and integration risks, plus seven exact Downloads-to-extracted-artifact identity chains and verified manual UI references. Keep current egui work; possible Iced comparison remains conditional on a concrete limitation. No framework build, migration or comparative performance/native-host acceptance occurred. The reopened status below is superseded; 96 remains independent.
+
 2026-10-27 scope extension: 101 is claimed again for the owner's additional Clay/Raven research and Downloads sonible reconciliation. Its initial evidence remains accepted; these additions are independent of ongoing 96 and do not switch frameworks.
 
 2026-10-27 research completion: [101](../offline-supervised-editor/issues/101-plugin-gui-framework-and-vendor-stack-research.md) is done with a cited open-source GUI comparison and exact-hash bounded vendor stack evidence. The recommendation retains current egui delivery, with a narrowly specified Iced editor prototype as a possible later comparison; no framework migration is selected. Ongoing 96 correctness/qualification continues. Earlier claimed-101 text below is historical.

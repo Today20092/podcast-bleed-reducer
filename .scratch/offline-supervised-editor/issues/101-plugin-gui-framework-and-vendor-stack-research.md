@@ -1,6 +1,6 @@
 # Compare open-source plugin GUI frameworks and identify vendor UI stacks
 
-Status: claimed
+Status: done
 Assignee: Codex
 Readiness: ready-for-agent
 Type: research
@@ -27,9 +27,13 @@ Compare options against the existing Rust egui/nice-plug editor, accepted CleanS
 
 The owner added explicit research targets [Clay](https://github.com/nicbarker/clay) and [Raven](https://github.com/oscar-soirey/Raven), and points to sonible packages in Downloads for REA. The initial research below remains complete; this ticket is reopened only for the added scope. No framework migration or vendor installation/activation is implied.
 
-- [ ] Compare Clay and Raven using current source/docs/licences: distinguish layout engines, widget systems, renderers and native window/format adapters; verify Rust/C integration, threading, DPI/input/accessibility, platform and maturity/test boundaries, and resource claims versus measurements.
-- [ ] Reconcile the actual sonible files in Downloads with retained source/extraction identities. Reuse matching REA evidence and shipped/manual GUI references; inspect only concrete new gaps with bounded static operations. Keep native/active-renderer claims distinct and serialize any heavy work behind the compiler.
-- [ ] Update the recommendation and representative prototype proposal with these two candidates and the Downloads evidence; preserve the existing implementation and leave unsupported claims explicit.
+- [x] Compare Clay and Raven using current source/docs/licences: distinguish layout engines, widget systems, renderers and native window/format adapters; verify Rust/C integration, threading, DPI/input/accessibility, platform and maturity/test boundaries, and resource claims versus measurements.
+- [x] Reconcile the actual sonible files in Downloads with retained source/extraction identities. Reuse matching REA evidence and shipped/manual GUI references; inspect only concrete new gaps with bounded static operations. Keep native/active-renderer claims distinct and serialize any heavy work behind the compiler.
+- [x] Update the recommendation and representative prototype proposal with these two candidates and the Downloads evidence; preserve the existing implementation and leave unsupported claims explicit.
+
+Extension completed 2026-10-27. The [Clay/Raven addendum](../../../docs/research/plugin-gui-clay-raven-101.md) pins current source and licences. Clay supplies layout/render commands; Raven supplies its own layout/widgets/rendering but its reviewed window API does not establish embedding inside a DAW. Raven's global runtime, worker defaults and Rust callback lifetime require a lifecycle proof before any visual prototype. Neither displaces the existing egui-first / possible Iced-screen recommendation. No comparative RAM/FPS measurement or host compatibility is claimed.
+
+All seven actual Downloads installers and retained extracted VST3s match their recorded hashes. The [vendor report](../../../docs/research/plugin-vendor-ui-stacks-101.md#downloads-reconciliation-and-visible-gui-references) records the complete identity chains and seven visually inspected manual UI illustrations. Reusing those exact artifacts avoided extraction, installation and deep analysis. The illustrations are manufacturer documentation, not native-host captures. Report whitespace/local links passed; no production code or dependencies changed.
 
 Completed 2026-10-27 at the requested research boundary. The [cited framework comparison](../../../docs/research/plugin-gui-frameworks-101.md) covers egui/nice-plug, Iced/nice-plug-iced, DPF/DGL, iPlug2/IGraphics, VSTGUI, JUCE 9 and Slint. The [vendor stack report](../../../docs/research/plugin-vendor-ui-stacks-101.md) retains exact identities, offsets, REA evidence and confidence boundaries.
 
