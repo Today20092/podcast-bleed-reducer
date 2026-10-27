@@ -5,19 +5,49 @@ use nice_plug::plugin::ParamValue;
 use std::collections::BTreeMap;
 
 #[test]
+fn a_new_experimental_gate_starts_bypassed() {
+    let gate = SmartGate::default();
+    assert!(gate.params.bypass.value());
+}
+
+#[test]
+fn restoring_any_saved_gate_state_requires_fresh_explicit_arming() {
+    for schema in ["1", "2", "999", "\"invalid\""] {
+        let mut saved = PluginState {
+            version: SmartGate::VERSION.into(),
+            params: BTreeMap::from([(BYPASS_ID.into(), ParamValue::Bool(false))]),
+            fields: BTreeMap::from([(STATE_KEY.into(), schema.into())]),
+        };
+        SmartGate::filter_state(&mut saved);
+        assert!(matches!(saved.params[BYPASS_ID], ParamValue::Bool(true)));
+    }
+}
+
+#[test]
+fn experimental_arming_is_explicit_temporary_and_cleared_by_reset() {
+    let mut gate = SmartGate::default();
+    assert!(!gate.experimental_armed());
+    gate.arm_experimental();
+    assert!(gate.experimental_armed());
+    assert_eq!(gate.params.serialize_fields().len(), 1);
+    gate.reset();
+    assert!(!gate.experimental_armed());
+}
+
+#[test]
 fn gate_has_distinct_stable_format_and_state_identity() {
     assert_eq!(SmartGate::CLAP_ID, "org.cleanslate.smart-gate");
     assert_eq!(SmartGate::VST3_CLASS_ID, *b"CleanSlateGate01");
     assert_ne!(SmartGate::CLAP_ID, "org.cleanslate.fl-probe");
     assert_ne!(SmartGate::VST3_CLASS_ID, *b"CleanSlateProbe1");
     let gate = SmartGate::default();
-    assert_eq!(gate.params.serialize_fields()[STATE_KEY], "1");
+    assert_eq!(gate.params.serialize_fields()[STATE_KEY], "2");
     assert_eq!(gate.params.param_map().len(), 1);
     assert_eq!(gate.params.param_map()[0].0, BYPASS_ID);
 }
 
 #[test]
-fn own_state_round_trips_and_foreign_or_future_state_resets_to_bypass() {
+fn own_foreign_or_future_state_restores_to_safe_bypass() {
     let state = PluginState {
         version: SmartGate::VERSION.into(),
         params: BTreeMap::from([(BYPASS_ID.into(), ParamValue::Bool(false))]),
@@ -26,7 +56,8 @@ fn own_state_round_trips_and_foreign_or_future_state_resets_to_bypass() {
     let wire = serde_json::to_vec(&state).unwrap();
     let mut restored: PluginState = serde_json::from_slice(&wire).unwrap();
     SmartGate::filter_state(&mut restored);
-    assert_eq!(serde_json::to_vec(&restored).unwrap(), wire);
+    assert!(matches!(restored.params[BYPASS_ID], ParamValue::Bool(true)));
+    assert_eq!(restored.fields, GateParams::default().serialize_fields());
     for fields in [
         BTreeMap::new(),
         BTreeMap::from([(STATE_KEY.into(), "2".into())]),

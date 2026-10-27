@@ -6,11 +6,12 @@ use nice_plug::prelude::*;
 use nice_plug_egui::{
     EguiEditor, EguiEditorState, EguiNiceSettings, RepaintNotifier, create_egui_editor,
 };
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 pub const BYPASS_ID: &str = "smart_gate_bypass";
 pub const STATE_KEY: &str = "org.cleanslate.smart-gate.state-version";
-pub const STATE_VERSION: u32 = 1;
+pub const STATE_VERSION: u32 = 2;
 
 #[derive(Params)]
 pub struct GateParams {
@@ -23,7 +24,7 @@ pub struct GateParams {
 impl Default for GateParams {
     fn default() -> Self {
         Self {
-            bypass: BoolParam::new("Bypass", false).make_bypass(),
+            bypass: BoolParam::new("Bypass", true).make_bypass(),
             state_version: Mutex::new(STATE_VERSION),
         }
     }
@@ -32,6 +33,7 @@ impl Default for GateParams {
 pub struct SmartGate {
     params: Arc<GateParams>,
     editor_state: Arc<EguiEditorState>,
+    armed: Arc<AtomicBool>,
 }
 
 impl Default for SmartGate {
@@ -39,7 +41,19 @@ impl Default for SmartGate {
         Self {
             params: Arc::new(GateParams::default()),
             editor_state: EguiEditorState::from_size(LogicalSize::new(640.0, 440.0), 1.0),
+            armed: Arc::new(AtomicBool::new(false)),
         }
+    }
+}
+
+impl SmartGate {
+    /// This consent is deliberately absent from parameters and saved state.
+    pub fn arm_experimental(&self) {
+        self.armed.store(true, Ordering::Release);
+    }
+
+    pub fn experimental_armed(&self) -> bool {
+        self.armed.load(Ordering::Acquire)
     }
 }
 
@@ -79,26 +93,20 @@ impl Plugin for SmartGate {
     }
 
     fn filter_state(state: &mut PluginState) {
-        let recognized = state
+        // Restoring a project is never consent to experimental attenuation.
+        state.params.clear();
+        state
+            .params
+            .insert(BYPASS_ID.into(), ParamValue::Bool(true));
+        state.fields.clear();
+        state
             .fields
-            .get(STATE_KEY)
-            .is_some_and(|version| version == "1")
-            && matches!(state.params.get(BYPASS_ID), Some(ParamValue::Bool(_)));
-        if !recognized {
-            // Probe/unknown schemas cannot enable future gating; restore only this product's safe bypass.
-            state.params.clear();
-            state
-                .params
-                .insert(BYPASS_ID.into(), ParamValue::Bool(true));
-            state.fields.clear();
-            state
-                .fields
-                .insert(STATE_KEY.into(), STATE_VERSION.to_string());
-            state.version = Self::VERSION.into();
-        } else {
-            state.params.retain(|id, _| id == BYPASS_ID);
-            state.fields.retain(|key, _| key == STATE_KEY);
-        }
+            .insert(STATE_KEY.into(), STATE_VERSION.to_string());
+        state.version = Self::VERSION.into();
+    }
+
+    fn reset(&mut self) {
+        self.armed.store(false, Ordering::Release);
     }
 
     fn process(

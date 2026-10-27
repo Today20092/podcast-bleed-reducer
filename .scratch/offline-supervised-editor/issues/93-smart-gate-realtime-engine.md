@@ -18,8 +18,48 @@ Acceptance:
 - [ ] Report actual latency/tail consistently to each adapter and validate sample alignment/PDC in the lightweight hosts.
 - [ ] Deterministic envelope tests cover silence, short speech, quiet starts/tails, chatter, rapid parameter changes and mono/stereo; actual CLAP/VST3 hosts exercise lifecycle/state/automation/offline processing.
 - [ ] Record memory/deadline/audio-integrity evidence and remaining subjective listening needs. Do not advertise OBS/VST2 support until 97 verifies the integration path.
+- [ ] Inspect the inference-linked artifact's actual native imports, stage verified runtime prerequisites/applicable notices, and validate CLAP/VST3 loading/inference from candidate paths without Cargo-cache, developer PATH or incidental host-module assistance. Embedded model bytes alone do not make the native runtime self-contained.
 
 ## Results
+
+### 2026-10-27 resumed state-safety checkpoint
+
+After the coordinator verified the authorized reboot and granted the sole heavy
+slot, public state tests were executed before their implementations. New Gate
+instances now default to bypass. Every saved state (including schema 1 and the
+current schema 2) restores to bypass; restore is never consent to experimental
+attenuation. Explicit experimental arming is an atomic, nonpersistent control,
+and reset clears it without allocation. Product and bypass parameter IDs remain
+unchanged. The editor does not expose arming yet, and the process callback remains
+exact pass-through. No detector/runtime dependency or DSP change is included.
+
+Default-bypass RED: `20261027-100331-cf248b739ce84a759f4321b8097603ae`;
+GREEN: `20261027-100541-b0ca389701f94c2a88c6fedc202c1ed8`.
+State-restore RED: `20261027-100733-6c26ddbc35324b1189b4d65fc3eedb5e`;
+GREEN (all five tests): `20261027-101040-b2a0f5ab356442ff99d1d77e9f71ae05`.
+Arming/reset public API RED (missing methods):
+`20261027-101146-642bb270c4f74b0583e42764c8419e9e`;
+GREEN (all six library tests): `20261027-101159-5c74e1b9b9804a589e3e67bd42874f48`.
+Guarded formatting passed: `20261027-101309-2b260b28176846199a98fa3ac4ec8e39`.
+Receipts/logs are under `%LOCALAPPDATA%/CleanSlate/BuildReceipts/`.
+Compilation used the unchanged default 14/8/6 GiB guard, locked/offline Cargo,
+one job and the shared pinned profile. A premature GREEN start while the prior
+guard still owned a lingering helper was refused before any process launched:
+`20261027-100424-1a473574f7a1415a8466c0f7f72700c2` (heavy-task-busy).
+The coordinator proved and stopped only the owned VCTIP helpers after compiler
+exit. No reserve failure, resource-policy relaxation or reboot was used here.
+
+Graph search again returned no Gate coverage; no index ran. Context7 rejected
+the request at quota, so installed pinned nice-plug/core 0.4.2 state/lifecycle
+sources supplied the API contract. The canonical primary packaging amendment
+and runtime audit were read directly without merging desktop source.
+
+Remaining: bounded worker/epoch queues, gain policy, actual-format state and
+automation/PDC/offline/lifecycle checks, allocation/deadline evidence and isolated
+runtime staging/loading. The zero-added-latency design is a prospective causal
+engineering prototype, not qualified speech-onset preservation. Whisper/laughter
+risk remains and default bypass/explicit arming are mandatory. Full host/Clippy
+checks have not run for this state-only checkpoint; ticket 93 remains claimed.
 
 Claimed 2026-10-27 after 92 acceptance, scoped branch
 `codex/smart-gate-realtime-93` from permanent Gate `c7513c8` in the retained Gate
