@@ -243,7 +243,10 @@ impl SessionUi {
             let rate = last.rate;
             if self.follow == 2 {
                 self.set_viewport(rate, position - (end - start) / 2, end - start);
-            } else if self.follow == 1 && self.catch_up.is_none() && (position >= end || position < start) {
+            } else if self.follow == 1
+                && self.catch_up.is_none()
+                && (position >= end || position < start)
+            {
                 self.set_viewport(rate, position - (end - start) / 20, end - start);
                 if !self.reduced_motion {
                     self.catch_up = Some(CatchUp {
@@ -258,7 +261,8 @@ impl SessionUi {
         if let Some(motion) = &self.catch_up {
             let progress = ((ui.input(|input| input.time) - motion.began) / 0.250).clamp(0.0, 1.0);
             let eased = progress * progress * (3.0 - 2.0 * progress);
-            let start = motion.from.0 + ((motion.target.0 - motion.from.0) as f64 * eased).round() as i64;
+            let start =
+                motion.from.0 + ((motion.target.0 - motion.from.0) as f64 * eased).round() as i64;
             self.viewport = Some((start, start + motion.from.1 - motion.from.0));
             if progress >= 1.0 {
                 self.viewport = Some(motion.target);
@@ -1014,8 +1018,12 @@ mod tests {
         workspace.viewport = Some((0, 80000));
         workspace.selection = Some((20000, 30000));
         click_control(&context, &mut workspace, &probe.params, &state, "Catch up");
-        state.playing.store(true, std::sync::atomic::Ordering::Relaxed);
-        state.position.store(150000, std::sync::atomic::Ordering::Relaxed);
+        state
+            .playing
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+        state
+            .position
+            .store(150000, std::sync::atomic::Ordering::Relaxed);
         let frame = |workspace: &mut SessionUi, now| {
             let mut output = context.run_ui(
                 egui::RawInput {
@@ -1028,22 +1036,34 @@ mod tests {
             output.textures_delta.clear();
         };
         frame(&mut workspace, 10.0);
-        assert_eq!(workspace.viewport, Some((0, 80000)), "Catch up starts at the visible range instead of jumping");
+        assert_eq!(
+            workspace.viewport,
+            Some((0, 80000)),
+            "Catch up starts at the visible range instead of jumping"
+        );
         frame(&mut workspace, 10.125);
         let halfway = workspace.viewport.expect("Catch up retains a viewport");
-        assert!(halfway.0 > 0 && halfway.0 < 146000, "The midpoint must be between the initial range and the 5% inset target: {halfway:?}");
+        assert!(
+            halfway.0 > 0 && halfway.0 < 146000,
+            "The midpoint must be between the initial range and the 5% inset target: {halfway:?}"
+        );
         assert_eq!(halfway.1 - halfway.0, 80000);
         frame(&mut workspace, 10.250);
         assert_eq!(workspace.viewport, Some((146000, 226000)));
         assert_eq!(workspace.selection, Some((20000, 30000)));
-        assert_eq!(state.position.load(std::sync::atomic::Ordering::Relaxed), 150000);
+        assert_eq!(
+            state.position.load(std::sync::atomic::Ordering::Relaxed),
+            150000
+        );
     }
 
     #[test]
     fn catch_up_reduced_motion_snaps_and_stop_cancels_a_slide() {
         use crate::session_mode::integration_tests::{Fixture, direct_capture};
         let fixture = Fixture::new(2);
-        for member in 0..2 { direct_capture(fixture.engine(), member, 0, 160000, false); }
+        for member in 0..2 {
+            direct_capture(fixture.engine(), member, 0, 160000, false);
+        }
         let state = GuiState::new();
         *state.capture.lock() = Some(fixture.engine().clone());
         let probe = crate::FlProbe::default();
@@ -1051,28 +1071,95 @@ mod tests {
         crate::editor::style(&context);
         let mut workspace = SessionUi::default();
         workspace_frame(&context, &mut workspace, &probe.params, &state, vec![]);
-        click_control(&context, &mut workspace, &probe.params, &state, "Shared sound & cache…");
-        click_control(&context, &mut workspace, &probe.params, &state, "Reduced motion");
+        click_control(
+            &context,
+            &mut workspace,
+            &probe.params,
+            &state,
+            "Shared sound & cache…",
+        );
+        click_control(
+            &context,
+            &mut workspace,
+            &probe.params,
+            &state,
+            "Reduced motion",
+        );
         // Close the details popup without changing the user's selected range.
-        workspace_frame(&context, &mut workspace, &probe.params, &state, vec![egui::Event::Key { key: egui::Key::Escape, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::NONE }]);
+        workspace_frame(
+            &context,
+            &mut workspace,
+            &probe.params,
+            &state,
+            vec![egui::Event::Key {
+                key: egui::Key::Escape,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: egui::Modifiers::NONE,
+            }],
+        );
         click_control(&context, &mut workspace, &probe.params, &state, "Catch up");
         workspace.viewport = Some((0, 80000));
         workspace.selection = Some((20000, 30000));
-        state.playing.store(true, std::sync::atomic::Ordering::Relaxed);
-        state.position.store(150000, std::sync::atomic::Ordering::Relaxed);
+        state
+            .playing
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+        state
+            .position
+            .store(150000, std::sync::atomic::Ordering::Relaxed);
         workspace_frame(&context, &mut workspace, &probe.params, &state, vec![]);
-        assert_eq!(workspace.viewport, Some((146000, 226000)), "Reduced motion repositions immediately");
-        click_control(&context, &mut workspace, &probe.params, &state, "Shared sound & cache…");
-        click_control(&context, &mut workspace, &probe.params, &state, "Reduced motion");
-        workspace_frame(&context, &mut workspace, &probe.params, &state, vec![egui::Event::Key { key: egui::Key::Escape, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::NONE }]);
+        assert_eq!(
+            workspace.viewport,
+            Some((146000, 226000)),
+            "Reduced motion repositions immediately"
+        );
+        click_control(
+            &context,
+            &mut workspace,
+            &probe.params,
+            &state,
+            "Shared sound & cache…",
+        );
+        click_control(
+            &context,
+            &mut workspace,
+            &probe.params,
+            &state,
+            "Reduced motion",
+        );
+        workspace_frame(
+            &context,
+            &mut workspace,
+            &probe.params,
+            &state,
+            vec![egui::Event::Key {
+                key: egui::Key::Escape,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: egui::Modifiers::NONE,
+            }],
+        );
         workspace.viewport = Some((0, 80000));
         workspace_frame(&context, &mut workspace, &probe.params, &state, vec![]);
         assert_eq!(workspace.viewport, Some((0, 80000)));
-        state.playing.store(false, std::sync::atomic::Ordering::Relaxed);
-        for _ in 0..30 { workspace_frame(&context, &mut workspace, &probe.params, &state, vec![]); }
-        assert_eq!(workspace.viewport, Some((0, 80000)), "Stop cancels the old target");
+        state
+            .playing
+            .store(false, std::sync::atomic::Ordering::Relaxed);
+        for _ in 0..30 {
+            workspace_frame(&context, &mut workspace, &probe.params, &state, vec![]);
+        }
+        assert_eq!(
+            workspace.viewport,
+            Some((0, 80000)),
+            "Stop cancels the old target"
+        );
         assert_eq!(workspace.selection, Some((20000, 30000)));
-        assert_eq!(state.position.load(std::sync::atomic::Ordering::Relaxed), 150000);
+        assert_eq!(
+            state.position.load(std::sync::atomic::Ordering::Relaxed),
+            150000
+        );
     }
 
     #[test]
@@ -1112,7 +1199,11 @@ mod tests {
         workspace_frame(&context, &mut workspace, &probe.params, &state, vec![]);
         let now = context.input(|input| input.time);
         let mut output = context.run_ui(
-            egui::RawInput { time: Some(now + 0.250), screen_rect: Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(720.0, 560.0))), ..Default::default() },
+            egui::RawInput {
+                time: Some(now + 0.250),
+                screen_rect: Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(720.0, 560.0))),
+                ..Default::default()
+            },
             |ui| workspace.show(ui, &probe.params, None, &state),
         );
         output.textures_delta.clear();
@@ -1578,14 +1669,20 @@ mod tests {
     fn waveform_render_work_measurement() {
         use crate::session_mode::integration_tests::{Fixture, visual_capture};
         let fixture = Fixture::new(8);
-        for member in 0..8 { visual_capture(fixture.engine(), member); }
+        for member in 0..8 {
+            visual_capture(fixture.engine(), member);
+        }
         fixture.engine().label(0, 8000, Some(0)).unwrap();
         fixture.engine().label(16000, 24000, Some(1)).unwrap();
         fixture.engine().label(32000, 40000, Some(129)).unwrap();
         for (width, height) in [(720.0, 560.0), (1000.0, 680.0)] {
             let context = egui::Context::default();
             crate::editor::style(&context);
-            let mut workspace = SessionUi { selection: Some((16000, 24000)), playhead: Some(20000), ..Default::default() };
+            let mut workspace = SessionUi {
+                selection: Some((16000, 24000)),
+                playhead: Some(20000),
+                ..Default::default()
+            };
             let mut samples = Vec::new();
             for frame in 0..41 {
                 let query_begin = Instant::now();
@@ -1593,22 +1690,33 @@ mod tests {
                 let query_us = query_begin.elapsed().as_secs_f64() * 1e6;
                 let draw_begin = Instant::now();
                 let mut output = context.run_ui(
-                    egui::RawInput { screen_rect: Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(width, height))), ..Default::default() },
+                    egui::RawInput {
+                        screen_rect: Some(Rect::from_min_size(
+                            Pos2::ZERO,
+                            egui::vec2(width, height),
+                        )),
+                        ..Default::default()
+                    },
                     |ui| {
-                        egui::ScrollArea::vertical().max_height(height - 370.0).show(ui, |ui| workspace.waveforms(ui, &view, 564.0));
+                        egui::ScrollArea::vertical()
+                            .max_height(height - 370.0)
+                            .show(ui, |ui| workspace.waveforms(ui, &view, 564.0));
                     },
                 );
                 let draw_us = draw_begin.elapsed().as_secs_f64() * 1e6;
                 let shapes = output.shapes.len();
                 let tess_begin = Instant::now();
-                let meshes = context.tessellate(std::mem::take(&mut output.shapes), output.pixels_per_point);
+                let meshes =
+                    context.tessellate(std::mem::take(&mut output.shapes), output.pixels_per_point);
                 let tess_us = tess_begin.elapsed().as_secs_f64() * 1e6;
                 let (mut vertices, mut indices, mut geometry_bytes) = (0, 0, 0);
                 for primitive in &meshes {
                     if let egui::epaint::Primitive::Mesh(mesh) = &primitive.primitive {
                         vertices += mesh.vertices.len();
                         indices += mesh.indices.len();
-                        geometry_bytes += mesh.vertices.capacity() * std::mem::size_of::<egui::epaint::Vertex>() + mesh.indices.capacity() * std::mem::size_of::<u32>();
+                        geometry_bytes += mesh.vertices.capacity()
+                            * std::mem::size_of::<egui::epaint::Vertex>()
+                            + mesh.indices.capacity() * std::mem::size_of::<u32>();
                     }
                 }
                 let sample = serde_json::json!({"frame":frame,"query_us":query_us,"draw_us":draw_us,"tessellation_us":tess_us,"shapes":shapes,"vertices":vertices,"indices":indices,"retained_mesh_capacity_bytes":geometry_bytes});
@@ -1617,11 +1725,17 @@ mod tests {
                 std::hint::black_box(meshes);
             }
             let percentile = |field: &str, p: f64| {
-                let mut values = samples[1..].iter().map(|row| row[field].as_f64().unwrap()).collect::<Vec<_>>();
+                let mut values = samples[1..]
+                    .iter()
+                    .map(|row| row[field].as_f64().unwrap())
+                    .collect::<Vec<_>>();
                 values.sort_by(f64::total_cmp);
                 values[((values.len() - 1) as f64 * p).ceil() as usize]
             };
-            eprintln!("visual fixture {width}x{height}: {}", serde_json::json!({"fixture":"eight-native-8khz-varied-v1","columns":1000,"warm_frames":40,"cold":samples[0],"query_us_p50_p95_p99":[percentile("query_us",0.5),percentile("query_us",0.95),percentile("query_us",0.99)],"draw_us_p50_p95_p99":[percentile("draw_us",0.5),percentile("draw_us",0.95),percentile("draw_us",0.99)],"tessellation_us_p50_p95_p99":[percentile("tessellation_us",0.5),percentile("tessellation_us",0.95),percentile("tessellation_us",0.99)],"samples":samples}));
+            eprintln!(
+                "visual fixture {width}x{height}: {}",
+                serde_json::json!({"fixture":"eight-native-8khz-varied-v1","columns":1000,"warm_frames":40,"cold":samples[0],"query_us_p50_p95_p99":[percentile("query_us",0.5),percentile("query_us",0.95),percentile("query_us",0.99)],"draw_us_p50_p95_p99":[percentile("draw_us",0.5),percentile("draw_us",0.95),percentile("draw_us",0.99)],"tessellation_us_p50_p95_p99":[percentile("tessellation_us",0.5),percentile("tessellation_us",0.95),percentile("tessellation_us",0.99)],"samples":samples})
+            );
         }
     }
 

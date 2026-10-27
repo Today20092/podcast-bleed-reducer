@@ -335,7 +335,9 @@ pub(crate) fn visual_capture(engine: &SessionCapture, member: usize) {
             let phase = (t * 1.7 + member as f32 * 0.43).fract();
             let burst = if index >= 8000 && phase < 0.58 {
                 (phase * std::f32::consts::PI / 0.58).sin().powi(2)
-            } else { 0.0 };
+            } else {
+                0.0
+            };
             let carrier = (t * (173.0 + member as f32 * 31.0) * std::f32::consts::TAU).sin();
             packet.samples[offset][0] = carrier * (0.012 + burst * (0.28 + member as f32 * 0.035));
         }
