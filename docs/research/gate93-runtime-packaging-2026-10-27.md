@@ -1,5 +1,11 @@
 # Gate 93 runtime packaging — bounded offline findings
 
+## Primary-source licence follow-up after reboot
+
+2026-10-27: Context7 resolution reached quota. The official [NuGet 1.15.4 page](https://www.nuget.org/packages/Microsoft.AI.DirectML/1.15.4) links a version-specific [Microsoft DirectML software licence](https://www.nuget.org/packages/Microsoft.AI.DirectML/1.15.4/License). It is a separate Microsoft binary licence, not the MIT licence of repository examples. Section 1(a) permits Windows/Xbox use and distribution within the described machine-learning applications; 1(c) addresses separate third-party notices; 3(c) preserves Microsoft/supplier notices; 3(e) restricts standalone redistribution outside the stated grant. Read the complete terms for scope and other conditions. This identifies a primary version-specific licence, not legal sign-off, verified compliance, a user agreement acceptance or publication authorization.
+
+The cached DLL version is 1.15.4, but its exact bytes have not been matched against the official NuGet binary. The 192.92 MB package was not downloaded for this light lookup. Keep its current Pyke-cache provenance/hash explicit; verify package provenance and applicable accompanying notices before claiming distributable packaging. No runtime/provider execution was inferred from this lookup. The original offline observations below retain their historical unknowns; this follow-up supersedes only the absence of an identified version licence.
+
 2026-10-27. Read-only investigation of the retained Gate worktree and installed
 registry/build artifacts. No compiler, index, native host/runtime, download,
 network request, resource poll or source edit was performed. Primary graph has
