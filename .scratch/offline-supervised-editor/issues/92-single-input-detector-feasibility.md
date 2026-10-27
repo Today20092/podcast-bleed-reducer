@@ -1,6 +1,6 @@
 # Choose and validate the causal single-input speech detector
 
-Status: claimed
+Status: done
 Assignee: Codex (Gate detector feasibility)
 Readiness: ready-for-agent
 Type: task
@@ -12,13 +12,51 @@ Related: 85, 86
 In the Gate workspace, evaluate the maintained speech detector and feature path through the graph before changing it. Determine causal inputs, lookahead/window/hop, preparation cost, sample-rate conversion and model-state/reset behavior. Distinguish speech presence from speaker identity and multi-mic ownership. This is a bounded decision/prototype, not a claim that offline ownership already solves live gating.
 
 Acceptance:
-- [ ] Deliver a decision record with exact reused model/code identity, current documentation, one chosen causal inference design and explicit measured algorithmic/host latency.
-- [ ] Provide a small offline harness for speech probability and resets at 44.1/48/96 kHz and varied block sizes, without a DAW.
-- [ ] Test silence, noise, quiet/normal speech, interjections, laughter and overlap using authorized fixtures; label available objective evidence and owner-listening gaps.
-- [ ] Measure per-block/tail latency, resident/private memory and preparation/inference work under 88. If the existing detector is unsuitable, document the concrete blocker and a bounded alternative requiring no vendor weights; do not enable a misleading threshold-only substitute.
-- [ ] Define the immutable detector-to-gain event/result contract, readiness and conservative fallback needed by 93. Stop that dependency if no usable causal detector is demonstrated.
+- [x] Deliver a decision record with exact reused model/code identity, current documentation, one chosen causal inference design and explicit measured algorithmic/host latency.
+- [x] Provide a small offline harness for speech probability and resets at 44.1/48/96 kHz and varied block sizes, without a DAW.
+- [x] Test silence, noise, quiet/normal speech, interjections, laughter and overlap using authorized fixtures; label available objective evidence and owner-listening gaps.
+- [x] Measure per-block/tail latency, resident/private memory and preparation/inference work under 88. If the existing detector is unsuitable, document the concrete blocker and a bounded alternative requiring no vendor weights; do not enable a misleading threshold-only substitute.
+- [x] Define the immutable detector-to-gain event/result contract, readiness and conservative fallback needed by 93. Stop that dependency if no usable causal detector is demonstrated.
 
 ## Results
+
+### Closure — 2026-10-27
+
+Bounded category smoke coverage and causal/technical feasibility are complete on
+reviewed source `1ddff266aa8d993c73b1c941eb89b912106534d8`. Independent final
+Standards and Spec reviews found zero actionable findings. The 225 category runs,
+unchanged 165 baseline arrays, public CLI hash-rejection regression and passing
+formatting/all-target tests/strict Clippy are recorded in the linked evidence.
+Low whisper/laughter probabilities remain a **strong preservation risk**.
+Ticket 93 is unblocked only for a default-bypassed, explicitly armed engineering
+prototype with conservative original fallback. This closes neither 85 nor any
+callback, native-host, PDC, per-frame preservation or sound/listening qualification.
+Earlier claimed, blocked and unrun descriptions below are retained history and
+are superseded by this closure and the recorded-category results.
+
+### Recorded category coverage, pending re-review
+
+225 actual runs now cover silence/noise, normal recorded speech, actual whispered
+speech, a short human affirmative, human laughter and source-bound natural
+overlap at 44.1/48/96 kHz × five block sizes. The optional fixture directory uses
+a compiled metadata manifest with exact PCM bytes/hashes, authors, licenses and
+fixed pre-inference decoding; no audio is distributed. The owner quick-project
+hash, all three source hashes and saved overlap reference 7 [1,2] bindings are
+verified. Original reference 13 is solo and is not natural-overlap evidence.
+
+Same-size one-byte PCM tampering is rejected before inference/report creation
+with public CLI red/green evidence. All-target causal/reset/fault tests, strict
+Clippy and formatting pass. Runtime took 22.38 s with 56.42 MiB peak private
+memory under explicit 4/2/1 GiB bounds; compilation retained default 14/8/6 and
+one Cargo job. All earlier 165 probability arrays remain exactly unchanged.
+
+See the report's recorded-category section and fixture-acquisition note for
+hashes, attribution, complete receipts and the independent evidence limits.
+Low whisper/laughter probabilities are a strong preservation risk, not an
+accuracy percentage without time masks. The bounded worker/gain prototype
+decision requires default bypass, explicit experimental arming and original
+fallback; production attenuation, per-frame preservation and 85/93 listening are
+not qualified. Keep 92 claimed until independent re-review and integration.
 
 ### Measured follow-up, pending review
 
