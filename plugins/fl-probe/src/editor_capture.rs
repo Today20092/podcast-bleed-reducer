@@ -43,12 +43,18 @@ pub fn write_capture(
         }
     }
     let mut pixels = vec![[32.0, 34.0, 38.0]; width * height];
-    for clipped in context.tessellate(output.shapes.clone(), 1.0) {
-        let Primitive::Mesh(mesh) = clipped.primitive else {
+    let scale = output.pixels_per_point;
+    for mut clipped in context.tessellate(output.shapes.clone(), scale) {
+        clipped.clip_rect =
+            egui::Rect::from_min_max(clipped.clip_rect.min * scale, clipped.clip_rect.max * scale);
+        let Primitive::Mesh(mut mesh) = clipped.primitive else {
             return Err(io::Error::other(
                 "Native paint callbacks cannot be captured by the CPU check",
             ));
         };
+        for vertex in &mut mesh.vertices {
+            vertex.pos *= scale;
+        }
         let texture = textures.get(&mesh.texture_id).ok_or_else(|| {
             io::Error::other("Mesh references a texture absent from this capture")
         })?;

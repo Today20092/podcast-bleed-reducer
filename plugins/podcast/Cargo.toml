@@ -12,6 +12,9 @@ crate-type = ["cdylib", "rlib"]
 
 [workspace]
 
+[features]
+acceptance-driver = []
+
 [dependencies]
 nice-plug = { version = "=0.4.2", default-features = false, features = ["vst3", "editor", "assert_process_allocs"] }
 crossbeam = "=0.8.4"

@@ -12,6 +12,9 @@ use clap_sys::{
     stream::*,
     version::*,
 };
+#[cfg(cleanslate_acceptance_driver)]
+#[path = "support/podcast_acceptance.rs"]
+mod podcast_acceptance;
 use std::{
     ffi::{CStr, CString, c_void},
     io::{Cursor, Read},
@@ -238,9 +241,14 @@ unsafe fn set_parameter(plugin: *const clap_plugin, index: u32, value: f64) {
             .cast::<clap_plugin_params>();
         let mut info: clap_param_info = mem::zeroed();
         assert!((params.get_info.unwrap())(plugin, index, &mut info));
-        let text = CString::new(value.to_string()).unwrap();
+        let text = CString::new(if index == 7 {
+            ["Original", "Processed", "Removed"][value as usize].to_owned()
+        } else {
+            value.to_string()
+        })
+        .unwrap();
         let mut clap_value = 0.0;
-        if index == 2 {
+        if index == 2 || index == 3 {
             clap_value = value;
         } else {
             assert!((params.text_to_value.unwrap())(
@@ -294,9 +302,40 @@ unsafe fn process(
     channels: u32,
 ) {
     unsafe {
-        let left: Vec<f32> = (0..frames)
-            .map(|n| ((n as f32 * 0.37).sin() * 0.25) - 0.01)
-            .collect();
+        process_audio(
+            plugin,
+            rate,
+            start,
+            frames,
+            transport_present,
+            playing,
+            in_place,
+            channels,
+            None,
+            true,
+        );
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+unsafe fn process_audio(
+    plugin: *const clap_plugin,
+    rate: f64,
+    start: i64,
+    frames: usize,
+    transport_present: bool,
+    playing: bool,
+    in_place: bool,
+    channels: u32,
+    source: Option<&[f32]>,
+    check: bool,
+) -> Vec<f32> {
+    unsafe {
+        let left: Vec<f32> = source.map(<[f32]>::to_vec).unwrap_or_else(|| {
+            (0..frames)
+                .map(|n| ((n as f32 * 0.37).sin() * 0.25) - 0.01)
+                .collect()
+        });
         let right: Vec<f32> = left.iter().map(|x| -*x).collect();
         let mut inputs = [left.clone(), right.clone()];
         let mut outputs = [vec![f32::NAN; frames], vec![f32::NAN; frames]];
@@ -365,17 +404,187 @@ unsafe fn process(
             CLAP_PROCESS_ERROR
         );
         let result = if in_place { &inputs } else { &outputs };
-        #[cfg(cleanslate_podcast)]
-        let [left, right] =
-            delayed_reference(plugin, &left, &right, start, transport_present, playing);
-        for (expected, actual) in [left, right].iter().zip(result).take(channels as usize) {
-            assert!(
-                expected
-                    .iter()
-                    .zip(actual)
-                    .all(|(a, b)| a.to_bits() == b.to_bits()),
-                "Pass-through changed samples"
+        if check {
+            #[cfg(cleanslate_podcast)]
+            let [left, right] =
+                delayed_reference(plugin, &left, &right, start, transport_present, playing);
+            for (expected, actual) in [left, right].iter().zip(result).take(channels as usize) {
+                assert!(
+                    expected
+                        .iter()
+                        .zip(actual)
+                        .all(|(a, b)| a.to_bits() == b.to_bits()),
+                    "Pass-through changed samples"
+                );
+            }
+        }
+        result[0].clone()
+    }
+}
+
+#[cfg(cleanslate_acceptance_driver)]
+unsafe fn session_acceptance(
+    library: &libloading::Library,
+    factory: &clap_plugin_factory,
+    host: &clap_host,
+    id: *const std::ffi::c_char,
+) {
+    unsafe {
+        let driver = *library
+            .get::<podcast_acceptance::Driver>(b"cleanslate_podcast_acceptance\0")
+            .expect(
+                "Acceptance mode requires the debug-only driver; normal candidates must reject it",
             );
+        let plugins = (0..2)
+            .map(|member| {
+                let plugin = (factory.create_plugin.unwrap())(factory, host, id);
+                assert!(!plugin.is_null());
+                assert!(((*plugin).init.unwrap())(plugin));
+                set_parameter(plugin, 0, 1.0);
+                set_parameter(plugin, 1, (member + 1) as f64);
+                set_parameter(plugin, 3, 1.0);
+                plugin
+            })
+            .collect::<Vec<_>>();
+        let active = std::cell::Cell::new(false);
+        podcast_acceptance::run(
+            driver,
+            |offline, listen| {
+                for &plugin in &plugins {
+                    if active.get() {
+                        ((*plugin).stop_processing.unwrap())(plugin);
+                        ((*plugin).deactivate.unwrap())(plugin);
+                    }
+                    set_parameter(plugin, 7, f64::from(listen));
+                    let configs = &*((*plugin).get_extension.unwrap())(
+                        plugin,
+                        CLAP_EXT_AUDIO_PORTS_CONFIG.as_ptr(),
+                    )
+                    .cast::<clap_plugin_audio_ports_config>();
+                    for index in 0..(configs.count.unwrap())(plugin) {
+                        let mut config = mem::zeroed();
+                        assert!((configs.get.unwrap())(plugin, index, &mut config));
+                        if config.main_input_channel_count == 1 {
+                            assert!((configs.select.unwrap())(plugin, config.id));
+                            break;
+                        }
+                    }
+                    let render =
+                        &*((*plugin).get_extension.unwrap())(plugin, CLAP_EXT_RENDER.as_ptr())
+                            .cast::<clap_plugin_render>();
+                    assert!((render.set.unwrap())(
+                        plugin,
+                        if offline {
+                            CLAP_RENDER_OFFLINE
+                        } else {
+                            CLAP_RENDER_REALTIME
+                        }
+                    ));
+                    assert!(((*plugin).activate.unwrap())(
+                        plugin,
+                        f64::from(podcast_acceptance::RATE),
+                        1,
+                        1024
+                    ));
+                    assert!(((*plugin).start_processing.unwrap())(plugin));
+                }
+                active.set(true);
+            },
+            || {
+                for &plugin in &plugins {
+                    ((*plugin).reset.unwrap())(plugin);
+                }
+            },
+            |member, start, samples| {
+                process_audio(
+                    plugins[member],
+                    f64::from(podcast_acceptance::RATE),
+                    start,
+                    samples.len(),
+                    true,
+                    true,
+                    false,
+                    1,
+                    Some(samples),
+                    false,
+                )
+            },
+            (f64::from(podcast_acceptance::RATE) * 0.416) as usize + 1024,
+        );
+        let states = plugins
+            .iter()
+            .map(|&plugin| {
+                ((*plugin).stop_processing.unwrap())(plugin);
+                ((*plugin).deactivate.unwrap())(plugin);
+                let state = &*((*plugin).get_extension.unwrap())(plugin, CLAP_EXT_STATE.as_ptr())
+                    .cast::<clap_plugin_state>();
+                let mut bytes = Vec::new();
+                let output = clap_ostream {
+                    ctx: (&mut bytes as *mut Vec<u8>).cast(),
+                    write: Some(write_state),
+                };
+                assert!((state.save.unwrap())(plugin, &output));
+                ((*plugin).destroy.unwrap())(plugin);
+                bytes
+            })
+            .collect::<Vec<_>>();
+        let restored = states
+            .into_iter()
+            .map(|bytes| {
+                let plugin = (factory.create_plugin.unwrap())(factory, host, id);
+                assert!(((*plugin).init.unwrap())(plugin));
+                let state = &*((*plugin).get_extension.unwrap())(plugin, CLAP_EXT_STATE.as_ptr())
+                    .cast::<clap_plugin_state>();
+                let mut cursor = Cursor::new(bytes);
+                let input = clap_istream {
+                    ctx: (&mut cursor as *mut Cursor<Vec<u8>>).cast(),
+                    read: Some(read_state),
+                };
+                assert!((state.load.unwrap())(plugin, &input));
+                assert!(((*plugin).activate.unwrap())(
+                    plugin,
+                    f64::from(podcast_acceptance::RATE),
+                    1,
+                    1024
+                ));
+                reset_reference(plugin, false);
+                assert!(((*plugin).start_processing.unwrap())(plugin));
+                plugin
+            })
+            .collect::<Vec<_>>();
+        for block in 0..40 {
+            for &plugin in &restored {
+                process(
+                    plugin,
+                    f64::from(podcast_acceptance::RATE),
+                    block * 1024,
+                    1024,
+                    true,
+                    true,
+                    false,
+                    2,
+                );
+            }
+        }
+        assert_eq!(
+            driver(0, 0, 0, 0),
+            0,
+            "restored CLAP instances must bind and flush captured PCM"
+        );
+        assert_eq!(
+            podcast_acceptance::query(driver, 5),
+            4,
+            "actual CLAP state retains shared examples"
+        );
+        assert_eq!(
+            podcast_acceptance::query(driver, 3),
+            0,
+            "restored sources remain original until explicit analysis"
+        );
+        for &plugin in &restored {
+            ((*plugin).stop_processing.unwrap())(plugin);
+            ((*plugin).deactivate.unwrap())(plugin);
+            ((*plugin).destroy.unwrap())(plugin);
         }
     }
 }
@@ -386,6 +595,15 @@ fn main() {
         .expect("host_check <absolute plugin.clap path>");
     unsafe {
         let library = libloading::Library::new(&path).expect("Load plugin DLL");
+        #[cfg(all(cleanslate_podcast, not(cleanslate_acceptance_driver)))]
+        assert!(
+            library
+                .get::<unsafe extern "C" fn(u32, i64, i64, u32) -> i32>(
+                    b"cleanslate_podcast_acceptance\0"
+                )
+                .is_err(),
+            "Normal artifacts must omit the acceptance driver"
+        );
         let entry = library
             .get::<*const clap_plugin_entry>(b"clap_entry\0")
             .expect("CLAP export");
@@ -546,6 +764,8 @@ fn main() {
         for &plugin in &plugins {
             ((*plugin).destroy.unwrap())(plugin);
         }
+        #[cfg(cleanslate_acceptance_driver)]
+        session_acceptance(&library, factory, &host, descriptor.id);
         (entry.deinit.unwrap())();
         let _get_factory = library
             .get::<unsafe extern "system" fn() -> *mut c_void>(b"GetPluginFactory\0")

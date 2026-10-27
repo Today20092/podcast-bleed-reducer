@@ -7,6 +7,12 @@ use vst3::{
     ComPtr, Interface,
     Steinberg::{Vst::*, *},
 };
+#[cfg(cleanslate_acceptance_driver)]
+#[path = "support/podcast_acceptance.rs"]
+mod podcast_acceptance;
+#[cfg(cleanslate_acceptance_driver)]
+#[path = "support/vst3_state.rs"]
+mod vst3_state;
 
 struct Instance {
     component: ComPtr<IComponent>,
@@ -171,9 +177,31 @@ impl Instance {
         timing: bool,
     ) {
         unsafe {
-            let expected: Vec<_> = (0..frames)
-                .map(|i| (i as f32 * 0.31).sin() * 0.125)
-                .collect();
+            self.process_audio(
+                start, frames, channels, rate, mode, in_place, timing, None, true,
+            );
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    unsafe fn process_audio(
+        &self,
+        start: i64,
+        frames: usize,
+        channels: i32,
+        rate: f64,
+        mode: i32,
+        in_place: bool,
+        timing: bool,
+        source: Option<&[f32]>,
+        check: bool,
+    ) -> Vec<f32> {
+        unsafe {
+            let expected: Vec<_> = source.map(<[f32]>::to_vec).unwrap_or_else(|| {
+                (0..frames)
+                    .map(|i| (i as f32 * 0.31).sin() * 0.125)
+                    .collect()
+            });
             let mut input = [expected.clone(), expected.iter().map(|x| -*x).collect()];
             let mut output = [vec![f32::NAN; frames], vec![f32::NAN; frames]];
             let mut input_pointers = [input[0].as_mut_ptr(), input[1].as_mut_ptr()];
@@ -251,17 +279,21 @@ impl Instance {
                 assert_eq!(self.processor.getTailSamples(), self.latency.get() as u32);
             }
             let actual = if in_place { &input } else { &output };
-            for (channel, samples) in actual.iter().enumerate().take(channels as usize) {
-                let mismatch = samples.iter().enumerate().find_map(|(offset, actual)| {
-                    let expected = reference[offset][channel];
-                    (actual.to_bits() != expected.to_bits()).then_some((offset, *actual, expected))
-                });
-                assert!(
-                    mismatch.is_none(),
-                    "VST3 pass-through changed sample bits: start {start}, frames {frames}, channel {channel}, rate {rate}, mode {mode}, delay {}, mismatch {mismatch:?}",
-                    self.latency.get()
-                );
+            if check {
+                for (channel, samples) in actual.iter().enumerate().take(channels as usize) {
+                    let mismatch = samples.iter().enumerate().find_map(|(offset, actual)| {
+                        let expected = reference[offset][channel];
+                        (actual.to_bits() != expected.to_bits())
+                            .then_some((offset, *actual, expected))
+                    });
+                    assert!(
+                        mismatch.is_none(),
+                        "VST3 pass-through changed sample bits: start {start}, frames {frames}, channel {channel}, rate {rate}, mode {mode}, delay {}, mismatch {mismatch:?}",
+                        self.latency.get()
+                    );
+                }
             }
+            actual[0].clone()
         }
     }
 
@@ -269,6 +301,133 @@ impl Instance {
         unsafe {
             assert_eq!(self.processor.setProcessing(0), kResultOk);
             assert_eq!(self.component.setActive(0), kResultOk);
+        }
+    }
+}
+
+#[cfg(cleanslate_acceptance_driver)]
+unsafe fn session_acceptance(
+    library: &libloading::Library,
+    factory: &ComPtr<IPluginFactory>,
+    cid: &TUID,
+) {
+    unsafe {
+        let driver = *library
+            .get::<podcast_acceptance::Driver>(b"cleanslate_podcast_acceptance\0")
+            .expect(
+                "Acceptance mode requires the debug-only driver; normal candidates must reject it",
+            );
+        let instances = [
+            Instance::new(factory, cid, 1),
+            Instance::new(factory, cid, 2),
+        ];
+        for instance in &instances {
+            instance.enable_uncalibrated();
+        }
+        let active = Cell::new(false);
+        let process_mode = Cell::new(ProcessModes_::kRealtime);
+        podcast_acceptance::run(
+            driver,
+            |offline, listen| {
+                process_mode.set(if offline {
+                    ProcessModes_::kOffline
+                } else {
+                    ProcessModes_::kRealtime
+                });
+                for instance in &instances {
+                    if active.get() {
+                        instance.deactivate();
+                    }
+                    for index in 0..instance.controller.getParameterCount() {
+                        let mut info: ParameterInfo = mem::zeroed();
+                        assert_eq!(
+                            instance.controller.getParameterInfo(index, &mut info),
+                            kResultOk
+                        );
+                        let end = info
+                            .title
+                            .iter()
+                            .position(|&value| value == 0)
+                            .unwrap_or(info.title.len());
+                        if String::from_utf16_lossy(&info.title[..end]) == "Listen" {
+                            assert_eq!(
+                                instance
+                                    .controller
+                                    .setParamNormalized(info.id, f64::from(listen) / 2.0),
+                                kResultOk
+                            );
+                        }
+                    }
+                    instance.activate(1, f64::from(podcast_acceptance::RATE), process_mode.get());
+                }
+                active.set(true);
+            },
+            || {},
+            |member, start, samples| {
+                instances[member].process_audio(
+                    start,
+                    samples.len(),
+                    1,
+                    f64::from(podcast_acceptance::RATE),
+                    process_mode.get(),
+                    false,
+                    true,
+                    Some(samples),
+                    false,
+                )
+            },
+            (f64::from(podcast_acceptance::RATE) * 0.416) as usize + 1024,
+        );
+        for instance in &instances {
+            instance.deactivate();
+        }
+        let states = instances
+            .iter()
+            .map(|instance| vst3_state::save(&instance.component))
+            .collect::<Vec<_>>();
+        drop(instances);
+        let restored = [
+            Instance::new(factory, cid, 1),
+            Instance::new(factory, cid, 2),
+        ];
+        for (instance, bytes) in restored.iter().zip(states) {
+            vst3_state::load(&instance.component, bytes);
+            instance.activate(
+                1,
+                f64::from(podcast_acceptance::RATE),
+                ProcessModes_::kRealtime,
+            );
+        }
+        for block in 0..40 {
+            for instance in &restored {
+                instance.process(
+                    block * 1024,
+                    1024,
+                    1,
+                    f64::from(podcast_acceptance::RATE),
+                    ProcessModes_::kRealtime,
+                    false,
+                    true,
+                );
+            }
+        }
+        assert_eq!(
+            driver(0, 0, 0, 0),
+            0,
+            "restored VST3 instances must bind and flush captured PCM"
+        );
+        assert_eq!(
+            podcast_acceptance::query(driver, 5),
+            4,
+            "actual VST3 state retains shared examples"
+        );
+        assert_eq!(
+            podcast_acceptance::query(driver, 3),
+            0,
+            "restored sources remain original until explicit analysis"
+        );
+        for instance in &restored {
+            instance.deactivate();
         }
     }
 }
@@ -289,6 +448,15 @@ fn main() {
     // released before ExitDll and library unloading. No background plugin thread outlives them.
     unsafe {
         let library = libloading::Library::new(path).expect("Load VST3 DLL");
+        #[cfg(all(cleanslate_podcast, not(cleanslate_acceptance_driver)))]
+        assert!(
+            library
+                .get::<unsafe extern "C" fn(u32, i64, i64, u32) -> i32>(
+                    b"cleanslate_podcast_acceptance\0"
+                )
+                .is_err(),
+            "Normal artifacts must omit the acceptance driver"
+        );
         if let Ok(init) = library.get::<unsafe extern "system" fn() -> bool>(b"InitDll\0") {
             assert!(init());
         }
@@ -390,6 +558,8 @@ fn main() {
             }
         }
         drop(instances);
+        #[cfg(cleanslate_acceptance_driver)]
+        session_acceptance(&library, &factory, &info.cid);
         drop(factory);
         let report_dir = std::path::PathBuf::from(std::env::var_os("LOCALAPPDATA").unwrap()).join(
             if cfg!(cleanslate_podcast) {

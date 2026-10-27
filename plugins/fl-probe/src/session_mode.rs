@@ -29,6 +29,54 @@ const MAX_LABELS: usize = 256;
 static NEXT_KEY: AtomicU64 = AtomicU64::new(1);
 static GROUPS: OnceLock<Mutex<[Weak<SessionCapture>; 8]>> = OnceLock::new();
 
+/// Debug-only acceptance commands for group one. Normal artifacts omit this symbol.
+/// All PCM, parameters, transport, state and output still cross the real format ABI.
+#[cfg(cleanslate_acceptance_driver)]
+#[unsafe(no_mangle)]
+pub extern "C" fn cleanslate_podcast_acceptance(op: u32, start: i64, end: i64, mask: u32) -> i32 {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let capture = GROUPS
+            .get()
+            .and_then(|groups| groups.lock()[0].upgrade())
+            .ok_or(())?;
+        match op {
+            0 => capture.flush().map(|_| 0).map_err(|_| ()),
+            1 if mask <= u8::MAX as u32 => capture
+                .label(start, end, Some(mask as u8))
+                .map(|_| 0)
+                .map_err(|_| ()),
+            2 => capture
+                .analyze(Settings::default())
+                .map(|_| 0)
+                .map_err(|_| ()),
+            3 => capture
+                .view(None, None, 32)
+                .map(|view| {
+                    if view.ready {
+                        2
+                    } else if view.busy {
+                        1
+                    } else {
+                        0
+                    }
+                })
+                .ok_or(()),
+            4 => {
+                capture.cancel_analysis();
+                Ok(0)
+            }
+            5 => capture
+                .view(None, None, 32)
+                .map(|view| view.labels.len() as i32)
+                .ok_or(()),
+            _ => Err(()),
+        }
+    }))
+    .ok()
+    .and_then(Result::ok)
+    .unwrap_or(-1)
+}
+
 #[derive(Clone, Copy, Default, Serialize, Deserialize)]
 struct Peak {
     min: f32,
@@ -269,6 +317,7 @@ pub struct SessionCapture {
     revision: AtomicU64,
     overrun: AtomicBool,
     cancel: Arc<AtomicBool>,
+    user_cancel: AtomicBool,
     stopping: AtomicBool,
     worker: Mutex<Option<thread::JoinHandle<()>>>,
     jobs: Mutex<Vec<thread::JoinHandle<()>>>,
@@ -561,6 +610,7 @@ impl SessionCapture {
             revision: AtomicU64::new(1),
             overrun: AtomicBool::new(false),
             cancel: Arc::new(AtomicBool::new(false)),
+            user_cancel: AtomicBool::new(false),
             stopping: AtomicBool::new(true),
             worker: Mutex::new(None),
             jobs: Mutex::new(Vec::new()),
@@ -605,6 +655,18 @@ impl SessionCapture {
         }
     }
     pub fn label(&self, start: i64, end: i64, mask: Option<u8>) -> Result<(), String> {
+        self.edit_label(start, end, mask, false)
+    }
+    pub fn replace_label(&self, start: i64, end: i64, mask: u8) -> Result<(), String> {
+        self.edit_label(start, end, Some(mask), true)
+    }
+    fn edit_label(
+        &self,
+        start: i64,
+        end: i64,
+        mask: Option<u8>,
+        replace: bool,
+    ) -> Result<(), String> {
         let mut state = self.state.lock();
         if state.busy {
             return Err("Wait for analysis to finish.".into());
@@ -625,6 +687,16 @@ impl SessionCapture {
         let allowed = active.iter().fold(0_u8, |bits, &i| bits | (1 << i));
         if mask.is_some_and(|bits| bits & !allowed != 0) {
             return Err("The label includes an absent microphone.".into());
+        }
+        if !replace
+            && mask.is_some_and(|mask| {
+                state
+                    .labels
+                    .iter()
+                    .any(|row| row.start < end && row.end > start && row.mask != mask)
+            })
+        {
+            return Err("This selection conflicts with saved examples. Confirm replacement or choose another range.".into());
         }
         let mut labels = Vec::new();
         for row in &state.labels {
@@ -695,10 +767,20 @@ impl SessionCapture {
         state.settings = settings;
         state.message = "Preparing captured audio for analysis…".into();
         self.invalidate();
+        self.user_cancel.store(false, SeqCst);
         self.cancel.store(false, SeqCst);
         self.persist_members(&state);
         self.commands.lock().push(Command::Analyze(settings));
         Ok(())
+    }
+    pub fn cancel_analysis(&self) {
+        self.user_cancel.store(true, SeqCst);
+        self.invalidate();
+        if let Some(mut state) = self.state.try_lock()
+            && state.busy
+        {
+            state.message = "Cancelling analysis; original audio is preserved…".into();
+        }
     }
     pub fn set_settings(&self, settings: Settings) -> Result<(), String> {
         if !settings.reduction_db.is_finite()
@@ -873,7 +955,13 @@ impl SessionCapture {
                         if let Err(e) = engine.start_analysis(settings) {
                             let mut state = engine.state.lock();
                             state.busy = false;
-                            state.message = e;
+                            state.message = if engine.user_cancel.load(SeqCst) {
+                                "Analysis cancelled. Examples and captured audio are retained; Analyze when ready.".into()
+                            } else if engine.cancel.load(SeqCst) {
+                                "Captured audio, examples or sound changed. Analyze again.".into()
+                            } else {
+                                e
+                            };
                         }
                     }
                 }
@@ -1101,6 +1189,14 @@ impl SessionCapture {
             return Err("No microphones are present.".into());
         }
         let mut state = self.state.lock();
+        if self.cancel.load(SeqCst) {
+            return Err(if self.user_cancel.load(SeqCst) {
+                "Analysis cancelled. Examples and captured audio are retained; Analyze when ready."
+            } else {
+                "Captured audio, examples or sound changed. Analyze again."
+            }
+            .into());
+        }
         let mut common = state.tracks[active[0]].verified.clone();
         let allowed = active.iter().fold(0_u8, |mask, &i| mask | (1 << i));
         if state.labels.iter().any(|row| row.mask & !allowed != 0) {
@@ -1124,7 +1220,15 @@ impl SessionCapture {
                     .as_mut()
                     .ok_or("Play every microphone to verify the cached audio first.")?;
                 let path = job.join(format!("mic-{i}.wav"));
-                let (output, hash) = snapshot_wav(file, &path, a, b, self.rate, track.channels)?;
+                let (output, hash) = snapshot_wav(
+                    file,
+                    &path,
+                    a,
+                    b,
+                    self.rate,
+                    track.channels,
+                    Some(&self.cancel),
+                )?;
                 paths.push(output);
                 hashes.push(hash);
             }
@@ -1157,7 +1261,8 @@ impl SessionCapture {
             let result=session_analysis::analyze(&paths,&labels,a,rate,&job,&cancel,settings);
             if let Some(engine)=engine.upgrade() {
                 let mut state=engine.state.lock();state.busy=false;
-                if engine.revision.load(SeqCst)!=revision {state.message="Captured audio or examples changed during analysis. Analyze again.".into();}
+                if engine.user_cancel.load(SeqCst) {state.message="Analysis cancelled. Examples and captured audio are retained; Analyze when ready.".into();}
+                else if engine.revision.load(SeqCst)!=revision {state.message="Captured audio, examples or sound changed during analysis. Analyze again.".into();}
                 else {match result {
                     Ok(analysis)=>{
                         let mut full_hashes=vec![Vec::new();MEMBERS];
@@ -1229,7 +1334,11 @@ fn snapshot_wav(
     end: i64,
     rate: u32,
     channels: usize,
+    cancel: Option<&AtomicBool>,
 ) -> Result<(PathBuf, Vec<[u8; 32]>), String> {
+    if cancel.is_some_and(|cancel| cancel.load(SeqCst)) {
+        return Err("Session snapshot cancelled.".into());
+    }
     let length = (end - start)
         .checked_mul(channels as i64 * 4)
         .and_then(|v| u32::try_from(v).ok())
@@ -1256,6 +1365,9 @@ fn snapshot_wav(
     let mut bytes = [0_u8; BLOCK * 8];
     let mut cursor = start;
     while cursor < end {
+        if cancel.is_some_and(|cancel| cancel.load(SeqCst)) {
+            return Err("Session snapshot cancelled.".into());
+        }
         let count = (BLOCK as i64 - cursor.rem_euclid(BLOCK as i64)).min(end - cursor) as usize;
         let bytes = &mut bytes[..count * channels * 4];
         file.read_exact(bytes).map_err(|e| e.to_string())?;
@@ -1513,6 +1625,7 @@ mod tests {
             (BLOCK * 2) as i64,
             48000,
             2,
+            None,
         )
         .unwrap();
         assert_eq!(hashes.len(), 2);
@@ -1544,6 +1657,7 @@ mod tests {
             end,
             48000,
             1,
+            None,
         )
         .unwrap();
         assert_eq!(

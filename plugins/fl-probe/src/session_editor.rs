@@ -59,9 +59,11 @@ pub struct SessionUi {
     viewport: Option<(i64, i64)>,
     selection: Option<(i64, i64)>,
     drag_anchor: Option<i64>,
+    selection_before_drag: Option<(i64, i64)>,
     overlap: u8,
     clear_armed: bool,
     error: Option<String>,
+    replacement: Option<(i64, i64, u8)>,
     last_view: Option<SessionView>,
     last_query: Option<(Option<(i64, i64)>, usize)>,
     last_refresh: Option<Instant>,
@@ -253,7 +255,7 @@ impl SessionUi {
         }
         // Capture performs disk work under its lock. Retain the last display instead of flashing empty.
         let view = fresh.or_else(|| self.last_view.take());
-        let Some(view) = view else {
+        let Some(mut view) = view else {
             self.empty(
                 ui,
                 "Your session appears here as you play",
@@ -261,10 +263,7 @@ impl SessionUi {
             );
             return;
         };
-        let height = (ui.available_height() - 220.0)
-            .clamp(200.0, 390.0)
-            .max(view.tracks.len() as f32 * 42.0 + 52.0);
-        egui::ScrollArea::vertical().auto_shrink([false; 2]).show(ui, |ui| {
+        ui.scope(|ui| {
             ui.horizontal_wrapped(|ui| {
                 ui.strong("Input history");
                 for action in Navigation::ALL {
@@ -277,7 +276,11 @@ impl SessionUi {
                 }
                 ui.label(egui::RichText::new(format!("{} – {}", time(view.start, view.rate), time(view.end, view.rate))).small().color(MUTED));
             });
-            self.waveforms(ui, &view, height);
+            let reserved = if self.replacement.is_some() { 295.0 } else { 255.0 };
+            let height = (ui.available_height() - reserved).clamp(140.0, 390.0);
+            egui::ScrollArea::vertical().id_salt("session-lanes").max_height(height).scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysVisible).scroll_source(egui::scroll_area::ScrollSource { scroll_bar: true, drag: egui::scroll_area::DragScroll::Never, mouse_wheel: false }).auto_shrink([false; 2]).show(ui, |ui| {
+                self.waveforms(ui, &view, (view.tracks.len() as f32 * 64.0 + 52.0).max(height));
+            });
             self.navigator(ui, &view);
             ui.horizontal_wrapped(|ui| {
                 for (mode, title) in [(0,"Follow off"), (1,"Catch up"), (2,"Lock playhead")] {
@@ -300,22 +303,25 @@ impl SessionUi {
                 }
             });
             let can_label = self.selection.is_some() && !view.busy;
-            ui.horizontal_wrapped(|ui| {
-                ui.label("Label selection");
+            ui.horizontal(|ui| {
+              ui.menu_button("Label selection…", |ui| {
+               ui.set_max_width(560.0);
+               ui.horizontal_wrapped(|ui| {
                 if ui.add_enabled(can_label, egui::Button::new("Room")).clicked() {
-                    self.apply_label(&capture, Some(0));
+                    self.apply_label(&capture, &view, Some(0));
+                    ui.close();
                 }
                 for track in &view.tracks {
-                    if track.member < 8 && ui.add_enabled(can_label, egui::Button::new(format!("Mic {}", track.member + 1))).clicked() {
-                        self.apply_label(&capture, Some(1 << track.member));
+                    if track.member < 8 && ui.add_enabled(can_label, egui::Button::new(format!("Mic {} only", track.member + 1))).clicked() {
+                        self.apply_label(&capture, &view, Some(1 << track.member));
+                        ui.close();
                     }
                 }
                 if ui.add_enabled(can_label, egui::Button::new("Erase label")).clicked() {
-                    self.apply_label(&capture, None);
+                    self.apply_label(&capture, &view, None);
+                    ui.close();
                 }
             });
-            if view.tracks.len() > 1 {
-                ui.horizontal_wrapped(|ui| {
                     ui.label("Overlap");
                     for track in &view.tracks {
                         if track.member >= 8 { continue; }
@@ -326,8 +332,36 @@ impl SessionUi {
                         }
                     }
                     if ui.add_enabled(can_label && self.overlap.count_ones() >= 2, egui::Button::new("Label overlap")).clicked() {
-                        self.apply_label(&capture, Some(self.overlap));
+                        self.apply_label(&capture, &view, Some(self.overlap));
+                        ui.close();
                     }
+                });
+                ui.menu_button(format!("Examples ({})", view.labels.len()), |ui| {
+                    egui::ScrollArea::vertical().id_salt("session-examples").max_height(140.0).show(ui, |ui| {
+                        for label in &view.labels {
+                            ui.horizontal(|ui| {
+                                if ui.small_button("Show").clicked() {
+                                    self.selection = Some((label.start, label.end));
+                                    self.set_viewport(view.rate, label.start.saturating_sub(i64::from(view.rate)), label.end - label.start + 2 * i64::from(view.rate));
+                                    ui.close();
+                                }
+                                ui.label(format!("{}  {} – {}", label_name(label.mask), time(label.start, view.rate), time(label.end, view.rate)));
+                                if ui.add_enabled(!view.busy, egui::Button::new("Remove").small()).clicked() {
+                                    self.error = capture.label(label.start, label.end, None).err();
+                                }
+                            });
+                        }
+                    });
+                });
+            });
+            if let Some((start, end, mask)) = self.replacement {
+                ui.horizontal_wrapped(|ui| {
+                    ui.label("Replace conflicting examples in this selection?");
+                    if ui.add_enabled(!view.busy, egui::Button::new("Replace examples")).clicked() {
+                        self.error = capture.replace_label(start, end, mask).err();
+                        self.replacement = None;
+                    }
+                    if ui.button("Keep examples").clicked() || ui.input(|input| input.key_pressed(egui::Key::Escape)) { self.replacement = None; }
                 });
             }
             ui.add_space(5.0);
@@ -335,40 +369,23 @@ impl SessionUi {
             ui.horizontal_wrapped(|ui| {
                 if ui.add_enabled(!view.busy && !view.labels.is_empty(), egui::Button::new(if view.busy { "Analyzing…" } else { "Analyze session" }).fill(BLUE.gamma_multiply(0.55))).clicked() {
                     self.error = capture.analyze(view.settings).err();
+                    if self.error.is_none() { view.busy = true; view.ready = false; view.message = "Preparing captured audio for analysis…".into(); }
                 }
+                if view.busy && ui.button("Cancel analysis").clicked() { capture.cancel_analysis(); }
                 let mut enabled = params.enabled.value();
                 if ui.add_enabled(view.ready || enabled, egui::Checkbox::new(&mut enabled, "Enable processing")).changed() {
                     set(setter, &params.enabled, enabled);
                 }
                 ui.label(egui::RichText::new(if view.busy { "Analysis in progress" } else if view.ready { "Analysis ready" } else { "Original audio preserved" }).color(if view.ready { TEAL } else { MUTED }));
             });
-            ui.label(egui::RichText::new(&view.message).small().color(MUTED));
+            egui::ScrollArea::vertical().id_salt("session-readiness").max_height(42.0).show(ui, |ui| {
             if let Some(error) = &self.error {
                 ui.label(egui::RichText::new(error).color(ERROR));
             }
-            ui.collapsing(format!("Examples ({})", view.labels.len()), |ui| {
-                if view.labels.is_empty() {
-                    ui.label("Add room tone and solo speech for each microphone, then Analyze.");
-                }
-                egui::ScrollArea::vertical().id_salt("session-examples").max_height(110.0).show(ui, |ui| {
-                    for label in &view.labels {
-                        ui.push_id((label.start, label.end, label.mask), |ui| {
-                            ui.horizontal_wrapped(|ui| {
-                                if ui.small_button("Show").clicked() {
-                                    self.selection = Some((label.start, label.end));
-                                    let padding = i64::from(view.rate);
-                                    self.viewport = Some((label.start.saturating_sub(padding), label.end.saturating_add(padding)));
-                                }
-                                ui.label(format!("{}  {} – {}", label_name(label.mask), time(label.start, view.rate), time(label.end, view.rate)));
-                                if ui.add_enabled(!view.busy, egui::Button::new("Remove").small()).clicked() {
-                                    self.error = capture.label(label.start, label.end, None).err();
-                                }
-                            });
-                        });
-                    }
-                });
+                ui.label(egui::RichText::new(&view.message).small().color(MUTED));
             });
-            ui.collapsing("Sound & cache", |ui| {
+            ui.menu_button("Shared sound & cache…", |ui| {
+              egui::ScrollArea::vertical().id_salt("session-details").max_height(200.0).show(ui, |ui| {
                 ui.label("Sound changes take effect after Analyze.");
                 let mut draft = view.settings;
                 for (title, value, min, max, suffix) in [
@@ -404,6 +421,7 @@ impl SessionUi {
                         if ui.button("Cancel").clicked() { self.clear_armed = false; }
                     });
                 }
+              });
             });
         });
         if self.viewport != query.0 {
@@ -438,9 +456,23 @@ impl SessionUi {
         );
     }
 
-    fn apply_label(&mut self, capture: &crate::session_mode::SessionCapture, mask: Option<u8>) {
+    fn apply_label(
+        &mut self,
+        capture: &crate::session_mode::SessionCapture,
+        view: &SessionView,
+        mask: Option<u8>,
+    ) {
         if let Some((start, end)) = self.selection {
             self.error = capture.label(start, end, mask).err();
+            self.replacement = mask
+                .filter(|mask| {
+                    self.error.is_some()
+                        && view
+                            .labels
+                            .iter()
+                            .any(|row| row.start < end && row.end > start && row.mask != *mask)
+                })
+                .map(|mask| (start, end, mask));
         }
     }
 
@@ -665,7 +697,7 @@ impl SessionUi {
                 Pos2::new(rect.left() + 13.0, center - 7.0),
                 Align2::LEFT_CENTER,
                 format!("Mic {}", track.member + 1),
-                FontId::proportional(13.0),
+                FontId::proportional(14.0),
                 TEXT,
             );
             painter.text(
@@ -678,7 +710,7 @@ impl SessionUi {
                 } else {
                     "Replay to verify"
                 },
-                FontId::proportional(10.0),
+                FontId::proportional(12.0),
                 MUTED,
             );
             painter.line_segment(
@@ -789,6 +821,7 @@ impl SessionUi {
             && plot.contains(origin)
         {
             self.drag_anchor = Some(sample_at(origin.x, plot, view.start, view.end));
+            self.selection_before_drag = self.selection;
             self.viewport = Some((view.start, view.end));
             self.range_zoom = modifiers.alt;
             response.request_focus();
@@ -816,8 +849,10 @@ impl SessionUi {
             self.range_zoom = false;
             self.zoom_range = None;
         }
-        if ui.input(|input| input.key_pressed(egui::Key::Escape)) {
-            self.selection = None;
+        if ui.input(|input| input.key_pressed(egui::Key::Escape) || !input.focused) {
+            if self.drag_anchor.is_some() {
+                self.selection = self.selection_before_drag;
+            }
             self.drag_anchor = None;
             self.pan_anchor = None;
             self.range_zoom = false;
@@ -1168,6 +1203,123 @@ mod tests {
         assert_eq!(label_name(0), "Room");
         assert_eq!(label_name(0b10000001), "Mic 1 + Mic 8");
     }
+
+    #[test]
+    fn escape_keeps_a_completed_source_time_selection() {
+        let context = egui::Context::default();
+        let mut workspace = SessionUi {
+            selection: Some((800000, 900000)),
+            ..Default::default()
+        };
+        navigation_frame(
+            &context,
+            &mut workspace,
+            &navigation_view(),
+            vec![egui::Event::Key {
+                key: egui::Key::Escape,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: egui::Modifiers::NONE,
+            }],
+            egui::Modifiers::NONE,
+        );
+        assert_eq!(workspace.selection, Some((800000, 900000)));
+    }
+
+    #[test]
+    fn labeling_popup_requires_replacement_and_shows_gap_recovery() {
+        use crate::session_mode::integration_tests::{Fixture, direct_capture};
+        let fixture = Fixture::new(2);
+        for member in 0..2 {
+            direct_capture(fixture.engine(), member, 0, 8000, false);
+        }
+        fixture.engine().label(0, 4000, Some(1)).unwrap();
+        let state = GuiState::new();
+        *state.capture.lock() = Some(fixture.engine().clone());
+        let probe = crate::FlProbe::default();
+        let context = egui::Context::default();
+        crate::editor::style(&context);
+        let frame = |workspace: &mut SessionUi, events: Vec<egui::Event>| {
+            let mut output = context.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(720.0, 560.0))),
+                    events,
+                    ..Default::default()
+                },
+                |ui| workspace.show(ui, &probe.params, None, &state),
+            );
+            let text = output
+                .shapes
+                .iter()
+                .filter_map(|shape| match &shape.shape {
+                    egui::Shape::Text(text) => Some((
+                        text.galley.job.text.clone(),
+                        Rect::from_min_size(text.pos, text.galley.size()),
+                        shape.clip_rect,
+                    )),
+                    _ => None,
+                })
+                .collect::<Vec<_>>();
+            output.textures_delta.clear();
+            text
+        };
+        let click = |workspace: &mut SessionUi, text: &str| {
+            let widgets = frame(workspace, vec![]);
+            let (_, rect, _) = widgets
+                .iter()
+                .rev()
+                .find(|widget| widget.0 == text)
+                .unwrap_or_else(|| panic!("Missing control {text}"));
+            let pos = rect.center();
+            frame(
+                workspace,
+                vec![
+                    egui::Event::PointerMoved(pos),
+                    egui::Event::PointerButton {
+                        pos,
+                        button: egui::PointerButton::Primary,
+                        pressed: true,
+                        modifiers: egui::Modifiers::NONE,
+                    },
+                ],
+            );
+            frame(
+                workspace,
+                vec![egui::Event::PointerButton {
+                    pos,
+                    button: egui::PointerButton::Primary,
+                    pressed: false,
+                    modifiers: egui::Modifiers::NONE,
+                }],
+            );
+        };
+        let mut workspace = SessionUi::default();
+        frame(&mut workspace, vec![]);
+        workspace.selection = Some((2000, 6000));
+        click(&mut workspace, "Label selection…");
+        click(&mut workspace, "Mic 2 only");
+        assert_eq!(
+            fixture.engine().view(None, None, 32).unwrap().labels[0].mask,
+            1
+        );
+        assert_eq!(workspace.replacement, Some((2000, 6000, 2)));
+        click(&mut workspace, "Replace examples");
+        assert_eq!(
+            fixture.engine().view(None, None, 32).unwrap().labels[1].mask,
+            2
+        );
+        workspace.selection = Some((7900, 9000));
+        click(&mut workspace, "Label selection…");
+        click(&mut workspace, "Room");
+        assert!(workspace.replacement.is_none());
+        let widgets = frame(&mut workspace, vec![]);
+        let (_, rect, clip) = widgets
+            .iter()
+            .find(|widget| widget.0.contains("gaps cannot be labeled"))
+            .expect("Label error must explain recovery");
+        assert!(clip.contains_rect(*rect), "Gap recovery must be visible");
+    }
     #[test]
     fn full_session_workspace_renders_actual_shared_capture_and_controls() {
         use crate::session_mode::integration_tests::{Fixture, direct_capture};
@@ -1183,39 +1335,63 @@ mod tests {
         Arc::get_mut(&mut probe.params).unwrap().group =
             IntParam::new("Session group", 1, IntRange::Linear { min: 0, max: 8 });
         let params = probe.params.clone();
-        for (name, width, height) in [
-            ("session-workspace", 1000, 680),
-            ("session-workspace-compact", 720, 560),
+        for (name, width, height, scale) in [
+            ("session-workspace-100", 1000, 680, 1.0),
+            ("session-workspace-150", 1000, 680, 1.5),
+            ("session-workspace-200", 1000, 680, 2.0),
+            ("session-workspace-compact-100", 720, 560, 1.0),
+            ("session-workspace-compact-150", 720, 560, 1.5),
+            ("session-workspace-compact-200", 720, 560, 2.0),
         ] {
             let context = egui::Context::default();
             crate::editor::style(&context);
             let mut workspace = SessionUi::default();
-            let mut output = context.run_ui(
-                egui::RawInput {
-                    screen_rect: Some(Rect::from_min_size(
-                        Pos2::ZERO,
-                        egui::vec2(width as f32, height as f32),
-                    )),
-                    ..Default::default()
-                },
-                |ui| {
-                    workspace.show(ui, &params, None, &state);
-                    assert!(ui.min_rect().right() <= width as f32 + 1.0);
-                },
-            );
+            let mut input = egui::RawInput {
+                screen_rect: Some(Rect::from_min_size(
+                    Pos2::ZERO,
+                    egui::vec2(width as f32, height as f32),
+                )),
+                ..Default::default()
+            };
+            input
+                .viewports
+                .get_mut(&egui::ViewportId::ROOT)
+                .unwrap()
+                .native_pixels_per_point = Some(scale);
+            let mut output = context.run_ui(input, |ui| {
+                workspace.show(ui, &params, None, &state);
+                assert!(ui.min_rect().right() <= width as f32 + 1.0);
+                assert!(
+                    ui.min_rect().bottom() <= height as f32,
+                    "workspace controls must remain reachable"
+                );
+            });
+            let analyze = output.shapes.iter().find_map(|shape| match &shape.shape {
+                egui::Shape::Text(text) if text.galley.job.text == "Analyze session" => {
+                    Some((shape.clip_rect, text.pos, text.galley.size()))
+                }
+                _ => None,
+            });
             if let Ok(directory) = std::env::var("CLEANSLATE_PLUGIN_CAPTURES") {
                 std::fs::create_dir_all(&directory).unwrap();
                 crate::editor_capture::write_capture(
                     &context,
                     &mut output,
                     &std::path::Path::new(&directory).join(format!("{name}.ppm")),
-                    width,
-                    height,
+                    (width as f32 * scale) as usize,
+                    (height as f32 * scale) as usize,
                 )
                 .unwrap();
             } else {
                 output.textures_delta.clear();
             }
+            let analyze = analyze.expect("Analyze must be drawn");
+            assert!(
+                analyze
+                    .0
+                    .contains_rect(Rect::from_min_size(analyze.1, analyze.2)),
+                "Analyze must be visible at {width}×{height}: {analyze:?}"
+            );
         }
     }
 

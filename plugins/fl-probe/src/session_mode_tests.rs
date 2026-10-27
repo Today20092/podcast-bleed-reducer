@@ -7,6 +7,117 @@ use std::time::Instant;
 const RATE: u32 = 8000;
 
 #[test]
+fn cancel_request_returns_while_capture_storage_is_locked() {
+    let fixture = Fixture::new(1);
+    let (send, receive) = std::sync::mpsc::channel();
+    let engine = fixture.engine().clone();
+    let mut completed = false;
+    let mut request = None;
+    fixture.with_worker_lock(|| {
+        request = Some(thread::spawn(move || {
+            engine.cancel_analysis();
+            send.send(()).unwrap();
+        }));
+        // A liveness timeout, not a claimed UI latency measurement: the lock stays held.
+        completed = receive.recv_timeout(Duration::from_secs(5)).is_ok();
+    });
+    request.unwrap().join().unwrap();
+    assert!(
+        completed,
+        "Cancel must not wait for capture/snapshot I/O to release its state lock"
+    );
+}
+
+#[test]
+fn conflicting_examples_require_explicit_replacement() {
+    let fixture = Fixture::new(2);
+    let engine = fixture.engine();
+    for member in 0..2 {
+        direct_capture(engine, member, 0, 8000, false);
+    }
+    engine.label(0, 4000, Some(1)).unwrap();
+    assert!(engine.label(2000, 6000, Some(2)).is_err());
+    assert_eq!(
+        engine.view(None, None, 32).unwrap().labels,
+        vec![LabelRange {
+            start: 0,
+            end: 4000,
+            mask: 1
+        }]
+    );
+    engine.replace_label(2000, 6000, 2).unwrap();
+    assert_eq!(
+        engine.view(None, None, 32).unwrap().labels,
+        vec![
+            LabelRange {
+                start: 0,
+                end: 2000,
+                mask: 1
+            },
+            LabelRange {
+                start: 2000,
+                end: 6000,
+                mask: 2
+            },
+        ]
+    );
+    assert!(engine.replace_label(4000, 9000, 1).is_err());
+    assert!(engine.replace_label(2000, 6000, 4).is_err());
+    engine.label(2000, 6000, None).unwrap();
+    assert_eq!(engine.view(None, None, 32).unwrap().labels.len(), 1);
+}
+
+#[test]
+fn cancelling_explicit_analysis_retains_examples_and_source_capture() {
+    let fixture = Fixture::new(1);
+    let engine = fixture.engine();
+    direct_capture(engine, 0, 0, 8000, false);
+    engine.label(0, 4000, Some(0)).unwrap();
+    assert!(!engine.view(None, None, 32).unwrap().busy);
+    engine.analyze(Settings::default()).unwrap();
+    engine.cancel_analysis();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        let view = engine.view(None, None, 32);
+        if let Some(view) = view
+            && !view.busy
+        {
+            assert!(!view.ready);
+            assert_eq!(view.labels.len(), 1);
+            assert!(view.tracks[0].verified);
+            assert!(view.message.to_lowercase().contains("cancelled"));
+            break;
+        }
+        assert!(Instant::now() < deadline, "cancelled analysis must drain");
+        thread::sleep(Duration::from_millis(5));
+    }
+    engine.analyze(Settings::default()).unwrap();
+    engine
+        .set_settings(Settings {
+            reduction_db: -18.0,
+            ..Settings::default()
+        })
+        .unwrap();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        if let Some(view) = engine.view(None, None, 32)
+            && !view.busy
+        {
+            assert!(!view.ready);
+            assert!(
+                view.message.to_lowercase().contains("changed"),
+                "{}",
+                view.message
+            );
+            assert!(!view.message.to_lowercase().contains("cancelled"));
+            break;
+        }
+        assert!(Instant::now() < deadline, "invalidated analysis must drain");
+        thread::sleep(Duration::from_millis(5));
+    }
+}
+
+#[test]
 fn waveform_long_history_redraw_measurement() {
     let fixture = Fixture::new(8);
     {

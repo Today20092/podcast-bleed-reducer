@@ -1,7 +1,7 @@
 # CleanSlate Podcast source candidate
 
-Ticket 95, experimental package 0.0.1. This is source preparation, not a qualified
-build or release. The maintained Session engine, source-time capture, waveform,
+Tickets 95/96, experimental package 0.0.1. Checked development candidates are
+separate from native-host/listening qualification and release. The maintained Session engine, source-time capture, waveform,
 label/history and conservative cached rendering are compiled directly from
 `../fl-probe/src/lib.rs`; no detector or trainer is copied. The Podcast editor
 enters the existing Session workspace unconditionally. No live gate mode is
@@ -43,7 +43,8 @@ command uses the global resource guard and shared locked/offline single-job
 cache. Compilation keeps 14 GiB start / 8 GiB reserve / 6 GiB job cap. The script
 runs the inherited unit and Session/egui event tests, strict Clippy, builds the
 DLL and separately named `podcast_host_check` / `podcast_vst3_host_check` examples,
-then runs both actual formats. These checks still need a resource-safe run.
+then runs both actual formats. The normal workflow checks driver-symbol absence;
+ticket 96 records exact candidates and resource receipts.
 The CLAP host checks the new name/ID, foreign-state disconnection and state
 round-trip, and uses a FIFO oracle for mandatory Session latency; the VST3 host
 retains its existing latency-aware processing checks. Synthetic host caches
@@ -56,6 +57,23 @@ output or activate Common Files links. A future deliberate installation would
 use separately named `CleanSlate Podcast.clap` / `CleanSlate Podcast.vst3` links;
 no link-activation script is supplied by ticket 95. Pass the exact candidate
 directory to `scripts/test-plugin-hosts.ps1 -Product Podcast` for a rerun.
+
+The Session lane area scrolls independently, retaining readable 64-point lanes
+and visible label, Analyze/cancel and readiness actions at 720×560 and 1000×680.
+Use Label selection for room, one microphone or overlap; conflicting examples
+require explicit replacement. Examples and Shared sound & cache open bounded
+menus. Sound remains shared and requires Analyze; per-track overrides/cache
+reuse and host metadata remain behind 80 in tickets 81–83.
+
+`scripts/check-podcast-workflow.ps1` is the separate machine acceptance lane.
+It preserves a normal candidate, builds the **nondefault, debug-only**
+`acceptance-driver` artifact and separately named host runners, and uses private
+synthetic caches. Its fixed scalar command seam invokes the existing Session
+API; PCM, parameters, transport, state and output use the real CLAP/VST3 ABIs.
+Normal artifacts omit that symbol; release profiles reject the feature.
+Outputs under `dist/podcast-acceptance-driver` must never be installed or
+distributed. Driver checks do not qualify a native editor's Analyze interaction
+or listening quality. The script restores the normal build afterwards.
 
 No running desktop GUI is needed. The shared `rust-app` path dependency has
 `default-features = false`, but its manifest still pulls Iced, rfd and rodio;
