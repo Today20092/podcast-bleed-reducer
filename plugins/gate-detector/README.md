@@ -1,8 +1,10 @@
 # Gate detector feasibility only
 
 Ticket 92 experiment, independently locked and not linked into Smart Gate.
-See [decision and resource-blocked checkpoint](../../docs/research/smart-gate-detector-92.md).
-Compilation green and inference measurements remain pending; do not enable 93.
+See the [measured decision and historical checkpoint](../../docs/research/smart-gate-detector-92.md).
+Tests, strict Clippy and the 165-run inference harness pass. Results support a
+conservative worker/gain prototype, not callback inference or sound qualification.
+Ticket 92 remains claimed pending review; Gate audio is still pass-through.
 
 From repository root, use shared Cargo settings and the standard resource guard:
 
@@ -16,6 +18,8 @@ $s = & ./scripts/local-build-settings.ps1
 Then guard `$s.TargetDir/debug/examples/feasibility.exe` with two arguments: the
 canonical local authorized `test-audio` root and a new private report JSON path.
 Never commit audio or infer missing labels. The harness verifies source hashes,
+pins the exact reviewed reference-project hash (changed projects require explicit
+binding/label review and a new fixture identity),
 reads at most three seconds per human reference, retains all probabilities and
 compares exact evidence across five blocks and three rates. It creates its report
 without overwriting an existing file. The harness is synchronous and allocates;

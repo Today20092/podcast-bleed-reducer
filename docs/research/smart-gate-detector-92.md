@@ -1,7 +1,8 @@
 # Causal Gate detector feasibility (ticket 92)
 
-Status: measurement pending; Gate audio stays pass-through. This is speech
-presence, including another speaker's bleed, never microphone ownership.
+Status: measured causal feasibility supports a conservative ticket-93 prototype;
+ticket 92 remains claimed pending review. Gate audio stays pass-through. This is
+speech presence, including another speaker's bleed, never microphone ownership.
 
 ## Chosen bounded experiment
 
@@ -81,6 +82,9 @@ reset and assert finite probability, native availability and fault recovery.
 
 ## 2026-10-26 checkpoint: resource blocked, no feasibility verdict yet
 
+The checkpoint below is historical. The measured follow-up at the end supersedes
+its uncompiled/unmeasured status without claiming native or listening acceptance.
+
 Source base `dda8505`; canonical claim commit `7721337`. No plugin/probe source,
 installed link or preserved Gate candidate changed. This separate crate has NOT
 compiled successfully and its measurement example has NOT executed. Therefore no
@@ -115,3 +119,163 @@ worst inference-bearing block results, then record a bounded feasibility decisio
 Ticket 92 stays claimed; 93 remains blocked. Natural laughter, quiet speech,
 interjections, overlap and listening remain qualification gaps even after the
 proposed derived development cases run.
+
+## 2026-10-26 measured follow-up and bounded decision
+
+**Decision:** the existing model, causal resampling/state adapter and event
+contract are usable for a conservative 93 worker/gain prototype. Preparation and
+synchronous inference must remain off the audio callback; every missing, stale,
+invalid or late decision must preserve the original. This is a feasibility
+decision, not a choice of production thresholds or evidence that quiet starts,
+tails, laughter and natural overlap are preserved by a gate. Ticket 92 is kept
+claimed until review/integration; do not silently enable product gating.
+
+No model or dependency was upgraded. `Get-FileHash` independently verified the
+embedded model SHA256 above. Context7 became available again: exact
+`/pykeio/ort/v2.0.0-rc.10` documentation confirmed the synchronous named-input
+Session/Tensor API; the [pinned upstream documentation](https://github.com/pykeio/ort/tree/v2.0.0-rc.10/docs/content)
+and installed source remain the contract. Strict Rust 1.99 Clippy first rejected
+constant `chunks_exact(4)` in the WAV fixture reader; using `as_chunks::<4>()`
+removed the lint and fallible conversion without changing the detector.
+
+### Actual checks and resource bounds
+
+All-target tests passed, including the public 44.1/48/96 kHz block/reset,
+nonfinite-fault and recovery contract (0.53 s test execution). Strict all-target
+Clippy and the example build passed. Compilation kept the default 14 GiB start,
+8 GiB reserve, 6 GiB owned cap, locked/offline shared cache/profile and Cargo -j1.
+The largest kernel job commit was 660,918,272 bytes; cleanup was verified.
+Test/build guard elapsed times include lingering VCTIP helpers: the coordinator
+confirmed each exact process inside its live named CleanSlate Job Object after
+cargo/rustc/link had exited, then stopped that helper only. No compiler, unrelated
+process, service or application was stopped; no guard limit was weakened.
+
+The runtime measurement used an explicit 4 GiB start / 2 GiB reserve / 1 GiB
+owned cap / 300 s budget. It completed in **13.93 s**, including streaming file
+hash verification and report writing: peak private **38,187,008 bytes (36.42 MiB)**,
+working set **68,612,096 bytes (65.43 MiB)**, kernel job commit **39,690,240 bytes
+(37.85 MiB)**. Minimum observed physical/commit headroom was 17,987,960,832 /
+17,060,339,712 bytes. These are process/job observations, not whole-host or
+worst-case realtime guarantees.
+
+| Native rate | First preparation in this run | Worst inference-bearing push across all cases/blocks | FIR delay |
+| --- | ---: | ---: | ---: |
+| 44.1 kHz | 124.980 ms | 0.416324 ms | 1.451247 ms |
+| 48 kHz | 80.856 ms | 0.447055 ms | 1.333333 ms |
+| 96 kHz | 78.913 ms | 0.534146 ms | 0.666667 ms |
+
+Preparation is a single observation per rate, not a repeated cold-start benchmark.
+Worst push spans include scheduling/resampling/model work and are measured wall
+time, not a guaranteed deadline. Across all 165 case/rate/block runs there were
+10,140 model calls and 6.488 s accumulated push time. Rust observed **16 allocations
+per model call**, excluding native ONNX allocations: direct callback use is
+explicitly rejected. A bounded worker bridge in 93 must be tested separately.
+
+For each of 11 cases, probabilities were bit-identical across blocks 1/17/64/257/
+1024 after reset at each rate. Public reset tests also contaminated state before
+reset. Every model call represents 512 fresh 16 kHz samples (32 ms); frame
+availability follows the exclusive native sample clock. Incomplete EOF tails
+were omitted, never inferred from manufactured zero padding. The event age is
+up to 32 ms plus the rate-specific FIR delay, host-block delivery and measured
+compute/worker scheduling. **Current pass-through host latency remains zero** as
+checked under 91; future gated-audio latency/PDC is not established by this run.
+
+### Available probability evidence and its limits
+
+The canonical project hash was
+`cb1180b1e8bcbeb1d136d6480a2227549407fad75f66769d8f81270bf2680d78`.
+All three complete float32 mono source hashes matched their saved human reference
+bindings before excerpt reading. At most three seconds of each current human
+reference were read for inference; sources and project were never written.
+
+At block 257 (other blocks give exactly the same probabilities), synthetic
+silence mean probability was 0.0047 at all rates, white noise 0.0085/0.0104/0.0129.
+The five source-bound human speech ranges had means approximately 0.833–0.959;
+scaled speech 0.877–0.884 and an artificial speech mix 0.939–0.955. These demonstrate
+speech response on this development material, not calibrated confidence,
+independent accuracy or natural quiet/overlap acceptance.
+
+**The human room reference disagrees:** reference 15, active_speakers=[], begins
+at 2279.618451 s. Its selected three seconds had mean probability
+0.8267/0.8264/0.8248; 77/93 frames were at least 0.5 at every rate. This is an
+important false-open/noise-leakage risk for a simple threshold gate. The saved
+annotation describes the session's assigned speakers; it is not an independent
+audit proving no untracked/distant speech in that waveform. No reference was
+relabelled and no production threshold was tuned to hide this disagreement.
+High probability here keeps a conservative gate open; it does not justify
+attenuating wanted speech or rejecting all causal/runtime feasibility.
+
+The 150 ms crop of reference 9 was never manually certified as speech throughout:
+maximum probability was 0.2288/0.1939/0.5938. It must not be reported as a verified
+interjection test or as proof of per-sample onset failure. Natural laughter,
+quiet starts/tails, interjections, overlap, changing noise and subjective sound
+remain qualification gaps. 93 should preserve audio on uncertainty and report
+these limits rather than claiming automatic speaker isolation. No newer model
+is proposed solely because it exists; any alternate model/calibration decision
+requires a separate bounded comparison with source-bound evidence.
+
+### Retained evidence
+
+Runtime report (local only):
+`%LOCALAPPDATA%/CleanSlate/GateDetector92/feasibility-5dd251afc2804a7ca82de4aec6576201.json`
+(500,839 bytes), SHA256
+`a262774f6ceed9cc88f2ba2469c3c251ab3d5b3044daf1ff4bb11e6b5c666195`.
+Executable: `%LOCALAPPDATA%/CleanSlate/BuildCache/debug/examples/feasibility.exe`,
+SHA256 `f6a16b410fa3d105c7df07444a89ee77631a01fe3f6f3772730f0432a5a550ea`.
+No audio is in the report or committed; the report retains probability series,
+excerpt hashes, source bindings, rate/block/tail identity and timing summaries.
+
+Receipts under `%LOCALAPPDATA%/CleanSlate/BuildReceipts/`:
+
+- Tests: `20261026-230839-70f78997b9ac4234b55c16ce51653aeb.json`.
+- Initial Clippy lint failure: `20261026-231006-9fe5979aea504762ac6fb88843c61506.json`.
+- Strict Clippy green: `20261026-231041-47c17c7e9f1e4fb5bf502392356d8302.json`.
+- Example build: `20261026-231055-93495e0b04b34b3d8c80fac2fc5af476.json`.
+- Runtime: `20261026-231218-b94e0e9e9c8a4669957427725637fa0a.json`.
+
+The tested detector is checkpoint `b4e036c` plus the fixture-reader Clippy fix;
+no detector algorithm, Smart Gate callback, probe source, installed link or
+preserved product candidate was changed during this follow-up.
+
+### Reference-fixture identity correction and final verification
+
+The harness deliberately selects reviewed reference IDs 9/12, so it must not
+silently accept edited projects whose reference bindings may be stale. It now
+pins the exact reviewed project SHA256 above **before** JSON parsing, file hashing,
+audio access or model preparation. Changed projects require deliberate reference
+binding/label review and a new fixture identity; this is not a general project
+importer. The actual measured project's six references were independently checked
+against the same verified source fingerprints; the original measurement remains
+valid.
+
+A public CLI red/green regression uses a private fixture containing only an empty
+`261005-supervised.cleanslate` (`{}`), with no source audio. Before the fix, the
+expected identity-boundary assertion failed because the command reached `missing
+sources`. After the fix, it explicitly rejects `reviewed reference project
+identity mismatch` and creates no report. Retained evidence:
+`%LOCALAPPDATA%/CleanSlate/GateDetector92/project-pin-red-guard.json` and
+`project-pin-green-guard.json` plus logs and `unreviewed-project-fixture/`.
+This negative check uses an explicit 2/1/0.5 GiB budget and 10 s deadline; no
+inference or real source audio is required.
+
+Final formatting and strict Clippy pass. The rebuilt final executable reran the
+original reviewed fixture successfully: all **165 probability arrays exactly
+match** the first report, with identical model/project identities. Final report:
+`%LOCALAPPDATA%/CleanSlate/GateDetector92/feasibility-pinned-project-20261026.json`,
+SHA256 `0be1fb808ee016ce7ed2d8f1cd5858d1886df1cabde7597c906e88379eeed77f`.
+The second run took 16.70 s, peak private/working-set/kernel-job bytes
+37,756,928 / 58,191,872 / 39,276,544, cleanup verified. Its preparation times were
+171.742/75.716/75.274 ms and worst inference-bearing pushes
+0.663352/0.432038/0.480089 ms at 44.1/48/96 kHz. Thus the largest observed push
+across both runs is **0.663352 ms**; neither run establishes a guaranteed deadline.
+
+Final executable SHA256:
+`a255ddc70dcb97e15317a6e20cadb0f449bc5d522dd4f2746b7dd541c124d349`.
+It is also hash-preserved outside the shared cache at
+`%LOCALAPPDATA%/CleanSlate/VerifiedBuilds/gate-detector/a255ddc7/feasibility.exe`.
+Final receipts: formatting `20261026-231943-efc21645f68d47598f36df7abf2f330f.json`,
+build `20261026-231944-913b80a1190d4ec6926c7230a2560030.json`,
+Clippy `20261026-232112-72c2e47ef46a4b0680a39634b2032b4c.json`,
+runtime `20261026-232116-2e1dd22d71704f219cd45d1b4c15bc0d.json`.
+The rebuilt example retained the same detector algorithm; changes were the
+fixture-reader lint fix and reviewed-project trust boundary.

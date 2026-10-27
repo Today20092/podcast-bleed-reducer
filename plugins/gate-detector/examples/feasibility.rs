@@ -14,6 +14,9 @@ use std::{
 
 struct CountAlloc;
 static ALLOCATIONS: AtomicU64 = AtomicU64::new(0);
+// This bounded experiment uses reviewed reference IDs/bindings, not arbitrary project annotations.
+const REFERENCE_PROJECT_SHA256: &str =
+    "cb1180b1e8bcbeb1d136d6480a2227549407fad75f66769d8f81270bf2680d78";
 unsafe impl GlobalAlloc for CountAlloc {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         ALLOCATIONS.fetch_add(1, Ordering::Relaxed);
@@ -64,8 +67,10 @@ fn excerpt(path: &Path, start: f64, duration: f64) -> Result<Vec<f32>, Box<dyn s
             let mut bytes = vec![0; length];
             file.read_exact(&mut bytes)?;
             return Ok(bytes
-                .chunks_exact(4)
-                .map(|b| f32::from_le_bytes(b.try_into().unwrap()))
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .map(|b| f32::from_le_bytes(*b))
                 .collect());
         }
         file.seek(SeekFrom::Start(body + size + size % 2))?;
@@ -79,6 +84,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     let root = Path::new(&args[1]);
     let project_bytes = std::fs::read(root.join("261005-supervised.cleanslate"))?;
+    let project_sha256 = format!("{:x}", Sha256::digest(&project_bytes));
+    if project_sha256 != REFERENCE_PROJECT_SHA256 {
+        return Err("reviewed reference project identity mismatch; review bindings before changing this fixture".into());
+    }
     let project: serde_json::Value = serde_json::from_slice(&project_bytes)?;
     // Verify the selected local files against their human-reference source binding.
     let mut source_hashes = Vec::new();
@@ -220,7 +229,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
     }
-    let report = json!({"schema":1,"recipe":RECIPE,"model_sha256":MODEL_SHA256,"project_sha256":format!("{:x}",Sha256::digest(project_bytes)),"verified_sources":source_hashes,"limits":"synchronous allocating offline feasibility; ORT CPU1 thread; no callback suitability or owner listening; laughter/natural quiet/interjection/overlap unqualified; no EOF padding/inference","runs":reports});
+    let report = json!({"schema":1,"recipe":RECIPE,"model_sha256":MODEL_SHA256,"project_sha256":project_sha256,"verified_sources":source_hashes,"limits":"synchronous allocating offline feasibility; ORT CPU1 thread; no callback suitability or owner listening; laughter/natural quiet/interjection/overlap unqualified; no EOF padding/inference","runs":reports});
     let file = std::fs::OpenOptions::new()
         .write(true)
         .create_new(true)
