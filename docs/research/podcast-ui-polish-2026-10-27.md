@@ -1,0 +1,37 @@
+# Podcast visual refinement checkpoint
+
+Ticket 103 is claimed on `codex/podcast-ui-polish-103`, from exact permanent Podcast tip `13e6dfd3781a3371e429f9760a9f7f30fc77df90`. Only the required ticket, premium contract amendment and original 102 visual-study sources/frames were imported from the primary tracker; no desktop branch was merged. Existing egui/Session seams remain the test boundaries. Context7 resolution returned its monthly quota error; pinned egui 0.37 source documents `RawInput.time`, viewport visibility and repaint APIs.
+
+Partial source checkpoint `d2b30c91fa5a7f078ca75cdbf6999defc69ed513` preserves the first Catch up RED/GREEN source and comparable fixture/baseline instrumentation. It is not integration-ready: no full suite or formatting/Clippy pass is claimed. A separate explicitly unverified test commit preserves the reduced-motion/stop case and the adjusted existing navigation timing expectation; neither executed after the guard stop. The exact recoverable test patch and original full source are outside the worktree at `C:/Users/User/AppData/Local/CleanSlate/Podcast/Workflow103Checkpoints/f0da41de356240d9b7f502fa0af5adf4/` (`unverified-motion-tests.patch`, `session_editor-with-unverified-tests.rs`). No source from this checkpoint has been integrated into the permanent Podcast lane.
+
+## Current scope
+
+The first semantic RED proved that Catch up jumped immediately to its 5% inset target. A minimal finite 250 ms smoothstep slide passes the same deterministic 0/125/250 ms test while preserving the range selection and host transport. Manual viewport dispatch and playback stop clear that transient target. This is a partial motion checkpoint: seek/hidden/reduced-motion behavior, interruption coverage, visual refinement and full checks remain unfinished. No new GUI dependency or processing/sound parameter change occurred. Shared sound retains actual dB and Fade in/Fade out milliseconds; study percentage values and per-track overrides are not product behavior.
+
+The next reduced-motion/stop test was prepared before production implementation. Its compilation was stopped by the resource guard; it has not executed and supplies no behavioral RED/GREEN. Full regression/formatting/Clippy checks have not run for this checkpoint. Existing navigation coverage was updated to allow the specified 250 ms slide rather than demand an immediate jump; that adjusted case is also unrun.
+
+## Comparable baseline
+
+The shared test fixture generates eight distinct 8 kHz PCM tracks, eight seconds each, with initial room, differing speech-like bursts, low background and sharp transitions. It supplies actual captured peaks, Room/solo/overlap labels, selection and playhead through the existing Session view and egui renderer. It is not speech-quality or native-host evidence. The same helper feeds future compact/full captures and performance measurements. Rendering uses 1,000 queried columns, readable lane heights and offscreen culling; the fixture/profile must remain unchanged for the post-refinement comparison.
+
+One cold frame plus 40 warm frames were recorded at each logical size. Values below are microseconds, in p50 / p95 / p99 order over warm samples using nearest-rank indices. The retained raw log contains every sample, cold values, shape/vertex/index counts and retained mesh-capacity bytes.
+
+| Logical size | Peak query | Geometry build | Tessellation | First warm vertices |
+| --- | --- | --- | --- | --- |
+| 720×560 | 208.197 / 236.133 / 288.584 | 243.187 / 398.864 / 515.778 | 188.292 / 319.804 / 326.508 | 12,664 |
+| 1000×680 | 236.482 / 314.635 / 342.991 | 567.740 / 654.343 / 666.146 | 491.543 / 615.930 / 770.210 | 20,808 |
+
+Timing spans include observer overhead and are CPU work only, without a native compositor, audio playback or presented-frame timing. Mesh capacities are scoped geometry storage, not allocation-call counts. nice-plug owns the debug global allocator; no replacement allocator or new dependency was introduced. Native per-instance CPU/memory, multiple editor instances, event latency, allocation counts, presentation misses and final before/after comparison remain unmeasured.
+
+## Guard receipts
+
+All receipt/log pairs are under `C:/Users/User/AppData/Local/CleanSlate/BuildReceipts/`. Source receipts record base `13e6dfd` plus the explicitly dirty 103 diff, subsequently preserved in the checkpoint commit. Original receipts are retained unchanged.
+
+- `20261027-101346-390bc90e13ab4d8e8de0e28bec893b2d`: first Catch up semantic RED. Initial viewport was 146000–226000 instead of 0–80000.
+- `20261027-101519-4d177d6339714ac59eb3b02cf82b23aa`: same Catch up test GREEN; 1 passed.
+- `20261027-101820-c79286ea001f451e82c4176fabc24ce2`: varied-fixture CPU baseline GREEN; 1 passed, raw timing JSON in `.log`.
+- `20261027-102017-498887ecffda405da9a8ede99fe30316`: next test compile stopped, `resource-blocked` / `low-commit-running`; no test executed. Peak owned commit 1,770,033,152 bytes, minimum available physical 11,223,363,584 bytes, minimum system commit headroom 8,315,363,328 bytes (7.74 GiB). Cleanup verified; no compiler/helper remains.
+
+Every heavy job used the unchanged 14 GiB start / 8 GiB running reserve / 6 GiB owned commit cap, shared pinned development profile, locked/offline Cargo and one compiler job. No retry, policy relaxation, cache wipe or unrelated process termination followed the stop. Earlier helpers were stopped only by the coordinator after proving exact named-job membership and compiler exit.
+
+Native 80 remains open and 81–83 remain blocked. No installation, owner audio/project write, release, DirectML/clean-room runtime qualification or vendor-equivalent performance claim occurred.
