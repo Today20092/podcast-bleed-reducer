@@ -877,6 +877,224 @@ impl SessionUi {
 mod tests {
     use super::*;
 
+    fn workspace_frame(
+        context: &egui::Context,
+        workspace: &mut SessionUi,
+        params: &ProbeParams,
+        state: &GuiState,
+        events: Vec<egui::Event>,
+    ) -> Vec<(String, Rect, Rect)> {
+        let mut output = context.run_ui(
+            egui::RawInput {
+                screen_rect: Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(720.0, 560.0))),
+                events,
+                ..Default::default()
+            },
+            |ui| workspace.show(ui, params, None, state),
+        );
+        let text = output
+            .shapes
+            .iter()
+            .filter_map(|shape| match &shape.shape {
+                egui::Shape::Text(text) => Some((
+                    text.galley.job.text.clone(),
+                    Rect::from_min_size(text.pos, text.galley.size()),
+                    shape.clip_rect,
+                )),
+                _ => None,
+            })
+            .collect();
+        output.textures_delta.clear();
+        text
+    }
+
+    fn click_control(
+        context: &egui::Context,
+        workspace: &mut SessionUi,
+        params: &ProbeParams,
+        state: &GuiState,
+        text: &str,
+    ) {
+        let widgets = workspace_frame(context, workspace, params, state, vec![]);
+        let (_, rect, _) = widgets
+            .iter()
+            .rev()
+            .find(|widget| widget.0 == text)
+            .unwrap_or_else(|| panic!("Missing control {text}"));
+        let pos = rect.center();
+        workspace_frame(
+            context,
+            workspace,
+            params,
+            state,
+            vec![
+                egui::Event::PointerMoved(pos),
+                egui::Event::PointerButton {
+                    pos,
+                    button: egui::PointerButton::Primary,
+                    pressed: true,
+                    modifiers: egui::Modifiers::NONE,
+                },
+            ],
+        );
+        workspace_frame(
+            context,
+            workspace,
+            params,
+            state,
+            vec![egui::Event::PointerButton {
+                pos,
+                button: egui::PointerButton::Primary,
+                pressed: false,
+                modifiers: egui::Modifiers::NONE,
+            }],
+        );
+    }
+
+    #[test]
+    fn center_follow_and_fit_controls_preserve_examples_and_host_transport() {
+        use crate::session_mode::integration_tests::{Fixture, direct_capture};
+        let fixture = Fixture::new(2);
+        for member in 0..2 {
+            direct_capture(fixture.engine(), member, 0, 160000, false);
+        }
+        let state = GuiState::new();
+        *state.capture.lock() = Some(fixture.engine().clone());
+        state
+            .position
+            .store(80000, std::sync::atomic::Ordering::Relaxed);
+        let probe = crate::FlProbe::default();
+        let context = egui::Context::default();
+        crate::editor::style(&context);
+        let mut workspace = SessionUi::default();
+        workspace_frame(&context, &mut workspace, &probe.params, &state, vec![]);
+        workspace.viewport = Some((0, 80000));
+        workspace.selection = Some((20000, 30000));
+        click_control(&context, &mut workspace, &probe.params, &state, "Center");
+        assert_eq!(workspace.viewport, Some((40000, 120000)));
+        assert_eq!(
+            state.position.load(std::sync::atomic::Ordering::Relaxed),
+            80000
+        );
+        click_control(&context, &mut workspace, &probe.params, &state, "Catch up");
+        state
+            .playing
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+        state
+            .position
+            .store(150000, std::sync::atomic::Ordering::Relaxed);
+        // Let the existing one-second manual-navigation suspension expire.
+        std::thread::sleep(Duration::from_millis(1050));
+        workspace_frame(&context, &mut workspace, &probe.params, &state, vec![]);
+        assert_eq!(workspace.viewport, Some((146000, 226000)));
+        click_control(
+            &context,
+            &mut workspace,
+            &probe.params,
+            &state,
+            "Lock playhead",
+        );
+        workspace_frame(&context, &mut workspace, &probe.params, &state, vec![]);
+        assert_eq!(workspace.viewport, Some((110000, 190000)));
+        click_control(
+            &context,
+            &mut workspace,
+            &probe.params,
+            &state,
+            "Follow off",
+        );
+        state
+            .position
+            .store(50000, std::sync::atomic::Ordering::Relaxed);
+        workspace_frame(&context, &mut workspace, &probe.params, &state, vec![]);
+        assert_eq!(workspace.viewport, Some((110000, 190000)));
+        click_control(
+            &context,
+            &mut workspace,
+            &probe.params,
+            &state,
+            "Fit selection",
+        );
+        assert_eq!(workspace.viewport, Some((20000, 30000)));
+        click_control(
+            &context,
+            &mut workspace,
+            &probe.params,
+            &state,
+            "Fit captured",
+        );
+        workspace_frame(&context, &mut workspace, &probe.params, &state, vec![]);
+        assert_eq!(workspace.viewport, None);
+        assert_eq!(workspace.selection, Some((20000, 30000)));
+        assert_eq!(workspace.last_view.as_ref().unwrap().end, 160000);
+        assert_eq!(
+            state.position.load(std::sync::atomic::Ordering::Relaxed),
+            50000
+        );
+        assert!(
+            fixture
+                .engine()
+                .view(None, None, 32)
+                .unwrap()
+                .labels
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn navigator_click_moves_the_view_without_changing_selection() {
+        let context = egui::Context::default();
+        let view = navigation_view();
+        let mut workspace = SessionUi {
+            selection: Some((800000, 900000)),
+            ..Default::default()
+        };
+        let frame = |workspace: &mut SessionUi, events| {
+            let mut bounds = Rect::NOTHING;
+            let mut output = context.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(1000.0, 60.0))),
+                    events,
+                    ..Default::default()
+                },
+                |ui| {
+                    bounds = Rect::from_min_size(
+                        ui.next_widget_position(),
+                        egui::vec2(ui.available_width(), 18.0),
+                    );
+                    workspace.navigator(ui, &view);
+                },
+            );
+            output.textures_delta.clear();
+            bounds
+        };
+        let rect = frame(&mut workspace, vec![]);
+        let pos = rect.center();
+        frame(
+            &mut workspace,
+            vec![
+                egui::Event::PointerMoved(pos),
+                egui::Event::PointerButton {
+                    pos,
+                    button: egui::PointerButton::Primary,
+                    pressed: true,
+                    modifiers: egui::Modifiers::NONE,
+                },
+            ],
+        );
+        frame(
+            &mut workspace,
+            vec![egui::Event::PointerButton {
+                pos,
+                button: egui::PointerButton::Primary,
+                pressed: false,
+                modifiers: egui::Modifiers::NONE,
+            }],
+        );
+        assert_eq!(workspace.viewport, Some((240000, 3120000)));
+        assert_eq!(workspace.selection, Some((800000, 900000)));
+    }
+
     fn navigation_view() -> SessionView {
         SessionView {
             rate: 48000,
@@ -1240,59 +1458,11 @@ mod tests {
         let probe = crate::FlProbe::default();
         let context = egui::Context::default();
         crate::editor::style(&context);
-        let frame = |workspace: &mut SessionUi, events: Vec<egui::Event>| {
-            let mut output = context.run_ui(
-                egui::RawInput {
-                    screen_rect: Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(720.0, 560.0))),
-                    events,
-                    ..Default::default()
-                },
-                |ui| workspace.show(ui, &probe.params, None, &state),
-            );
-            let text = output
-                .shapes
-                .iter()
-                .filter_map(|shape| match &shape.shape {
-                    egui::Shape::Text(text) => Some((
-                        text.galley.job.text.clone(),
-                        Rect::from_min_size(text.pos, text.galley.size()),
-                        shape.clip_rect,
-                    )),
-                    _ => None,
-                })
-                .collect::<Vec<_>>();
-            output.textures_delta.clear();
-            text
+        let frame = |workspace: &mut SessionUi, events| {
+            workspace_frame(&context, workspace, &probe.params, &state, events)
         };
         let click = |workspace: &mut SessionUi, text: &str| {
-            let widgets = frame(workspace, vec![]);
-            let (_, rect, _) = widgets
-                .iter()
-                .rev()
-                .find(|widget| widget.0 == text)
-                .unwrap_or_else(|| panic!("Missing control {text}"));
-            let pos = rect.center();
-            frame(
-                workspace,
-                vec![
-                    egui::Event::PointerMoved(pos),
-                    egui::Event::PointerButton {
-                        pos,
-                        button: egui::PointerButton::Primary,
-                        pressed: true,
-                        modifiers: egui::Modifiers::NONE,
-                    },
-                ],
-            );
-            frame(
-                workspace,
-                vec![egui::Event::PointerButton {
-                    pos,
-                    button: egui::PointerButton::Primary,
-                    pressed: false,
-                    modifiers: egui::Modifiers::NONE,
-                }],
-            );
+            click_control(&context, workspace, &probe.params, &state, text)
         };
         let mut workspace = SessionUi::default();
         frame(&mut workspace, vec![]);
