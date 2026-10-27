@@ -1,6 +1,7 @@
 # Single-input gate DSP and actual-format checks
 
-Status: open
+Status: claimed
+Assignee: Codex (Gate realtime prototype)
 Readiness: ready-for-agent
 Type: task
 Blocked by: 92
@@ -20,5 +21,35 @@ Acceptance:
 
 ## Results
 
-Not started. Readiness describes specification only; all listed dependencies must be done before claiming.
+Claimed 2026-10-27 after 92 acceptance, scoped branch
+`codex/smart-gate-realtime-93` from permanent Gate `c7513c8` in the retained Gate
+worktree. Read-only discovery found that current Gate state is schema 1 with
+Bypass default false and the callback is still pass-through; both state migration
+and actual-format assertions must change deliberately before introducing DSP.
+The first test-first seam is the public `PluginState` restore/parameter boundary:
+new instances and every v1/unknown/malformed state must remain bypassed/unarmed;
+saved state must never implicitly enable experimental gating. Product IDs and
+probe compatibility remain stable. No test or implementation source was written
+in this checkpoint.
+
+The 92 inference path allocates synchronously and must stay on a bounded worker,
+with preallocated epoch/source-time queues and finite callback work. Stereo must
+avoid opposite-phase cancellation and apply one envelope; exact channel policy,
+worker-delivery budget, fixed host latency/PDC and tail need explicit engineering
+tests before being selected. Invalid, missing, stale, overflowed or late evidence
+must preserve original audio. Whisper/laughter response from 92 remains a strong
+preservation risk, requiring default bypass and explicit experimental arming.
+
+Graph search found no Smart Gate coverage in the indexed primary project; no
+index was started while another product owned the heavy slot. Named Gate files
+were read for the coverage gap. ORT runtime packaging/link mode has **not** been
+inspected or established; do not assume DLL mode or standalone deployment.
+
+Further source/test work is deferred after the coordinator's verified standard
+guard denial at 13.8205 GiB available physical memory, below the unchanged 14 GiB
+start threshold: receipt
+`%LOCALAPPDATA%/CleanSlate/BuildReceipts/20261027-004212-5e39d1247dc343ac804ddb95ca04accd.json`.
+No compiler, test, index, native host, resource re-poll, dependency change,
+callback/DSP edit or installed artifact action was attempted for 93. This is a
+claim/design checkpoint, not implemented or qualified gating; 94 remains blocked.
 
