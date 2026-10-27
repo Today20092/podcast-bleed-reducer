@@ -144,31 +144,32 @@ impl SessionUi {
                 ..Self::default()
             };
         }
-        ui.horizontal_wrapped(|ui| {
+        ui.horizontal(|ui| {
             ui.label(
                 egui::RichText::new(if cfg!(cleanslate_podcast) {
                     "CleanSlate Podcast"
                 } else {
                     "CleanSlate"
                 })
-                .size(20.0)
-                .strong(),
+                .size(22.0),
             );
             ui.label(egui::RichText::new("Session").color(TEAL));
-            ui.separator();
+            ui.add_space((ui.available_width() - 3.0 * 94.0 - 24.0).max(0.0));
             for (mode, title) in [
                 (ListenMode::Original, "Original"),
                 (ListenMode::Processed, "Processed"),
                 (ListenMode::Removed, "Removed"),
             ] {
                 if ui
-                    .selectable_label(params.listen.value() == mode, title)
+                    .add(egui::Button::new(title).selected(params.listen.value() == mode).min_size(egui::vec2(94.0, 30.0)))
                     .clicked()
                 {
                     set(setter, &params.listen, mode);
                 }
             }
         });
+        ui.add_space(3.0);
+        ui.separator();
         #[cfg(cleanslate_podcast)]
         if *params.product_state_rejected.lock() {
             ui.colored_label(ERROR, "State was not loaded: this is not supported Podcast state. The instance was disconnected. Reopen the original project with its original plugin; configure Podcast separately.");
@@ -404,7 +405,7 @@ impl SessionUi {
             ui.add_space(5.0);
             ui.separator();
             ui.horizontal_wrapped(|ui| {
-                if ui.add_enabled(!view.busy && !view.labels.is_empty(), egui::Button::new(if view.busy { "Analyzing…" } else { "Analyze session" }).fill(BLUE.gamma_multiply(0.55))).clicked() {
+                if ui.add_enabled(!view.busy && !view.labels.is_empty(), egui::Button::new(egui::RichText::new(if view.busy { "Analyzing…" } else { "Analyze session" }).color(Color32::from_rgb(21, 34, 51))).fill(BLUE).min_size(egui::vec2(180.0, 34.0))).clicked() {
                     self.error = capture.analyze(view.settings).err();
                     if self.error.is_none() { view.busy = true; view.ready = false; view.message = "Preparing captured audio for analysis…".into(); }
                 }
@@ -738,6 +739,10 @@ impl SessionUi {
             if !lane.intersects(ui.clip_rect()) {
                 continue;
             }
+            painter.line_segment(
+                [Pos2::new(plot.left(), lane.bottom()), Pos2::new(plot.right(), lane.bottom())],
+                Stroke::new(1.0, Color32::from_rgb(47, 52, 59)),
+            );
             let color = if track.verified {
                 if index % 2 == 0 { TEAL } else { BLUE }
             } else {
@@ -1841,6 +1846,37 @@ mod tests {
             .expect("Label error must explain recovery");
         assert!(clip.contains_rect(*rect), "Gap recovery must be visible");
     }
+    #[test]
+    fn compact_workspace_shows_actual_shared_sound_values_and_analysis_readiness() {
+        use crate::session_mode::integration_tests::{Fixture, visual_capture};
+        let fixture = Fixture::new(8);
+        for member in 0..8 {
+            visual_capture(fixture.engine(), member);
+        }
+        fixture.engine().label(0, 8000, Some(0)).unwrap();
+        fixture.engine().set_settings(crate::session_analysis::Settings {
+            reduction_db: -18.0,
+            attack_ms: 22.0,
+            release_ms: 120.0,
+        }).unwrap();
+        let state = GuiState::new();
+        *state.capture.lock() = Some(fixture.engine().clone());
+        let probe = crate::FlProbe::default();
+        let context = egui::Context::default();
+        crate::editor::style(&context);
+        let mut workspace = SessionUi::default();
+        let widgets = workspace_frame(&context, &mut workspace, &probe.params, &state, vec![]);
+        for expected in ["Shared sound", "Reduction", "-18.0 dB", "Fade in", "22.0 ms", "Fade out", "120.0 ms", "Analyze session"] {
+            let (_, bounds, clip) = widgets.iter().find(|(text, _, _)| text.replace('−', "-") == expected)
+                .unwrap_or_else(|| panic!("Actual shared control must be visible without opening a menu: {expected}"));
+            assert!(clip.contains_rect(*bounds), "Shared control must remain reachable at720×560: {expected}");
+        }
+        let (_, bounds, clip) = widgets.iter().find(|(text, _, _)| text.contains("Sound settings changed. Analyze again"))
+            .expect("The actual stale-analysis reason must remain visible beside the controls");
+        assert!(clip.contains_rect(*bounds));
+        assert!(!fixture.engine().view(None, None, 32).unwrap().ready);
+    }
+
     #[test]
     fn full_session_workspace_renders_actual_shared_capture_and_controls() {
         use crate::session_mode::integration_tests::{Fixture, visual_capture};
