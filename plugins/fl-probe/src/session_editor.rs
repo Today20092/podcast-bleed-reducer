@@ -161,7 +161,11 @@ impl SessionUi {
                 (ListenMode::Removed, "Removed"),
             ] {
                 if ui
-                    .add(egui::Button::new(title).selected(params.listen.value() == mode).min_size(egui::vec2(94.0, 30.0)))
+                    .add(
+                        egui::Button::new(title)
+                            .selected(params.listen.value() == mode)
+                            .min_size(egui::vec2(94.0, 30.0)),
+                    )
                     .clicked()
                 {
                     set(setter, &params.listen, mode);
@@ -741,7 +745,10 @@ impl SessionUi {
                 continue;
             }
             painter.line_segment(
-                [Pos2::new(plot.left(), lane.bottom()), Pos2::new(plot.right(), lane.bottom())],
+                [
+                    Pos2::new(plot.left(), lane.bottom()),
+                    Pos2::new(plot.right(), lane.bottom()),
+                ],
                 Stroke::new(1.0, Color32::from_rgb(47, 52, 59)),
             );
             let color = if track.verified {
@@ -1855,11 +1862,14 @@ mod tests {
             visual_capture(fixture.engine(), member);
         }
         fixture.engine().label(0, 8000, Some(0)).unwrap();
-        fixture.engine().set_settings(crate::session_analysis::Settings {
-            reduction_db: -18.0,
-            attack_ms: 22.0,
-            release_ms: 120.0,
-        }).unwrap();
+        fixture
+            .engine()
+            .set_settings(crate::session_analysis::Settings {
+                reduction_db: -18.0,
+                attack_ms: 22.0,
+                release_ms: 120.0,
+            })
+            .unwrap();
         let state = GuiState::new();
         *state.capture.lock() = Some(fixture.engine().clone());
         let probe = crate::FlProbe::default();
@@ -1867,21 +1877,39 @@ mod tests {
         crate::editor::style(&context);
         let mut workspace = SessionUi::default();
         let widgets = workspace_frame(&context, &mut workspace, &probe.params, &state, vec![]);
-        for expected in ["Shared sound", "Reduction", "Fade in", "Fade out", "Analyze session"] {
+        for expected in [
+            "Shared sound",
+            "Reduction",
+            "Fade in",
+            "Fade out",
+            "Analyze session",
+        ] {
             let (_, bounds, clip) = widgets.iter().find(|(text, _, _)| text.replace('−', "-") == expected)
                 .unwrap_or_else(|| panic!("Actual shared control must be visible without opening a menu: {expected}; visible text: {:?}", widgets.iter().map(|widget| &widget.0).collect::<Vec<_>>()));
-            assert!(clip.contains_rect(*bounds), "Shared control must remain reachable at720×560: {expected}");
+            assert!(
+                clip.contains_rect(*bounds),
+                "Shared control must remain reachable at720×560: {expected}"
+            );
         }
         // egui paints the editable number and its unit as adjacent text atoms.
         for (value, unit) in [("-18.0", " dB"), ("22.0", " ms"), ("120.0", " ms")] {
-            let pair = widgets.windows(2).find(|pair| pair[0].0.replace('−', "-") == value && pair[1].0 == unit)
-                .unwrap_or_else(|| panic!("Shared value and unit must be visible together: {value}{unit}"));
+            let pair = widgets
+                .windows(2)
+                .find(|pair| pair[0].0.replace('−', "-") == value && pair[1].0 == unit)
+                .unwrap_or_else(|| {
+                    panic!("Shared value and unit must be visible together: {value}{unit}")
+                });
             for (_, bounds, clip) in pair {
-                assert!(clip.contains_rect(*bounds), "Shared value must remain reachable: {value}{unit}");
+                assert!(
+                    clip.contains_rect(*bounds),
+                    "Shared value must remain reachable: {value}{unit}"
+                );
             }
             assert!((pair[0].1.center().y - pair[1].1.center().y).abs() < 2.0);
         }
-        let (_, bounds, clip) = widgets.iter().find(|(text, _, _)| text.contains("Sound settings changed. Analyze again"))
+        let (_, bounds, clip) = widgets
+            .iter()
+            .find(|(text, _, _)| text.contains("Sound settings changed. Analyze again"))
             .expect("The actual stale-analysis reason must remain visible beside the controls");
         assert!(clip.contains_rect(*bounds));
         assert!(!fixture.engine().view(None, None, 32).unwrap().ready);
