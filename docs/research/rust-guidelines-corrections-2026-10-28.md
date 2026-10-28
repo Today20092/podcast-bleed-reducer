@@ -1,6 +1,6 @@
 # Google Rust audit correction batch
 
-Status: verification pending
+Status: implemented; three managed worktree archives remain app-blocked
 Date: 2026-10-28
 Baseline: development at 6a0760c2225c27c5eb4ba95ed39c28849ddc3065
 Integration: codex/rust-guidelines-corrections
@@ -23,11 +23,27 @@ The machine's initial native snapshot was about 10.92 GiB available physical mem
 - Acoustic sharing meaningful RED: [run 40626870961](https://github.com/Today20092/podcast-bleed-reducer/actions/runs/40626870961), source 34d698c0a53928e1ca65ed78d35331df7c36f881, macOS ARM job 122613807500. Shared-fit identity failed; the suite had ten passing cases and one expected failure.
 - Acoustic GREEN: [run 40627689255](https://github.com/Today20092/podcast-bleed-reducer/actions/runs/40627689255), source 954e0cf3cec3ae28678349ddfb5d65337d58cda7. Windows x64, Linux x64, macOS ARM64 and macOS x64 all passed the existing full check script.
 - Intermediate worker candidates stopped at one formatting mismatch, a Drop-type test-fixture initialization error, then a regression injection-ordering error. These failures and their precise sources/results remain in ticket 104; they are not represented as successful checks.
-- Combined candidate: 618aed8058ffff79b8037a1ab1cb8d9e7c850543. [Run 40630060652](https://github.com/Today20092/podcast-bleed-reducer/actions/runs/40630060652) is pending final qualification.
-- Independent Standards review: zero actionable findings on the production change at 17feca9; final test-only delta review pending.
+- Combined candidate: 618aed8058ffff79b8037a1ab1cb8d9e7c850543. [Run 40630060652](https://github.com/Today20092/podcast-bleed-reducer/actions/runs/40630060652) passed all four platforms: macOS ARM job 122624166212, Linux job 122624166575, Windows job 122624166579, and macOS Intel job 122624166621. The Linux log explicitly passes all eight new regressions, with 380 passing tests and 20 existing ignored tests across its successful test targets.
+- Independent Standards review: zero actionable findings through 618aed8, including the final test-only delta.
 - Independent Spec review: zero actionable findings through 618aed8, including corrected failure injection before the actual Analyze command.
 
-Documentation tickets independently verified source contracts, unchanged non-comment implementation and links. Final integration/primary-checkout verification and implementer cleanup are pending. Ticket 104 remains claimed until scoped acceptance passes.
+Documentation tickets independently verified source contracts, unchanged non-comment implementation and links. Tickets 104–107 are all done. Merger review verified production code and tests byte-identical to the combined CI source, then merged the final worker branch at 31e2c33216dd8667f8138b528b058c95ff578712.
+
+## Standards
+
+Zero actionable findings against the documented repository rules and Google Rust adaptation. The independent review covered the whole changed source and the final test-only correction. Mechanical checks ran in CI; source review is separate evidence.
+
+## Spec
+
+Zero actionable findings against the accepted four-ticket scope. The independent review traced launch recovery, lifetime ownership, source validation, immutable evidence reuse and the documented API contracts. The corrected test reaches the real Analyze command's launch boundary.
+
+Review summary: Standards 0, Spec 0; neither axis has an unresolved finding.
+
+## Primary checkout and cleanup
+
+The primary development checkout was fast-forwarded to 31e2c33. A single default-policy outer guard attempted the combined scripts/check.ps1 -Local command there, containing any compiler used by its fixture scripts as well as Cargo. It refused before starting a process at 11.08 GiB available physical memory and 7.82 GiB commit headroom. Receipt rust-audit-33b073001b6e45f38a4899e174f0addb.json is retained under the local CleanSlate BuildReceipts directory; reason low-memory-before-start, cleanup_verified true, process_id null. Defaults stayed 14 GiB start / 8 GiB reserve / 6 GiB owned cap / 1800 seconds. This is a local resource refusal, not a local passing check; no local retry or threshold reduction followed.
+
+The managed archive of the 107 implementer worktree is confirmed. Archives of 104, 105 and 106 were refused by the app with “Another active task still uses this worktree,” including owner-side attempts. Those clean, merged worktrees and their branches remain preserved; no manual removal bypassed the in-use guard. The integration worktree is also retained for the reviewed branch. Existing unrelated worktrees and the primary checkout's pre-existing untracked attachments/screenshots remain intact.
 
 ## Evidence limits
 

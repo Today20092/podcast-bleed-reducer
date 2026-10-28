@@ -1,6 +1,6 @@
 # Google Rust audit corrections
 
-Status: accepted
+Status: implemented (tickets 104–107 done)
 Owner authorization: 2026-10-27 conversation approving the four audit corrections and invoking to-tickets / implement-spec.
 Integration branch: codex/rust-guidelines-corrections
 Baseline: development at 6a0760c2225c27c5eb4ba95ed39c28849ddc3065.
@@ -34,3 +34,7 @@ Apply TDD to behavior changes at those seams. Documentation-only 106/107 need co
 Run appropriate focused checks and repository-required combined checks through existing guarded entrypoints. The smaller plugin-only warm budgets in resource-guard.md do not automatically authorize lower budgets for this desktop batch. Stop heavy work on resource refusal without retry loops or configuration relaxation. Existing hosted CI may provide additional evidence on an authorized branch; report its source and platform separately from local checks.
 
 Complete both Standards and Spec review of the integration branch, resolve findings, test combined features in the primary development checkout when policy permits, and record limitations. Tickets close only after their scoped acceptance checks pass. No release promotion, tag, signing, plugin deployment or quality/listening claim is included.
+
+## Completion — 2026-10-28
+
+All four tickets passed scoped acceptance and are done. The combined source 618aed8 passed the existing four-platform check matrix; independent Standards and Spec reviews each found zero actionable issues. Integration merge 31e2c33 preserves the tested production/test tree. [Combined receipt](../../docs/research/rust-guidelines-corrections-2026-10-28.md) records exact runs, failed intermediate checkpoints, the refused primary local-check attempt, and residual app-blocked cleanup. Three merged implementer worktrees remain preserved because the app reports another active task still uses them; 107 is archived. No optional style migration or release action is included.
