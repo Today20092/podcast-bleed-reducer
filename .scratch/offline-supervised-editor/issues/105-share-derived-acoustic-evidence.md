@@ -1,7 +1,7 @@
 # 105: Share immutable completed acoustic evidence
 
-Status: ready-for-agent
-Assignee: unclaimed
+Status: claimed
+Assignee: Codex rust_ticket105
 Readiness: ready-for-agent
 Type: task
 Blocked by: None (can start immediately)
