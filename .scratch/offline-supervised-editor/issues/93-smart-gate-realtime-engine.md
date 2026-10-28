@@ -22,6 +22,52 @@ Acceptance:
 
 ## Results
 
+### Callback/worker checkpoint — 2026-10-28
+
+Owner-authorized cleanup stopped verified unused REA/Astro/shadcn tool servers
+without closing applications/services or changing the memory guard. Worker
+`64c5525` and callback `af4d921` are committed/clean on scoped
+`codex/smart-gate-realtime-93`; no permanent Gate or desktop integration.
+The callback now applies real finite gain through the existing embedded detector,
+independent stereo confidence and one shared envelope. This supersedes earlier
+unity-callback descriptions for current source, not the preserved native build.
+
+All 17 library tests, formatting and strict library/test Clippy pass. Real
+missing-worker, stereo and callback RED/GREEN slices plus block-size, fault,
+reset and queue checks are recorded in the
+[current receipt](../../../docs/research/smart-gate-resumption-2026-10-28.md).
+Final test receipt `20261028-182205-dba42bf392524f4eafb4aa44cc386e83` and Clippy
+`20261028-182304-6e43b8120a4947c9aa8aaba04dd7a279` verify cleanup. The tested
+executable/hash is preserved in the report. No dependency changed.
+
+Native compilation preflight stopped at 9.76 GiB physical / 7.82 GiB commit,
+below the separate 10/9 GiB requirements. No native build/host or new candidate
+was produced. Arming remains Rust API/test-only; native arming/readiness,
+callback allocation/deadline, all-rate/CLAP/VST3/PDC/runtime packaging and
+listening checks remain open. Exact original fallback/default bypass remain;
+whisper/laughter/onset preservation is not qualified. 93 stays claimed, 94 blocked.
+
+### Resumption — 2026-10-28
+
+The owner requested continuing Smart Gate and permits additional sonible research
+if needed. Existing static research is sufficient for this worker/DSP slice; no
+new vendor execution or investigation is required. Ticket 93 remains claimed on
+`codex/smart-gate-realtime-93` in the retained `smart-gate-identity-91` worktree.
+The next change is the prepared worker epoch-reset regression, followed by its
+smallest passing worker implementation before any callback connection.
+
+Native preflight measured 7.51 GiB available physical / 6.52 GiB commit headroom
+with no compiler processes. Physical memory is below the fixed 8 GiB warm-build
+minimum; no compiler, indexer, inference or host was launched. Preserve the
+8/3/2.5 GiB / 600-second policy and >=6 GiB commit preflight; no lower threshold
+or automatic retry. Source/test preparation may continue, but no new semantic
+RED/GREEN or runtime acceptance is claimed. Last tested policy stays `bb9e1a4`.
+
+The pending worker regression now covers all three supported rates and repeated
+resets with undrained results; it is unrun and the worker module remains absent.
+[Resumption boundary and next slices](../../../docs/research/smart-gate-resumption-2026-10-28.md)
+record the affected callers/checks, graph coverage gap and runtime requirements.
+
 Latest source checkpoint is `bb9e1a4efcceec168e461813cf3373fd8d882ed2`, not yet integrated: eight library tests and formatting pass for state safety and a finite gain policy with .10 open/.01 close, .14 quiet-confidence opening, bounded ramps and exact original at evidence expiry. [Policy receipts/limits](../../../docs/research/smart-gate-gain-policy-93.md). Callback still passes through; worker/inference/actual-format/offline/packaging/UI acceptance remains unchecked. A single worker epoch-reset RED is prepared but unrun, backed up outside the repo; no worker implementation. Further compilation stopped on the shared 3 GiB commit reserve during 103; [resource recovery checkpoint](../../../docs/research/cleanslate-memory-recovery-2026-10-27.md) records the owned tool-server footprint and protected app-recovery plan.
 
 2026-10-27 post-reboot partial implementation: tested state-safety checkpoint `c66f8ba5dfc77a1aa8d1232e27c2c5fb77d2884d` on the scoped branch makes default and restored states bypassed, adds nonpersistent explicit arming, and clears it on reset. Three recorded RED/GREEN slices end with six passing library tests and formatting. The callback is still unity; worker/gain, inference deployment, format/PDC/offline checks and native UI are not implemented or qualified. A single subsequent gain-policy RED is prepared but unrun; retain it separately from this green checkpoint. No permanent Gate integration or ticket closure.
