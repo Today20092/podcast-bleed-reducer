@@ -24,4 +24,10 @@ Cache reuse and final source revalidation reuse completed immutable acoustic fra
 
 ## Results
 
-Not started. Record source, scoped verification and limitations here before closure.
+Claimed 2026-10-27 on codex/rust-audit-105 from integration source 5a321767b09cd42eb836c996979da5bea05b714c. The approved verification seam is the existing public acoustic-cache consumer and its source/label validation boundary.
+
+RED checkpoint 34d698c0a53928e1ca65ed78d35331df7c36f881 adds unchanged_acoustic_requests_share_completed_fit. Hosted run 40626870961 / macos-arm64 job 122613807500 reached the regression and failed at its shared-fit identity assertion (2026-10-28T03:33:35); session_acoustics reported 10 passed / 1 failed. The other checks, including strict Clippy, had reached test execution. This is actual failing behavior, not a compile-only or inferred RED.
+
+The production correction stores and returns one Arc<SessionAcoustics> per completed derived fit. Cache hits and the existing final ownership revalidation now clone only that handle, not the recording-length vectors. All source fingerprints, alignment/readiness checks, reference/recipe identity, cancellation and atomic completed-cache replacement remain in place. Existing consumers borrow through Arc dereferencing; no algorithm, source-validation call, model recipe or serialized field changed.
+
+GREEN and combined verification remain pending. No local Cargo/compiler ran because the desktop resource policy is unchanged; hosted evidence must identify its source/platform separately. No long-session time or peak-memory improvement is measured or claimed.
