@@ -1,6 +1,6 @@
 # 104: Recover from application worker-start failures
 
-Status: claimed
+Status: done
 Assignee: Codex rust_ticket104
 Readiness: ready-for-agent
 Type: task
@@ -16,13 +16,17 @@ User actions that need a background worker report an actionable start failure an
 
 ## Acceptance criteria
 
-- [ ] Every production launch handles an OS thread-start error without an uncaught panic, phantom active-worker registration or permanently busy operation.
-- [ ] Deterministic failure injection at the existing launcher/job boundaries proves failed launch, retry and user-facing recovery without exhausting the machine.
-- [ ] Normal completion, worker unwinding and cancellation/close retain exactly-once lifetime accounting and never permit publication or exit while an actual owned worker remains alive.
-- [ ] Affected callers and focused tests are updated together; source validation, project edits and safe export behavior remain intact.
-- [ ] Focused RED/GREEN evidence and relevant repository checks are recorded under the existing resource policy.
+- [x] Every production launch handles an OS thread-start error without an uncaught panic, phantom active-worker registration or permanently busy operation.
+- [x] Deterministic failure injection at the existing launcher/job boundaries proves failed launch, retry and user-facing recovery without exhausting the machine.
+- [x] Normal completion, worker unwinding and cancellation/close retain exactly-once lifetime accounting and never permit publication or exit while an actual owned worker remains alive.
+- [x] Affected callers and focused tests are updated together; source validation, project edits and safe export behavior remain intact.
+- [x] Focused RED/GREEN evidence and relevant repository checks are recorded under the existing resource policy.
 
 ## Results
+
+Completed 2026-10-28 on tested combined source 618aed8058ffff79b8037a1ab1cb8d9e7c850543. [Hosted run 40630060652](https://github.com/Today20092/podcast-bleed-reducer/actions/runs/40630060652) passed the existing complete check entrypoint on Windows x64 (job 122624166579), Linux x64 (122624166575), macOS ARM64 (122624166212) and macOS x64 (122624166621). The Linux log explicitly passes all eight new regressions across this batch (seven worker-recovery cases plus ticket 105's evidence-sharing case), with 380 tests passed and 20 existing ignored across its recorded suites. Both independent Standards and Spec reviews reported zero findings for this source, with the final test-ordering delta rechecked.
+
+The process-isolated lifetime case verifies no registration remains after an injected failed start, that active work keeps close busy, and that completion/unwinding releases the registration. Import, UI, preparation/playback and render/export regressions establish actionable errors, settled pending state, retained project/prepared data and successful retry; existing source/cancellation/publication checks also pass. No real machine exhaustion, local compiler, GUI/audio-device exercise, installation or release publication ran. Local build policy remains unchanged; hosted evidence is identified separately from local/native qualification. The [combined receipt](../../../docs/research/rust-guidelines-corrections-2026-10-28.md) records the batch. Historical pending and failed-candidate notes below are superseded by this completion evidence, not erased.
 
 Claimed 2026-10-27 on codex/rust-audit-104 from integration checkpoint 5a321767b09cd42eb836c996979da5bea05b714c. Behavior changes use TDD at the approved launcher/job and worker-lifetime boundaries. Local compilation waits for parent-owned guarded execution; the plugin-only smaller budgets are not applicable.
 
