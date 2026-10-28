@@ -71,6 +71,29 @@ mod tests {
 
     #[test]
     fn registered_workers_hold_owned_work_until_completion_or_unwinding() {
+        const CHILD: &str = "CLEANSLATE_WORKER_LIFETIME_TEST_CHILD";
+        if std::env::var_os(CHILD).is_none() {
+            let output = std::process::Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "worker_lifetime::tests::registered_workers_hold_owned_work_until_completion_or_unwinding",
+                    "--nocapture",
+                ])
+                .env(CHILD, "1")
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "isolated worker lifetime check failed:\n{}\n{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            return;
+        }
+        assert!(!active());
+        fail_next_spawn();
+        assert!(spawn(|| ()).is_err());
+        assert!(!active(), "a failed start must not keep close busy");
         for panic in [false, true] {
             let released = Arc::new(AtomicBool::new(false));
             let owned = Released(Arc::clone(&released));
@@ -88,6 +111,7 @@ mod tests {
             assert!(!released.load(Ordering::Acquire));
             finish.send(()).unwrap();
             assert_eq!(worker.join().is_err(), panic);
+            assert!(!active(), "a finished worker must release its registration");
             assert!(released.load(Ordering::Acquire));
         }
     }
