@@ -6,6 +6,8 @@ Baseline: development at 6a0760c2225c27c5eb4ba95ed39c28849ddc3065
 Integration: codex/rust-guidelines-corrections
 Specification: [accepted corrections](../../.scratch/offline-supervised-migration/rust-guidelines-corrections.md)
 
+Source promotion: [PR 24](https://github.com/Today20092/podcast-bleed-reducer/pull/24), merge `f0ea4f02e092d3e8f0c674a5489051f2474a4ba8`, after exact PR head `e1919e9` passed [all four platform checks](https://github.com/Today20092/podcast-bleed-reducer/actions/runs/40635018559). [Ticket 108](../../.scratch/offline-supervised-editor/issues/108-rust-guidelines-promotion.md) records skill installation documentation, development synchronization and remaining release gates. Source promotion did not publish packages or qualify fresh physical playback/listening.
+
 ## Delivered scope
 
 - [104](../../.scratch/offline-supervised-editor/issues/104-recover-worker-start-failures.md): fallible OS thread startup, transient lifetime rollback and caller-specific recovery, preserving playback's separate cancel/join ownership.
