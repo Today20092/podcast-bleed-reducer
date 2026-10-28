@@ -279,9 +279,8 @@ mod tests {
         assert!(app.messages[0].contains("start source inspection"));
         assert_eq!(serde_json::to_value(&app.project).unwrap(), saved);
 
-        let _ = app.update(Message::AnalyzeReferences);
         crate::worker_lifetime::fail_next_spawn();
-        app.launch_preview();
+        let _ = app.update(Message::AnalyzeReferences);
         assert!(app.preview_processing.is_none());
         assert!(app.preview_pending.is_none());
         assert!(
