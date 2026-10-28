@@ -1,9 +1,19 @@
 # CleanSlate Smart Gate 0.0.1
 
-Unqualified pass-through prototype for one mono/stereo insert. Input samples remain
-unchanged with Bypass on or off, with zero added latency/tail. Speech detection,
-gain reduction and automatic volume leveling are not implemented. There is no
-group/member, Session capture or desktop/trainer prerequisite.
+The last checked native candidate is a pass-through prototype for one mono/stereo
+insert. Current ticket 93 source connects the embedded speech detector, bounded
+worker and finite gain policy, with 17 passing library tests. No new native
+candidate has been built or qualified from this source. Automatic volume leveling
+is outside scope; there is no group/member, Session capture or desktop prerequisite.
+
+New/restored instances start bypassed. Processing additionally requires temporary
+explicit arming, currently available only through the Rust engineering API/tests;
+the existing editor does not expose arming yet. Reset/deactivation clear consent.
+The -6 dB floor, confidence thresholds and 500 ms offline wait are engineering
+limits, not sound acceptance. Missing/invalid/stale evidence preserves original
+audio. Stereo uses two independent detectors and the greater confidence, applying
+one envelope to both outputs. No audio delay is introduced; detector/delivery
+delay and speech-onset preservation still need native measurement/listening.
 
 The compact editor identifies the prototype and exposes the saved Bypass control.
 The full accepted [Gate design](../../docs/design/plugin-ui-contract.md) belongs
@@ -18,14 +28,13 @@ native UI acceptance nor evidence of a working speech gate.
 | Product name | CleanSlate Smart Gate | CleanSlate FL Probe |
 | CLAP ID | `org.cleanslate.smart-gate` | `org.cleanslate.fl-probe` |
 | VST3 raw class bytes | ASCII `CleanSlateGate01` | ASCII `CleanSlateProbe1` |
-| State | `org.cleanslate.smart-gate.state-version` = `1`; parameter `smart_gate_bypass` | Existing probe schema and parameters unchanged |
+| State | `org.cleanslate.smart-gate.state-version` = `2`; parameter `smart_gate_bypass` | Existing probe schema and parameters unchanged |
 
 VST3 applies the existing SDK's Windows GUID byte-order conversion to these fixed
 16 bytes. IDs are literal constants, independent of branch names, build paths or
 random installation identifiers. Keep them stable when the implementation grows.
-Invalid/missing/future state markers or a missing/wrong-type bypass parameter
-reset this product to bypass; no probe settings or calibration are imported.
-Valid Gate state round-trips its independent namespace and bypass value.
+All restored Gate states force bypass; no saved state grants arming consent.
+No probe settings or calibration are imported.
 
 Prototype 0.0.1 has its own maturity under [the version policy](../../docs/releasing.md#versioning-and-stability).
 It does not inherit desktop stable status. No signed/published package, VST2,
@@ -71,9 +80,10 @@ Context7 NIH-plug predecessor reference and egui 0.37.0 documentation with the
 installed nice-plug 0.4.2 / nice-plug-egui 0.6.0 source; the fork source controls
 the actual trait signatures.
 
-Ticket 91 remains claimed until real compilation, format coexistence/state and
-bypass checks pass. The initial default-policy test command refused before
-starting a compiler because available memory was below 14 GiB. That is a resource
-refusal, not semantic test red/green. Offline lock generation and locked metadata
-resolution passed; Rust type/ABI correctness, executable UI and native acceptance
-remain unverified until the guarded checks can run.
+Ticket 91 is done for its preserved pass-through candidate. Ticket 93 remains
+claimed: current source passes 17 library tests, formatting and strict library/test
+Clippy, including real offline non-unity callback processing, mono/stereo parity,
+block-size independence, bypass/reset and invalid-input fallback. Realtime
+allocation/deadline, actual CLAP/VST3 gating, native arming/readiness, standalone
+runtime packaging and listening acceptance remain open. No installed path or old
+candidate was replaced. See the canonical tracker/report for current receipts.

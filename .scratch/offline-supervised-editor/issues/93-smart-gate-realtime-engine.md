@@ -22,6 +22,31 @@ Acceptance:
 
 ## Results
 
+### Callback checkpoint — 2026-10-28
+
+The offline mono/stereo callback regression reached real semantic RED (gain
+remained 1), then GREEN after activation/preparation and shared envelope
+integration. Explicitly armed absence reaches the finite -6 dB floor; one gain
+is applied to both channels. Unarmed/bypassed/reset/faulted input stays original,
+including invalid sample payload bits. Processing uses fixed 256-sample chunks
+and never applies future evidence early. Offline renders match exactly for
+127/1536/32768 host blocks. No delay is added to audio; this does not establish
+speech-onset preservation or zero detector latency. Activation/preparation and
+joining teardown stay outside process/reset; no new dependency.
+
+All 17 library tests pass in `20261028-182205-dba42bf392524f4eafb4aa44cc386e83`;
+formatting and strict library/test Clippy pass
+(`20261028-182304-6e43b8120a4947c9aa8aaba04dd7a279`). Cleanup is verified.
+The tested executable is preserved at
+`%LOCALAPPDATA%/CleanSlate/VerifiedBuilds/gate93/20261028-182205/gate-library-tests.exe`,
+SHA256 `f278b3b1c43ef26f8d3b7e4c80c8245e7a8be050986073340f1b9777fce11e68`.
+It is not a standalone runtime package. Worker checkpoint `64c5525` precedes this
+callback slice. Native compilation preflight stopped at 9.76 GiB physical /
+7.82 GiB commit, below the separate 10/9 GiB requirements; no native build/host
+started. Arming is currently Rust API/test-only; no editor/native arming control,
+new candidate, installed link, PDC/deadline or listening qualification is claimed.
+93 remains claimed and 94 blocked.
+
 ### Worker checkpoint — 2026-10-28
 
 Owner-authorized memory cleanup stopped seven verified unused REA server

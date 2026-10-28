@@ -328,6 +328,158 @@ fn mono_stereo_and_bypass_preserve_every_input_bit_without_host_work() {
     }
 }
 
+#[test]
+fn explicitly_armed_offline_callback_applies_one_finite_gain_and_reset_restores_original() {
+    for channels in [1, 2] {
+        let mut gate = SmartGate::default();
+        Arc::get_mut(&mut gate.params).unwrap().bypass =
+            BoolParam::new("Bypass", false).make_bypass();
+        let layout = &SmartGate::AUDIO_IO_LAYOUTS[if channels == 1 { 1 } else { 0 }];
+        assert!(gate.activate(
+            layout,
+            &BufferConfig {
+                sample_rate: 48_000.0,
+                min_buffer_size: None,
+                max_buffer_size: 1536,
+                process_mode: ProcessMode::Offline,
+            },
+            &mut ActivationHost
+        ));
+        gate.reset();
+        let original: Vec<Vec<f32>> = (0..channels)
+            .map(|channel| vec![if channel == 0 { 0.0001 } else { -0.0001 }; 1536])
+            .collect();
+        let mut audio = original.clone();
+        process_test_block(&mut gate, &mut audio);
+        assert_eq!(audio, original, "unarmed audio must stay original");
+        gate.arm_experimental();
+        for _ in 0..32 {
+            audio.clone_from(&original);
+            process_test_block(&mut gate, &mut audio);
+        }
+        let gain = audio[0][1535] / original[0][1535];
+        assert!(
+            (0.50..0.51).contains(&gain),
+            "armed absence did not reach finite reduction: {gain}"
+        );
+        for channel in 0..channels {
+            assert_eq!(audio[channel][1535] / original[channel][1535], gain);
+        }
+        Arc::get_mut(&mut gate.params).unwrap().bypass =
+            BoolParam::new("Bypass", true).make_bypass();
+        audio.clone_from(&original);
+        process_test_block(&mut gate, &mut audio);
+        assert_eq!(audio, original, "bypass overrides explicit arming");
+        Arc::get_mut(&mut gate.params).unwrap().bypass =
+            BoolParam::new("Bypass", false).make_bypass();
+        audio.clone_from(&original);
+        audio[0][500] = f32::from_bits(0x7fc0_1234);
+        process_test_block(&mut gate, &mut audio);
+        for channel in 0..channels {
+            for frame in 0..1536 {
+                let expected = if channel == 0 && frame == 500 {
+                    0x7fc0_1234
+                } else {
+                    original[channel][frame].to_bits()
+                };
+                assert_eq!(
+                    audio[channel][frame].to_bits(),
+                    expected,
+                    "invalid input must stay original"
+                );
+            }
+        }
+        audio.clone_from(&original);
+        process_test_block(&mut gate, &mut audio);
+        assert_eq!(
+            audio, original,
+            "faults preserve subsequent input until reset"
+        );
+        gate.reset();
+        audio.clone_from(&original);
+        process_test_block(&mut gate, &mut audio);
+        assert_eq!(
+            audio, original,
+            "reset must disarm and preserve original audio"
+        );
+        gate.deactivate();
+    }
+}
+
+#[test]
+fn offline_callback_gain_is_independent_of_host_block_size() {
+    let source = vec![0.0001_f32; 32_768];
+    let mut rendered = Vec::new();
+    for block in [127, 1536, 32_768] {
+        let mut gate = SmartGate::default();
+        Arc::get_mut(&mut gate.params).unwrap().bypass =
+            BoolParam::new("Bypass", false).make_bypass();
+        assert!(gate.activate(
+            &SmartGate::AUDIO_IO_LAYOUTS[1],
+            &BufferConfig {
+                sample_rate: 48_000.0,
+                min_buffer_size: None,
+                max_buffer_size: 32_768,
+                process_mode: ProcessMode::Offline,
+            },
+            &mut ActivationHost
+        ));
+        gate.reset();
+        gate.arm_experimental();
+        let mut result = Vec::new();
+        for samples in source.chunks(block) {
+            let mut audio = vec![samples.to_vec()];
+            process_test_block(&mut gate, &mut audio);
+            result.extend_from_slice(&audio[0]);
+        }
+        assert!(
+            result.last().unwrap() < source.last().unwrap(),
+            "all-original output is not gating"
+        );
+        rendered.push(result);
+    }
+    assert_eq!(rendered[0], rendered[1]);
+    assert_eq!(rendered[0], rendered[2]);
+}
+
+fn process_test_block(gate: &mut SmartGate, audio: &mut [Vec<f32>]) {
+    let frames = audio[0].len();
+    let mut buffer = Buffer::default();
+    // SAFETY: all channels have equal lengths and remain exclusively borrowed until buffer drops.
+    unsafe {
+        buffer.set_slices(frames, |slices| {
+            slices.extend(audio.iter_mut().map(Vec::as_mut_slice))
+        });
+    }
+    assert!(matches!(
+        gate.process(
+            &mut buffer,
+            &mut AuxiliaryBuffers {
+                inputs: &mut [],
+                outputs: &mut [],
+            },
+            &mut UnusedHost
+        ),
+        ProcessStatus::Normal
+    ));
+}
+
+struct ActivationHost;
+impl ActivateContext<SmartGate> for ActivationHost {
+    fn plugin_api(&self) -> PluginApi {
+        panic!("Gate activation must be host independent")
+    }
+    fn execute(&self, _: ()) {
+        panic!("Gate owns its inference worker")
+    }
+    fn set_latency_samples(&self, samples: u32) {
+        assert_eq!(samples, 0);
+    }
+    fn set_current_voice_capacity(&self, _: u32) {
+        panic!("Gate has no voices")
+    }
+}
+
 struct UnusedHost;
 impl ProcessContext<SmartGate> for UnusedHost {
     fn plugin_api(&self) -> PluginApi {

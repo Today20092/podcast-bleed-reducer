@@ -1,4 +1,5 @@
 mod editor;
+mod engine;
 pub mod gain;
 pub mod worker;
 
@@ -36,6 +37,7 @@ pub struct SmartGate {
     params: Arc<GateParams>,
     editor_state: Arc<EguiEditorState>,
     armed: Arc<AtomicBool>,
+    engine: Option<engine::Engine>,
 }
 
 impl Default for SmartGate {
@@ -44,6 +46,7 @@ impl Default for SmartGate {
             params: Arc::new(GateParams::default()),
             editor_state: EguiEditorState::from_size(LogicalSize::new(640.0, 440.0), 1.0),
             armed: Arc::new(AtomicBool::new(false)),
+            engine: None,
         }
     }
 }
@@ -107,17 +110,53 @@ impl Plugin for SmartGate {
         state.version = Self::VERSION.into();
     }
 
+    fn activate(
+        &mut self,
+        layout: &AudioIOLayout,
+        config: &BufferConfig,
+        context: &mut impl ActivateContext<Self>,
+    ) -> bool {
+        self.armed.store(false, Ordering::Release);
+        self.engine = None;
+        if ![44_100.0, 48_000.0, 96_000.0].contains(&config.sample_rate) {
+            return false;
+        }
+        let channels = layout.main_input_channels.map_or(0, NonZeroU32::get);
+        if layout.main_input_channels != layout.main_output_channels {
+            return false;
+        }
+        let Ok(engine) =
+            engine::Engine::prepare(config.sample_rate as u32, channels, config.process_mode)
+        else {
+            return false;
+        };
+        self.engine = Some(engine);
+        context.set_latency_samples(0);
+        true
+    }
+
     fn reset(&mut self) {
         self.armed.store(false, Ordering::Release);
+        if let Some(engine) = &mut self.engine {
+            engine.reset();
+        }
+    }
+
+    fn deactivate(&mut self) {
+        self.armed.store(false, Ordering::Release);
+        self.engine = None;
     }
 
     fn process(
         &mut self,
-        _: &mut Buffer,
+        buffer: &mut Buffer,
         _: &mut AuxiliaryBuffers,
         _: &mut impl ProcessContext<Self>,
     ) -> ProcessStatus {
-        // Ticket 93 owns qualified gating. Leaving the framework's input-filled buffer untouched is exact unity.
+        let enabled = self.experimental_armed() && !self.params.bypass.value();
+        if let Some(engine) = &mut self.engine {
+            engine.process(buffer, enabled);
+        }
         ProcessStatus::Normal
     }
 }
