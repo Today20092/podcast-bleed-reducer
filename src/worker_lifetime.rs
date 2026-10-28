@@ -14,8 +14,29 @@ pub(crate) fn spawn<T: Send + 'static>(
             ACTIVE.fetch_sub(1, Ordering::AcqRel);
         }
     }
-    std::thread::spawn(move || {
+    start_thread(move || {
         let _finished = Finished;
         work()
     })
+    .expect("Could not start background worker")
+}
+
+fn start_thread<T: Send + 'static>(
+    work: impl FnOnce() -> T + Send + 'static,
+) -> std::io::Result<std::thread::JoinHandle<T>> {
+    #[cfg(test)]
+    if FAIL_NEXT_SPAWN.with(|fail| fail.replace(false)) {
+        return Err(std::io::Error::other("injected thread-start failure"));
+    }
+    std::thread::Builder::new().spawn(work)
+}
+
+#[cfg(test)]
+thread_local! {
+    static FAIL_NEXT_SPAWN: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+#[cfg(test)]
+pub(crate) fn fail_next_spawn() {
+    FAIL_NEXT_SPAWN.with(|fail| fail.set(true));
 }

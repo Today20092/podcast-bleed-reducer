@@ -371,6 +371,22 @@ mod tests {
     use super::*;
     use std::io::Write;
 
+    #[test]
+    fn import_worker_start_failure_is_actionable_and_retryable() {
+        let sources = vec![AudioSource::mono("source-kept.wav".into())];
+        let mut job = Job::failed(1, sources.clone(), "previous failure".into());
+        job.retry();
+        crate::worker_lifetime::fail_next_spawn();
+        job.start();
+        assert!(job.error.as_deref().is_some_and(|error| error.contains("start import")));
+        assert!(job.events.is_none(), "failed launch cannot leave a busy receiver");
+        assert_eq!(job.sources, sources);
+        job.retry();
+        assert!(job.error.is_none());
+        assert!(job.events.is_none());
+        assert!(job.status.starts_with("Queued"));
+    }
+
     fn run(sources: Vec<AudioSource>) -> (Vec<Event>, Result<(), String>) {
         let (sender, receiver) = mpsc::sync_channel(2);
         let cancelled = Arc::new(AtomicBool::new(false));
