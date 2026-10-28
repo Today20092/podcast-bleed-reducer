@@ -143,6 +143,29 @@ fn trusted_solo_scalar_evidence_is_finite_and_does_not_change_audio() {
 }
 
 #[test]
+fn unchanged_acoustic_requests_share_completed_fit() {
+    let (root, project, audio) = fixture();
+    let mut cache = AcousticEvidenceCache::default();
+    let first = cache.analyze(&project, &audio, None).unwrap();
+    let second = cache.analyze(&project, &audio, None).unwrap();
+    let source = project.sources[0].track_id;
+    let target = project.sources[1].track_id;
+    assert!(
+        std::ptr::eq(
+            first.transfer(source, target).unwrap(),
+            second.transfer(source, target).unwrap(),
+        ),
+        "Unchanged requests must share the completed immutable fit instead of copying it"
+    );
+    assert_eq!(cache.stats().reference_fits, 1);
+    assert_eq!(
+        first.features_at(TICKS_PER_SECOND).unwrap()[0].normalized_values(),
+        second.features_at(TICKS_PER_SECOND).unwrap()[0].normalized_values(),
+    );
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn label_edits_invalidate_only_fits_and_cancelled_refits_keep_completed_evidence() {
     let (root, mut project, audio) = fixture();
     let mut cache = AcousticEvidenceCache::default();
