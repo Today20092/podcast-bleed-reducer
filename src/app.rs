@@ -315,7 +315,12 @@ mod tests {
 
         crate::worker_lifetime::fail_next_spawn();
         let _ = app.update(Message::OpenLink(super::AppLink::Help));
-        assert!(app.app_feedback.as_deref().unwrap().contains("Open https://"));
+        assert!(
+            app.app_feedback
+                .as_deref()
+                .unwrap()
+                .contains("Open https://")
+        );
         assert_eq!(serde_json::to_value(&app.project).unwrap(), saved);
         drop(app);
         std::fs::remove_dir_all(root).unwrap();
