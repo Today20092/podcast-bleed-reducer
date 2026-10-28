@@ -25,3 +25,9 @@ User actions that need a background worker report an actionable start failure an
 ## Results
 
 Claimed 2026-10-27 on codex/rust-audit-104 from integration checkpoint 5a321767b09cd42eb836c996979da5bea05b714c. Behavior changes use TDD at the approved launcher/job and worker-lifetime boundaries. Local compilation waits for parent-owned guarded execution; the plugin-only smaller budgets are not applicable.
+
+RED evidence: hosted run 40627066393, macos-arm64 job 122614435707, source e4f598e8d248ddef123b10d214fa25f6e3407814. The deterministic import start-failure regression reached the actual panic in the shared launcher: "Could not start background worker ... injected thread-start failure". Library result: 214 passed, 1 failed, 11 ignored. This is the intended failed behavior, not a compiler/formatting failure.
+
+Prepared correction: transient launch returns the OS I/O error; a closure-owned registration guard rolls back failed starts and releases successful/unwinding work. All nine transient launch call sites now settle their existing error/state paths. Persistent playback uses the same fallible OS boundary without global transient registration, retaining its separate cancel/join owner so ordinary close is not blocked by an idle playback thread. Synthetic failure injection is thread-local and test-only. Added regression coverage for import retry, UI project/pending states, render/export retry, audition preparation/playback, and captured-work completion/unwinding. The original import regression drives the shared root correction; subsequent caller checks broaden acceptance coverage and are not claimed as independently observed RED cycles.
+
+No local compiler, GUI, audio device, package publication or resource-limit reduction ran. Context7 was quota-limited; the Builder::spawn I/O-error contract was checked against official Rust documentation. GREEN verification remains pending on this source; do not close the ticket before it passes.

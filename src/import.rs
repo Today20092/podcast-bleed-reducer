@@ -88,10 +88,14 @@ impl Job {
         self.status = "Sampling whole-recording preview".into();
         let sources = self.sources.clone();
         let cancelled = self.cancelled.clone();
-        crate::worker_lifetime::spawn(move || {
+        if let Err(error) = crate::worker_lifetime::spawn(move || {
             let result = prepare(&sources, &cancelled, &sender).map_err(|e| e.to_string());
             let _ = sender.send(Event::Finished(result));
-        });
+        }) {
+            self.events = None;
+            self.status = "Failed · Retry or Remove".into();
+            self.error = Some(format!("Could not start import preview: {error}"));
+        }
     }
 
     pub fn retry(&mut self) {
