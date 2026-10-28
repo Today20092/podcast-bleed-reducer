@@ -24,7 +24,10 @@ fn check_cancelled(cancelled: Option<&AtomicBool>) -> Result<(), RenderBlocker> 
 }
 #[derive(Clone, Debug)]
 pub struct OwnershipTrainingExample {
+    /// Full recipe-space vector in the same order as the names supplied to training.
+    /// Include constant columns; the model selects and standardizes retained features.
     pub features: Vec<f64>,
+    /// Human truth that the assigned person is speaking locally, independent of other tracks.
     pub owns_speech: bool,
 }
 #[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -64,7 +67,16 @@ pub struct OwnershipModel {
     diagnostics: OwnershipFitDiagnostics,
 }
 impl OwnershipModel {
-    /// Callers supply explicit human truth; production rows are built from Project labels.
+    /// Fit explicit human truth from full, consistently ordered recipe-space feature vectors.
+    /// Names define the positional contract for training and inference; they do not reorder
+    /// input vectors. Training stores its means/scales and removes constant columns internally.
+    /// Callers apply their recipe's unit transforms before training, not a second z-score pass.
+    ///
+    /// Require 1–64 dimensions, at most 8192 rows, at least three rows per class and a varying
+    /// feature. Every value must be finite with magnitude at most `1e6`. Invalid shapes,
+    /// settings, cancellation or a failed numerical fit return an error.
+    /// See the [editor feature recipe](https://github.com/Today20092/podcast-bleed-reducer/blob/development/docs/supervised-ownership-models.md#feature-recipe-and-operation-order)
+    /// for the application's ordering and unit transforms; this trainer is recipe-agnostic.
     pub fn train(
         feature_names: Vec<String>,
         examples: &[OwnershipTrainingExample],
@@ -283,6 +295,15 @@ impl OwnershipModel {
         }
         Ok(())
     }
+    /// Estimate local ownership as a value in `[0, 1]`, independently of other track models.
+    /// Supply the full training feature vector in its original name order and recipe units,
+    /// including columns removed during fitting. Stored normalization is applied internally;
+    /// callers must not pre-standardize the vector. Length alone cannot validate its semantics.
+    ///
+    /// Return an error for invalid model metadata, a dimension mismatch, a nonfinite input,
+    /// an input magnitude above `1e6`, or a nonfinite score. A numerical estimate is evidence,
+    /// not guaranteed calibrated confidence or a mutually exclusive speaker selection.
+    /// See [`Self::predictor`] for the allocation-free validated copy.
     pub fn estimate(&self, features: &[f64]) -> Result<f64, RenderBlocker> {
         self.validate()?;
         if features.len() != self.means.len()
@@ -307,10 +328,15 @@ impl OwnershipModel {
     pub fn diagnostics(&self) -> &OwnershipFitDiagnostics {
         &self.diagnostics
     }
+    /// Check exact ordered feature names and training settings before reusing a model.
+    /// This does not validate source identity, current human truth or feature-vector contents.
     pub fn matches_recipe(&self, names: &[String], settings: OwnershipTrainingSettings) -> bool {
         self.feature_names == names && self.settings == settings
     }
-    /// A restored cache's recorded diagnostics are not proof of its present coefficients.
+    /// Revalidate restored coefficients against the current full human-truth rows.
+    /// Recompute normalization, the retained mask and the useful/converged training objective;
+    /// saved diagnostics alone are insufficient. Rows use the original feature order/units.
+    /// An error rejects the restored model; callers still own source/reference identity checks.
     pub fn validate_truth_rows(
         &self,
         rows: &[OwnershipTrainingExample],
@@ -401,7 +427,9 @@ impl OwnershipModel {
         Ok(model)
     }
 
-    /// Validate once outside realtime processing, then use the allocation-free copy.
+    /// Validate once outside realtime processing, then copy the model into fixed-size storage.
+    /// Invalid metadata returns an error. The returned predictor uses the same full feature
+    /// order, unit transforms and internal normalization as [`Self::estimate`].
     pub fn predictor(&self) -> Result<OwnershipPredictor, RenderBlocker> {
         self.validate()?;
         let mut predictor = OwnershipPredictor {
@@ -423,6 +451,8 @@ impl OwnershipModel {
     }
 }
 
+/// Fixed-size inference state produced by [`OwnershipModel::predictor`].
+/// This copy retains trained normalization and requires no inference allocation.
 #[derive(Clone, Copy, Debug)]
 pub struct OwnershipPredictor {
     dimensions: usize,
@@ -435,6 +465,14 @@ pub struct OwnershipPredictor {
 }
 
 impl OwnershipPredictor {
+    /// Apply the same full, ordered recipe-space input contract as [`OwnershipModel::estimate`].
+    /// Stored means/scales standardize retained columns internally, even though callers supply
+    /// all original columns. Return `None` for a dimension mismatch, nonfinite/out-of-bound
+    /// (`abs() > 1e6`) input or a nonfinite score. `None` is unavailable evidence, not a zero
+    /// ownership probability; the caller must apply its preservation/error policy.
+    ///
+    /// For example, a model trained with names `["activity", "constant"]` still expects both
+    /// recipe-space values even when the constant column was removed during fitting.
     pub fn estimate(&self, features: &[f64]) -> Option<f64> {
         if features.len() != self.dimensions
             || features.iter().any(|v| !v.is_finite() || v.abs() > 1e6)
