@@ -1236,8 +1236,12 @@ mod tests {
     #[test]
     fn preparation_worker_start_failure_settles_and_retains_cached_audio() {
         let cached = prepared_samples(&[vec![0.25; 512]], "preparation-start-failure");
-        let mut preparation = AuditionPreparation::default();
-        preparation.cache = Some(cached.clone());
+        let mut preparation = AuditionPreparation {
+            generation: 0,
+            cache: Some(cached.clone()),
+            job: None,
+            pending: None,
+        };
         crate::worker_lifetime::fail_next_spawn();
         preparation.request_sources(cached.sources.clone());
         let error = preparation.poll().unwrap().err().unwrap();
