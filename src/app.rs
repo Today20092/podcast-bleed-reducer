@@ -24,6 +24,8 @@ use iced::{
 mod button {
     pub use iced::widget::button::*;
 }
+mod presets;
+mod project_files;
 use std::{
     path::PathBuf,
     sync::{
@@ -250,6 +252,137 @@ fn example_speakers(label: &crate::ReferenceLabel) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn worker_start_failures_preserve_the_project_and_clear_pending_ui_states() {
+        use super::{CleanSlateApp, Command, Message, SourceRequest};
+        let (root, project, _audio) = export_fixture::session();
+        let mut app = CleanSlateApp {
+            preview_parameters: project.parameters(),
+            project: Some(project),
+            ..Default::default()
+        };
+        let saved = serde_json::to_value(&app.project).unwrap();
+
+        crate::worker_lifetime::fail_next_spawn();
+        app.begin_source_loading(SourceRequest::Open(root.join("not-opened.cleanslate")));
+        assert!(app.source_loading.is_none());
+        assert!(!app.import_dialog);
+        assert!(app.messages[0].contains("start source loading"));
+        assert_eq!(serde_json::to_value(&app.project).unwrap(), saved);
+
+        app.pending_imports.push(root.join("not-inspected.wav"));
+        app.import_due = Some(std::time::Instant::now());
+        crate::worker_lifetime::fail_next_spawn();
+        app.poll_sources();
+        assert!(app.source_inspection.is_none());
+        assert!(!app.import_dialog);
+        assert!(app.messages[0].contains("start source inspection"));
+        assert_eq!(serde_json::to_value(&app.project).unwrap(), saved);
+
+        crate::worker_lifetime::fail_next_spawn();
+        let _ = app.update(Message::AnalyzeReferences);
+        assert!(app.preview_processing.is_none());
+        assert!(app.preview_pending.is_none());
+        assert!(
+            app.preview_error
+                .as_deref()
+                .unwrap()
+                .contains("start analysis")
+        );
+        assert_eq!(serde_json::to_value(&app.project).unwrap(), saved);
+
+        app.update_dialog = Some(super::UpdateDialog {
+            prepared: Some(crate::updater::Prepared {
+                transaction: root.join("staged-update"),
+                recovery: root.join("not-started-helper"),
+                version: "test".into(),
+            }),
+            ..Default::default()
+        });
+        crate::worker_lifetime::fail_next_spawn();
+        let _ = app.update(Message::UpdateAction(Command::CheckUpdates));
+        assert!(!app.update_dialog.as_ref().unwrap().busy);
+        assert!(
+            app.update_dialog
+                .as_ref()
+                .unwrap()
+                .status
+                .lock()
+                .unwrap()
+                .contains("start update")
+        );
+
+        crate::worker_lifetime::fail_next_spawn();
+        let _ = app.update(Message::OpenLink(super::AppLink::Help));
+        assert!(
+            app.app_feedback
+                .as_deref()
+                .unwrap()
+                .contains("Open https://")
+        );
+        assert_eq!(serde_json::to_value(&app.project).unwrap(), saved);
+        drop(app);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn export_worker_start_failures_preserve_analysis_and_allow_retry() {
+        let (root, mut project, audio) = export_fixture::session();
+        let analysis = crate::EditorAnalysisWorker::default()
+            .analyze_acoustic_evidence(
+                &project,
+                &audio,
+                &std::sync::atomic::AtomicU8::new(0),
+                &std::sync::atomic::AtomicBool::new(false),
+            )
+            .unwrap();
+        let effective = analysis
+            .install(
+                &mut project,
+                &mut crate::EffectiveEnvelopeCache::default(),
+                None,
+            )
+            .unwrap();
+        let mut app = super::CleanSlateApp {
+            preview_parameters: project.parameters(),
+            project: Some(project),
+            supervised_result: Some(analysis),
+            effective_result: Some(effective),
+            ..Default::default()
+        };
+        let saved = serde_json::to_value(&app.project).unwrap();
+        crate::worker_lifetime::fail_next_spawn();
+        app.start_processing();
+        assert!(app.processing.is_none());
+        assert!(app.messages[0].contains("start WAV preparation"));
+        assert_eq!(serde_json::to_value(&app.project).unwrap(), saved);
+        app.start_processing();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+        while app.processing.is_some() {
+            app.poll_processing();
+            assert!(std::time::Instant::now() < deadline);
+            std::thread::yield_now();
+        }
+        assert!(app.export_ready(), "{:?}", app.messages);
+        let rendered = serde_json::to_value(&app.project).unwrap();
+        let destination = root.join("retry-delivery");
+        crate::worker_lifetime::fail_next_spawn();
+        app.export_to(destination.clone());
+        assert!(app.exporting.is_none());
+        assert!(app.messages[0].contains("start WAV saving"));
+        assert!(!destination.exists());
+        assert_eq!(serde_json::to_value(&app.project).unwrap(), rendered);
+        app.export_to(destination.clone());
+        while app.exporting.is_some() {
+            app.poll_exporting();
+            assert!(std::time::Instant::now() < deadline);
+            std::thread::yield_now();
+        }
+        assert!(destination.is_dir(), "{:?}", app.messages);
+        drop(app);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
     #[test]
     fn embedded_application_icon_has_valid_rgba_dimensions() {
         iced::window::icon::from_rgba(include_bytes!("../assets/cleanslate.rgba").to_vec(), 64, 64)
@@ -2405,6 +2538,11 @@ mod tests {
             ..Default::default()
         };
         let t = crate::TICKS_PER_SECOND;
+        app.project
+            .as_mut()
+            .unwrap()
+            .save_as(&root.join("named.cleanslate"))
+            .unwrap();
         app.timeline.set_total_samples(2 * t);
         let _ = app.update(Message::Settings);
         let _ = app.update(Message::CaptureShortcut(Command::SaveExample));
@@ -2433,7 +2571,11 @@ mod tests {
                 Modifiers::CTRL
             },
         ));
-        assert!(app.messages.iter().any(|m| m == "Editable project saved."));
+        assert!(
+            app.messages
+                .iter()
+                .any(|m| m.starts_with("Project saved to "))
+        );
         assert!(app.reference_menu.is_some());
         app.sound_typing = true;
         let _ = app.update(Message::KeyPressed(
@@ -2878,7 +3020,11 @@ mod tests {
             Modifiers::empty(),
         ));
         assert_eq!(app.project.as_ref().unwrap().reference_labels().len(), 1);
-        assert!(app.messages.iter().all(|m| m != "Editable project saved."));
+        assert!(
+            app.messages
+                .iter()
+                .all(|m| !m.starts_with("Project saved to "))
+        );
         app.stop_audition();
         drop(app);
         std::fs::remove_dir_all(root).unwrap();
@@ -4457,6 +4603,90 @@ mod tests {
     }
 
     #[test]
+    fn presets_use_registered_actions_and_keep_dialog_and_project_state_separate() {
+        use super::{Command, Message};
+        let directory = crate::audio_io::multichannel_tests::root();
+        let source = directory.join("voice.wav");
+        write_wav(&source, &[0.0; 100]);
+        let mut project =
+            synchronized_project(directory.join("recovery.cleanslate"), vec![source]).unwrap();
+        project
+            .set_parameters(crate::AutomixParameters {
+                mute: true,
+                ..project.parameters()
+            })
+            .unwrap();
+        let before = project.parameters();
+        let mut app = super::CleanSlateApp {
+            preview_parameters: before,
+            project: Some(project),
+            preferences_path: Some(directory.join("preferences.json")),
+            ..Default::default()
+        };
+        let _ = app.update(Message::InvokeAction(Command::SoundPresets));
+        assert!(app.preset_dialog.is_some());
+        assert!(!app.action_available(Command::UndoSound));
+        assert!(!app.action_available(Command::SaveProjectAs));
+        let _ = app.update(Message::PresetSelected("Gentle".into()));
+        let _ = app.update(Message::InvokeAction(Command::ApplyPreset));
+        assert_eq!(
+            app.project.as_ref().unwrap().parameters().attenuation_db,
+            -12.0
+        );
+        assert!(app.project.as_ref().unwrap().parameters().mute);
+        let _ = app.update(Message::PresetName("My room".into()));
+        let _ = app.update(Message::InvokeAction(Command::SavePreset));
+        let saved = crate::sound::Presets::load(&directory.join("sound-presets.json")).unwrap();
+        assert_eq!(saved.get("My room").unwrap().attenuation_db, -12.0);
+        let _ = app.view();
+        let _ = app.update(Message::InvokeAction(Command::ClosePresets));
+        let _ = app.update(Message::InvokeAction(Command::UndoSound));
+        assert_eq!(app.project.as_ref().unwrap().parameters(), before);
+        let _ = app.update(Message::InvokeAction(Command::RedoSound));
+        assert_eq!(
+            app.project.as_ref().unwrap().parameters().attenuation_db,
+            -12.0
+        );
+        let named = directory.join("named.cleanslate");
+        app.project.as_mut().unwrap().save_as(&named).unwrap();
+        let _ = app.update(Message::Attenuation(-24.0));
+        app.reference_menu = Some((0, iced::Point::ORIGIN));
+        assert!(app.action_available(Command::SaveProject));
+        assert!(app.action_available(Command::SaveProjectAs));
+        let command_modifier = if cfg!(target_os = "macos") {
+            iced::keyboard::Modifiers::LOGO
+        } else {
+            iced::keyboard::Modifiers::CTRL
+        };
+        let _ = app.update(Message::KeyPressed(
+            iced::keyboard::Key::Character("s".into()),
+            command_modifier,
+        ));
+        app.reference_menu = None;
+        assert_eq!(
+            crate::Project::open(&named)
+                .unwrap()
+                .parameters()
+                .attenuation_db,
+            -24.0
+        );
+        let _ = app.update(Message::InvokeAction(Command::SoundPresets));
+        let _ = app.update(Message::PresetSelected("My room".into()));
+        app.appearance = crate::appearance::Appearance::Light;
+        let _ = app.view();
+        let _ = app.update(Message::InvokeAction(Command::ClosePresets));
+        app.reset_project(true);
+        assert!(
+            crate::sound::Presets::load(&directory.join("sound-presets.json"))
+                .unwrap()
+                .get("My room")
+                .is_some()
+        );
+        drop(app);
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
     fn typed_sound_drafts_commit_cancel_validate_and_reset_individually() {
         use super::{Message, SoundParameter};
         let directory =
@@ -5209,6 +5439,7 @@ struct ReferenceAudition {
 }
 
 pub struct CleanSlateApp {
+    preset_dialog: Option<presets::PresetDialog>,
     update_dialog: Option<UpdateDialog>,
     shortcuts: Shortcuts,
     shortcut_capture: Option<(Command, Option<Binding>)>,
@@ -5347,16 +5578,15 @@ impl SoundParameter {
         }
     }
     fn parse(self, value: &str) -> Result<f32, &'static str> {
-        let bounds = if self == Self::Attenuation {
-            -120.0..=0.0
-        } else {
-            0.0..=60000.0
-        };
         value
             .trim()
             .parse::<f32>()
             .ok()
-            .filter(|v| v.is_finite() && bounds.contains(v))
+            .filter(|v| {
+                let mut parameters = AutomixParameters::default();
+                self.set(&mut parameters, *v);
+                crate::SoundSettings::from(parameters).validate().is_ok()
+            })
             .ok_or(if self == Self::Attenuation {
                 "Enter a finite value from −120 to 0 dB."
             } else {
@@ -5368,6 +5598,7 @@ impl SoundParameter {
 impl Default for CleanSlateApp {
     fn default() -> Self {
         Self {
+            preset_dialog: None,
             update_dialog: None,
             appearance: Appearance::Dark,
             shortcuts: Shortcuts::default(),
@@ -5856,6 +6087,8 @@ enum Message {
     #[cfg(test)]
     SelectSupervisedWarning(usize),
     SaveProject,
+    PresetSelected(String),
+    PresetName(String),
     ProtectSelection,
     Export,
     ExportLayout(crate::ExportLayout),
@@ -5933,7 +6166,6 @@ legacy_buttons! {
     RestoreAllShortcuts => "RestoreAllShortcuts: Transient dialog, capture or menu navigation.",
     RestoreShortcut(a: Command) => "RestoreShortcut: Transient dialog, capture or menu navigation.",
     RetryImport(a: u64) => "RetryImport: Explicit item arguments; current source, range and selection validation retained.",
-    SaveProject => "SaveProject: Legacy command pending migration; existing availability and keyboard binding retained.",
     SaveTrackName => "SaveTrackName: Text/value editor or disclosure with local input ownership.",
     Settings => "Settings: Transient dialog, capture or menu navigation.",
     SetupDetails(a: bool) => "SetupDetails: Text/value editor or disclosure with local input ownership.",
@@ -6663,7 +6895,7 @@ impl CleanSlateApp {
         }
         let (sender, events) = mpsc::channel();
         let (publish, accepted) = mpsc::channel();
-        crate::worker_lifetime::spawn(move || {
+        if let Err(error) = crate::worker_lifetime::spawn(move || {
             let result =
                 load_sources(request, project, parameters, &sender).and_then(|mut loaded| {
                     // Preparation cannot change the saved project. Only the window's
@@ -6681,7 +6913,11 @@ impl CleanSlateApp {
                     Ok(Box::new(loaded))
                 });
             let _ = sender.send(SourceEvent::Finished(result));
-        });
+        }) {
+            self.import_dialog = false;
+            self.messages = vec![format!("Could not start source loading: {error}")];
+            return;
+        }
         self.source_loading = Some(SourceLoading {
             paths,
             waveforms: vec![],
@@ -6830,7 +7066,7 @@ impl CleanSlateApp {
                     .as_ref()
                     .map_or_else(Vec::new, Project::source_paths);
                 paths.extend(additions.iter().cloned());
-                crate::worker_lifetime::spawn(move || {
+                if let Err(error) = crate::worker_lifetime::spawn(move || {
                     let inputs = additions
                         .into_iter()
                         .map(|path| {
@@ -6860,7 +7096,11 @@ impl CleanSlateApp {
                         .collect::<Result<Vec<_>, String>>()
                         .map(|inputs| inputs.into_iter().flatten().collect());
                     let _ = sender.send(inputs);
-                });
+                }) {
+                    self.import_dialog = false;
+                    self.messages = vec![format!("Could not start source inspection: {error}")];
+                    return;
+                }
                 self.source_inspection = Some(SourceInspection {
                     paths,
                     result,
@@ -7007,7 +7247,7 @@ impl CleanSlateApp {
         let worker_cancel = cancelled.clone();
         let worker_progress = progress.clone();
         let worker_snapshot = snapshot.clone();
-        crate::worker_lifetime::spawn(move || {
+        if let Err(error) = crate::worker_lifetime::spawn(move || {
             let completed = (|| {
                 let private = crate::prepare_supervised_float_render(
                     &project,
@@ -7022,7 +7262,10 @@ impl CleanSlateApp {
             })()
             .map_err(|error: crate::RenderBlocker| error.to_string());
             let _ = sender.send(completed);
-        });
+        }) {
+            self.messages = vec![format!("Could not start WAV preparation: {error}")];
+            return;
+        }
         self.processing = Some(Processing {
             cancelled,
             progress,
@@ -7052,7 +7295,7 @@ impl CleanSlateApp {
         let cancelled = Arc::new(AtomicBool::new(false));
         let worker_cancel = cancelled.clone();
         let (sender, result) = mpsc::channel();
-        crate::worker_lifetime::spawn(move || {
+        if let Err(error) = crate::worker_lifetime::spawn(move || {
             let completed = (|| {
                 let private = crate::prepare_export_in_order(
                     &project,
@@ -7066,7 +7309,10 @@ impl CleanSlateApp {
             })()
             .map_err(|error: crate::RenderBlocker| error.to_string());
             let _ = sender.send(completed);
-        });
+        }) {
+            self.messages = vec![format!("Could not start WAV saving: {error}")];
+            return;
+        }
         self.exporting = Some(ExportProcessing { cancelled, result });
         self.messages = vec!["Checking and saving WAV files in the background.".into()];
     }
@@ -7236,7 +7482,7 @@ impl CleanSlateApp {
         let feedback = Arc::new(Mutex::new("Starting analysis".into()));
         let worker_feedback = feedback.clone();
         let (sender, result) = mpsc::channel();
-        crate::worker_lifetime::spawn(move || {
+        if let Err(error) = crate::worker_lifetime::spawn(move || {
             let completed = worker
                 .analyze_with_feedback(
                     &source_project,
@@ -7254,7 +7500,10 @@ impl CleanSlateApp {
                     )
                 });
             let _ = sender.send((completed, worker));
-        });
+        }) {
+            self.preview_error = Some(format!("Could not start analysis: {error}"));
+            return;
+        }
         self.analysis_details = None;
         self.analysis_details_open = false;
         self.preview_processing = Some(PreviewProcessing {
@@ -7687,6 +7936,32 @@ impl CleanSlateApp {
             Menu => Some(Message::Menu),
             Reference => Some(Message::KeyboardShortcuts),
             SaveProject => Some(Message::SaveProject),
+            SaveProjectAs => {
+                self.save_project(true);
+                None
+            }
+            SoundPresets | ApplyPreset | SavePreset | UpdatePreset | RenamePreset
+            | DeletePreset | ClosePresets => {
+                return self.preset_action(command);
+            }
+            UndoSound | RedoSound => {
+                if let Some(project) = &mut self.project {
+                    let result = if command == UndoSound {
+                        project.undo_sound()
+                    } else {
+                        project.redo_sound()
+                    };
+                    match result {
+                        Ok(()) => {
+                            self.preview_parameters = project.parameters();
+                            self.render_generation.invalidate();
+                            self.queue_preview(Duration::from_millis(40));
+                        }
+                        Err(error) => self.messages.push(error.to_string()),
+                    }
+                }
+                None
+            }
             UndoLabels => Some(Message::UndoReferences),
             RedoLabels => Some(Message::RedoReferences),
             UndoGain => Some(Message::UndoGain),
@@ -8146,7 +8421,11 @@ impl CleanSlateApp {
 
 impl CleanSlateApp {
     fn app_support_open(&self) -> bool {
-        self.help_open || self.shortcuts_open || self.menu_open || self.app_dialog.is_some()
+        self.preset_dialog.is_some()
+            || self.help_open
+            || self.shortcuts_open
+            || self.menu_open
+            || self.app_dialog.is_some()
     }
 
     fn workspace_input_active(&self) -> bool {
@@ -8226,6 +8505,32 @@ impl CleanSlateApp {
     fn action_available(&self, command: Command) -> bool {
         use Command::*;
         match command {
+            ApplyPreset | SavePreset | UpdatePreset | RenamePreset | DeletePreset
+            | ClosePresets => return self.preset_available(command),
+            SaveProject | SaveProjectAs => {
+                return self.project.is_some()
+                    && !self.app_support_open()
+                    && !self.import_dialog
+                    && self.export_dialog.is_none()
+                    && self.gain_menu.is_none()
+                    && self.source_loading.is_none()
+                    && self.processing.is_none()
+                    && self.sound_draft.is_none()
+                    && self.track_name_draft.is_none();
+            }
+            SoundPresets | UndoSound | RedoSound => {
+                return self.project.is_some()
+                    && self.workspace_input_active()
+                    && self.source_loading.is_none()
+                    && self.processing.is_none()
+                    && self.sound_draft.is_none()
+                    && self.track_name_draft.is_none()
+                    && match command {
+                        UndoSound => self.project.as_ref().is_some_and(Project::can_undo_sound),
+                        RedoSound => self.project.as_ref().is_some_and(Project::can_redo_sound),
+                        _ => true,
+                    };
+            }
             CheckUpdates => {
                 return self
                     .update_dialog
@@ -8341,7 +8646,8 @@ impl CleanSlateApp {
             self.update_status("The application is still working. Wait for analysis, export, import and update work to finish, or use their Cancel controls and wait for completion before closing/restarting.".into());
             return Task::none();
         }
-        if self.sound_draft.is_some()
+        if self.preset_dialog.is_some()
+            || self.sound_draft.is_some()
             || self.track_name_draft.is_some()
             || self.example_draft.is_some()
             || self.gain_drag.is_some()
@@ -8359,10 +8665,7 @@ impl CleanSlateApp {
                 .set_buttons(rfd::MessageButtons::YesNoCancelCustom("Save".into(),"Discard".into(),"Cancel".into())).show();
             match choice {
                 rfd::MessageDialogResult::Custom(ref label) if label == "Save" => {
-                    if let Err(error) = self.project.as_ref().unwrap().save() {
-                        self.update_status(format!(
-                            "Project was not saved; session remains open: {error}"
-                        ));
+                    if !self.save_project(false) {
                         return Task::none();
                     }
                 }
@@ -8461,7 +8764,7 @@ impl CleanSlateApp {
         let status = dialog.status.clone();
         let prereleases = dialog.prereleases;
         let (sender, receiver) = iced::futures::channel::oneshot::channel();
-        crate::worker_lifetime::spawn(move || {
+        if let Err(error) = crate::worker_lifetime::spawn(move || {
             let result = if command == CleanupUpdate {
                 crate::updater::cleanup(&previous.unwrap())
                     .map(|()| UpdateOutcome::Cleaned(crate::updater::eligible()))
@@ -8478,7 +8781,11 @@ impl CleanSlateApp {
                     .map(|offer| UpdateOutcome::Checked(offer, eligibility))
             };
             let _ = sender.send(result);
-        });
+        }) {
+            return self.update(Message::UpdateFinished(Err(format!(
+                "Could not start update work; the installed application was retained: {error}"
+            ))));
+        }
         Task::perform(
             async move {
                 receiver.await.unwrap_or_else(|_| {
@@ -8565,6 +8872,43 @@ impl CleanSlateApp {
                 | Message::OpenLink(_)
                 | Message::InvokeAction(_) => {}
                 _ => return Task::none(),
+            }
+        }
+        if let Message::PresetSelected(selected) = &message {
+            if let Some(dialog) = &mut self.preset_dialog {
+                dialog.select(selected);
+            }
+            return Task::none();
+        }
+        if let Message::PresetName(name) = &message {
+            if let Some(dialog) = &mut self.preset_dialog {
+                dialog.edit_name(name);
+            }
+            return Task::none();
+        }
+        if self.preset_dialog.is_some() {
+            if let Message::KeyPressed(key, modifiers) = &message {
+                if let Some(command) = self.shortcuts.resolve(key, *modifiers, Context::Presets) {
+                    return self.dispatch_shortcut(command);
+                }
+                match key {
+                    keyboard::Key::Named(keyboard::key::Named::Escape) => {
+                        return self.dispatch_shortcut(Command::ClosePresets);
+                    }
+                    keyboard::Key::Named(keyboard::key::Named::Tab) => {
+                        return crate::gui_controls::focus_next(modifiers.shift());
+                    }
+                    _ => return Task::none(),
+                }
+            }
+            if !matches!(
+                message,
+                Message::InvokeAction(_)
+                    | Message::Tick
+                    | Message::PlaybackFrame
+                    | Message::ShortcutHintInput
+            ) {
+                return Task::none();
             }
         }
         if let Message::HideSupportIntro(hidden) = message {
@@ -9061,7 +9405,10 @@ impl CleanSlateApp {
         }
         let previous_parameters = self.preview_parameters;
         match message {
-            Message::InvokeAction(_) | Message::HideSupportIntro(_) => {
+            Message::InvokeAction(_)
+            | Message::HideSupportIntro(_)
+            | Message::PresetSelected(_)
+            | Message::PresetName(_) => {
                 unreachable!("actions dispatch before input routing")
             }
             Message::ImportChannel(index, selected) => {
@@ -9819,12 +10166,7 @@ impl CleanSlateApp {
                 }
             }
             Message::SaveProject => {
-                if let Some(project) = &self.project {
-                    self.messages = vec![match project.save() {
-                        Ok(()) => "Editable project saved.".into(),
-                        Err(error) => format!("Project was not saved: {error}"),
-                    }];
-                }
+                self.save_project(false);
             }
             #[cfg(test)]
             Message::RemoveCalibration(index) => {
@@ -9921,9 +10263,11 @@ impl CleanSlateApp {
             Message::OpenLink(link) => {
                 self.app_feedback = Some("Opening in your browser…".into());
                 let (sender, receiver) = iced::futures::channel::oneshot::channel();
-                crate::worker_lifetime::spawn(move || {
+                if let Err(error) = crate::worker_lifetime::spawn(move || {
                     let _ = sender.send(open_app_link(link));
-                });
+                }) {
+                    return self.update(Message::LinkOpened(link, Err(error.to_string())));
+                }
                 return Task::perform(
                     async move {
                         receiver
@@ -9982,7 +10326,13 @@ impl CleanSlateApp {
             }
             Message::CopyProjectPath => {
                 if let Some(project) = &self.project {
-                    return iced::clipboard::write::<Message>(project.path().display().to_string());
+                    return iced::clipboard::write::<Message>(
+                        project
+                            .save_destination()
+                            .unwrap_or(project.path())
+                            .display()
+                            .to_string(),
+                    );
                 }
             }
             Message::VersionInfoReady(..) | Message::VersionCopied(..) => {}
@@ -10054,6 +10404,7 @@ impl CleanSlateApp {
                 && let Err(error) = project.set_parameters(self.preview_parameters)
             {
                 self.preview_error = Some(error.to_string());
+                self.preview_parameters = project.parameters();
             }
             self.queue_preview(Duration::from_millis(40));
         }
@@ -10169,7 +10520,22 @@ impl CleanSlateApp {
         } else {
             Subscription::none()
         };
-        let help_keys = if self.app_support_open() {
+        let help_keys = if self.preset_dialog.is_some() {
+            iced::event::listen_with(|event, status, _| match event {
+                iced::Event::Keyboard(
+                    event @ keyboard::Event::KeyPressed {
+                        key:
+                            keyboard::Key::Named(
+                                keyboard::key::Named::Tab | keyboard::key::Named::Escape,
+                            ),
+                        ..
+                    },
+                ) if status == iced::event::Status::Captured => {
+                    application_keyboard_event(event, iced::event::Status::Ignored)
+                }
+                _ => None,
+            })
+        } else if self.app_support_open() {
             iced::event::listen_with(|event, status, _| match event {
                 iced::Event::Keyboard(event @ keyboard::Event::KeyPressed { .. })
                     if status == iced::event::Status::Captured =>
@@ -10395,6 +10761,24 @@ impl CleanSlateApp {
     }
 
     fn view(&self) -> Element<'_, Message> {
+        if self.preset_dialog.is_some() {
+            return responsive(move |size| {
+                stack![
+                    self.workspace(compact_workspace(size.width), size.height, size.width),
+                    opaque(
+                        container(self.preset_view())
+                            .center_x(Fill)
+                            .center_y(Fill)
+                            .style(|theme| container::Style {
+                                background: Some(colors(theme).scrim.into()),
+                                ..Default::default()
+                            })
+                    )
+                ]
+                .into()
+            })
+            .into();
+        }
         if let Some(dialog) = &self.update_dialog {
             let status = dialog
                 .status
@@ -11159,7 +11543,11 @@ impl CleanSlateApp {
         };
         let mut controls = column![
             text("Sources").size(16),
-            text(format!("Project autosaved to {}", project.path().display())).size(12),
+            text(project.save_destination().map_or_else(
+                || "Project has not been saved to a chosen location.".into(),
+                |path| format!("Project: {}{}", path.display(), if project.has_unsaved_changes() { " · Unsaved changes" } else { " · Saved" }),
+            )).size(12),
+            text(format!("Local recovery: {}", project.path().display())).size(12),
             button("Copy project path").style(secondary_button).on_press(LegacyButton::CopyProjectPath),
             text("Original audio is read only. Keep its card or drive connected until processing finishes.").size(12),
             button("Recheck source files")
@@ -11399,7 +11787,10 @@ impl CleanSlateApp {
                 text(
                     self.project
                         .as_ref()
-                        .and_then(|project| project.path().file_stem())
+                        .and_then(|project| project
+                            .save_destination()
+                            .unwrap_or(project.path())
+                            .file_stem())
                         .map_or_else(
                             || "Untitled project".into(),
                             |name| name.to_string_lossy().into_owned()
@@ -11436,12 +11827,13 @@ impl CleanSlateApp {
                 (!self.sources_busy() && self.processing.is_none())
                     .then_some(LegacyButton::OpenProject)
             ),
-            self.shortcut_control(
+            self.action_control(
                 Command::SaveProject,
-                button("Save project").style(quiet_button).on_press_maybe(
-                    (self.project.is_some() && self.source_loading.is_none())
-                        .then_some(LegacyButton::SaveProject)
-                )
+                button("Save project").style(quiet_button)
+            ),
+            self.action_control(
+                Command::SaveProjectAs,
+                button("Save as…").style(quiet_button)
             ),
         ]
         .spacing(12)
@@ -12018,6 +12410,18 @@ impl CleanSlateApp {
         .align_y(iced::Center);
         let transitions = column![
             inspector_heading("Transitions and gaps"),
+            row![
+                self.action_control(
+                    Command::SoundPresets,
+                    button("Presets…").style(inspector_button)
+                ),
+                self.action_control(
+                    Command::UndoSound,
+                    button("Undo sound").style(inspector_button)
+                ),
+                self.action_control(Command::RedoSound, button("Redo").style(inspector_button)),
+            ]
+            .spacing(6),
             self.timing_control(SoundParameter::Open, "Fade to full volume"),
             self.timing_control(SoundParameter::Close, "Fade to reduced volume"),
             self.timing_control(SoundParameter::Gap, "Ignore gaps shorter than"),

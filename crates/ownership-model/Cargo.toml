@@ -1,0 +1,13 @@
+[package]
+name = "cleanslate-ownership-model"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[dependencies]
+linfa = { version = "=0.8.1", default-features = false }
+linfa-logistic = "=0.8.1"
+ndarray = "=0.16.1"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0"

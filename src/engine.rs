@@ -497,6 +497,10 @@ impl Default for AutomixParameters {
     }
 }
 
+/// Linear attenuation on this envelope's source-frame grid, with project-time queries.
+/// The current effective-envelope path composes automatic gain with manual constraints;
+/// legacy point envelopes retain their sample-grid interpolation behavior.
+/// See the [effective-envelope contract](https://github.com/Today20092/podcast-bleed-reducer/blob/development/docs/effective-envelopes.md).
 #[derive(Clone, Debug, PartialEq)]
 pub struct GainEnvelope {
     effective: Option<std::sync::Arc<crate::effective_envelope::EffectiveTrackEnvelope>>,
@@ -569,6 +573,8 @@ impl GainEnvelope {
             effective: Some(effective),
         })
     }
+    /// Construct constant linear gain on a grid of `sample_count` frames at `sample_rate` Hz.
+    /// Reject invalid/unrepresentable grids and nonfinite or out-of-range gains (`[0, 1]`).
     pub fn constant_at_rate(
         sample_count: usize,
         sample_rate: u32,
@@ -592,20 +598,26 @@ impl GainEnvelope {
             }],
         })
     }
+    /// Frames per second for sample-index queries, independent of the analysis grid.
     pub fn sample_rate(&self) -> u32 {
         self.sample_rate
     }
+    /// Exclusive source end in project ticks, rounded up on non-exact grids.
     pub fn duration(&self) -> crate::TimePosition {
         self.source_grid()
             .duration()
             .expect("validated envelope grid")
     }
+    /// Coordinate grid for this envelope's sample indices; no resampling is implied.
     pub fn source_grid(&self) -> crate::SourceTimebase {
         crate::SourceTimebase {
             sample_rate: self.sample_rate,
             frame_count: self.sample_count as u64,
         }
     }
+    /// Query linear gain at project ticks, returning unity at or beyond the source end.
+    /// Effective envelopes evaluate the shared time-domain curve directly; legacy point
+    /// envelopes round down to a source frame before using [`Self::gain_at`].
     pub fn gain_at_time(&self, time: crate::TimePosition) -> f32 {
         if let Some(effective) = &self.effective {
             return effective.gain_at_time(time);
@@ -617,6 +629,12 @@ impl GainEnvelope {
             .filter(|&sample| sample < self.sample_count)
             .map_or(1.0, |sample| self.gain_at(sample))
     }
+    /// Sampled minimum/maximum for an ordered half-open project-time interval.
+    /// Endpoints are capped at the source duration, then start rounds down and end up
+    /// before [`Self::gain_bounds`] is queried. `None` means that converted/clipped sample
+    /// range is empty or conversion failed. Ordering is checked after conversion, so even
+    /// equal off-grid endpoints can cover a sample; validate a time range before calling
+    /// when strict time-domain nonemptiness is required.
     pub fn gain_bounds_time(
         &self,
         start: crate::TimePosition,
@@ -637,7 +655,10 @@ impl GainEnvelope {
         .ok()?;
         self.gain_bounds(start, end)
     }
-    /// Same arithmetic as random access; retain the segment index during playback.
+    /// Query the same source-frame coordinate as [`Self::gain_at`], retaining an opaque
+    /// segment cursor for playback. Start the cursor at zero for an envelope and retain it
+    /// across calls; backward seeks and out-of-range cursors are handled internally.
+    /// Effective envelopes return unity after the source; legacy points extrapolate.
     pub fn gain_at_sequential(&self, sample: usize, cursor: &mut usize) -> f32 {
         if let Some(effective) = &self.effective {
             if sample >= self.sample_count {
@@ -677,6 +698,11 @@ impl GainEnvelope {
         }
     }
 
+    /// Query linear gain at a frame index on [`Self::source_grid`], not project ticks.
+    /// Effective envelopes convert that frame to project ticks (rounding down) and return
+    /// unity for `sample >= sample_count`. Legacy point envelopes continue their last
+    /// segment beyond the end, so callers needing source-bounded values should use only
+    /// indices in `0..sample_count` or use [`Self::gain_at_time`].
     pub fn gain_at(&self, sample: usize) -> f32 {
         if let Some(effective) = &self.effective {
             if sample >= self.sample_count {
@@ -694,11 +720,13 @@ impl GainEnvelope {
         point.gain_at(sample)
     }
 
+    /// Number of source frames; valid in-source sample indices are `0..sample_count`.
     pub fn sample_count(&self) -> usize {
         self.sample_count
     }
 
-    /// Exact gain extrema in the half-open sample range, clipped to this envelope.
+    /// Exact gain extrema in `[start, end)` on the envelope's source-frame grid.
+    /// Clip the end to [`Self::sample_count`]; return `None` if no source frames remain.
     pub fn gain_bounds(&self, start: usize, end: usize) -> Option<(f32, f32)> {
         if let Some(effective) = &self.effective {
             return effective.bounds(self.source_grid(), start, end);

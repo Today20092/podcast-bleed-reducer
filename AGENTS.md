@@ -12,6 +12,8 @@ For GUI changes, read [the GUI development guide](docs/gui-development.md) and u
 
 ## Maintainability
 
+For Rust implementation and review, use [Google Rust Guidelines](https://github.com/Today20092/skills/tree/main/skills/engineering/google-rust-guidelines). [Installation and usage](CONTRIBUTING.md#google-rust-guidelines) are optional setup; if unavailable, read the canonical skill and its relevant references directly. Apply its general Rust guidance within this repository's accepted scope and architecture; Google platform rules apply only to matching targets. Record substantive exceptions rather than introducing unrelated style migrations.
+
 For every project change, optimize for the lifetime cost of understanding, testing, and safely changing the code. Choose the smallest coherent solution; file count and diff size are not quality targets.
 
 - Fix root causes in the layer that owns the behavior. Update all affected callers, interfaces, tests, fixtures, and documentation, even when the solution spans multiple files.

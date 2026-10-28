@@ -11,6 +11,7 @@ pub(crate) enum Context {
     Project,
     Updates,
     WorkspaceAndUpdates,
+    Presets,
 }
 impl Context {
     fn mask(self) -> u8 {
@@ -22,6 +23,7 @@ impl Context {
             Self::Project => 7,
             Self::Updates => 8,
             Self::WorkspaceAndUpdates => 11,
+            Self::Presets => 16,
         }
     }
     pub(crate) fn name(self) -> &'static str {
@@ -33,6 +35,7 @@ impl Context {
             Self::Project => "Workspace or speaker popup (no text entry)",
             Self::Updates => "Updates dialog",
             Self::WorkspaceAndUpdates => "Workspace or Updates dialog",
+            Self::Presets => "Sound presets dialog",
         }
     }
 }
@@ -87,6 +90,16 @@ commands! {
     ResumeUpdateRecovery => ("Resume update recovery", Updates, []),
     CleanupUpdate => ("Remove retained previous version", Updates, []),
     SaveProject => ("Save project", Project, ["Cmd+s"]),
+    SaveProjectAs => ("Save project as", Project, ["Cmd+Shift+s"]),
+    SoundPresets => ("Sound presets", Workspace, []),
+    ApplyPreset => ("Apply selected sound preset", Presets, []),
+    SavePreset => ("Save sound as custom preset", Presets, []),
+    UpdatePreset => ("Update selected custom preset", Presets, []),
+    RenamePreset => ("Rename selected custom preset", Presets, []),
+    DeletePreset => ("Delete selected custom preset", Presets, []),
+    ClosePresets => ("Close sound presets", Presets, []),
+    UndoSound => ("Undo sound change", Workspace, []),
+    RedoSound => ("Redo sound change", Workspace, []),
     UndoLabels => ("Undo labels", Labels, ["Cmd+z"]),
     RedoLabels => ("Redo labels", Labels, ["Cmd+Shift+z", "Cmd+y"]),
     UndoGain => ("Undo gain", Gain, ["Cmd+z"]),

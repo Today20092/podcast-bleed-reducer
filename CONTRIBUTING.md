@@ -36,6 +36,30 @@ Keep recordings, personal projects, caches and generated builds out of commits. 
 
 ## Optional AI agent skills
 
+### Google Rust Guidelines
+
+For Rust implementation and review, use the personal [Google Rust Guidelines skill](https://github.com/Today20092/skills/tree/main/skills/engineering/google-rust-guidelines), adapted from [Google's Rust style guide](https://google.github.io/styleguide/rustguide.html). The skill includes the complete rule inventory, platform-specific references, source revision and attribution. It is maintained independently and is not endorsed by Google.
+
+Install it for a project using the [Skills CLI](https://github.com/vercel-labs/skills):
+
+```sh
+npx skills add Today20092/skills --skill google-rust-guidelines
+```
+
+For a personal Codex installation shared across projects:
+
+```sh
+npx skills add Today20092/skills --skill google-rust-guidelines --global -a codex
+```
+
+Select your agent when prompted. For agents supporting named skill invocation, use `$google-rust-guidelines`; otherwise ask the agent to use Google Rust Guidelines. For example: “Audit this ticket's changed Rust code using Google Rust Guidelines; report applicable findings, exceptions and verification.”
+
+The canonical skill stays in the skills repository; do not copy it into CleanSlate. Installation is optional and not a build dependency. The short pointer in AGENTS.md makes the policy discoverable even without an installed copy. Follow this project's accepted specification and architecture, apply Google platform rules only where relevant, and scope fixes to the ticket. Avoid unrelated style rewrites. The skill's source revision can change independently; record the skill commit in an audit or PR when reproducibility matters.
+
+The initial audit and tickets 104–107 used [skill revision b775ecd](https://github.com/Today20092/skills/tree/b775ecd77d076212b65d0f6c14396760cf74c4e4/skills/engineering/google-rust-guidelines). See the [correction receipt](docs/research/rust-guidelines-corrections-2026-10-28.md) for the actual fixes and checks.
+
+### Specification and review workflow
+
 This project uses [Matt Pocock's agent skills](https://github.com/mattpocock/skills) to clarify requirements, write specifications, split work into tickets, implement and review. The project's configuration lives in [AGENTS.md](AGENTS.md) and [docs/agents/](docs/agents/); the skill files themselves are not bundled in this repository.
 
 For agent-assisted work, install the skills for your agent using the [upstream installation instructions](https://github.com/mattpocock/skills#installation-30-second-setup). An editable-file installation can use:

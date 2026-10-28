@@ -133,6 +133,16 @@ pub struct Project {
     path: PathBuf,
     #[serde(skip)]
     deferred_save: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    named_destination: Option<PathBuf>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    recovery_path: Option<PathBuf>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    named_snapshot: Option<String>,
+    #[serde(skip)]
+    unsaved_changes: bool,
+    #[serde(skip)]
+    save_warning: Option<String>,
     pub sources: Vec<SourceIdentity>,
     #[serde(default)]
     supplied_alignment: bool,
@@ -149,6 +159,10 @@ pub struct Project {
     gain_undo: Vec<GainConstraints>,
     #[serde(skip)]
     gain_redo: Vec<GainConstraints>,
+    #[serde(skip)]
+    sound_undo: Vec<AutomixParameters>,
+    #[serde(skip)]
+    sound_redo: Vec<AutomixParameters>,
     manual_edits: Vec<ManualGainEdit>,
     bound_protections: Vec<BoundProtection>,
     pending_rebind: Vec<TrackId>,
@@ -230,8 +244,13 @@ impl Project {
         let mut project = Self {
             schema_version: PROJECT_SCHEMA_VERSION,
             ticks_per_second: TICKS_PER_SECOND,
+            recovery_path: Some(path.clone()),
             path,
             deferred_save,
+            named_destination: None,
+            named_snapshot: None,
+            unsaved_changes: true,
+            save_warning: None,
             sources,
             supplied_alignment: false,
             export_encoding: crate::ExportEncoding::default(),
@@ -242,6 +261,8 @@ impl Project {
             reference_redo: vec![],
             gain_undo: vec![],
             gain_redo: vec![],
+            sound_undo: vec![],
+            sound_redo: vec![],
             manual_edits: vec![],
             bound_protections: vec![],
             pending_rebind: vec![],
@@ -270,6 +291,11 @@ impl Project {
         let mut project: Self = serde_json::from_slice(&fs::read(&path)?).map_err(invalid_json)?;
         project.path = path;
         project.validate_contract()?;
+        if !project.is_recovery_copy() {
+            project.named_destination = Some(fs::canonicalize(&project.path)?);
+            project.recovery_path = None;
+            project.named_snapshot = Some(project.content_identity()?);
+        }
         if project.analysis_recipe.as_ref().is_some_and(|recipe| {
             !recipe
                 .feature_recipe
@@ -301,10 +327,20 @@ impl Project {
             project.render = RenderState::Stale;
         }
         project.rebuild_runtime()?;
+        project.unsaved_changes = project.named_snapshot.is_none()
+            || Some(project.content_identity()?) != project.named_snapshot;
         Ok(project)
     }
 
     pub fn save(&self) -> io::Result<()> {
+        let bytes = self.saved_bytes()?;
+        if self.deferred_save {
+            return Ok(());
+        }
+        atomic_save(&self.path, &bytes)
+    }
+
+    fn saved_bytes(&self) -> io::Result<Vec<u8>> {
         self.validate_contract()?;
         if !self.runtime_order.is_empty()
             && self.runtime_order != self.sources.iter().map(|s| s.track_id).collect::<Vec<_>>()
@@ -313,26 +349,119 @@ impl Project {
                 "Use reorder_tracks to change track order without transferring decisions.",
             ));
         }
-        if self.deferred_save {
-            return Ok(());
+        serde_json::to_vec_pretty(self).map_err(invalid_json)
+    }
+
+    pub fn save_destination(&self) -> Option<&Path> {
+        self.named_destination.as_deref()
+    }
+    fn is_recovery_copy(&self) -> bool {
+        crate::storage::is_local_project(&self.path)
+            && self.recovery_path.as_ref().is_some_and(|recovery| {
+                fs::canonicalize(recovery)
+                    .ok()
+                    .zip(fs::canonicalize(&self.path).ok())
+                    .is_some_and(|(a, b)| a == b)
+            })
+    }
+    pub fn save_warning(&self) -> Option<&str> {
+        self.save_warning.as_deref()
+    }
+
+    fn content_identity(&self) -> io::Result<String> {
+        let mut value = serde_json::to_value(self).map_err(invalid_json)?;
+        let object = value.as_object_mut().unwrap();
+        for key in ["named_destination", "recovery_path", "named_snapshot"] {
+            object.remove(key);
         }
-        let bytes = serde_json::to_vec_pretty(self).map_err(invalid_json)?;
-        atomic_save(&self.path, &bytes)
+        Ok(format!(
+            "{:x}",
+            Sha256::digest(serde_json::to_vec(&value).map_err(invalid_json)?)
+        ))
+    }
+
+    pub fn has_unsaved_changes(&self) -> bool {
+        self.unsaved_changes
+    }
+
+    pub fn save_named(&mut self) -> io::Result<()> {
+        let path = self
+            .named_destination
+            .clone()
+            .ok_or_else(|| invalid("Choose a project destination with Save As."))?;
+        self.save_as(&path)
+    }
+
+    /// Explicit saves publish a snapshot; automatic editing saves keep using the recovery path.
+    pub fn save_as(&mut self, path: &Path) -> io::Result<()> {
+        self.validate_contract()?;
+        if !path
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("cleanslate"))
+        {
+            return Err(invalid(
+                "Choose a .cleanslate project file; source recordings cannot be replaced.",
+            ));
+        }
+        let path = fs::canonicalize(
+            path.parent()
+                .filter(|p| !p.as_os_str().is_empty())
+                .unwrap_or(Path::new(".")),
+        )?
+        .join(
+            path.file_name()
+                .ok_or_else(|| invalid("Choose a project filename."))?,
+        );
+        if self.sources.iter().any(|s| {
+            fs::canonicalize(&s.path)
+                .ok()
+                .zip(fs::canonicalize(&path).ok())
+                .is_some_and(|(a, b)| a == b)
+        }) {
+            return Err(invalid("A project cannot replace source media."));
+        }
+        let mut next = self.clone();
+        if fs::canonicalize(&path)
+            .ok()
+            .zip(fs::canonicalize(&self.path).ok())
+            .is_some_and(|(a, b)| a == b)
+        {
+            next.path = crate::storage::new_project()?;
+        }
+        for source in &mut next.sources {
+            if source.path.is_relative() {
+                let current = source.stamp_is_current();
+                source.path = std::env::current_dir()?.join(&source.path);
+                if current {
+                    source.loaded_stamp = SourceStamp::read_source(&source.audio_source()).ok();
+                }
+            }
+        }
+        next.named_destination = Some(path.clone());
+        next.named_snapshot = Some(next.content_identity()?);
+        next.unsaved_changes = false;
+        next.recovery_path = Some(std::path::absolute(&next.path)?);
+        let mut snapshot = next.clone();
+        snapshot.named_destination = None;
+        snapshot.named_snapshot = None;
+        snapshot.recovery_path = None;
+        atomic_save(&path, &snapshot.saved_bytes()?)?;
+        // The named file is committed: a recovery-association error must not report a failed Save.
+        next.save_warning = next.save().err().map(|error| format!("The named project was saved, but local recovery could not remember its destination. Keep the named file and retry Save before relying on recovery: {error}"));
+        *self = next;
+        Ok(())
     }
 
     /// GUI autosaves use local storage even when the opened project is on removable media.
     pub(crate) fn localize_for_editing(&mut self) -> io::Result<bool> {
-        let local = crate::storage::root()?.join("Projects");
-        if fs::canonicalize(local).is_ok_and(|local| {
-            fs::canonicalize(&self.path).is_ok_and(|path| path.starts_with(local))
-        }) && !fs::metadata(&self.path)?.permissions().readonly()
-        {
+        if self.is_recovery_copy() && !fs::metadata(&self.path)?.permissions().readonly() {
             return Ok(false);
         }
-        let previous = self.path.clone();
+        let previous = self.clone();
         self.path = crate::storage::new_project()?;
+        self.recovery_path = Some(self.path.clone());
         if let Err(error) = self.save() {
-            self.path = previous;
+            *self = previous;
             return Err(error);
         }
         Ok(true)
@@ -355,6 +484,8 @@ impl Project {
         change(&mut next)?;
         next.validate_contract()?;
         next.rebuild_runtime()?;
+        next.unsaved_changes =
+            next.named_snapshot.is_none() || Some(next.content_identity()?) != next.named_snapshot;
         next.save()?;
         *self = next;
         Ok(())
@@ -1376,9 +1507,54 @@ impl Project {
         })
     }
     pub fn set_parameters(&mut self, parameters: AutomixParameters) -> io::Result<()> {
+        crate::SoundSettings::from(parameters).validate()?;
+        if self.parameters == parameters {
+            return Ok(());
+        }
         self.transaction(|next| {
+            next.sound_undo.push(next.parameters);
+            next.sound_redo.clear();
             next.parameters = parameters;
             next.render = RenderState::Stale;
+            Ok(())
+        })
+    }
+    pub fn apply_sound(&mut self, sound: crate::SoundSettings) -> io::Result<bool> {
+        sound.validate()?;
+        let parameters = sound.apply_to(self.parameters);
+        let changed = parameters != self.parameters;
+        self.set_parameters(parameters)?;
+        Ok(changed)
+    }
+    pub fn can_undo_sound(&self) -> bool {
+        !self.sound_undo.is_empty()
+    }
+    pub fn can_redo_sound(&self) -> bool {
+        !self.sound_redo.is_empty()
+    }
+    pub fn undo_sound(&mut self) -> io::Result<()> {
+        self.restore_sound(false)
+    }
+    pub fn redo_sound(&mut self) -> io::Result<()> {
+        self.restore_sound(true)
+    }
+    fn restore_sound(&mut self, redo: bool) -> io::Result<()> {
+        self.transaction(|next| {
+            let stack = if redo {
+                &mut next.sound_redo
+            } else {
+                &mut next.sound_undo
+            };
+            if let Some(parameters) = stack.pop() {
+                let other = if redo {
+                    &mut next.sound_undo
+                } else {
+                    &mut next.sound_redo
+                };
+                other.push(next.parameters);
+                next.parameters = parameters;
+                next.render = RenderState::Stale;
+            }
             Ok(())
         })
     }

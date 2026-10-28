@@ -1,5 +1,7 @@
 # Actions and shortcuts
 
+The standalone FL probe uses a separate egui editor and cannot dispatch desktop Iced actions. Its waveform navigation commands are declared once in `plugins/fl-probe/src/session_editor.rs` (`Navigation::control`/`navigate`), shared by buttons, focused keyboard handling and the context menu. This source now lives in the independent plugin worktrees described in [product boundaries](../plugin-products.md); it is absent from the desktop checkout. Its source/range canvas gestures, navigator and Follow mode are local viewport editing controls; they do not seek the host, modify source audio or register global desktop shortcuts. Host transport remains in the DAW. Customizable plugin shortcuts are not currently provided.
+
 New user commands must be registered before they can be attached to a button.
 
 1. Add one entry to `commands!` in [shortcuts.rs](../../src/shortcuts.rs), supplying its stable identifier, name, activation context and default bindings. Use `[]` when no default is appropriate. Never rename an existing identifier: it is a saved-preferences key.
@@ -30,10 +32,12 @@ The `legacy_buttons!` declaration in [app.rs](../../src/app.rs) is the individua
 | `RebindSource`, `Relink`, `SoloTrack` | Explicit current source/track argument and bounds/identity checks. |
 | `RemoveImport`, `RetryImport` | Explicit pending-import identity. |
 | `AnalyzeReferences`, `CancelAnalysis`, `Cancel`, `CancelPendingImports`, `Validate` | Legacy worker/source commands; migrate with the operation's availability policy. |
-| `ImportStems`, `NewProject`, `OpenProject`, `SaveProject`, `CopyProjectPath`, `Export` | Legacy project/file operations; preserve native chooser, dirty-state and export safeguards. |
+| `ImportStems`, `NewProject`, `OpenProject`, `CopyProjectPath`, `Export` | Legacy project/file operations; preserve native chooser, dirty-state and export safeguards. Save/Save As now use registered dispatch and shared availability. |
 | `Audition`, `Stop`, `Previous`, `Original`, `Processed`, `Removed` | Legacy transport/listening routes, including reference-loop differences. |
 | `UndoGain`, `RedoGain`, `DeleteGain`, `UndoReferences`, `RedoReferences` | Existing registered keyboard actions with legacy button routes; preserve distinct editing contexts. |
 
 Non-button editing controls also retain explicit exemptions: `UnlockOnZoom` is a Settings preference; `ImportChannel` and `ImportChannelName` edit the current import choice; `TrackName` and `SoundText` edit text; `GainTool` and `ReplaceGainConstraints` change the editing mode/policy; `SuppliedAlignment` confirms source setup; `ReferenceSpeaker` edits the current labeling popup. `ExportLayout` and `ExportEncoding` select current export values. `Attenuation`, `OpenTime`, `CloseTime`, `MinimumGap` and `MonitorGain` are continuous/precise values with their existing input ownership. Timeline/example/gain canvas gestures carry the current source, range or point identity and retain their existing validation rather than becoming arbitrary global commands.
 
 Any new non-button actionable control must likewise choose a registered action or add an individually justified editing/navigation exemption here. Parameterized commands must resolve and validate the current item at activation time; never persist a transient item index as a global shortcut.
+
+Ticket 100 adds two dialog editing exemptions: `PresetSelected` selects an existing name in the current Sound presets collection, and `PresetName` edits the transient custom-name draft. Neither mutates a project or stored preset. Registered Apply/Save/Update/Rename/Delete actions validate the current selection at activation. The dialog owns input; captured name typing does not dispatch shortcuts. Tab/Shift+Tab navigates controls, Escape closes, and customizable preset actions resolve only in the Sound presets context.

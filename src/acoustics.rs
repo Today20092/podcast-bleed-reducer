@@ -161,19 +161,20 @@ impl SessionAcoustics {
 #[derive(Default)]
 pub struct AcousticEvidenceCache {
     fixed: Option<Arc<FixedAcoustics>>,
-    derived: Option<SessionAcoustics>,
+    derived: Option<Arc<SessionAcoustics>>,
     stats: AcousticCacheStats,
 }
 impl AcousticEvidenceCache {
     pub fn stats(&self) -> AcousticCacheStats {
         self.stats
     }
+    /// Reuses immutable completed evidence after revalidating the current sources and labels.
     pub fn analyze(
         &mut self,
         project: &Project,
         audio: &[PreparedAnalysisAudio],
         cancelled: Option<&AtomicBool>,
-    ) -> Result<SessionAcoustics, RenderBlocker> {
+    ) -> Result<Arc<SessionAcoustics>, RenderBlocker> {
         crate::prepared_analysis::check_cancelled(cancelled)?;
         project.require_alignment()?;
         for copy in audio {
@@ -391,7 +392,7 @@ impl AcousticEvidenceCache {
                 ));
             }
         }
-        let result = SessionAcoustics {
+        let result = Arc::new(SessionAcoustics {
             development_comparisons: comparisons,
             fir_features,
             cache_key: derived_key,
@@ -399,7 +400,7 @@ impl AcousticEvidenceCache {
             fixed: fixed.clone(),
             floors,
             transfers,
-        };
+        });
         if self.fixed.as_ref().is_none_or(|old| old.key != fixed.key) {
             self.stats.fixed_preparations += 1;
         }

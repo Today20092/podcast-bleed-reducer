@@ -79,11 +79,11 @@ impl PreparedAudio {
         }
         let start = grid.frame_at_time(start, Rounding::Floor)? as usize;
         let end = grid.frame_at_time(end, Rounding::Ceil)? as usize;
-        Ok(AuditionSource::prepare_stream(
+        AuditionSource::prepare_stream(
             self.clone(),
             Arc::new(Controls::new(mode, monitor, start, envelopes)),
             end,
-        ))
+        )
     }
     pub fn prepare_for_rate(
         paths: &[PathBuf],
@@ -329,11 +329,12 @@ impl AuditionPreparation {
             return;
         };
         let output_rate = preparation_output_rate();
-        let cached = self.cache.take();
+        let cached = self.cache.clone();
         let cancelled = Arc::new(AtomicBool::new(false));
         let worker_cancelled = Arc::clone(&cancelled);
         let (sender, result) = mpsc::channel();
-        crate::worker_lifetime::spawn(move || {
+        let launch_error = sender.clone();
+        if let Err(error) = crate::worker_lifetime::spawn(move || {
             // A cancelled warm request may still return its validated PCM to the cache.
             // Generation checks prevent that result from starting playback.
             let prepared = (|| {
@@ -353,7 +354,11 @@ impl AuditionPreparation {
                 }
             })();
             let _ = sender.send(prepared);
-        });
+        }) {
+            let _ = launch_error.send(Err(RenderBlocker(format!(
+                "Could not start audio preparation; press Play to retry: {error}"
+            ))));
+        }
         self.job = Some(PreparationJob {
             generation: self.generation,
             retain_cache: true,
@@ -654,7 +659,7 @@ impl AuditionSource {
         prepared: PreparedAudio,
         controls: Arc<Controls>,
         end: usize,
-    ) -> AuditionPlayback {
+    ) -> Result<AuditionPlayback, RenderBlocker> {
         let sample_rate = prepared.sample_rate;
         let grid = SourceTimebase::new(sample_rate, prepared.frame_count() as u64)
             .expect("validated playback grid");
@@ -665,9 +670,7 @@ impl AuditionSource {
         let cancelled = Arc::new(AtomicBool::new(false));
         let worker_cancelled = Arc::clone(&cancelled);
         let worker_controls = Arc::clone(&controls);
-        #[cfg(test)]
-        count_playback_work(2);
-        let worker = std::thread::spawn(move || {
+        let worker = crate::worker_lifetime::spawn_untracked(move || {
             let reclaim = || {
                 for _ in 0..PLAYBACK_BLOCKS {
                     match retired.try_recv() {
@@ -725,7 +728,14 @@ impl AuditionSource {
                     }
                 }
             }
-        });
+        })
+        .map_err(|error| {
+            RenderBlocker(format!(
+                "Could not start playback; press Play to retry: {error}"
+            ))
+        })?;
+        #[cfg(test)]
+        count_playback_work(2);
         let (loop_start, envelopes) = {
             let settings = controls.settings.read().unwrap();
             (settings.loop_start, Arc::clone(&settings.envelopes))
@@ -754,14 +764,14 @@ impl AuditionSource {
             failure: None,
             worker_stopped_error: Some(RenderBlocker("playback worker stopped".into())),
         };
-        AuditionPlayback {
+        Ok(AuditionPlayback {
             grid,
             source,
             worker: PlaybackWorker {
                 cancelled: Arc::clone(&cancelled),
                 handle: Some(worker),
             },
-        }
+        })
     }
     pub fn position_frame(&self) -> usize {
         self.controls.position_frame()
@@ -1096,7 +1106,7 @@ impl LiveAudition {
         controls.settings.write().unwrap().loop_start = (repeating && start < end).then_some(start);
         let AuditionPlayback {
             mut source, worker, ..
-        } = AuditionSource::prepare_stream(prepared.clone(), Arc::clone(&controls), end);
+        } = AuditionSource::prepare_stream(prepared.clone(), Arc::clone(&controls), end)?;
         source.persistent = true;
         player.append(source);
         player.play();
@@ -1209,6 +1219,39 @@ impl LiveAudition {
 mod tests {
     use super::*;
     use std::time::Instant;
+
+    #[test]
+    fn playback_worker_start_failure_is_retryable_without_losing_prepared_audio() {
+        let prepared = prepared_samples(&[vec![0.25; 512]], "start-failure");
+        crate::worker_lifetime::fail_next_spawn();
+        let result = prepared.playback(vec![], AuditionMode::Original, 1.0, 0, prepared.duration());
+        assert!(result.err().unwrap().to_string().contains("start playback"));
+        assert_eq!(prepared.read_frames(0..1).unwrap(), vec![vec![0.25]]);
+        let playback = prepared
+            .playback(vec![], AuditionMode::Original, 1.0, 0, prepared.duration())
+            .unwrap();
+        drop(playback);
+    }
+
+    #[test]
+    fn preparation_worker_start_failure_settles_and_retains_cached_audio() {
+        let cached = prepared_samples(&[vec![0.25; 512]], "preparation-start-failure");
+        let mut preparation = AuditionPreparation {
+            generation: 0,
+            cache: Some(cached.clone()),
+            job: None,
+            pending: None,
+        };
+        crate::worker_lifetime::fail_next_spawn();
+        preparation.request_sources(cached.sources.clone());
+        let error = preparation.poll().unwrap().err().unwrap();
+        assert!(error.to_string().contains("start audio preparation"));
+        assert!(!preparation.is_busy());
+        assert!(Arc::ptr_eq(
+            &cached.stems,
+            &preparation.cache.as_ref().unwrap().stems
+        ));
+    }
 
     // Track one live envelope allocation, including frees on the device thread.
     // All allocator operations still use System; the marker never allocates.
@@ -1769,7 +1812,8 @@ mod tests {
             prepared_samples(&[vec![1.0; 1024]], "changes"),
             Arc::clone(&controls),
             1024,
-        );
+        )
+        .unwrap();
         assert!((0..CONTROL_BLOCK).all(|frame| next_at(&mut source, frame) == Some(0.5)));
         let position = controls.position.load(Ordering::Relaxed);
         controls
@@ -1808,7 +1852,8 @@ mod tests {
                 ),
                 Arc::clone(&controls),
                 2048,
-            );
+            )
+            .unwrap();
             for (block, (solo, sum)) in [(0, 1.4), (1, 0.2), (5, 1.0), (2, 0.4), (0, 1.4)]
                 .into_iter()
                 .enumerate()
@@ -1923,7 +1968,8 @@ mod tests {
                 prepared_samples(&stems, "selection"),
                 Arc::clone(&controls),
                 1400,
-            );
+            )
+            .unwrap();
             for position in 123..123 + CONTROL_BLOCK {
                 let expected = stems
                     .iter()

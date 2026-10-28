@@ -1,5 +1,7 @@
 # GUI development
 
+Ticket 100: Sound presets use a registered dialog context and the four-value `SoundSettings` model. Project Save / Save As retain a named snapshot destination alongside local recovery; close/restart uses the same flow. See [extension and persistence guide](agents/sound-presets.md) for ownership, compatibility and the recovery-association warning. The Save button now uses shared action availability, including the existing speaker-popup shortcut context.
+
 New user commands must follow the [action and shortcut contract](agents/actions-and-shortcuts.md). Declare the command once, handle it through shared dispatch and use `action_control` for its button: Settings, reference entries and effective-binding hints then share its identity. Defaults are optional; an Unbound action remains customizable. Existing editing/dialog/legacy exceptions are individually inventoried rather than automatically inherited by new controls.
 
 ## Transport and waveform display

@@ -265,6 +265,9 @@ pub(crate) fn validate_calibration(
 }
 
 pub(crate) fn validate_parameters(p: AutomixParameters) -> Result<(), RenderBlocker> {
+    crate::SoundSettings::from(p)
+        .validate()
+        .map_err(|e| RenderBlocker(e.to_string()))?;
     if ![
         p.speech_sensitivity,
         p.bleed_discrimination_db,
@@ -278,11 +281,7 @@ pub(crate) fn validate_parameters(p: AutomixParameters) -> Result<(), RenderBloc
     .all(|v| v.is_finite())
         || !(0.0..=1.0).contains(&p.speech_sensitivity)
         || p.bleed_discrimination_db < 0.0
-        || !(-120.0..=0.0).contains(&p.attenuation_db)
         || p.speech_padding_ms < 0.0
-        || !(0.0..=60000.0).contains(&p.open_ms)
-        || !(0.0..=60000.0).contains(&p.close_ms)
-        || !(0.0..=60000.0).contains(&p.minimum_gap_ms)
     {
         return Err(RenderBlocker(
             "automix parameters must be finite, attenuation-only, and within valid ranges".into(),

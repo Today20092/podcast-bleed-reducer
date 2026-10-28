@@ -28,7 +28,7 @@ Mixed/modified folders, legacy manifests, development builds, removable/network 
 
 Open recordings directly from an SD card or another readable drive. CleanSlate opens originals for reading only; the card can remain write-protected. Keep it connected until processing finishes. A full local copy of the original recordings is not required.
 
-New projects autosave in local application storage: `%LOCALAPPDATA%/CleanSlate/Projects` on Windows, `~/Library/Application Support/io.github.Today20092.CleanSlate/Projects` on macOS, or `$XDG_DATA_HOME/cleanslate/Projects` (default `~/.local/share/cleanslate/Projects`) on Linux. Sources shows the current project path. Analysis copies and private processed WAVs use the neighboring `Work` directory, independently of the originals and export destination. These files use local disk space. Projects opened from outside local application storage, or marked read-only, open as new local editing copies; the old project remains unchanged. Reopen the displayed local project to continue those edits.
+New projects autosave local recovery copies in `%LOCALAPPDATA%/CleanSlate/Projects` on Windows, `~/Library/Application Support/io.github.Today20092.CleanSlate/Projects` on macOS, or `$XDG_DATA_HOME/cleanslate/Projects` (default `~/.local/share/cleanslate/Projects`) on Linux. First **Save project** asks for a folder and filename; subsequent saves update that named file. **Save as…** always offers another destination and makes it the next Save destination. Opening a named project retains that destination while edits autosave locally. Sources shows both locations and whether the named project has unsaved changes. Source audio is referenced, not copied. Analysis copies and private processed WAVs use the neighboring `Work` directory, independently of the originals and export destination. These files use local disk space. Cancellation or failed named saving retains the session and the last valid file. If named saving succeeds but local recovery cannot remember its destination, the app reports a warning: keep the named file and retry Save after local storage is writable.
 
 In Export, choose any writable parent location, including Downloads or an SD card. The dialog shows a new `CleanSlate export` folder inside that location, adding a number when needed. Existing files and original recordings are never replaced. Output is prepared privately on the destination volume, verified and flushed before the completed folder is published. A locked card can be an input, but cannot receive exports; choose a computer folder instead.
 
@@ -100,7 +100,11 @@ Lock keeps the playhead at a fixed horizontal position. While locked, middle-dra
 
 Minimizing the window suspends unnecessary drawing while audio and background analysis can continue. Restoring refreshes the playhead and visible result. See the [performance report](research/fabfilter-performance-final-review-2026-10-21.md) for measured scenarios and limits; these changes do not promise a particular frame rate or device latency.
 
-Save project persists labels, gain overrides, protections, review states and recipe identities. Opening a project validates sources; Analyze reconstructs its preview using reusable fixed evidence.
+Save project persists labels, gain overrides, protections, review states, sound values and recipe identities. Opening a project validates sources; Analyze reconstructs its preview using reusable fixed evidence.
+
+Keep the `.cleanslate` extension in the save chooser. A filename without it is rejected if the platform's chooser does not supply it, so overwrite confirmation always refers to the actual chosen file.
+
+**Presets…**, beside the transition controls, offers Default (-18 dB), Gentle (-12 dB) and Strong (-24 dB). All start with 50 ms to full volume, 500 ms to reduced volume and a 768 ms minimum gap. These are starting points to audition on your recording. Create named custom presets, apply them in other projects, or update, rename and delete them in the same dialog. Replacement, update and deletion ask for confirmation; factory presets can be copied under a custom name. Applying a preset is one change, with **Undo sound** and **Redo** available beside Presets. Mute, examples, analysis and manual edits stay with the current project. Saved projects retain actual values even if a preset changes later. Custom presets live locally beside application preferences; unsupported/corrupt preset files are preserved and reported.
 
 Final rendering applies the accepted effective envelopes at each source's native sample rate. Export verifies that accepted render's report, WAV hashes, source identities and saved project identity before encoding the selected delivery. Monitoring gain, Solo controls and comparison mode never enter exported audio. Label/model/source changes require current analysis; gain edits require a fresh render without repeating inference. Both final render and delivery can be cancelled. Incomplete or obsolete private attempts never replace prior deliverables. A published attempt that cannot be accepted remains beside the project as recovery material; deleting it is an explicit file operation.
 
@@ -126,6 +130,7 @@ Common defaults:
 | Open shortcut reference | Ctrl+/ |
 | Open Menu | Alt+M |
 | Save project | Ctrl+S on Windows/Linux, Command+S on macOS |
+| Save project as | Ctrl+Shift+S on Windows/Linux, Command+Shift+S on macOS |
 
 In Who is talking?, 1 through 8 toggles speakers, R clears the selected speakers, and S saves the example. Enter also saves; nobody selected means room tone. Popup bindings do not change the workspace monitoring choices. Text fields keep their typing keys, and held keys do not repeatedly toggle commands. Use Settings for the full command list and context rules.
 

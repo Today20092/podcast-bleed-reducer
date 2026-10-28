@@ -50,6 +50,134 @@ fn bindings(project: &Project) -> Vec<SourceBinding> {
 }
 
 #[test]
+fn preset_sound_changes_are_atomic_undoable_and_preserve_mute() {
+    let dir = temp_dir();
+    let mut project = session(&dir);
+    project
+        .add_reference_label(
+            TimeRange::new(0, TICKS_PER_SECOND / 4).unwrap(),
+            vec![project.sources[0].speaker_id],
+            &[],
+        )
+        .unwrap();
+    project
+        .protect_range(TICKS_PER_SECOND / 2, TICKS_PER_SECOND * 3 / 4)
+        .unwrap();
+    let references = project.reference_labels().to_vec();
+    let constraints = project.gain_constraints();
+    project
+        .set_parameters(AutomixParameters {
+            mute: true,
+            ..project.parameters()
+        })
+        .unwrap();
+    let before = project.parameters();
+    let mut sound = rust_app::SoundSettings::from(before);
+    sound.attenuation_db = -12.0;
+    sound.open_ms = 25.0;
+    assert!(project.apply_sound(sound).unwrap());
+    assert!(project.parameters().mute);
+    assert_eq!(project.reference_labels(), references);
+    assert_eq!(project.gain_constraints(), constraints);
+    assert_eq!(project.parameters().attenuation_db, -12.0);
+    assert!(!project.apply_sound(sound).unwrap());
+    let mut invalid = sound;
+    invalid.close_ms = f32::NAN;
+    assert!(project.apply_sound(invalid).is_err());
+    assert_eq!(project.parameters().close_ms, before.close_ms);
+    project.undo_sound().unwrap();
+    assert_eq!(project.parameters(), before);
+    project.redo_sound().unwrap();
+    assert_eq!(
+        Project::open(project.path()).unwrap().parameters(),
+        project.parameters()
+    );
+    project
+        .set_parameters(AutomixParameters {
+            mute: false,
+            ..project.parameters()
+        })
+        .unwrap();
+    let mut unmuted = rust_app::SoundSettings::from(project.parameters());
+    unmuted.attenuation_db = -24.0;
+    assert!(project.apply_sound(unmuted).unwrap());
+    assert!(!project.parameters().mute);
+    project.undo_sound().unwrap();
+    assert!(!project.parameters().mute);
+    fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn named_save_is_independent_of_recovery_and_failed_save_as_keeps_destination() {
+    let dir = temp_dir();
+    let mut project = session(&dir);
+    assert!(project.save_destination().is_none());
+    let recovery = project.path().to_owned();
+    let named = dir.join("named.cleanslate");
+    project.save_as(&named).unwrap();
+    let named = fs::canonicalize(named).unwrap();
+    let saved = fs::read(&named).unwrap();
+    assert_eq!(project.path(), recovery);
+    project
+        .set_parameters(AutomixParameters {
+            attenuation_db: -12.0,
+            ..project.parameters()
+        })
+        .unwrap();
+    assert_eq!(fs::read(&named).unwrap(), saved);
+    assert!(project.has_unsaved_changes());
+    assert!(
+        project
+            .save_as(&dir.join("missing/copy.cleanslate"))
+            .is_err()
+    );
+    assert_eq!(project.save_destination(), Some(named.as_path()));
+    project.save_named().unwrap();
+    assert!(!project.has_unsaved_changes());
+    let reopened = Project::open(&named).unwrap();
+    assert_eq!(reopened.save_destination(), Some(named.as_path()));
+    assert_eq!(reopened.parameters().attenuation_db, -12.0);
+    assert_eq!(reopened.sources[0].path, project.sources[0].path);
+    assert_eq!(
+        Project::open(&recovery).unwrap().save_destination(),
+        Some(fs::canonicalize(&recovery).unwrap().as_path())
+    );
+    assert!(project.save_as(&dir.join("voice.wav")).is_err());
+    let saved = fs::read(&named).unwrap();
+    assert!(project.save_as(&dir.join("named")).is_err());
+    assert_eq!(fs::read(&named).unwrap(), saved);
+    fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+#[cfg(windows)]
+fn named_save_reports_success_with_warning_if_only_recovery_association_fails() {
+    let dir = temp_dir();
+    let mut project = session(&dir);
+    let recovery = project.path().to_owned();
+    let original_permissions = fs::metadata(&recovery).unwrap().permissions();
+    let mut readonly = original_permissions.clone();
+    readonly.set_readonly(true);
+    fs::set_permissions(&recovery, readonly).unwrap();
+    let destination = dir.join("named.cleanslate");
+    project.save_as(&destination).unwrap();
+    assert!(project.save_warning().is_some());
+    assert_eq!(
+        project.save_destination(),
+        Some(fs::canonicalize(&destination).unwrap().as_path())
+    );
+    assert!(!project.has_unsaved_changes());
+    assert_eq!(
+        Project::open(&destination).unwrap().parameters(),
+        project.parameters()
+    );
+    fs::set_permissions(recovery, original_permissions).unwrap();
+    project.save_named().unwrap();
+    assert!(project.save_warning().is_none());
+    fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
 fn sound_values_validate_persist_and_legacy_settings_keep_finite_attenuation() {
     let dir = temp_dir();
     let mut project = session(&dir);
