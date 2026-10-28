@@ -191,7 +191,12 @@ pub fn storage_check(root: &Path, needed: u64) -> Result<()> {
     let mut volume = [0u16; 1024];
     let mut fs_name = [0u16; 64];
     let mut free = 0;
-    // Buffers are owned here and all Windows strings are NUL terminated.
+    // Win32 supplies volume type, filesystem and free-space facts unavailable through std::fs.
+    // SAFETY: full is NUL-terminated UTF-16; all buffers and free are initialized, exclusively
+    // borrowed for these synchronous calls, and remain alive throughout. Buffer capacities
+    // are passed in UTF-16 units. Short-circuit checks reject failed calls before reading
+    // their outputs; successful string outputs are NUL-terminated within those capacities.
+    // The remaining output pointers are optional and may be null; no pointer is retained.
     unsafe {
         if GetVolumePathNameW(full.as_ptr(), volume.as_mut_ptr(), volume.len() as u32) == 0
             || GetDriveTypeW(volume.as_ptr()) != 3
@@ -599,7 +604,14 @@ fn wait_parent(pid: u32, root: &Path, ready: &mut impl FnMut() -> Result<()>) ->
             QueryFullProcessImageNameW, WaitForSingleObject,
         },
     };
-    // Open before acknowledging readiness so PID reuse cannot change which process is awaited.
+    // std::process cannot open an existing PID; a Win32 handle pins the verified parent
+    // before readiness is acknowledged so PID reuse cannot change which process is awaited.
+    // SAFETY: OpenProcess returns an owned handle or null, which is rejected. Its access
+    // rights permit image queries and waiting. The initialized UTF-16 buffer and length
+    // stay live for the synchronous query; its input length is the capacity, and only a
+    // successful returned length (excluding the NUL) is used to read the buffer. No handle
+    // escapes, and it remains open until the wait ends. Exactly one CloseHandle follows
+    // every success or Result-error path after acquisition; a failed open needs no close.
     unsafe {
         let handle = OpenProcess(
             PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_SYNCHRONIZE,
