@@ -253,6 +253,137 @@ fn example_speakers(label: &crate::ReferenceLabel) -> String {
 #[cfg(test)]
 mod tests {
     #[test]
+    fn worker_start_failures_preserve_the_project_and_clear_pending_ui_states() {
+        use super::{CleanSlateApp, Command, Message, SourceRequest};
+        let (root, project, _audio) = export_fixture::session();
+        let mut app = CleanSlateApp {
+            preview_parameters: project.parameters(),
+            project: Some(project),
+            ..Default::default()
+        };
+        let saved = serde_json::to_value(&app.project).unwrap();
+
+        crate::worker_lifetime::fail_next_spawn();
+        app.begin_source_loading(SourceRequest::Open(root.join("not-opened.cleanslate")));
+        assert!(app.source_loading.is_none());
+        assert!(!app.import_dialog);
+        assert!(app.messages[0].contains("start source loading"));
+        assert_eq!(serde_json::to_value(&app.project).unwrap(), saved);
+
+        app.pending_imports.push(root.join("not-inspected.wav"));
+        app.import_due = Some(std::time::Instant::now());
+        crate::worker_lifetime::fail_next_spawn();
+        app.poll_sources();
+        assert!(app.source_inspection.is_none());
+        assert!(!app.import_dialog);
+        assert!(app.messages[0].contains("start source inspection"));
+        assert_eq!(serde_json::to_value(&app.project).unwrap(), saved);
+
+        crate::worker_lifetime::fail_next_spawn();
+        let _ = app.update(Message::AnalyzeReferences);
+        assert!(app.preview_processing.is_none());
+        assert!(app.preview_pending.is_none());
+        assert!(
+            app.preview_error
+                .as_deref()
+                .unwrap()
+                .contains("start analysis")
+        );
+        assert_eq!(serde_json::to_value(&app.project).unwrap(), saved);
+
+        app.update_dialog = Some(super::UpdateDialog {
+            prepared: Some(crate::updater::Prepared {
+                transaction: root.join("staged-update"),
+                recovery: root.join("not-started-helper"),
+                version: "test".into(),
+            }),
+            ..Default::default()
+        });
+        crate::worker_lifetime::fail_next_spawn();
+        let _ = app.update(Message::UpdateAction(Command::CheckUpdates));
+        assert!(!app.update_dialog.as_ref().unwrap().busy);
+        assert!(
+            app.update_dialog
+                .as_ref()
+                .unwrap()
+                .status
+                .lock()
+                .unwrap()
+                .contains("start update")
+        );
+
+        crate::worker_lifetime::fail_next_spawn();
+        let _ = app.update(Message::OpenLink(super::AppLink::Help));
+        assert!(
+            app.app_feedback
+                .as_deref()
+                .unwrap()
+                .contains("Open https://")
+        );
+        assert_eq!(serde_json::to_value(&app.project).unwrap(), saved);
+        drop(app);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn export_worker_start_failures_preserve_analysis_and_allow_retry() {
+        let (root, mut project, audio) = export_fixture::session();
+        let analysis = crate::EditorAnalysisWorker::default()
+            .analyze_acoustic_evidence(
+                &project,
+                &audio,
+                &std::sync::atomic::AtomicU8::new(0),
+                &std::sync::atomic::AtomicBool::new(false),
+            )
+            .unwrap();
+        let effective = analysis
+            .install(
+                &mut project,
+                &mut crate::EffectiveEnvelopeCache::default(),
+                None,
+            )
+            .unwrap();
+        let mut app = super::CleanSlateApp {
+            preview_parameters: project.parameters(),
+            project: Some(project),
+            supervised_result: Some(analysis),
+            effective_result: Some(effective),
+            ..Default::default()
+        };
+        let saved = serde_json::to_value(&app.project).unwrap();
+        crate::worker_lifetime::fail_next_spawn();
+        app.start_processing();
+        assert!(app.processing.is_none());
+        assert!(app.messages[0].contains("start WAV preparation"));
+        assert_eq!(serde_json::to_value(&app.project).unwrap(), saved);
+        app.start_processing();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+        while app.processing.is_some() {
+            app.poll_processing();
+            assert!(std::time::Instant::now() < deadline);
+            std::thread::yield_now();
+        }
+        assert!(app.export_ready(), "{:?}", app.messages);
+        let rendered = serde_json::to_value(&app.project).unwrap();
+        let destination = root.join("retry-delivery");
+        crate::worker_lifetime::fail_next_spawn();
+        app.export_to(destination.clone());
+        assert!(app.exporting.is_none());
+        assert!(app.messages[0].contains("start WAV saving"));
+        assert!(!destination.exists());
+        assert_eq!(serde_json::to_value(&app.project).unwrap(), rendered);
+        app.export_to(destination.clone());
+        while app.exporting.is_some() {
+            app.poll_exporting();
+            assert!(std::time::Instant::now() < deadline);
+            std::thread::yield_now();
+        }
+        assert!(destination.is_dir(), "{:?}", app.messages);
+        drop(app);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn embedded_application_icon_has_valid_rgba_dimensions() {
         iced::window::icon::from_rgba(include_bytes!("../assets/cleanslate.rgba").to_vec(), 64, 64)
             .expect("embedded application icon must remain valid");
@@ -6764,7 +6895,7 @@ impl CleanSlateApp {
         }
         let (sender, events) = mpsc::channel();
         let (publish, accepted) = mpsc::channel();
-        crate::worker_lifetime::spawn(move || {
+        if let Err(error) = crate::worker_lifetime::spawn(move || {
             let result =
                 load_sources(request, project, parameters, &sender).and_then(|mut loaded| {
                     // Preparation cannot change the saved project. Only the window's
@@ -6782,7 +6913,11 @@ impl CleanSlateApp {
                     Ok(Box::new(loaded))
                 });
             let _ = sender.send(SourceEvent::Finished(result));
-        });
+        }) {
+            self.import_dialog = false;
+            self.messages = vec![format!("Could not start source loading: {error}")];
+            return;
+        }
         self.source_loading = Some(SourceLoading {
             paths,
             waveforms: vec![],
@@ -6931,7 +7066,7 @@ impl CleanSlateApp {
                     .as_ref()
                     .map_or_else(Vec::new, Project::source_paths);
                 paths.extend(additions.iter().cloned());
-                crate::worker_lifetime::spawn(move || {
+                if let Err(error) = crate::worker_lifetime::spawn(move || {
                     let inputs = additions
                         .into_iter()
                         .map(|path| {
@@ -6961,7 +7096,11 @@ impl CleanSlateApp {
                         .collect::<Result<Vec<_>, String>>()
                         .map(|inputs| inputs.into_iter().flatten().collect());
                     let _ = sender.send(inputs);
-                });
+                }) {
+                    self.import_dialog = false;
+                    self.messages = vec![format!("Could not start source inspection: {error}")];
+                    return;
+                }
                 self.source_inspection = Some(SourceInspection {
                     paths,
                     result,
@@ -7108,7 +7247,7 @@ impl CleanSlateApp {
         let worker_cancel = cancelled.clone();
         let worker_progress = progress.clone();
         let worker_snapshot = snapshot.clone();
-        crate::worker_lifetime::spawn(move || {
+        if let Err(error) = crate::worker_lifetime::spawn(move || {
             let completed = (|| {
                 let private = crate::prepare_supervised_float_render(
                     &project,
@@ -7123,7 +7262,10 @@ impl CleanSlateApp {
             })()
             .map_err(|error: crate::RenderBlocker| error.to_string());
             let _ = sender.send(completed);
-        });
+        }) {
+            self.messages = vec![format!("Could not start WAV preparation: {error}")];
+            return;
+        }
         self.processing = Some(Processing {
             cancelled,
             progress,
@@ -7153,7 +7295,7 @@ impl CleanSlateApp {
         let cancelled = Arc::new(AtomicBool::new(false));
         let worker_cancel = cancelled.clone();
         let (sender, result) = mpsc::channel();
-        crate::worker_lifetime::spawn(move || {
+        if let Err(error) = crate::worker_lifetime::spawn(move || {
             let completed = (|| {
                 let private = crate::prepare_export_in_order(
                     &project,
@@ -7167,7 +7309,10 @@ impl CleanSlateApp {
             })()
             .map_err(|error: crate::RenderBlocker| error.to_string());
             let _ = sender.send(completed);
-        });
+        }) {
+            self.messages = vec![format!("Could not start WAV saving: {error}")];
+            return;
+        }
         self.exporting = Some(ExportProcessing { cancelled, result });
         self.messages = vec!["Checking and saving WAV files in the background.".into()];
     }
@@ -7337,7 +7482,7 @@ impl CleanSlateApp {
         let feedback = Arc::new(Mutex::new("Starting analysis".into()));
         let worker_feedback = feedback.clone();
         let (sender, result) = mpsc::channel();
-        crate::worker_lifetime::spawn(move || {
+        if let Err(error) = crate::worker_lifetime::spawn(move || {
             let completed = worker
                 .analyze_with_feedback(
                     &source_project,
@@ -7355,7 +7500,10 @@ impl CleanSlateApp {
                     )
                 });
             let _ = sender.send((completed, worker));
-        });
+        }) {
+            self.preview_error = Some(format!("Could not start analysis: {error}"));
+            return;
+        }
         self.analysis_details = None;
         self.analysis_details_open = false;
         self.preview_processing = Some(PreviewProcessing {
@@ -8616,7 +8764,7 @@ impl CleanSlateApp {
         let status = dialog.status.clone();
         let prereleases = dialog.prereleases;
         let (sender, receiver) = iced::futures::channel::oneshot::channel();
-        crate::worker_lifetime::spawn(move || {
+        if let Err(error) = crate::worker_lifetime::spawn(move || {
             let result = if command == CleanupUpdate {
                 crate::updater::cleanup(&previous.unwrap())
                     .map(|()| UpdateOutcome::Cleaned(crate::updater::eligible()))
@@ -8633,7 +8781,11 @@ impl CleanSlateApp {
                     .map(|offer| UpdateOutcome::Checked(offer, eligibility))
             };
             let _ = sender.send(result);
-        });
+        }) {
+            return self.update(Message::UpdateFinished(Err(format!(
+                "Could not start update work; the installed application was retained: {error}"
+            ))));
+        }
         Task::perform(
             async move {
                 receiver.await.unwrap_or_else(|_| {
@@ -10111,9 +10263,11 @@ impl CleanSlateApp {
             Message::OpenLink(link) => {
                 self.app_feedback = Some("Opening in your browser…".into());
                 let (sender, receiver) = iced::futures::channel::oneshot::channel();
-                crate::worker_lifetime::spawn(move || {
+                if let Err(error) = crate::worker_lifetime::spawn(move || {
                     let _ = sender.send(open_app_link(link));
-                });
+                }) {
+                    return self.update(Message::LinkOpened(link, Err(error.to_string())));
+                }
                 return Task::perform(
                     async move {
                         receiver
