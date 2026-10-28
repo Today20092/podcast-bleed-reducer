@@ -378,8 +378,15 @@ mod tests {
         job.retry();
         crate::worker_lifetime::fail_next_spawn();
         job.start();
-        assert!(job.error.as_deref().is_some_and(|error| error.contains("start import")));
-        assert!(job.events.is_none(), "failed launch cannot leave a busy receiver");
+        assert!(
+            job.error
+                .as_deref()
+                .is_some_and(|error| error.contains("start import"))
+        );
+        assert!(
+            job.events.is_none(),
+            "failed launch cannot leave a busy receiver"
+        );
         assert_eq!(job.sources, sources);
         job.retry();
         assert!(job.error.is_none());
