@@ -92,7 +92,7 @@ mod tests {
         }
         assert!(!active());
         fail_next_spawn();
-        assert!(spawn(|| ()).is_err());
+        assert!(spawn(|| {}).is_err());
         assert!(!active(), "a failed start must not keep close busy");
         for panic in [false, true] {
             let released = Arc::new(AtomicBool::new(false));
