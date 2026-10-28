@@ -22,6 +22,46 @@ Acceptance:
 
 ## Results
 
+### Worker checkpoint — 2026-10-28
+
+Owner-authorized memory cleanup stopped seven verified unused REA server
+processes. Available physical/commit headroom rose 7.77/6.53 -> 8.67/8.55 GiB;
+no application/service/cache change or threshold reduction. The pending worker
+test reached a missing-module RED, then GREEN; a separate stereo RED preceded
+independent-channel/max-confidence implementation. Fixed-capacity atomic SPSC
+queues use no unsafe shared storage, mutexes or CAS retry loops. Generation
+invalidation rejects queued/in-flight results across repeated/reused public
+epochs; input/result overflow and nonfinite input latch a fault until reset.
+Model preparation, fallible worker startup and joining teardown stay off callback.
+Offline synchronization is bounded to 500 ms and unavailable in realtime mode.
+
+All 15 library tests pass in receipt
+`20261028-181617-9484ac1a3da643a4be4279e39a556426`; formatting and strict
+library/test Clippy pass (`20261028-181729-24069531cf5f470cb782677fe33e3fa0`).
+Cleanup is verified. No dependency changed. This is worker-level evidence:
+callback remains unity, and no native-format/PDC/packaging/listening/UI acceptance
+is claimed. Ticket stays claimed; 94 stays blocked. Canonical report:
+`C:/Users/User/Documents/podcast-automix-rust-gui/docs/research/smart-gate-resumption-2026-10-28.md`.
+
+### Resumption — 2026-10-28
+
+The owner requests continuing 93 and permits sonible research if needed; the
+existing evidence is sufficient for this worker/DSP slice. Canonical ownership
+remains in the primary development tracker. Current branch is
+`codex/smart-gate-realtime-93` at tested policy checkpoint `bb9e1a4`.
+
+The already-applied pending worker regression now covers 44.1/48/96 kHz and
+repeated resets with undrained evidence. It is unrun and requires the missing
+worker module. Native preflight measured 7.51 GiB available physical / 6.52 GiB
+commit, no compiler processes; no compile/index/inference/host followed below
+the fixed 8 GiB warm-build start threshold. No new RED/GREEN, callback integration
+or product qualification is claimed. No dependency or production source changed.
+
+Continue with the prepared worker RED once memory permits the unchanged
+8/3/2.5 GiB / 600-second warm guard and immediate >=6 GiB commit preflight.
+Canonical details and next slices are in
+`C:/Users/User/Documents/podcast-automix-rust-gui/docs/research/smart-gate-resumption-2026-10-28.md`.
+
 ### 2026-10-27 bounded gain-policy checkpoint
 
 The next test-first batch adds a public immutable-Event-to-gain module without

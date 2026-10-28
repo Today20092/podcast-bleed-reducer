@@ -1,5 +1,6 @@
 mod editor;
 pub mod gain;
+pub mod worker;
 
 use nice_plug::editor::dpi::LogicalSize;
 use nice_plug::plugin::ParamValue;

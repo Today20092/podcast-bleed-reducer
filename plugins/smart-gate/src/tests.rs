@@ -91,6 +91,157 @@ fn quiet_confidence_opens_a_previously_attenuated_gate_within_five_ms() {
 }
 
 #[test]
+fn offline_worker_reset_discards_old_evidence_and_delivers_the_new_epoch() {
+    use crate::worker::WorkerBridge;
+
+    for rate in [44_100, 48_000, 96_000] {
+        let frames = (512_u64 * u64::from(rate)).div_ceil(16_000);
+        let silence = vec![0.0; frames as usize];
+        let mut worker = WorkerBridge::prepare(rate, 1, ProcessMode::Offline).unwrap();
+        worker.reset(7);
+        assert!(worker.submit(&silence, None));
+        assert!(worker.wait_until_processed(frames));
+        // Leave epoch 7's real detector event queued when starting a new stream.
+        for epoch in [8, 9] {
+            worker.reset(epoch);
+            assert!(worker.pop_event().is_none(), "old evidence survived reset");
+            assert!(worker.submit(&silence, None));
+            assert!(worker.wait_until_processed(frames));
+            let fresh = worker
+                .pop_event()
+                .expect("fresh evidence after bounded offline wait");
+            assert_eq!(fresh.epoch, epoch, "wrong stream at {rate} Hz");
+            assert_eq!(fresh.end_16k, 512);
+            assert_eq!(fresh.available_at, frames);
+            assert!(fresh.probability.is_finite());
+            assert!(worker.pop_event().is_none());
+            // Queue another event so each reset rejects an undrained result.
+            assert!(worker.submit(&silence, None));
+            assert!(worker.wait_until_processed(frames * 2));
+        }
+    }
+}
+
+#[test]
+fn mono_worker_matches_direct_detector_across_host_block_sizes() {
+    use crate::worker::WorkerBridge;
+    use cleanslate_gate_detector::Detector;
+
+    let source: Vec<f32> = (0..4608).map(|i| (i as f32 * 0.07).sin() * 0.1).collect();
+    let mut direct = Detector::new(48_000).unwrap();
+    direct.reset();
+    let mut expected = Vec::new();
+    direct
+        .push(&source, |mut event| {
+            event.epoch = 51;
+            expected.push(event);
+        })
+        .unwrap();
+    for block in [127, 512, 1536] {
+        let mut worker = WorkerBridge::prepare(48_000, 1, ProcessMode::Offline).unwrap();
+        worker.reset(51);
+        let mut processed = 0;
+        for samples in source.chunks(block) {
+            assert!(worker.submit(samples, None));
+            processed += samples.len() as u64;
+            assert!(worker.wait_until_processed(processed));
+        }
+        let actual: Vec<_> = std::iter::from_fn(|| worker.pop_event()).collect();
+        assert_eq!(actual, expected, "host block size {block}");
+    }
+}
+
+#[test]
+fn worker_faults_hide_queued_evidence_until_reset_even_when_epoch_is_reused() {
+    use crate::worker::WorkerBridge;
+
+    let mut worker = WorkerBridge::prepare(48_000, 1, ProcessMode::Offline).unwrap();
+    for invalid in [vec![f32::NAN], vec![0.0; 8193]] {
+        worker.reset(7);
+        assert!(worker.submit(&[0.0; 1536], None));
+        assert!(worker.wait_until_processed(1536));
+        assert!(!worker.submit(&invalid, None));
+        assert!(worker.failed());
+        assert!(worker.pop_event().is_none());
+        assert!(!worker.submit(&[0.0; 1536], None));
+        worker.reset(7);
+        assert!(!worker.failed());
+        assert!(worker.submit(&[0.0; 1536], None));
+        assert!(worker.wait_until_processed(1536));
+        let fresh = worker
+            .pop_event()
+            .expect("reset should recover worker inference");
+        assert_eq!(fresh.epoch, 7);
+        assert_eq!(fresh.end_16k, 512);
+    }
+}
+
+#[test]
+fn stereo_worker_uses_both_channels_without_phase_cancellation() {
+    use crate::worker::WorkerBridge;
+    use cleanslate_gate_detector::Detector;
+
+    let right: Vec<f32> = (0..4608).map(|i| (i as f32 * 0.07).sin() * 0.1).collect();
+    for left in [
+        vec![0.0; right.len()],
+        right.iter().map(|sample| -sample).collect(),
+    ] {
+        let mut left_detector = Detector::new(48_000).unwrap();
+        let mut right_detector = Detector::new(48_000).unwrap();
+        let mut left_events = Vec::new();
+        let mut right_events = Vec::new();
+        left_detector
+            .push(&left, |event| left_events.push(event))
+            .unwrap();
+        right_detector
+            .push(&right, |event| right_events.push(event))
+            .unwrap();
+        let mut worker = WorkerBridge::prepare(48_000, 2, ProcessMode::Offline).unwrap();
+        worker.reset(4);
+        for (i, (l, r)) in left.chunks(1536).zip(right.chunks(1536)).enumerate() {
+            assert!(worker.submit(l, Some(r)));
+            assert!(worker.wait_until_processed((i as u64 + 1) * 1536));
+        }
+        for (l, r) in left_events.iter().zip(right_events) {
+            let event = worker.pop_event().expect("stereo evidence");
+            assert_eq!(event.epoch, 4);
+            assert_eq!(event.end_16k, l.end_16k);
+            assert_eq!(event.available_at, l.available_at);
+            assert_eq!(event.probability, l.probability.max(r.probability));
+        }
+        assert!(worker.pop_event().is_none());
+    }
+}
+
+#[test]
+fn worker_result_overflow_requires_reset_and_realtime_wait_never_arms_a_fault() {
+    use crate::worker::WorkerBridge;
+
+    let mut worker = WorkerBridge::prepare(48_000, 1, ProcessMode::Offline).unwrap();
+    worker.reset(4);
+    for frame in 1..=32 {
+        assert!(worker.submit(&[0.0; 1536], None));
+        assert!(worker.wait_until_processed(frame * 1536));
+    }
+    assert!(worker.submit(&[0.0; 1536], None));
+    assert!(!worker.wait_until_processed(33 * 1536));
+    assert!(worker.failed());
+    assert!(worker.pop_event().is_none());
+    worker.reset(5);
+    assert!(worker.submit(&[0.0; 1536], None));
+    assert!(worker.wait_until_processed(1536));
+    assert_eq!(worker.pop_event().unwrap().epoch, 5);
+    drop(worker);
+
+    let worker = WorkerBridge::prepare(48_000, 1, ProcessMode::Realtime).unwrap();
+    assert!(!worker.wait_until_processed(1536));
+    assert!(
+        !worker.failed(),
+        "realtime must return without entering the offline wait"
+    );
+}
+
+#[test]
 fn gate_has_distinct_stable_format_and_state_identity() {
     assert_eq!(SmartGate::CLAP_ID, "org.cleanslate.smart-gate");
     assert_eq!(SmartGate::VST3_CLASS_ID, *b"CleanSlateGate01");
