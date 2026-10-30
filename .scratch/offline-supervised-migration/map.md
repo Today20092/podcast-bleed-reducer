@@ -1,5 +1,15 @@
 # Plan the offline supervised CleanSlate migration
 
+2026-10-30 Podcast editor-close lifecycle source `fa1f3f4` passes its RED/GREEN
+and all 75 library tests. The component close boundary clears pending Catch up
+motion while preserving selection/follow; the actual Panel close callback is
+source-reviewed. Pinned-linker compilation, direct suite and formatting finalize
+normally under unchanged guards. Preserved executable SHA256:
+`012ef420ecf533e04a58dbc030f05cb7dbc450fafab190c0a2d96d1387118d8d`.
+This is component lifecycle evidence, not native hidden-window scheduling or
+ticket 103 completion. Gesture interruption, indicators, gain display,
+comparisons and native acceptance remain open on `Today20092/podcast-seek-resume`.
+
 2026-10-30 Gate arming lifecycle source `bdb94e9` passes its RED/GREEN and all
 18 library tests with finalized guarded receipts. The selected unit-test target
 links with the pinned Rust linker without the persistent MSVC helper; formatting
