@@ -20,6 +20,15 @@ Implement the owner's FabFilter/sonible quality target in the existing Podcast e
 
 ## Results
 
+2026-10-30 unfinished-gesture slice `4083b0f`: actual component pointer input
+RED/GREEN covers selection-drag, Alt-range zoom and Middle-pan across close/
+reopen. One cancellation path restores the committed selection and clears
+transient gestures for close and existing Escape/focus loss. All76 library tests
+and formatting pass with finalized cleanup-verified default guards.
+[Source, receipt and artifact pointers](../../../docs/research/podcast103-seek-2026-10-30.md#unfinished-gesture-close-slice).
+Clippy, indicators, Analysis gain, final comparisons and native acceptance remain;
+103 stays claimed and isolated.
+
 2026-10-30 editor-close slice `fa1f3f4`: an actual component-frame semantic RED
 then GREEN verifies the lifecycle boundary cancels the obsolete Catch up tween
 without changing viewport/selection/follow. Panel forwards its close callback.
