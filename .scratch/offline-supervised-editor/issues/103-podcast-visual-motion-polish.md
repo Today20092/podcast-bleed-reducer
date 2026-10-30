@@ -20,6 +20,15 @@ Implement the owner's FabFilter/sonible quality target in the existing Podcast e
 
 ## Results
 
+2026-10-30 restored-checkout continuation: source `595d0aa` fixes the saved
+backward host-seek RED; the targeted test passes (one passed, 73 filtered out).
+The default fresh-build guard then waited for actual job member VCTIP.EXE PID4112
+after Cargo exited0. Scoped cancellation and mutex release were verified; no
+finalized successful guard receipt or full-suite/native result is claimed.
+[Exact source, artifact hash and job evidence](../../../docs/research/podcast103-seek-2026-10-30.md#restored-checkout-continuation).
+Ticket109 owns the shared guard prerequisite. This slice remains isolated and
+103 remains claimed; permanent Podcast integration and other acceptance stay open.
+
 2026-10-30 scoped continuation: `codex/podcast103-seek` starts at exact `2b0595f`.
 The public egui/Session seek-interruption regression produced semantic RED:
 after a backward seek into the visible range, Catch up continued to its old
