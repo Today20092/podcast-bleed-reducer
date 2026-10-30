@@ -1,5 +1,17 @@
 # Plan the offline supervised CleanSlate migration
 
+2026-10-30 tested continuation: Podcast backward-seek fix `595d0aa` passes all
+74 library tests from preserved artifact
+`fab1a2c6127ec80fd47f5a3e1826abffd516ffa415488a84b700cb89dba35883`.
+The direct executable run finalized receipt
+`844f49a11ce642b69b72908ad31d801c` with root/command exit 0, no remaining job
+PIDs and verified cleanup. Product evidence is `2afd150` on
+`Today20092/podcast-seek-resume`; 103 remains claimed. The diagnostic Cargo
+run identified an actual owned `VCTIP.EXE` surviving root exit, reproduced by
+tiny MSVC compiler/linker probes. [109](../offline-supervised-editor/issues/109-resource-guard-completion.md)
+now has a concrete build-helper cause; no descendant is ignored and the
+normal MSVC build-completion blocker remains open. Product source stays separate.
+
 2026-10-30 continuation on `Today20092/finish-implement-spec`: restored the
 preserved Podcast seek and Gate 93 branches into managed worktrees after finding
 their former checkout directories contained only markers. Shared guard
