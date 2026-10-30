@@ -30,6 +30,23 @@ Implement the owner's FabFilter/sonible quality target in the existing Podcast e
 
 ## Results
 
+### Tested continuation — 2026-10-30
+
+Scoped `Today20092/podcast-seek-resume` now contains backward-seek cancellation
+`595d0aa`, close-animation cancellation `fa1f3f4` and shared gesture cancellation
+`4083b0f`. The last slice passes all 76 library tests and formatting with finalized
+guarded receipts, no remaining job PIDs and verified cleanup. Actual pointer
+tests cover selection, Alt range zoom and middle pan across component close/reopen;
+selection/follow and the interrupted viewport remain correct. Source review of
+the Panel forwarding is separate from native callback delivery/hidden scheduling.
+The preserved executable SHA256 is
+`9516b908db9c592c7db73bebb10505a99c5fc85c0efefeb1e5c795cfa66a48e8`, under
+`%LOCALAPPDATA%/CleanSlate/Podcast/Workflow103Checkpoints/20261030-gesture-close-green/`.
+The selected target uses 109's documented pinned-linker workaround; no default
+build policy changed. Indicators, bounded Analysis gain, final comparable captures,
+strict checks and native acceptance remain open. Shared bounded-query work is
+[110](110-bounded-gain-query.md); this ticket stays claimed.
+
 Current machine-green motion source `671c4b5c556bef51a6b1ccb53055f09e2943f274`: all 72 tests, formatting and targeted strict normal Clippy pass in receipt `20261027-105758-d786de06357743d2bef92408eb328502`. The finite 250 ms slide, local Reduced motion snap/stop behavior and existing navigation timing case are verified. The owner-authorized warm profile is fixed at 8 GiB start / 3 GiB running reserve / 2.5 GiB owned cap / 600 seconds, with immediate native physical >=8 / commit >=6 GiB preflight; script defaults are unchanged. Peak owned commit 1,801,764,864 bytes, minimum physical 11,908,128,768 bytes, minimum commit headroom 8,564,899,840 bytes, exit 0 and cleanup verified. A prior linker failure was repaired by reversible quarantine of the exact failed Podcast test incremental leaf, preserving other caches/dependencies and tested binaries; exact paths and receipts are in the report. The green test executable/source hash is preserved outside the worktree. This is not a normal plugin build or 103 completion. The heavy slot was released to 93; no further compiler/renderer/packaging work follows without coordinator grant.
 
 Remaining: hidden/seek/interruption completion, 110 ms indicators, actual visual refinement preserving the full 96 workflow, final comparable performance/captures, relevant format checks and independent review. Status remains claimed and all broader acceptance unchecked; permanent base is still `13e6dfd`. Native 80 and blocked 81–83 remain unchanged. Historical checkpoints below are retained rather than rewritten.
