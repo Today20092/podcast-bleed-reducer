@@ -1,5 +1,13 @@
 # Plan the offline supervised CleanSlate migration
 
+2026-10-30 implement-spec resumed on coordination branch
+`codex/implement-spec-2026-10-30`. One native preflight found 4.77 GiB physical /
+3.66 GiB commit, below unchanged requirements; no heavy process launched or
+retry occurred. Gate 93 is preserved at `0e8de06`, Podcast 103 at `2b0595f`.
+The latter already includes verified inline numeric controls and 73 tests;
+older pending-inline-control notes below are superseded. Both remain claimed,
+94 blocked. [Current frontier and limits](../../docs/research/implement-spec-resumption-2026-10-30.md).
+
 2026-10-28 Smart Gate 93 resumed after owner-authorized unused tool-server cleanup. Scoped worker `64c5525` and callback `af4d921` now perform real offline mono/stereo inference-to-gain processing; 17 library tests, formatting and strict library/test Clippy pass with verified guarded cleanup. [Receipt and remaining checks](../../docs/research/smart-gate-resumption-2026-10-28.md). No new native candidate, permanent Gate/desktop merge, native arming/readiness, deadline/PDC/runtime or listening acceptance. Larger native compilation preflight stopped at 9.76 GiB physical / 7.82 GiB commit, below its 10/9 GiB requirements; no threshold reduction or native launch. 93 stays claimed and 94 blocked. Earlier unity-callback notes describe prior source/native candidates.
 
 2026-10-28 [108](../offline-supervised-editor/issues/108-rust-guidelines-promotion.md) is done: [PR 24](https://github.com/Today20092/podcast-bleed-reducer/pull/24) passed all four platform checks and promoted the existing development backlog plus Rust corrections through merge f0ea4f0. Development is synchronized. AGENTS.md points to the canonical Google Rust skill; CONTRIBUTING.md documents optional NPX installation and use. Public package publication retains ticket 74's final-package/private-signing gates; ticket 100's remaining native acceptance and separate plugin lanes remain open.

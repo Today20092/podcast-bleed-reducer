@@ -1,5 +1,15 @@
 # Podcast visual, motion and performance refinement
 
+2026-10-30 reconciliation: retained clean scoped tip `2b0595f` is newer than
+the historical results below. Inline shared numeric controls at `90d30da` /
+`da703a5` already passed public UI RED/GREEN, all 73 tests, strict Clippy,
+formatting and six CPU captures, as recorded in that branch's report. Remaining
+work includes seek/hidden/interruption coverage, 110 ms indicators, bounded
+Analysis gain, final comparisons/native qualification and review. No heavy
+work ran today: coordinator preflight was below fixed memory requirements.
+See [resumption](../../../docs/research/implement-spec-resumption-2026-10-30.md).
+Status remains claimed; no broader acceptance is newly checked.
+
 Status: claimed
 Assignee: Codex
 Readiness: ready-for-agent

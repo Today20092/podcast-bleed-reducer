@@ -1,5 +1,12 @@
 # Single-input gate DSP and actual-format checks
 
+2026-10-30 resumption: scoped branch is preserved at documentation checkpoint
+`0e8de06` after callback source `af4d921`. One same-process native preflight
+found 4.77 GiB physical / 3.66 GiB commit, below fixed warm 8/6 and native 10/9
+requirements. No compiler/index/inference/host launched and no retry occurred.
+See [resumption](../../../docs/research/implement-spec-resumption-2026-10-30.md).
+93 remains claimed; 94 remains blocked; no new acceptance is claimed.
+
 Status: claimed
 Assignee: Codex (Gate realtime prototype)
 Readiness: ready-for-agent
