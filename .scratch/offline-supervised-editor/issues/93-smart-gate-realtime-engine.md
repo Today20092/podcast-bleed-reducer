@@ -22,6 +22,14 @@ Acceptance:
 
 ## Results
 
+### Resource preflight — 2026-10-30
+
+Resumption at clean `af4d921` stopped before heavy work: same-process native
+memory reported 4.77 GiB available physical / 3.66 GiB commit, below the fixed
+warm 8/6 and native 10/9 GiB preflight requirements. No compiler, indexer,
+inference, host, retry or threshold change ran. Existing tested source remains
+preserved; 93 stays claimed and 94 blocked. [Checkpoint](../../../docs/research/gate93-resume-2026-10-30.md).
+
 ### Callback checkpoint — 2026-10-28
 
 The offline mono/stereo callback regression reached real semantic RED (gain
