@@ -6,7 +6,8 @@ New-Item -ItemType Directory -Path $temporary | Out-Null
 $shell = (Get-Process -Id $PID).Path
 $marker = Join-Path $temporary 'descendant-completed.txt'
 $receipt = Join-Path $temporary 'completion.json'
-$childCommand = "Start-Sleep -Seconds 2; Set-Content -LiteralPath '$marker' -Value completed"
+$diagnostic = [IO.Path]::ChangeExtension($receipt, '.diagnostics.log')
+$childCommand = "`$timer=[Diagnostics.Stopwatch]::StartNew(); while (-not (Test-Path -LiteralPath '$diagnostic')) { if (`$timer.Elapsed.TotalSeconds -ge 6) { exit 23 }; Start-Sleep -Milliseconds 50 }; Set-Content -LiteralPath '$marker' -Value completed"
 $encodedChild = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($childCommand))
 $rootCommand = "Start-Process -FilePath '$shell' -ArgumentList @('-NoProfile','-EncodedCommand','$encodedChild') -WindowStyle Hidden; exit 17"
 try {
