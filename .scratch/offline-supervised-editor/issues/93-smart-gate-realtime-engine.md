@@ -78,6 +78,9 @@ and `git diff --check` pass. New strict Clippy and native hosts were not run.
 
 The tested executable and receipts are retained under
 `%LOCALAPPDATA%/CleanSlate/VerifiedBuilds/gate93/20261030-lifecycle/`.
+Behavioral source is committed at `bdb94e9`; its final documentation comment was
+clarified after compilation without changing behavior. Preserved test executable
+SHA256: `03a78fb905f0d8092aa5904947d1427aee15c4c42a2a0ce9fa8fff4d011a5134`.
 Native editor arming/readiness, fault/stale processing truth, runtime deployment,
 deadlines/PDC/listening and the rest of ticket 93 remain open. Ticket 94 stays
 blocked. The global compiler slot is released after this bounded slice.
