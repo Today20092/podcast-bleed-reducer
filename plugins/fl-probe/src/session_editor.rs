@@ -127,6 +127,17 @@ fn sample_at(x: f32, plot: Rect, start: i64, end: i64) -> i64 {
 impl SessionUi {
     pub(crate) fn editor_closed(&mut self) {
         self.catch_up = None;
+        self.cancel_gesture();
+    }
+
+    fn cancel_gesture(&mut self) {
+        if self.drag_anchor.take().is_some() {
+            self.selection = self.selection_before_drag;
+        }
+        self.selection_before_drag = None;
+        self.pan_anchor = None;
+        self.range_zoom = false;
+        self.zoom_range = None;
     }
 
     pub fn show(
@@ -923,13 +934,7 @@ impl SessionUi {
             self.zoom_range = None;
         }
         if ui.input(|input| input.key_pressed(egui::Key::Escape) || !input.focused) {
-            if self.drag_anchor.is_some() {
-                self.selection = self.selection_before_drag;
-            }
-            self.drag_anchor = None;
-            self.pan_anchor = None;
-            self.range_zoom = false;
-            self.zoom_range = None;
+            self.cancel_gesture();
         }
         if let Some((start, end)) = self.zoom_range.or(self.selection)
             && end > view.start
@@ -1571,6 +1576,80 @@ mod tests {
         );
         output.textures_delta.clear();
         plot
+    }
+
+    #[test]
+    fn closing_editor_cancels_unfinished_pointer_gestures() {
+        for (button, modifiers) in [
+            (egui::PointerButton::Primary, egui::Modifiers::NONE),
+            (egui::PointerButton::Primary, egui::Modifiers::ALT),
+            (egui::PointerButton::Middle, egui::Modifiers::NONE),
+        ] {
+            let context = egui::Context::default();
+            let original_selection = Some((800000, 900000));
+            let mut workspace = SessionUi {
+                selection: original_selection,
+                follow: 1,
+                ..Default::default()
+            };
+            let view = navigation_view();
+            navigation_frame(
+                &context,
+                &mut workspace,
+                &view,
+                vec![egui::Event::PointerMoved(Pos2::new(530.0, 200.0))],
+                modifiers,
+            );
+            navigation_frame(
+                &context,
+                &mut workspace,
+                &view,
+                vec![egui::Event::PointerButton {
+                    pos: Pos2::new(530.0, 200.0),
+                    button,
+                    pressed: true,
+                    modifiers,
+                }],
+                modifiers,
+            );
+            navigation_frame(
+                &context,
+                &mut workspace,
+                &view,
+                vec![egui::Event::PointerMoved(Pos2::new(430.0, 200.0))],
+                modifiers,
+            );
+            if button == egui::PointerButton::Primary && !modifiers.alt {
+                assert_ne!(workspace.selection, original_selection);
+            }
+            let interrupted_viewport = workspace.viewport;
+            workspace.editor_closed();
+            let reopened_context = egui::Context::default();
+            navigation_frame(
+                &reopened_context,
+                &mut workspace,
+                &view,
+                vec![
+                    egui::Event::PointerMoved(Pos2::new(700.0, 200.0)),
+                    egui::Event::PointerButton {
+                        pos: Pos2::new(700.0, 200.0),
+                        button,
+                        pressed: false,
+                        modifiers,
+                    },
+                ],
+                modifiers,
+            );
+            assert_eq!(
+                workspace.selection, original_selection,
+                "Closing must cancel {button:?}/{modifiers:?} without committing its draft selection"
+            );
+            assert_eq!(
+                workspace.viewport, interrupted_viewport,
+                "A release after reopening must not resume {button:?}/{modifiers:?} navigation"
+            );
+            assert_eq!(workspace.follow, 1);
+        }
     }
 
     #[test]
