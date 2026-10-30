@@ -1,5 +1,13 @@
 # Plan the offline supervised CleanSlate migration
 
+2026-10-30 Gate arming lifecycle source `bdb94e9` passes its RED/GREEN and all
+18 library tests with finalized guarded receipts. The selected unit-test target
+links with the pinned Rust linker without the persistent MSVC helper; formatting
+passes and the executable is preserved. [109](../offline-supervised-editor/issues/109-resource-guard-completion.md)
+records that bounded workaround and its limits. Native editor consent/readiness,
+runtime/host/PDC/deadline/listening acceptance remain open; 93 stays claimed and
+94 blocked. Source remains on `Today20092/gate93-resume`, separate from Desktop.
+
 2026-10-30 tested continuation: Podcast backward-seek fix `595d0aa` passes all
 74 library tests from preserved artifact
 `fab1a2c6127ec80fd47f5a3e1826abffd516ffa415488a84b700cb89dba35883`.

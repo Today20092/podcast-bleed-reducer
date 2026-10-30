@@ -18,6 +18,21 @@ Diagnose the two post-command guard stalls recorded in [the resumption receipt](
 
 ## Results
 
+Latest selected-target proof: Gate lifecycle source `bdb94e9` was compiled with
+the pinned Rust linker and passed all 18 library tests. Initial selected-target
+compile receipt `20261030-192712-6402e179b21c41e49b1f02ea627c2f56.json`
+completed with root/command exit 0, no remaining job PIDs and verified cleanup.
+GREEN compilation and full-suite receipts are
+`20261030-193511-f5c8d7449ae0480da812e81e7e00b950.json` and
+`20261030-193549-e7f29a8e46414a82964c846c29a95639.json`.
+The executable SHA256 is
+`03a78fb905f0d8092aa5904947d1427aee15c4c42a2a0ce9fa8fff4d011a5134`,
+preserved in `%LOCALAPPDATA%/CleanSlate/VerifiedBuilds/gate93/20261030-lifecycle/`.
+This supersedes the earlier pending selected-target check below. It verifies a
+scoped unit-test link/runtime workaround; ordinary MSVC builds, fresh native C
+dependencies and native plugin packaging retain their helper-completion blocker.
+No default linker, containment or completion policy changed. Ticket stays claimed.
+
 Claimed 2026-10-30 from integration `6877e73`. Scripts are excluded from graph indexing, so direct source inspection is used for this graph coverage gap.
 
 The ordinary pipe-launched completion probe and all existing disposable fixtures passed before any change. Historical stalled logs and artifacts were absent at their recorded paths. A PTY probe was refused by the execution provider before launch (Access denied). Those initial probes did not reproduce the stall; the later compiler/linker reproduction is recorded below.
