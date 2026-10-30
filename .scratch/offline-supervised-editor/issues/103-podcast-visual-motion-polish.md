@@ -20,6 +20,16 @@ Implement the owner's FabFilter/sonible quality target in the existing Podcast e
 
 ## Results
 
+2026-10-30 scoped continuation: `codex/podcast103-seek` starts at exact `2b0595f`.
+The public egui/Session seek-interruption regression produced semantic RED:
+after a backward seek into the visible range, Catch up continued to its old
+146000–226000 target instead of retaining the interrupted 73000–153000 range.
+Production code is unchanged. The outer resource guard did not complete after
+the test exited; its exact owning PowerShell process was cancelled, and global
+mutex release was verified. No GREEN or retry ran. See
+[the incomplete checkpoint](../../../docs/research/podcast103-seek-2026-10-30.md).
+Keep this failing-test branch isolated; ticket remains claimed.
+
 Post-app-recovery source `da703a556360f2862abc9f7ac27c0ea8d0bdbf7d` exposes real
 shared sound numeric controls inline and reserves compact footer space. Semantic
 RED was observed; all 73 library tests now pass, including value/unit clipping,

@@ -1071,6 +1071,60 @@ mod tests {
     }
 
     #[test]
+    fn host_seek_cancels_catch_up_without_changing_selection_or_follow() {
+        use crate::session_mode::integration_tests::{Fixture, direct_capture};
+        let fixture = Fixture::new(2);
+        for member in 0..2 {
+            direct_capture(fixture.engine(), member, 0, 160000, false);
+        }
+        let state = GuiState::new();
+        *state.capture.lock() = Some(fixture.engine().clone());
+        let probe = crate::FlProbe::default();
+        let context = egui::Context::default();
+        crate::editor::style(&context);
+        let mut workspace = SessionUi::default();
+        workspace_frame(&context, &mut workspace, &probe.params, &state, vec![]);
+        workspace.viewport = Some((0, 80000));
+        workspace.selection = Some((20000, 30000));
+        click_control(&context, &mut workspace, &probe.params, &state, "Catch up");
+        state
+            .playing
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+        state
+            .position
+            .store(150000, std::sync::atomic::Ordering::Relaxed);
+        let frame = |workspace: &mut SessionUi, now| {
+            let mut output = context.run_ui(
+                egui::RawInput {
+                    time: Some(now),
+                    screen_rect: Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(720.0, 560.0))),
+                    ..Default::default()
+                },
+                |ui| workspace.show(ui, &probe.params, None, &state),
+            );
+            output.textures_delta.clear();
+        };
+        frame(&mut workspace, 10.0);
+        frame(&mut workspace, 10.125);
+        let interrupted = workspace.viewport.expect("Catch up retains its visible range");
+        state
+            .position
+            .store(80000, std::sync::atomic::Ordering::Relaxed);
+        frame(&mut workspace, 10.250);
+        assert_eq!(
+            workspace.viewport,
+            Some(interrupted),
+            "Seeking inside the visible range cancels the old slide target"
+        );
+        assert_eq!(workspace.selection, Some((20000, 30000)));
+        assert_eq!(workspace.follow, 1, "Seeking retains Catch up mode");
+        assert_eq!(
+            state.position.load(std::sync::atomic::Ordering::Relaxed),
+            80000
+        );
+    }
+
+    #[test]
     fn catch_up_reduced_motion_snaps_and_stop_cancels_a_slide() {
         use crate::session_mode::integration_tests::{Fixture, direct_capture};
         let fixture = Fixture::new(2);
