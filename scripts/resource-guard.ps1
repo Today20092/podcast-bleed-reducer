@@ -31,7 +31,8 @@ if (-not $ReceiptPath) {
 $ReceiptPath = [IO.Path]::GetFullPath($ReceiptPath)
 New-Item -ItemType Directory -Path (Split-Path -Parent $ReceiptPath) -Force | Out-Null
 $logPath = [IO.Path]::ChangeExtension($ReceiptPath, '.log')
-if ((Test-Path -LiteralPath $ReceiptPath) -or (Test-Path -LiteralPath $logPath)) { throw 'Choose a new receipt path; existing evidence is never overwritten.' }
+$diagnosticPath = [IO.Path]::ChangeExtension($ReceiptPath, '.diagnostics.log')
+if ((Test-Path -LiteralPath $ReceiptPath) -or (Test-Path -LiteralPath $logPath) -or (Test-Path -LiteralPath $diagnosticPath)) { throw 'Choose a new receipt path; existing evidence is never overwritten.' }
 $timer = [Diagnostics.Stopwatch]::StartNew()
 $receipt = [ordered]@{
     schema_version=1
@@ -41,10 +42,13 @@ $receipt = [ordered]@{
     arguments=$ArgumentList
     working_directory=$WorkingDirectory
     log_path=$logPath
+    diagnostic_path=$diagnosticPath
     reason='guard-error'
     status='failed'
     exit_code=$null
     process_id=$null
+    root_exit_code=$null
+    remaining_process_ids=@()
     cleanup_verified=$true
     elapsed_seconds=0
     peak_private_bytes=0L
@@ -73,6 +77,12 @@ try {
     $receipt.process_id=$task.ProcessId
     while ($true) {
         $sample=$task.Sample(); $memory=[CleanSlate.Build.OwnedTask]::Memory()
+        $receipt.remaining_process_ids=@($sample.ProcessIds)
+        if ($null -ne $sample.RootExitCode -and $null -eq $receipt.root_exit_code) {
+            $receipt.root_exit_code=$sample.RootExitCode
+            # Persist once before waiting for real descendants, so a stalled run retains evidence.
+            Add-Content -LiteralPath $diagnosticPath -Value "Owned root exited: $($sample.RootExitCode); active job processes: $($sample.ActiveProcesses); job PIDs: $($sample.ProcessIds -join ',')"
+        }
         $receipt.peak_private_bytes=[Math]::Max($receipt.peak_private_bytes,[long]$sample.PrivateBytes)
         $receipt.peak_working_set_bytes=[Math]::Max($receipt.peak_working_set_bytes,[long]$sample.WorkingSetBytes)
         $receipt.peak_job_commit_bytes=[Math]::Max($receipt.peak_job_commit_bytes,[long]$sample.PeakCommitBytes)

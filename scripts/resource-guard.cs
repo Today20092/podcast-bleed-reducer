@@ -11,6 +11,8 @@ namespace CleanSlate.Build {
     }
     public sealed class TaskSample {
         public uint ActiveProcesses;
+        public int[] ProcessIds;
+        public uint? RootExitCode;
         public ulong PrivateBytes, WorkingSetBytes, PeakCommitBytes;
         public bool MemoryLimitHit;
     }
@@ -66,6 +68,7 @@ namespace CleanSlate.Build {
         [DllImport("kernel32.dll", SetLastError=true)] static extern uint ResumeThread(IntPtr thread);
         [DllImport("kernel32.dll", SetLastError=true)] static extern bool CloseHandle(IntPtr handle);
         [DllImport("kernel32.dll", SetLastError=true)] static extern bool GetExitCodeProcess(IntPtr process, out uint code);
+        [DllImport("kernel32.dll", SetLastError=true)] static extern uint WaitForSingleObject(IntPtr handle, uint milliseconds);
         [DllImport("kernel32.dll", SetLastError=true)] static extern IntPtr CreateIoCompletionPort(IntPtr file, IntPtr existing, UIntPtr key, uint threads);
         [DllImport("kernel32.dll", SetLastError=true)] static extern bool GetQueuedCompletionStatus(IntPtr port, out uint message, out UIntPtr key, out IntPtr value, uint timeout);
         [DllImport("kernel32.dll", CharSet=CharSet.Unicode, SetLastError=true)] static extern IntPtr CreateFile(string path, uint access, uint share, ref SecurityAttributes attributes, uint creation, uint flags, IntPtr template);
@@ -137,13 +140,18 @@ namespace CleanSlate.Build {
             uint message; UIntPtr key; IntPtr value;
             while (GetQueuedCompletionStatus(port, out message, out key, out value, 0)) if (message == 9 || message == 10) memoryLimitHit=true;
             var sample=new TaskSample { ActiveProcesses=Query<Accounting>(1).ActiveProcesses, PeakCommitBytes=Query<ExtendedLimits>(9).PeakJobMemory.ToUInt64(), MemoryLimitHit=memoryLimitHit };
+            uint wait=WaitForSingleObject(process, 0);
+            if (wait == UInt32.MaxValue) throw new Win32Exception(Marshal.GetLastWin32Error());
+            if (wait == 0) sample.RootExitCode=ExitCode;
             int capacity=4096, size=8+capacity*IntPtr.Size; IntPtr ids=Marshal.AllocHGlobal(size);
             try {
                 Check(QueryInformationJobObject(job, 3, ids, (uint)size, IntPtr.Zero));
                 int count=Marshal.ReadInt32(ids,4);
                 if (count > capacity) throw new InvalidOperationException("Owned process count exceeds accounting capacity.");
+                sample.ProcessIds=new int[count];
                 for (int i=0;i<count;i++) {
                     int id=checked((int)Marshal.ReadIntPtr(ids,8+i*IntPtr.Size).ToInt64());
+                    sample.ProcessIds[i]=id;
                     try { using (Process p=Process.GetProcessById(id)) { sample.PrivateBytes+=(ulong)p.PrivateMemorySize64; sample.WorkingSetBytes+=(ulong)p.WorkingSet64; } }
                     catch (ArgumentException) { } // The owned child exited between job accounting and the process read.
                     catch (InvalidOperationException) { }
