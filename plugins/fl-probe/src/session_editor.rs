@@ -231,9 +231,15 @@ impl SessionUi {
         };
         let columns = (ui.available_width() - 116.0).ceil().clamp(64.0, 2048.0) as usize;
         let position = state.position.load(std::sync::atomic::Ordering::Relaxed);
+        let moved_back = self.playhead.is_some_and(|previous| position < previous);
         self.playhead = (position >= 0).then_some(position);
         let playing = state.playing.load(std::sync::atomic::Ordering::Relaxed);
-        if !playing || self.follow != 1 || self.drag_anchor.is_some() || self.pan_anchor.is_some() {
+        if !playing
+            || moved_back
+            || self.follow != 1
+            || self.drag_anchor.is_some()
+            || self.pan_anchor.is_some()
+        {
             self.catch_up = None;
         }
         if playing
