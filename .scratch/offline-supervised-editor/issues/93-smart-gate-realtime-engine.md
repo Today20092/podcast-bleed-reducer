@@ -1,7 +1,7 @@
 # Single-input gate DSP and actual-format checks
 
 Status: claimed
-Assignee: Codex (Gate realtime prototype)
+Assignee: Codex (Gate realtime prototype; resumed arming/readiness slice)
 Readiness: ready-for-agent
 Type: task
 Blocked by: 92
@@ -21,6 +21,66 @@ Acceptance:
 - [ ] Inspect the inference-linked artifact's actual native imports, stage verified runtime prerequisites/applicable notices, and validate CLAP/VST3 loading/inference from candidate paths without Cargo-cache, developer PATH or incidental host-module assistance. Embedded model bytes alone do not make the native runtime self-contained.
 
 ## Results
+
+### Arming/readiness continuation — 2026-10-30
+
+Claimed on `Today20092/gate93-resume` from preserved `d03d3ab`. The first
+regression uses the existing public plugin lifecycle and temporary engineering
+arming interface: an inactive/deactivated instance cannot arm; a prepared
+instance requires explicit consent, and deactivation clears it. This checks
+readiness before native editor wiring without constructing a fake native frame.
+The existing editor cannot expose consent and still advertises unconditional
+pass-through; that wiring remains in this slice, separate from ticket 94 polish.
+Test preparation only: no Cargo/native/indexer launch, semantic RED or production
+change is claimed while the coordinator owns the execution gate.
+
+After execution grant, shared guard diagnostics were selectively integrated as
+`132bc6d` / `bfc1d46`. The default 14 GiB start / 8 GiB reserve / 6 GiB owned cap /
+1800-second compiler preflight passed at 19.30 GiB physical / 18.20 GiB commit.
+Guard receipt `20261030-192632-16f3ea728de744b785ce25f09c3342f6.json` then refused
+before launch because unrelated Android Cargo/rustc processes were active
+(Cargo 19340, rustc 19204; a different repository/toolchain). Process ID is null,
+peak owned commit is zero and cleanup verified. No compiler/test ran, no semantic
+RED is claimed, and no unrelated process was stopped.
+
+The planned invocation uses pinned Rust 1.99.0's existing `rust-lld.exe` only for
+the final selected unit-test target via `cargo rustc --lib --profile test` and
+the ordinary locked/offline/shared settings. Cargo documents final-target-only
+arguments at <https://doc.rust-lang.org/cargo/commands/cargo-rustc.html>.
+`shortcut:` this scoped command avoids the MSVC helper completion blocker under
+109; replace it with the ordinary product check after verified bounded MSVC
+helper completion. No persistent linker setting, toolchain or dependency changes.
+
+The unrelated compiler finished; one fresh same-policy preflight passed at
+20.21 GiB physical / 19.55 GiB commit. The final-target-only lld compile completed
+normally in 431.64 seconds, receipt
+`20261030-192712-6402e179b21c41e49b1f02ea627c2f56.json`: root/command exit 0,
+empty job PIDs and cleanup verified; peak owned job commit 989,896,704 bytes,
+minimum physical 15,199,465,472 / commit 12,336,652,288 bytes. This is actual
+Gate test-target evidence, not a default MSVC/native package fix.
+
+The prepared lifecycle test produced semantic RED (unprepared instance armed)
+in `20261030-193445-ecc11a58fcf544948fa0ebb5a96f4bbe.json`; nonzero exit was
+propagated with empty remaining job PIDs and cleanup verified. The shared
+`arm_experimental` now accepts consent only while its engine is prepared/active.
+The earlier temporary-consent/reset test now activates first, preserving its
+intended reset/persistence checks. No processing/UI/status behavior was changed.
+
+GREEN compilation `20261030-193511-f5c8d7449ae0480da812e81e7e00b950.json`
+completed in 16.18 compiler seconds. Targeted GREEN
+`20261030-193537-857b0cab6c04420091cc71e373a9ac29.json` and all 18 tests
+`20261030-193549-e7f29a8e46414a82964c846c29a95639.json` pass; the full suite
+took 4.95 test seconds, peak job commit 66,461,696 bytes, root/command exit 0,
+empty remaining job PIDs and cleanup verified. Inference tests and compilation
+used the unchanged default guard, with same-process physical/commit >=14 GiB
+preflights. Formatting `20261030-193605-8926ba7cb5ab443abc4ab920bc9b4188.json`
+and `git diff --check` pass. New strict Clippy and native hosts were not run.
+
+The tested executable and receipts are retained under
+`%LOCALAPPDATA%/CleanSlate/VerifiedBuilds/gate93/20261030-lifecycle/`.
+Native editor arming/readiness, fault/stale processing truth, runtime deployment,
+deadlines/PDC/listening and the rest of ticket 93 remain open. Ticket 94 stays
+blocked. The global compiler slot is released after this bounded slice.
 
 ### Resumed all-target check — 2026-10-30
 

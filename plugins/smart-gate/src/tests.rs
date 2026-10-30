@@ -11,6 +11,36 @@ fn a_new_experimental_gate_starts_bypassed() {
 }
 
 #[test]
+fn experimental_arming_requires_a_prepared_active_gate() {
+    let mut gate = SmartGate::default();
+    gate.arm_experimental();
+    assert!(
+        !gate.experimental_armed(),
+        "an unprepared gate cannot accept experimental arming"
+    );
+    assert!(gate.activate(
+        &SmartGate::AUDIO_IO_LAYOUTS[1],
+        &BufferConfig {
+            sample_rate: 48_000.0,
+            min_buffer_size: None,
+            max_buffer_size: 1536,
+            process_mode: ProcessMode::Offline,
+        },
+        &mut ActivationHost
+    ));
+    assert!(!gate.experimental_armed(), "activation is not consent");
+    gate.arm_experimental();
+    assert!(gate.experimental_armed());
+    gate.deactivate();
+    assert!(!gate.experimental_armed());
+    gate.arm_experimental();
+    assert!(
+        !gate.experimental_armed(),
+        "deactivated gate must require successful preparation before rearming"
+    );
+}
+
+#[test]
 fn restoring_any_saved_gate_state_requires_fresh_explicit_arming() {
     for schema in ["1", "2", "999", "\"invalid\""] {
         let mut saved = PluginState {
@@ -26,6 +56,16 @@ fn restoring_any_saved_gate_state_requires_fresh_explicit_arming() {
 #[test]
 fn experimental_arming_is_explicit_temporary_and_cleared_by_reset() {
     let mut gate = SmartGate::default();
+    assert!(gate.activate(
+        &SmartGate::AUDIO_IO_LAYOUTS[1],
+        &BufferConfig {
+            sample_rate: 48_000.0,
+            min_buffer_size: None,
+            max_buffer_size: 1536,
+            process_mode: ProcessMode::Offline,
+        },
+        &mut ActivationHost
+    ));
     assert!(!gate.experimental_armed());
     gate.arm_experimental();
     assert!(gate.experimental_armed());

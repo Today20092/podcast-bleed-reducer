@@ -52,9 +52,11 @@ impl Default for SmartGate {
 }
 
 impl SmartGate {
-    /// This consent is deliberately absent from parameters and saved state.
+    /// Ignores requests unless prepared and active; consent is never saved.
     pub fn arm_experimental(&self) {
-        self.armed.store(true, Ordering::Release);
+        if self.engine.is_some() {
+            self.armed.store(true, Ordering::Release);
+        }
     }
 
     pub fn experimental_armed(&self) -> bool {
