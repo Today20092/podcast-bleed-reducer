@@ -9,12 +9,21 @@ use nice_plug::prelude::*;
 use nice_plug_egui::{
     EguiEditor, EguiEditorState, EguiNiceSettings, RepaintNotifier, create_egui_editor,
 };
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 pub const BYPASS_ID: &str = "smart_gate_bypass";
 pub const STATE_KEY: &str = "org.cleanslate.smart-gate.state-version";
 pub const STATE_VERSION: u32 = 2;
+
+const CONSENT_MASK: u64 = 3;
+
+#[repr(u64)]
+enum Consent {
+    Unavailable,
+    Ready,
+    Armed,
+}
 
 #[derive(Params)]
 pub struct GateParams {
@@ -36,7 +45,7 @@ impl Default for GateParams {
 pub struct SmartGate {
     params: Arc<GateParams>,
     editor_state: Arc<EguiEditorState>,
-    armed: Arc<AtomicBool>,
+    consent: Arc<AtomicU64>,
     engine: Option<engine::Engine>,
 }
 
@@ -45,7 +54,7 @@ impl Default for SmartGate {
         Self {
             params: Arc::new(GateParams::default()),
             editor_state: EguiEditorState::from_size(LogicalSize::new(640.0, 440.0), 1.0),
-            armed: Arc::new(AtomicBool::new(false)),
+            consent: Arc::new(AtomicU64::new(Consent::Unavailable as u64)),
             engine: None,
         }
     }
@@ -54,13 +63,28 @@ impl Default for SmartGate {
 impl SmartGate {
     /// Ignores requests unless prepared and active; consent is never saved.
     pub fn arm_experimental(&self) {
-        if self.engine.is_some() {
-            self.armed.store(true, Ordering::Release);
+        let consent = self.consent.load(Ordering::Acquire);
+        if consent & CONSENT_MASK == Consent::Ready as u64 {
+            let _ = self.consent.compare_exchange(
+                consent,
+                (consent & !CONSENT_MASK) | Consent::Armed as u64,
+                Ordering::AcqRel,
+                Ordering::Acquire,
+            );
         }
     }
 
     pub fn experimental_armed(&self) -> bool {
-        self.armed.load(Ordering::Acquire)
+        self.consent.load(Ordering::Acquire) & CONSENT_MASK == Consent::Armed as u64
+    }
+
+    fn invalidate_consent(&self) {
+        // Changing generation retires a press/focus that predates this lifecycle boundary.
+        let _ = self
+            .consent
+            .try_update(Ordering::AcqRel, Ordering::Acquire, |consent| {
+                Some(consent.wrapping_add(CONSENT_MASK + 1) & !CONSENT_MASK)
+            });
     }
 }
 
@@ -95,7 +119,7 @@ impl Plugin for SmartGate {
             self.editor_state.clone(),
             RepaintNotifier::new(),
             EguiNiceSettings::new(),
-            editor::Panel::new(self.params.clone()),
+            editor::Panel::new(Arc::clone(&self.params), Arc::clone(&self.consent)),
         )
     }
 
@@ -118,7 +142,7 @@ impl Plugin for SmartGate {
         config: &BufferConfig,
         context: &mut impl ActivateContext<Self>,
     ) -> bool {
-        self.armed.store(false, Ordering::Release);
+        self.invalidate_consent();
         self.engine = None;
         if ![44_100.0, 48_000.0, 96_000.0].contains(&config.sample_rate) {
             return false;
@@ -133,19 +157,23 @@ impl Plugin for SmartGate {
             return false;
         };
         self.engine = Some(engine);
+        self.consent
+            .fetch_or(Consent::Ready as u64, Ordering::Release);
         context.set_latency_samples(0);
         true
     }
 
     fn reset(&mut self) {
-        self.armed.store(false, Ordering::Release);
+        self.invalidate_consent();
         if let Some(engine) = &mut self.engine {
             engine.reset();
+            self.consent
+                .fetch_or(Consent::Ready as u64, Ordering::Release);
         }
     }
 
     fn deactivate(&mut self) {
-        self.armed.store(false, Ordering::Release);
+        self.invalidate_consent();
         self.engine = None;
     }
 
@@ -166,7 +194,7 @@ impl Plugin for SmartGate {
 impl ClapPlugin for SmartGate {
     const CLAP_ID: &'static str = "org.cleanslate.smart-gate";
     const CLAP_DESCRIPTION: Option<&'static str> =
-        Some("Single-input pass-through prototype; speech gating is not enabled.");
+        Some("Experimental single-input speech gate; bypassed until explicitly armed.");
     const CLAP_MANUAL_URL: Option<&'static str> = Some(Self::URL);
     const CLAP_SUPPORT_URL: Option<&'static str> = None;
     const CLAP_FEATURES: &'static [ClapFeature] = &[

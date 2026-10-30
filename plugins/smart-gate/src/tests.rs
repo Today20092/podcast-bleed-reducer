@@ -41,6 +41,192 @@ fn experimental_arming_requires_a_prepared_active_gate() {
 }
 
 #[test]
+fn editor_arming_requires_a_click_and_keeps_bypass_enabled() {
+    let mut gate = SmartGate::default();
+    assert!(gate.activate(
+        &SmartGate::AUDIO_IO_LAYOUTS[1],
+        &BufferConfig {
+            sample_rate: 48_000.0,
+            min_buffer_size: None,
+            max_buffer_size: 1536,
+            process_mode: ProcessMode::Offline,
+        },
+        &mut ActivationHost
+    ));
+    let context = egui::Context::default();
+    let mut panel = editor::Panel::new(Arc::clone(&gate.params), Arc::clone(&gate.consent));
+    let output = draw_gate_panel(&context, &mut panel, Vec::new());
+    assert!(
+        !gate.experimental_armed(),
+        "opening the editor is not consent"
+    );
+    let button = output.shapes.iter().find_map(|shape| match &shape.shape {
+        egui::Shape::Text(text) if text.galley.job.text == "Arm experimental gate" => {
+            Some(text.pos + text.galley.size() / 2.0)
+        }
+        _ => None,
+    });
+    let position = button.expect("the actual editor must expose explicit experimental arming");
+    for pressed in [true, false] {
+        draw_gate_panel(
+            &context,
+            &mut panel,
+            vec![
+                egui::Event::PointerMoved(position),
+                egui::Event::PointerButton {
+                    pos: position,
+                    button: egui::PointerButton::Primary,
+                    pressed,
+                    modifiers: egui::Modifiers::NONE,
+                },
+            ],
+        );
+    }
+    assert!(
+        gate.experimental_armed(),
+        "the explicit editor click must arm"
+    );
+    assert!(
+        gate.params.bypass.value(),
+        "consent must not disable bypass"
+    );
+    let output = draw_gate_panel(&context, &mut panel, Vec::new());
+    assert!(output.shapes.iter().any(|shape| matches!(
+        &shape.shape,
+        egui::Shape::Text(text) if text.galley.job.text == "Bypassed · original audio"
+    )));
+    for _ in 0..2 {
+        for pressed in [true, false] {
+            draw_gate_panel(
+                &context,
+                &mut panel,
+                vec![egui::Event::Key {
+                    key: egui::Key::Tab,
+                    physical_key: None,
+                    pressed,
+                    repeat: false,
+                    modifiers: egui::Modifiers::NONE,
+                }],
+            );
+        }
+    }
+    for expected in [false, true] {
+        for pressed in [true, false] {
+            draw_gate_panel(
+                &context,
+                &mut panel,
+                vec![egui::Event::Key {
+                    key: egui::Key::Enter,
+                    physical_key: None,
+                    pressed,
+                    repeat: false,
+                    modifiers: egui::Modifiers::NONE,
+                }],
+            );
+        }
+        assert_eq!(
+            gate.experimental_armed(),
+            expected,
+            "focused Enter toggles consent"
+        );
+    }
+    gate.deactivate();
+    let output = draw_gate_panel(&context, &mut panel, Vec::new());
+    assert!(
+        output.shapes.iter().any(|shape| matches!(
+            &shape.shape,
+            egui::Shape::Text(text) if text.galley.job.text == "Not prepared · original audio"
+        )),
+        "the editor must report unavailable preparation after deactivation"
+    );
+}
+
+#[test]
+fn editor_lifecycle_interruptions_cancel_an_in_flight_arming_click() {
+    for interruption in ["reset", "reactivate"] {
+        let mut gate = SmartGate::default();
+        let config = BufferConfig {
+            sample_rate: 48_000.0,
+            min_buffer_size: None,
+            max_buffer_size: 1536,
+            process_mode: ProcessMode::Offline,
+        };
+        assert!(gate.activate(
+            &SmartGate::AUDIO_IO_LAYOUTS[1],
+            &config,
+            &mut ActivationHost
+        ));
+        let context = egui::Context::default();
+        let mut panel = editor::Panel::new(Arc::clone(&gate.params), Arc::clone(&gate.consent));
+        let output = draw_gate_panel(&context, &mut panel, Vec::new());
+        let position = output
+            .shapes
+            .iter()
+            .find_map(|shape| match &shape.shape {
+                egui::Shape::Text(text) if text.galley.job.text == "Arm experimental gate" => {
+                    Some(text.pos + text.galley.size() / 2.0)
+                }
+                _ => None,
+            })
+            .expect("explicit arming control");
+        let pointer = |pressed| {
+            vec![
+                egui::Event::PointerMoved(position),
+                egui::Event::PointerButton {
+                    pos: position,
+                    button: egui::PointerButton::Primary,
+                    pressed,
+                    modifiers: egui::Modifiers::NONE,
+                },
+            ]
+        };
+        draw_gate_panel(&context, &mut panel, pointer(true));
+        if interruption == "reset" {
+            gate.reset();
+        } else {
+            gate.deactivate();
+            assert!(gate.activate(
+                &SmartGate::AUDIO_IO_LAYOUTS[1],
+                &config,
+                &mut ActivationHost
+            ));
+        }
+        draw_gate_panel(&context, &mut panel, pointer(false));
+        assert!(
+            !gate.experimental_armed(),
+            "{interruption} must retire a gesture begun before the lifecycle change"
+        );
+        for pressed in [true, false] {
+            draw_gate_panel(&context, &mut panel, pointer(pressed));
+        }
+        assert!(
+            gate.experimental_armed(),
+            "a fresh click after {interruption} may arm"
+        );
+    }
+}
+
+fn draw_gate_panel(
+    context: &egui::Context,
+    panel: &mut editor::Panel,
+    events: Vec<egui::Event>,
+) -> egui::FullOutput {
+    let mut output = context.run_ui(
+        egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                egui::Pos2::ZERO,
+                egui::vec2(640.0, 440.0),
+            )),
+            events,
+            ..Default::default()
+        },
+        |ui| panel.show(ui),
+    );
+    output.textures_delta.clear();
+    output
+}
+
+#[test]
 fn restoring_any_saved_gate_state_requires_fresh_explicit_arming() {
     for schema in ["1", "2", "999", "\"invalid\""] {
         let mut saved = PluginState {

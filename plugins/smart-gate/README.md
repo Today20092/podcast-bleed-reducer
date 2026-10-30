@@ -2,20 +2,24 @@
 
 The last checked native candidate is a pass-through prototype for one mono/stereo
 insert. Current ticket 93 source connects the embedded speech detector, bounded
-worker and finite gain policy, with 17 passing library tests. No new native
+worker and finite gain policy, with 20 passing library/editor tests. No new native
 candidate has been built or qualified from this source. Automatic volume leveling
 is outside scope; there is no group/member, Session capture or desktop prerequisite.
 
 New/restored instances start bypassed. Processing additionally requires temporary
-explicit arming, currently available only through the Rust engineering API/tests;
-the existing editor does not expose arming yet. Reset/deactivation clear consent.
+explicit arming through the current editor or Rust engineering API. The editor's
+Arm / Disarm action is temporary and never changes saved Bypass. Activation/reset
+boundaries retire an in-flight arm click; deactivation makes arming unavailable.
+Headless pointer and keyboard checks pass; no new native editor is qualified.
 The -6 dB floor, confidence thresholds and 500 ms offline wait are engineering
 limits, not sound acceptance. Missing/invalid/stale evidence preserves original
 audio. Stereo uses two independent detectors and the greater confidence, applying
 one envelope to both outputs. No audio delay is introduced; detector/delivery
 delay and speech-onset preservation still need native measurement/listening.
 
-The compact editor identifies the prototype and exposes the saved Bypass control.
+The compact editor identifies experimental processing, saved Bypass and temporary
+consent. It reports unavailable preparation and original audio while bypassed;
+armed consent does not claim current inference or gain reduction.
 The full accepted [Gate design](../../docs/design/plugin-ui-contract.md) belongs
 to ticket 94 after detector/DSP qualification. A successful build is neither
 native UI acceptance nor evidence of a working speech gate.
@@ -81,9 +85,11 @@ installed nice-plug 0.4.2 / nice-plug-egui 0.6.0 source; the fork source control
 the actual trait signatures.
 
 Ticket 91 is done for its preserved pass-through candidate. Ticket 93 remains
-claimed: current source passes 17 library tests, formatting and strict library/test
-Clippy, including real offline non-unity callback processing, mono/stereo parity,
-block-size independence, bypass/reset and invalid-input fallback. Realtime
+claimed: current source passes 20 library/editor tests and formatting, including
+real offline non-unity callback processing, mono/stereo parity, block-size
+independence, bypass/reset, invalid-input fallback and actual pointer/keyboard
+consent interaction. Earlier worker/callback source passed strict library/test
+Clippy; that check has not been repeated for the new editor slice. Realtime
 allocation/deadline, actual CLAP/VST3 gating, native arming/readiness, standalone
 runtime packaging and listening acceptance remain open. No installed path or old
 candidate was replaced. See the canonical tracker/report for current receipts.
