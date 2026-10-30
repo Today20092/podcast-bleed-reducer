@@ -1,5 +1,15 @@
 # Plan the offline supervised CleanSlate migration
 
+2026-10-30 continuation on `Today20092/finish-implement-spec`: restored the
+preserved Podcast seek and Gate 93 branches into managed worktrees after finding
+their former checkout directories contained only markers. Shared guard
+diagnostics `e00b78f` pass the existing disposable suite and a real delayed-child
+completion regression. [109](../offline-supervised-editor/issues/109-resource-guard-completion.md)
+remains claimed: the historical stall is unreproduced, completion/containment
+semantics and resource limits are unchanged, and the next representative product
+run must retain root-exit and actual job-PID evidence. Product source remains
+separate; no native qualification, ticket closure or release is implied.
+
 2026-10-30 implement-spec resumed on coordination branch
 `codex/implement-spec-2026-10-30`. One native preflight found 4.77 GiB physical /
 3.66 GiB commit, below unchanged requirements; no heavy process launched or
