@@ -111,6 +111,7 @@ impl NiceEguiApp for Panel {
 
     fn editor_closed(&mut self) {
         self.context = None;
+        self.session_ui.editor_closed();
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _: &mut nice_plug_egui::Frame) {
