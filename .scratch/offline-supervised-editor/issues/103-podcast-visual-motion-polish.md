@@ -28,6 +28,11 @@ finalized successful guard receipt or full-suite/native result is claimed.
 [Exact source, artifact hash and job evidence](../../../docs/research/podcast103-seek-2026-10-30.md#restored-checkout-continuation).
 Ticket109 owns the shared guard prerequisite. This slice remains isolated and
 103 remains claimed; permanent Podcast integration and other acceptance stay open.
+The preserved source595d0aa executable then passed all74 library tests directly,
+without compiler/linker work, under the unchanged default guard. Finalized receipt
+`20261030-192408-844f49a11ce642b69b72908ad31d801c` records exit0, cleanup verified
+and no remaining processes. This excludes the uncompiled lifecycle RED draft and
+does not resolve the MSVC build-helper stall or claim native acceptance.
 
 2026-10-30 scoped continuation: `codex/podcast103-seek` starts at exact `2b0595f`.
 The public egui/Session seek-interruption regression produced semantic RED:
