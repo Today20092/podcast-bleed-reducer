@@ -710,7 +710,22 @@ fn touching_manual_constraints_have_explicit_right_endpoint_ownership_and_exact_
             .map(|sample| envelope.gain_at(sample))
             .fold((1.0_f32, 0.0_f32), |(lo, hi), g| (lo.min(g), hi.max(g)));
         assert_eq!(envelope.gain_bounds(start, end).unwrap(), expected);
+        assert_eq!(
+            envelope.gain_bounds_bounded(start, end, usize::MAX),
+            rust_app::BoundedGainBounds::Bounds(expected.0, expected.1),
+            "bounded queries preserve exact manual/protection extrema"
+        );
     }
+    assert_eq!(
+        envelope.gain_bounds_bounded(0, 153600, 0),
+        rust_app::BoundedGainBounds::TooDense,
+        "a zero edge budget refuses a dense effective envelope"
+    );
+    assert_eq!(
+        envelope.gain_bounds_bounded(153600, usize::MAX, 0),
+        rust_app::BoundedGainBounds::Empty,
+        "source clipping takes precedence over density"
+    );
     let mut replace = project.begin_gain_edit();
     replace.constraints.manual_edits.clear();
     replace.constraints.protections.clear();

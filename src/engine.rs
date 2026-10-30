@@ -431,6 +431,27 @@ mod preview_tests {
     }
 
     #[test]
+    fn bounded_gain_queries_refuse_legacy_retargets_before_evaluating() {
+        let envelope = GainEnvelope {
+            sample_count: 40,
+            sample_rate: crate::timebase::DETECTOR_SAMPLE_RATE,
+            effective: None,
+            points: vec![
+                GainPoint { sample: 0, gain: 0.25, alpha: 0.0, target: 0.25 },
+                GainPoint { sample: 10, gain: 0.75, alpha: 0.0, target: 0.75 },
+                GainPoint { sample: 20, gain: 0.5, alpha: 0.0, target: 0.5 },
+            ],
+        };
+        assert_eq!(envelope.gain_bounds_bounded(0, 40, 1), BoundedGainBounds::TooDense);
+        assert_eq!(envelope.gain_bounds_bounded(0, 40, 2), BoundedGainBounds::Bounds(0.25, 0.75));
+        assert_eq!(envelope.gain_bounds_bounded(10, 20, 0), BoundedGainBounds::Bounds(0.75, 0.75));
+        assert_eq!(envelope.gain_bounds_bounded(20, usize::MAX, 0), BoundedGainBounds::Bounds(0.5, 0.5));
+        for (start, end) in [(40, 50), (20, 20), (20, 10)] {
+            assert_eq!(envelope.gain_bounds_bounded(start, end, 0), BoundedGainBounds::Empty);
+        }
+    }
+
+    #[test]
     fn one_pole_matches_closed_form_and_retargets_from_current_gain() {
         let floor = 0.25;
         let regions = vec![
@@ -558,6 +579,17 @@ fn sequential_gain_matches_random_access_across_seeks() {
             envelope.gain_at(sample)
         );
     }
+}
+
+/// Result of an exact source-frame extrema query with an indexed edge budget.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum BoundedGainBounds {
+    /// Exact lower and upper linear gain in the clipped half-open range.
+    Bounds(f32, f32),
+    /// The clipped source range is empty or cannot be converted.
+    Empty,
+    /// The indexed candidate count exceeds the caller's budget.
+    TooDense,
 }
 
 impl GainEnvelope {
@@ -748,6 +780,14 @@ impl GainEnvelope {
             bounds = (bounds.0.min(gain), bounds.1.max(gain));
         }
         Some(bounds)
+    }
+
+    /// Query exact extrema while limiting the indexed candidate edges inspected.
+    /// The budget counts effective-envelope edges (including interval endpoints)
+    /// or legacy retargets strictly inside the clipped range, not output points.
+    pub fn gain_bounds_bounded(&self, start: usize, end: usize, _max_edges: usize) -> BoundedGainBounds {
+        // RED scaffold: budget refusal is deliberately absent until its test fails.
+        self.gain_bounds(start, end).map_or(BoundedGainBounds::Empty, |(low, high)| BoundedGainBounds::Bounds(low, high))
     }
 }
 
