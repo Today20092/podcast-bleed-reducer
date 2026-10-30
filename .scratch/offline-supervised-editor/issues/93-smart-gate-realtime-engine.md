@@ -29,6 +29,20 @@ Acceptance:
 
 ## Results
 
+### Resumed all-target check — 2026-10-30
+
+Fresh preflight recovered to 26.26 GiB physical / 28.69 GiB commit with no
+compiler processes. On unchanged source `0e8de06`, the guarded all-target test
+log reports 17 library tests passed and both example test targets passed (zero
+tests). The guard did not finalize after test completion; scoped Ctrl-C ended
+its session. No finalized success/cleanup receipt exists. Guard PID 17488 and
+its observed conhost 18364 were gone afterwards, no compiler remained, and the
+global heavy-task mutex was successfully acquired/released. The next build
+attempt had safely refused that still-held mutex; no native candidate was built.
+See [check evidence](../../../docs/research/gate93-check-2026-10-30.md).
+Status remains claimed; native arming, runtime packaging, host/PDC/deadline and
+listening acceptance remain open, and 94 remains blocked.
+
 ### Callback/worker checkpoint — 2026-10-28
 
 Owner-authorized cleanup stopped verified unused REA/Astro/shadcn tool servers
