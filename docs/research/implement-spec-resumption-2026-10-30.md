@@ -1,6 +1,31 @@
 # Implement-spec resumption — 2026-10-30
 
-Status: incomplete; compiler work blocked by the unchanged resource policy.
+Status: incomplete; memory recovered, but guarded process completion stalled twice.
+
+## Latest resumed attempt
+
+Fresh Gate preflight passed at 26.26 GiB available physical / 28.69 GiB commit.
+The unchanged guarded all-target test run reported 17 library tests passing,
+but did not finalize its receipt after test processes exited. Scoped cancellation
+and mutex verification completed; see [Gate evidence](gate93-check-2026-10-30.md).
+Observed console-host ancestry does not establish job membership or root cause.
+
+Podcast's isolated `codex/podcast103-seek` branch, based on `2b0595f`, preserves
+semantic RED checkpoint `294c1c1`. A public editor/Session regression confirms
+that a backward host seek during Catch up continues toward the obsolete target:
+expected viewport 73000–153000, actual 146000–226000. The guard again stalled
+after test exit; scoped cleanup and global mutex release were verified, without
+a finalized guard receipt. Production behavior was not changed; GREEN and
+integration remain pending. The child branch/worktree is retained because its
+failing regression is useful continuation context, not completed delivery.
+
+Stop further heavy checks until guarded completion can be diagnosed. Capture
+root exit status, job active-process count and actual job PID membership before
+changing completion semantics; waiting for real descendants remains required.
+No ticket closure, product merge, release or push follows from these checks.
+
+The earlier resource refusal below is historical and is superseded by the fresh
+successful preflights above.
 
 Coordination branch: `codex/implement-spec-2026-10-30`, based on development
 `523cc13`. Existing untracked attachments and ticket-100 screenshots are retained.
