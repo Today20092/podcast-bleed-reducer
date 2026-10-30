@@ -53,6 +53,14 @@ and must omit `ReceiptPath`. Its budget is the outer task's budget. Do not wrap 
 build in a lightweight test budget: the queue runner must validate the task's
 required policy before launch.
 
+If a command root exits while descendants remain, the guard still waits for the
+actual job to empty. It writes one adjacent `.diagnostics.log` with the root exit
+code, active job count and actual job PIDs immediately after observing root exit.
+The receipt records `diagnostic_path`, `root_exit_code` and the latest
+`remaining_process_ids`; these are diagnostics, not a relaxation of completion.
+`scripts/test-resource-guard-completion.ps1` checks delayed descendant completion
+and root failure propagation through the public guard command.
+
 Small disposable tests use explicit budgets of 0.125–0.5 GiB and physical/commit
 reserves of 1 GiB. These are separate test budgets, not relaxed build defaults.
 Run `./scripts/test-resource-guard.ps1`; it retains evidence in a new temporary
