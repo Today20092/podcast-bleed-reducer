@@ -100,7 +100,7 @@ restoration, which still forces bypass and never restores temporary arming.
 Sources: `git show 4afa18a:plugins/smart-gate/src/lib.rs`, `gain.rs`, `engine.rs`
 and `history.rs`. No claim about that actor's later uncommitted GUI is made.
 
-The actual detector is fixed embedded **Silero VAD v5**, not a per-person model.
+The actual detector is fixed embedded **Silero VAD v6.2 (hash verified)**, not a per-person model.
 It consumes 512 new 16 kHz samples per inference (32 ms), with past recurrent/FIR
 context and an asynchronous worker. Stereo takes the greater score from two
 independent detectors and applies one linked gain. It has no peer microphone
@@ -250,3 +250,64 @@ keep it in the supervised Desktop/Podcast path or first accept a new host input,
 training, latency and state contract for a separate feature. For this Gate,
 finish truthful controls, natural transitions, onset protection and holdout
 listening before claiming a competitive result.
+
+## Full-control recommendation outline, pending native findings
+
+This is a proposed original design, not an implementation ticket or a claim of
+vendor algorithm equivalence. Core and Advanced describe eventual presentation,
+not permission to omit Advanced features from the user's requested analysis.
+The manual defines the documented controls on
+[pp.7–12](https://www.sonible.com/wp-content/uploads/2023/09/manual-smgate_EN.pdf#page=7).
+Native code/model findings must be integrated before selecting the final algorithm.
+
+| Feature | Proposed podcast mapping | Actual backend work and interactions |
+| --- | --- | --- |
+| Activity threshold — Core | One clearly directed Speech sensitivity control. Display detector confidence/activity separately from gain reduction. | Define a monotonic mapping to bounded opening/closing thresholds; preserve explicit hysteresis. Confidence is not calibrated speaker probability. Keep evidence epoch/freshness/fault checks upstream of every gain decision. |
+| Level Bias — Advanced | Level influence, initially speech-first; rising influence can deliberately reject quiet speech as well as bleed. | Add a documented level feature with smoothing and a meaningful reference (absolute dBFS or explicitly calibrated noise-relative level). Define and test the combination with VAD; it must not duplicate threshold or silently change with clip gain. No invented vendor equation. |
+| Tolerance — Advanced | Soft transition around activity threshold, separately named from timing and hysteresis. | Define a bounded activity-to-target-gain curve, its exact endpoints and threshold-zero behavior. Hysteresis controls chatter, tolerance controls the curve, Attack/Hold/Release controls time. Avoid three controls that all unknowably alter the same boundary. |
+| Impact — Core via Range | Use maximum reduction in dB as the single strength control. No extra opaque Impact knob. | Current Range0–6dB already sets a floor. Extending it to deeper reduction or full closure changes preservation risk and needs an explicit floor/mute endpoint, smoothing and lost-word listening checks. A vendor percent has no established dB conversion. |
+| Attack / Hold / Release — Core | Opening, pause preservation, and closing. Keep today's5/300/250ms as compatibility values, not newly established optimal defaults. | Parameterize the existing sample-rate-aware ramps/hold, with bounded values and smooth automation. Speech arriving during release must reopen; repeated boundaries and block-size changes must not restart ramps incorrectly. Faster Attack cannot recover speech preceding causal detection. |
+| Three-band suppression / crossovers / enable / solo — Advanced | Low/mid/high reduction shaping for rumble, voice body and breath/air; all neutral initially. | Add complementary reconstructing crossovers and independent smooth per-band gains. Define whether controls alter floor or envelope response; do not label a static EQ as equivalent. Bound crossover ordering, preserve neutral reconstruction and mono/stereo phase, and define solo behavior separately from saved cleanup settings. |
+| Gate / Duck — Advanced | Gate for mic cleanup; Duck for voice-over/music or a guide signal. | Invert the valid activity-to-gain mapping, not safety fallback. Missing, stale or faulted evidence must still produce safe unity. Clarify whether Attack/Release describe gain opening/closing or detector engagement; use one consistent contract. |
+| Internal / external sidechain — Advanced | Internal default; explicit external detector input for an independent clean guide mic. | Add and negotiate real CLAP/VST3 sidechain buses, validate channel/layout/source continuity and route only the detector input. Apply gain to main audio. Define absent sidechain fallback; do not silently use main input. External speech detection still does not identify which person owns the main mic. |
+| Mono / Side detection and processing — Advanced | Retain a phase-safe linked-stereo default for podcasts; offer deliberate Mono mix and Side-only options with clear labels. | Current both-channel analysis is not necessarily arithmetic mono mix. Mono can cancel anti-phase speech. Side-only needs a defined M/S normalization, analysis of S and reconstruction with M unchanged; unavailable for mono. Stereo link preserves image. Never claim Side mode identifies off-mic speakers. |
+| Difference monitoring — Core | Original / Processed / Removed audition, with unmistakable monitoring state. | Removed is sample-aligned input minus processed output. Preserve latency alignment, finite output, headroom and correct channel routing; changing monitor mode needs click-free switching. Audition choice must not accidentally persist into a destructive export or reset consent. |
+| Profiles / initialization — Core Speech; other profiles Advanced | Honest Speech mode and conventional level-gate fallback. Future vocal/music profiles require real models or measured processing distinctions. | Silero is a generic speech detector, not a person recognizer, breath classifier or laughter model. A UI preset can adjust thresholds/timing but cannot truthfully become a new target model. Any initialization must state exactly what is measured, preserve reset semantics and never imply voice training without an actual trainer. |
+| Presets / A-B or comparison states — Core workflow | Podcast starting points and two quick comparisons; more slots remain a workflow choice. | Stable versioned host parameters/state, validated ranges and migration; compare sound settings without reviving Arm consent. Decide whether model/calibration state is portable, and avoid stale worker evidence when changing analysis settings. Factory presets require listening, not marketing names alone. |
+
+Original grouping can be **Speech** (profile, sensitivity), **Shape** (Range,
+Attack/Hold/Release), **Advanced detection** (level influence, softness, routing,
+mode), **Advanced spectrum** (bands), and **Listen/Compare**. This is a later GUI
+handoff; backend contracts and both format adapters come first.
+
+Quiet speech, breaths, laughter and overlap are separate evaluation cases. Longer
+hold/release can preserve nearby non-speech sounds but does not make VAD detect
+them. A foreground/background voice problem cannot be solved reliably by adding
+more threshold knobs to generic VAD. Desktop's supervised synchronized multi-mic
+ownership evidence is a distinct potential advantage, currently absent from Gate.
+
+### Current artifact checkpoint for the eventual implementation ticket
+
+Read-only audit,2026-10-31: canonical source is a6ca1f6; GUI owner has subsequent
+uncommitted work. Live candidate124870c09ed24883bd715318b9c831f9 records a6ca1f6
+and both native formats hash to
+`6f74cc0182976c1386e7a39eabf6c7decd2c01b1e67fe67b83ef42234d48d2d5`.
+Installed links and the checked standalone shortcut still use2e3adbf,
+hash274eb182915506a685389cc9f0ca19b86e055859ab406f8b318f44efe4568e31.
+Latest armed native-editor attempts explicitly report UNQUALIFIED with unity gain;
+consent9→10 alone does not prove bypass off, current evidence or attenuation.
+The independent native-host diagnosis owns that unresolved issue.
+
+Last preserved full unit success found is30/30 at2212416, receipt002214-f643f3e7;
+later4afa test compilation004827 failed on missing `output` in tests.rs, while
+strict all-target Clippy005552 succeeded. These are historical checkpoints,
+not a latest-source full pass. Required narrow next evidence is actual load and
+armed attenuation, real parameter effect, state restore safety and fault/reset
+behavior in both formats. Do not expand this into a large matrix before fixing
+the demonstrated path.
+
+Model identity correction: the bundled2327524-byte ONNX SHA256
+`1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3`
+matches the official Silero v6.2 artifact at commit
+`be95df9152c0d7618fa1edfeb296fc3dae32376f`. Earlier repository v5 labels were
+stale; this correction does not describe a model upgrade.
