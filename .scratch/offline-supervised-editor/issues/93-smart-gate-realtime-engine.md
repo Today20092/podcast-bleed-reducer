@@ -29,6 +29,22 @@ Acceptance:
 
 ## Results
 
+2026-10-30 scoped native checkpoint: Gate DLL source `2e3adbf` builds and its
+uninstalled candidate is staged by `ef94023` with pinned DirectML, four verified
+MSVC redistributables and notices for both formats. Receipts distinguish plugin
+source, packaging source and expected plugin hash. Loader hosts `cdf5ce0` compile,
+pass strict example Clippy/formatting and pass actual isolated CLAP/VST3 positive
+and missing-sidecar cases in `223232-8c628442`. Both positives load the pinned
+candidate DirectML; both negatives explicitly reject an outside runtime (exit
+42). An independently reviewed regression corrected the original invalid
+any-failure negative checker. Three previously absent CRTs load from the
+candidate; VCRUNTIME140 is already loaded from System32. This proves the explicit
+engineering-host search strategy, not ordinary DAW deployment, independent CRT
+loading or armed inference. No installed link, prior candidate or release changed.
+Full provenance and remaining work are in the
+[continuation record](../../../docs/research/implement-spec-continuation-2026-10-30.md).
+93 stays claimed and 94 remains blocked.
+
 ### Resumed readiness verification
 
 Gate behavior `57e2cc2`, checkpoint `8f95ba8`, passes 25 tests, strict
