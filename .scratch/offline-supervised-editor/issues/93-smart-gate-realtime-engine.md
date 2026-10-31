@@ -24,6 +24,13 @@ Acceptance:
 
 ### Candidate-loader verification source prepared — 2026-10-30
 
+Follow-up diagnostics (source only): observed DirectML path now prints before
+the expected-sidecar lookup, so missing-sidecar fallback paths remain visible.
+The same existing CRT module helper reports before/after-Gate paths for all
+four CRT imports. This change has formatting/whitespace checks only; it has not
+been compiled or executed. The verified runtime checkpoint remains `80eac5c`
+and its preserved 20.51 s receipt below.
+
 Review correction: candidate and loaded runtime hashes are now compared against
 the reviewed `docs/licenses/directml-1.15.4-runtime.json` inventory, selectively
 preserved from the native-runtime branch. Both format sidecars are validated

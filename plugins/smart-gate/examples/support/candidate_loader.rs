@@ -17,11 +17,7 @@ mod windows {
         unsafe { GetModuleHandleW(name.as_ptr()) }
     }
 
-    pub fn configure(binary: &str) {
-        assert!(
-            module().is_null(),
-            "DirectML was already loaded before Gate"
-        );
+    fn report_crt(phase: &str) {
         for name in [
             "MSVCP140.dll",
             "MSVCP140_1.dll",
@@ -32,11 +28,22 @@ mod windows {
             // SAFETY: wide is a live, NUL-terminated module name.
             let handle = unsafe { GetModuleHandleW(wide.as_ptr()) };
             if !handle.is_null() {
-                println!("CRT_PRELOADED: {name}: {}", module_path(handle).display());
+                println!(
+                    "CRT_{phase}_PATH: {name}: {}",
+                    module_path(handle).display()
+                );
             } else {
-                println!("CRT_NOT_PRELOADED: {name}");
+                println!("CRT_{phase}_ABSENT: {name}");
             }
         }
+    }
+
+    pub fn configure(binary: &str) {
+        assert!(
+            module().is_null(),
+            "DirectML was already loaded before Gate"
+        );
+        report_crt("BEFORE_GATE");
         let binary = std::fs::canonicalize(binary).unwrap();
         let mut directory: Vec<_> = binary.parent().unwrap().as_os_str().encode_wide().collect();
         directory.push(0);
@@ -64,6 +71,8 @@ mod windows {
         let module = module();
         assert!(!module.is_null(), "Gate activation did not load DirectML");
         let loaded = module_path(module);
+        println!("DIRECTML_PATH: {}", loaded.display());
+        report_crt("AFTER_GATE");
         let expected = std::fs::canonicalize(
             std::path::Path::new(binary)
                 .parent()
@@ -75,7 +84,6 @@ mod windows {
             loaded, expected,
             "DirectML must resolve from the candidate sidecar"
         );
-        println!("DIRECTML_PATH: {}", loaded.display());
     }
 }
 
