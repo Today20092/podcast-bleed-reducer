@@ -127,3 +127,62 @@ No actual ONNX graph, topology, parameter count, sample rate, receptive field,
 normalization or trained-source identity is recovered by this tranche. The
 precise limit is a pointer/length/data identity plus export/container behavior;
 the main plugin's consumer/transform is still the missing link.
+
+## Follow-up: shared-region layout
+
+Ordinary non-REA `compare-layout.cjs` in the same external evidence directory
+compares exact bytes, without decoding. Its `payload-layout.json` records all
+58,634 matching runs, top-run hashes, all sixteen 16-byte alignments, 4 KiB window
+counts, input window and script identity. JSON SHA256:
+`99a71c5666ce1d288242f34a620ec8a93e5bb96ce4c5a581819f670eeacdcc54`.
+
+The 202,371 matching bytes are highly localized. Three runs account for 136,737
+of them; the largest alone accounts for 127,992. These regions are useful for
+tracing segment boundaries after any decoder is actually identified.
+
+| Matching-run length | Runs | Matching bytes |
+| --- | ---: | ---: |
+| 1 | 57,820 | 57,820 |
+| 2–3 | 740 | 1,656 |
+| 4–7 | 25 | 131 |
+| 8–15 | 5 | 52 |
+| 16–31 | 5 | 111 |
+| 32–63 | 6 | 328 |
+| 64–127 | 18 | 1,386 |
+| 128–255 | 8 | 1,298 |
+| 256–511 | 1 | 293 |
+| 512–1,023 | 3 | 2,559 |
+| 1,024–4,095 | 0 | 0 |
+| 4,096+ | 3 | 136,737 |
+
+Largest exact common regions, each start shared at the same offset in both files:
+
+| Payload-relative start | File start | Length | SHA256 |
+| --- | --- | ---: | --- |
+| `0xa8c` | `0x12f3c` | 127,992 | `3dc9f0c032188ad21375e8825c0edc59e91523b104613710e4df793b0a0b49fa` |
+| `0x13756c` | `0x149a1c` | 4,488 | `e5b05fe088a37614dd5725fd8c55bf215bd5f6999942fcf57ac15039a3d20b5c` |
+| `0xfc1f3` | `0x10e6a3` | 4,257 | `59e2f01afbac303eb764312de74f12e096d353a459c1dc6498f4f396f083ea18` |
+| `0x138dac` | `0x14b25c` | 920 | `2ef12cab289dda7ca9278cfb7f4ef2f98722e07e15b1b3abe122eef04f097044` |
+| `0x138a0c` | `0x14aebc` | 896 | `9f93029372b27d684c1836bcc0fae7282b221c3ab279a12187aa7bfbb3cd4f96` |
+| `0x139168` | `0x14b618` | 743 | `fcf389592526b12d6b07f36ff2de32ef9c861b015e7ef6b7f35d0b9823455ba1` |
+
+At payload-relative alignment zero, 8,876 of 80,201 complete 16-byte blocks match
+at the same position (11.067%). Across shifts 0–15 the rate remains approximately
+11.065–11.089%; there is no pronounced winning alignment in this simple test.
+Searching each Speech block against all Vocals blocks at relative alignment zero
+finds zero blocks that match only at a different index; 71,325 have no match.
+This tests a 16-byte-aligned grid, not arbitrary byte shifts or arbitrary chunks.
+It neither establishes nor excludes a block cipher, common submodel or packed
+tensor layout.
+
+The shared 52-byte prefix is not yet a recognized header. Reading its thirteen
+aligned 32-bit words in either endian order yields no small version/count value
+and no value within this 1,283,224-byte window. None identifies the export length.
+That narrow observation cannot exclude variable-length, unaligned, transformed
+or external metadata. No brute-force transformations were attempted.
+
+Actionable anchors for the main trace: inspect whether the consumer explicitly
+segments near relative `0xa8c` and `0x1fe84` (the end of the largest common run),
+and whether the near-tail runs correspond to decoded metadata only after actual
+dataflow/format evidence exists. Do not assign those regions operator or weight
+names from their lengths alone.
