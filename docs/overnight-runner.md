@@ -55,7 +55,7 @@ over newer files.
 
 Supported commands are deliberately narrow:
 
-- Cargo `build`, `test`, `clippy` and `fmt` retain the heavy resource policy.
+- Cargo `build`, `test`, `clippy` and `fmt` retain serialized execution and timeouts.
   Compilation/test commands require locked/offline dependencies, one job and
   the existing shared target/config. Later/duplicate job or profile/config
   overrides are rejected.
@@ -66,12 +66,12 @@ Supported commands are deliberately narrow:
   use explicit guarded Cargo commands instead.
 - An existing, hash-pinned `rust-app.exe --package-self-check` is supported.
   Direct plugin-host executables are excluded in favor of their maintained runner.
-- The fixed shipped `fixture` commands (`pass`, `fail`, `wait`, `memory-refusal`)
+- The fixed shipped `fixture` commands (`pass`, `fail`, `wait`)
   are disposable test seams. Additional source-mutation fixtures require an
   explicitly marked temporary repository. Fixtures accept no arbitrary shell
   code and cannot represent product acceptance.
 
-No command-string shell execution, caller-selected memory policy, DAW/vendor
+No command-string shell execution, caller-selected execution policy, DAW/vendor
 installation, shared-server deep REA, private signing, push/tag/release or installed
 link retargeting is provided. Unknown execution paths remain for agent/owner
 review. Source and selected command/input identities are checked again before
@@ -86,13 +86,12 @@ only after dependencies, workspace and all selected commands pass validation.
 Other owners and stale claims are never stolen automatically. Preparing a
 checkpoint before the claim keeps interrupted claim acquisition reviewable.
 
-Every command runs through [the resource guard](resource-guard.md), including
-commands whose scripts also use that guard. Builds keep 14 GiB available before
-start, 8 GiB physical/commit reserve, 6 GiB owned commit and a 30-minute deadline.
-Only the existing package self-check/plugin-host contract can use the fixed
-lightweight policy (2 GiB start, 1 GiB reserve, 0.5 GiB commit, 90 seconds).
-Disposable fixtures use a separate fixed 0.25 GiB/5-second policy. No Rust build
-can acquire that budget by labeling itself lightweight.
+Every command runs through [the execution wrapper](resource-guard.md), including
+scripts that also use it. The owner removed all memory thresholds, reserves and
+caps after upgrading to 40 GB RAM. Builds retain a 30-minute deadline; existing
+package self-check/plugin-host commands use 90 seconds and disposable fixtures
+use five seconds. No label can bypass compiler serialization or change the
+reviewed timeout policy.
 
 State defaults to `%LOCALAPPDATA%/CleanSlate/OvernightRuns/<run_id>`, or an explicit
 `-StateRoot` outside all source workspaces. Identity, per-ticket checkpoints and
@@ -125,11 +124,10 @@ before launch. A rejected identity retains an explicit unlaunched
 the rejected check and continue independent work.
 
 Missing prerequisites/SDKs or owner/agent work skip to independent ready tickets.
-Resource refusals/timeouts preserve outputs and may also skip to independent
-work. A later explicit resume gets at most one resource retry, and memory-start
-requirements must recover before that retry is consumed. Two resource-limited
-attempts exhaust the retry. No cache is wiped, policy relaxed, unrelated process
-killed or endless recovery loop started.
+Busy-task refusals and timeouts preserve outputs and may skip to independent
+work. A later explicit resume gets at most one retry. There is no memory-recovery
+preflight or wait. Two blocked attempts exhaust the retry. No cache is wiped,
+unrelated process killed or endless recovery loop started.
 
 The host chat cannot restart itself after cancellation/context/process loss.
 Checkpoints support a new supported session resuming the explicit runner command;
@@ -143,8 +141,8 @@ Run `scripts/test-overnight-runner.ps1` separately from a guarded build. It crea
 an isolated temporary Git repository, tickets/plans and small fixed commands.
 The suite covers dry-run order/dependencies/ownership, branch/commit mismatch,
 stale claims, verified restart, tracked/untracked edits, failed-test stop/resume,
-memory refusal, retained retry, maximum retry count, last-good backups, forbidden
-Cargo budget/override paths and competing coordinator exclusion. Evidence and
+timeout retry, maximum retry count, last-good backups, forbidden Cargo
+policy/override paths and competing coordinator exclusion. Evidence and
 failure receipts remain in the printed temporary directory. No real product is
 built or ticket claimed by these fixtures.
 
