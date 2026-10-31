@@ -2,8 +2,10 @@
 
 ## Silero VAD model
 
-`silero_vad.onnx` is the Silero VAD v5 model copied from the validated Python
-reference environment. It is distributed by the
+`silero_vad.onnx` is byte-identical to the official Silero VAD v6.2 model,
+originally copied from the validated Python reference environment. See the
+[verified provenance](../docs/research/silero-model-provenance-2026-10-31.md).
+It is distributed by the
 [`snakers4/silero-vad`](https://github.com/snakers4/silero-vad) project under
 the MIT license.
 
