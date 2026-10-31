@@ -162,8 +162,12 @@ adds a 48-unit control strip and uses default process DPI behavior. No global
 display setting changes. Physical presentation, realtime performance, ordinary
 DAW/PDC behavior and listening acceptance require separate evidence. This mode
 compiled successfully at `1297164`, with strict example Clippy and formatting
-passing. It has not yet been launched; ordinary coexistence invocation remains
-unchanged but also awaits execution after the shared ABI block extraction.
+passing. The bounded native attempt reached an exact-unity baseline and editor-
+ready log, but Windows automation was unavailable and no consent/input was sent.
+It ended at its own timeout with exit 101 and verified cleanup; real arming,
+native presentation and armed output remain unqualified. The ordinary coexistence
+invocation subsequently passed after the shared ABI block extraction, without
+opening a native editor.
 
 ## Source/checkpoint
 

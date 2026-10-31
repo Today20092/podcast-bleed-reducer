@@ -60,6 +60,40 @@ Host SHA256: `06d49321300e821a4de016ecb3b3db9485025ebfeff997e45ce9b69bc1871f01`.
 executed by this worker; the coordinator owns the real-GUI launch/observation
 handoff. The normal invocation also awaits execution after ABI block extraction.
 
+### Native attempt unqualified; normal regression verified — 2026-10-30
+
+The coordinator launched preserved host `1297164` against the prepared candidate.
+The first isolated preflight (`abcc1edfa89d4b41bccbd143150e1930`) stopped before
+launch because its sanitized PATH omitted Git. The corrected run used
+System32 plus Git/cmd, fresh CWD/LOCALAPPDATA and the existing loader policy that
+excludes PATH. Its evidence is under
+`20261030-native-editor-c163f73/runs/7adcf41afcf445b0a429bfa0a055d691/` in the
+preserved native-editor evidence root above.
+
+The actual ABI baseline rendered all 36,000 samples at bit-exact unity and
+reported zero latency/tail. The log reached `NATIVE_EDITOR_READY`. Both available
+Windows automation backends reported their native pipe unavailable; no consent
+click or render request was sent. The host completed its own 120-second timeout,
+stopped/detached, verified module paths, and exited 101 with no armed-output
+report. The wrapper records empty remaining PIDs and cleanup verified. DirectML
+and three CRTs resolved beside the candidate; startup VCRUNTIME140 remained from
+System32. This attempt is **UNQUALIFIED** for real consent, native presentation,
+armed processing, realtime deadlines, ordinary-host PDC and listening.
+
+The separately authorized normal VST3 regression then passed on the refactored
+preserved host with Gate's existing candidate and an immutable evidence copy of
+the known Probe 0.0.6 artifact. Probe SHA256 exactly matches the earlier committed
+navigation-delivery record:
+`94cf0dc682447677e1d942397dfc8aea929c9fe697a5a0035127968dace54aaa`.
+Its source/installed paths were only read. Fresh LOCALAPPDATA was scoped/restored;
+no GUI mode/window or installation was used by this regression. Final host and
+wrapper exits are 0 with the coexistence PASS contract, empty remaining PIDs and
+verified cleanup. This verifies IDs/state, bypass, mono/stereo, supported rates,
+realtime/offline unity and zero latency after shared ABI-helper extraction.
+Inputs, hashes, log and receipt are retained under
+`20261030-native-editor-c163f73/normal-regression/97c5cbf5b0074769b5b027fa75241f36/`.
+No additional source behavior was changed after these runs.
+
 ### Callback allocation/alignment continuation claimed — 2026-10-30
 
 Claimed on `codex/gate-native-runtime` after fast-forwarding consolidated Gate
