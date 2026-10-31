@@ -9,6 +9,14 @@
 
 CleanSlate is an offline microphone bleed-reduction tool for multitrack podcasts. It uses a supervised algorithm to learn from a few examples of who is speaking, then attenuate each microphone when its assigned person is silent. Listen to the result and adjust the gain where needed.
 
+## Products
+
+- **CleanSlate Desktop** is the standalone offline editor. [Download the desktop app](#download).
+- **CleanSlate Podcast** is a supervised multitrack post-production plugin in development.
+- **CleanSlate Smart Gate** is a single-input live speech-gating plugin in development.
+
+The desktop downloads below do not include the plugins. See [product boundaries and development branches](docs/plugin-products.md) for their scope and outstanding qualification.
+
 ## Purchase CleanSlate
 
 CleanSlate is free and open source. If it helps your podcast, [make an optional one-time purchase on Ko-fi](https://ko-fi.com/ayoubab1), choosing an amount that works for you. The complete application stays free whether you pay or not. You can also [support the project through GitHub Sponsors](https://github.com/sponsors/Today20092), with one-time and monthly options.
@@ -40,7 +48,7 @@ Earlier video: [CleanSlate alpha demo](https://youtu.be/OFSipS6v0w4).
 
 ## Download
 
-Choose your platform below. CleanSlate runs locally without Python, a model download or an internet connection. Links appear here when packages are published, including alpha prereleases. Draft releases are not public downloads.
+Choose a desktop package below. CleanSlate Desktop runs locally without Python, a model download or an internet connection. Links appear here when packages are published, including alpha prereleases. Draft releases are not public downloads.
 
 <!-- downloads:start -->
 | Platform | Download | How to run |

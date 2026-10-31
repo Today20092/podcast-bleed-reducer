@@ -10,6 +10,8 @@ Accepted by the owner on 2026-10-25. This separates the previous combined Sessio
 
 Smart Gate means speech-controlled attenuation; automatic voice-volume leveling is not in its initial scope. Podcast does not need live multitrack recording support. Both are separate products, not modes selected inside one shipping plugin. Product names are working names.
 
+The published [desktop downloads](../README.md#download) are for the standalone application. The plugins remain in development; source checkpoints and prototype host checks do not establish released or fully qualified plugin packages. Follow the [active map](../.scratch/offline-supervised-migration/map.md) for current acceptance status.
+
 ## Code and integration boundaries
 
 Each plugin branch has an independent Git worktree with its own source, working state and eventual product artifacts. The initial snapshots retain the full repository because the prototype depends on its maintained offline library by relative path. They do not require running the desktop GUI. This is a source-control/product separation, not a claim that the engine has already been fully extracted into UI-free crates.
