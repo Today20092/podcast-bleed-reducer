@@ -45,7 +45,7 @@ The preserved executable SHA256 is
 The selected target uses 109's documented pinned-linker workaround; no default
 build policy changed. Indicators, bounded Analysis gain, final comparable captures,
 strict checks and native acceptance remain open. Shared bounded-query work is
-[110](110-bounded-gain-query.md); this ticket stays claimed.
+[110](110-bounded-exact-gain-query.md); this ticket stays claimed.
 
 Current machine-green motion source `671c4b5c556bef51a6b1ccb53055f09e2943f274`: all 72 tests, formatting and targeted strict normal Clippy pass in receipt `20261027-105758-d786de06357743d2bef92408eb328502`. The finite 250 ms slide, local Reduced motion snap/stop behavior and existing navigation timing case are verified. The owner-authorized warm profile is fixed at 8 GiB start / 3 GiB running reserve / 2.5 GiB owned cap / 600 seconds, with immediate native physical >=8 / commit >=6 GiB preflight; script defaults are unchanged. Peak owned commit 1,801,764,864 bytes, minimum physical 11,908,128,768 bytes, minimum commit headroom 8,564,899,840 bytes, exit 0 and cleanup verified. A prior linker failure was repaired by reversible quarantine of the exact failed Podcast test incremental leaf, preserving other caches/dependencies and tested binaries; exact paths and receipts are in the report. The green test executable/source hash is preserved outside the worktree. This is not a normal plugin build or 103 completion. The heavy slot was released to 93; no further compiler/renderer/packaging work follows without coordinator grant.
 
