@@ -147,6 +147,11 @@ builds. Close produces `GUI_PREVIEW_CLOSED` after normal teardown. Do not run th
 user-close mode inside the bounded acceptance wrapper for a long GUI session.
 Compilation/normal regression must pass before the launch handoff; native
 presentation remains observational until that launch is inspected.
+The checked preview host is preserved under
+`%LOCALAPPDATA%/CleanSlate/VerifiedBuilds/gate93/20261030-gui-preview/` from source
+`aaf9f44`; selected build, strict example Clippy, formatting and normal coexistence
+regression pass. Use `host-artifact.json` there for its SHA256 and installed Gate
+argument. This worker has not launched the preview; root owns the UI handoff.
 
 The Windows-only optional mode `smart_gate_vst3_check.exe --native-editor <candidate VST3 binary>`
 embeds the actual editor in a new host-owned parent. It first configures bypass

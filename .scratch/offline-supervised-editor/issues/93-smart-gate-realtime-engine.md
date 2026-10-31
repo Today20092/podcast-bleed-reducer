@@ -40,6 +40,23 @@ handoff. Interactive preview must run outside the global compiler mutex, with
 bounded startup/READY observation, so GUI editing and subsequent builds can
 coexist. Source remains unverified until the focused checks below run.
 
+Clean source `aaf9f44` subsequently compiled the selected VST3 host in 3.58
+seconds. Strict example Clippy, formatting and ordinary VST3 coexistence
+regression all pass, using the newly installed user Gate VST3 bundle and the
+preserved known Probe copy. Successful wrappers record exit 0, empty job PIDs
+and verified cleanup. The normal run opens no editor and confirms the original
+IDs/state/bypass/mono-stereo/rates/realtime-offline/unity/latency contract remains.
+
+Preserved host/receipts:
+`%LOCALAPPDATA%/CleanSlate/VerifiedBuilds/gate93/20261030-gui-preview/`.
+Compiled source: `aaf9f44ac2ff4292580938efa7971a95a99817e1`.
+Host SHA256: `ad5b646877663d2dbd1e2192bf6ea422fe7cc215b35e9b1b7542e34777e8e65e`.
+`host-artifact.json` records the exact installed Gate path and both input hashes.
+The worker did not launch a GUI window; root received the checked explicit
+`--gui-preview` invocation and owns its bounded-startup/interactive handoff.
+Live preview presentation and user-close cleanup remain observational until
+that run occurs; no armed, realtime deadline or DAW PDC claim is added.
+
 ### Native VST3 consent verification preparation — 2026-10-30
 
 Claimed on `codex/gate-native-runtime` after callback evidence `25d384b`.
