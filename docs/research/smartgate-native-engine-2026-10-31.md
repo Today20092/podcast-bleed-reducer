@@ -152,3 +152,26 @@ Earlier attempts are preserved rather than erased: a first SDK-default 60-second
 Decompiler limitations mattered: a shared indirect-call/security thunk was incorrectly marked no-return, hiding valid fallthrough; some .pdata entries cover only a prologue fragment; inferred types hide tagged values and atomics. Important math/call flow was cross-checked with ordinary sequential assembly. A missing symbol-regex match, no direct caller or neighboring vtable is never treated as proof of absence or ownership.
 
 The recovered scope establishes architecture, authenticated graph structure, feature adaptation, in-place state feedback and substantial actual spectral/PostGate arithmetic. It does not establish training data/objective, calibrated class meaning, full public registry ranges/defaults, every callback's field binding, all mode/routing semantics, actual worker scheduling, cross-ISA numerical equivalence, measured host PDC/latency, subjective sound or quality superiority. Runtime audio and listening validation were outside this static investigation. Those limits do not invalidate the recovered code/model facts, and they should remain explicit when choosing our own design.
+
+## Final saved state and stop
+
+The owner-requested research is saved and all analysis workers are stopped.
+Explicit close completed normally with exit0; the owned driver, REA server,
+Ghidra JVM and known analysis children were verified absent, with no forced
+termination. No implementation ticket or plugin/GUI change followed this work.
+
+The final public Evidence bundle contains78 records (36,123,969 bytes); the close
+snapshot contains63 primitive entries and78 records (72,028,787 bytes). The
+after-close manifest inventories489 files and376,727,224 bytes. Under the
+completion evidence directory:
+
+- `final-cleanup-receipt.json`, SHA256 `3a3e65a9909d52dab016f7b361b879cd32c5f971beeac783d960bb21b89fc16e`.
+- `final-research-file-manifest.json`, SHA256 `8972fcc92136bac2239d4962d513e606fef60b2a04b641ba69e7ce22736ce166`.
+
+The supported Ghidra CPU performance settings remain available, with the original
+`launch.properties` preserved as `launch.properties.before-cpu32` in the earlier
+`smartgate-native-2026-10-31` evidence directory. Its SHA256 is
+`5a0fa4849ee760fa36fda8183be56c008bfb73199b9dc21359125e47abd6ae83`.
+The saved completion driver retains the reviewed error-continuation behavior,
+32GiB process-local heap and maximum supported timers; the short analysis
+deadlines and close-on-ordinary-tool-error policy were not restored.

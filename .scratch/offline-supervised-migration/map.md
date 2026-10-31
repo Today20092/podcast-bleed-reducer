@@ -1,5 +1,15 @@
 # Plan the offline supervised CleanSlate migration
 
+2026-10-31 RESEARCH COMPLETE / OWNER STOP AFTER REPORT: the
+[completed native report](../../docs/research/smartgate-native-engine-2026-10-31.md)
+and linked model, DSP, parameter and comparison reports are saved. Full Ghidra
+analysis succeeded; authenticated Speech/Vocals graphs and63 focused code
+dossiers establish the neural, spectral and PostGate processing with explicit
+remaining limits. Final export has78 Evidence records; owned processes closed
+normally and all analysis subagents stopped. No implementation ticket, plugin
+change or GUI change is authorized after this research. Resume only on a new
+owner instruction. The older live-session and failure records below are history.
+
 2026-10-31 OWNER RESUMPTION — native research only: the owner explicitly revokes
 the research stop, requests complete sonible VST3 reverse engineering and removes
 the artificial job deadlines/resource guards for that investigation. Use the
