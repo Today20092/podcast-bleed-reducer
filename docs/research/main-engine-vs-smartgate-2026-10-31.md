@@ -36,10 +36,14 @@ the playback callback.
 
 There are two distinct model layers:
 
-1. **Fixed embedded Silero VAD v5** supplies speech-presence evidence on512-sample
+1. **Fixed embedded Silero VAD v6.2** supplies speech-presence evidence on512-sample
    /32ms frames with64 past-context samples and recurrent state. Its weights are
    not trained by labels. `src/vad.rs::silero_frames`,
    `src/session_ownership.rs::analyze_acoustic_with_feedback`.
+
+   Version correction: the initial audit repeated the repository's `v5` label.
+   Subsequent [official tag/byte verification](silero-model-provenance-2026-10-31.md)
+   proves the unchanged asset matches v6.2. This corrects metadata, not weights.
 2. **One binary logistic regression per assigned track** learns local ownership
    from this session's labels using pinned `linfa-logistic0.8.1`. It standardizes
    varying features, fits L2-regularized coefficients/intercept, and verifies
