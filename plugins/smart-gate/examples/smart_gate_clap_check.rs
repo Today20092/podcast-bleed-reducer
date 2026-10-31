@@ -1,4 +1,6 @@
 //! Device-free Gate/probe coexistence, state and exact pass-through through the actual CLAP ABI.
+#[path = "support/candidate_loader.rs"]
+mod candidate_loader;
 use clap_sys::{
     audio_buffer::*,
     entry::*,
@@ -252,16 +254,22 @@ unsafe fn process(plugin: *const clap_plugin, channels: u32, frames: usize, in_p
 }
 
 fn main() {
-    let paths: Vec<_> = std::env::args().skip(1).collect();
+    let mut paths: Vec<_> = std::env::args().skip(1).collect();
+    let isolated = paths.first().is_some_and(|arg| arg == "--candidate-loader");
+    if isolated {
+        paths.remove(0);
+        assert_eq!(paths.len(), 1, "--candidate-loader <Gate binary>");
+        candidate_loader::configure(&paths[0]);
+    }
     assert_eq!(
         paths.len(),
-        2,
+        if isolated { 1 } else { 2 },
         "smart_gate_clap_check <Gate binary> <preserved probe binary>"
     );
     // Libraries, host callbacks and audio storage stay live until each instance is stopped/destroyed.
     unsafe {
         let gate = Bundle::load(&paths[0], "org.cleanslate.smart-gate");
-        let probe = Bundle::load(&paths[1], "org.cleanslate.fl-probe");
+        let probe = (!isolated).then(|| Bundle::load(&paths[1], "org.cleanslate.fl-probe"));
         let host = clap_host {
             clap_version: CLAP_VERSION,
             host_data: ptr::null_mut(),
@@ -274,9 +282,11 @@ fn main() {
             request_process: Some(request),
             request_callback: Some(request),
         };
-        let old = probe.create(&host);
-        state_round_trip(old, false);
-        ((*old).destroy.unwrap())(old);
+        if let Some(probe) = &probe {
+            let old = probe.create(&host);
+            state_round_trip(old, false);
+            ((*old).destroy.unwrap())(old);
+        }
         let plugin = gate.create(&host);
         state_round_trip(plugin, true);
         let gui = &*((*plugin).get_extension.unwrap())(plugin, CLAP_EXT_GUI.as_ptr())
@@ -319,6 +329,15 @@ fn main() {
             }
         }
         ((*plugin).destroy.unwrap())(plugin);
+        if isolated {
+            candidate_loader::verify(&paths[0]);
+        }
+    }
+    if isolated {
+        println!(
+            "PASS: isolated candidate-local DirectML load and CLAP activation; no arming or inference qualification."
+        );
+        return;
     }
     println!(
         "PASS: Gate/probe CLAP IDs coexist; independent state round trips; Gate bypass, mono/stereo, 44.1/48/96 kHz, in-place/separate buffers, exact unity and zero latency; editor contract only."

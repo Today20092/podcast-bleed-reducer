@@ -83,6 +83,23 @@ Gate mono/stereo, bypass, exact input/output bits, latency and block layouts.
 Their isolated caches remain available for review. No DAW, audio device or
 native editor window is opened by these tests.
 
+`scripts/test-smart-gate-loader.ps1 -PluginDirectory <candidate> -HostDirectory <preserved hosts>`
+prepares fresh copies of each candidate and host outside the Cargo cache. Each
+dedicated host process uses an empty working directory, isolated application
+data and System32-only PATH. Its `--candidate-loader <binary>` mode excludes
+application-directory, CWD and PATH DLL search, adds only the candidate binary's
+directory, and never loads the probe. Before loading Gate it rejects preloaded
+DirectML; after activation it checks the actual loaded DirectML path. The script
+compares its SHA256 with the source candidate and requires a second fresh process
+without the staged DirectML sidecars to fail. Fixtures and child logs are retained.
+The host reports the four imported MSVC CRT modules already loaded at startup,
+including their actual paths; these may mask candidate CRT sidecars.
+
+This explicit `AddDllDirectory` strategy verifies an engineering loader only.
+It does not establish that FL Studio, OBS or another ordinary host discovers the
+sidecars, nor does it prove candidate-local CRT loading, arming, inference or
+realtime behavior. Loader mode source is prepared; execution is still pending.
+
 Reserved future Windows links are `%COMMONPROGRAMFILES%/CLAP/CleanSlate Smart Gate.clap`
 and `%COMMONPROGRAMFILES%/VST3/CleanSlate Smart Gate.vst3`. They are distinct from
 probe and Podcast paths. This ticket/build script creates no installed links.

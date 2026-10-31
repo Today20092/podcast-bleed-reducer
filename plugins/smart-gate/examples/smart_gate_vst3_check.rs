@@ -1,4 +1,6 @@
 //! Device-free Gate/probe factory, state, bypass and audio checks using the actual VST3 ABI.
+#[path = "support/candidate_loader.rs"]
+mod candidate_loader;
 use std::{
     ffi::c_void,
     io::{Cursor, Read, Seek, SeekFrom, Write},
@@ -311,18 +313,24 @@ impl Drop for Instance {
 }
 
 fn main() {
-    let paths: Vec<_> = std::env::args().skip(1).collect();
+    let mut paths: Vec<_> = std::env::args().skip(1).collect();
+    let isolated = paths.first().is_some_and(|arg| arg == "--candidate-loader");
+    if isolated {
+        paths.remove(0);
+        assert_eq!(paths.len(), 1, "--candidate-loader <Gate binary>");
+        candidate_loader::configure(&paths[0]);
+    }
     assert_eq!(
         paths.len(),
-        2,
+        if isolated { 1 } else { 2 },
         "smart_gate_vst3_check <Gate binary> <preserved probe binary>"
     );
     // COM objects are released before factory/ExitDll and library unloading; streams and audio storage outlive every ABI call.
     unsafe {
         let gate = Bundle::load(&paths[0], *b"CleanSlateGate01");
-        let probe = Bundle::load(&paths[1], *b"CleanSlateProbe1");
-        assert_ne!(gate.id, probe.id);
-        {
+        let probe = (!isolated).then(|| Bundle::load(&paths[1], *b"CleanSlateProbe1"));
+        if let Some(probe) = &probe {
+            assert_ne!(gate.id, probe.id);
             let old = probe.create();
             old.state_round_trip(false);
         }
@@ -346,6 +354,15 @@ fn main() {
                 }
             }
         }
+        if isolated {
+            candidate_loader::verify(&paths[0]);
+        }
+    }
+    if isolated {
+        println!(
+            "PASS: isolated candidate-local DirectML load and VST3 activation; no arming or inference qualification."
+        );
+        return;
     }
     println!(
         "PASS: Gate/probe VST3 IDs coexist; independent state round trips; Gate bypass, mono/stereo, 44.1/48/96 kHz, realtime/offline, exact unity and zero latency; editor contract only."

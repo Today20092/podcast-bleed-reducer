@@ -22,6 +22,24 @@ Acceptance:
 
 ## Results
 
+### Candidate-loader verification source prepared — 2026-10-30
+
+Added an explicit `--candidate-loader` mode to both existing ABI hosts and
+`scripts/test-smart-gate-loader.ps1` accepting preserved candidate/host paths.
+The default coexistence checks remain intact. Dedicated processes exclude
+developer PATH/CWD/application-directory search, skip probe loading, reject
+preloaded DirectML, check the actual loaded candidate-local module path and
+SHA256, and require a missing-sidecar negative control to fail. CRT startup
+module paths are reported, not qualified. No dependencies or arming seam added.
+
+PowerShell parser, path-prefix normalization self-check and diff whitespace
+check pass; Rust examples were formatted with the pinned rustfmt. Compilation
+and actual candidate/negative-control execution are pending the shared compiler
+slot and native staging. No PASS receipt or runtime acceptance is claimed.
+`AddDllDirectory` is an explicit engineering-host strategy; ordinary DAW runtime
+discovery, candidate-local CRT loading, actual armed inference and realtime
+qualification remain open.
+
 ### Resumed source-valid detection feedback — 2026-10-30
 
 Verified source `57e2cc2` distinguishes waiting for current detection data from
