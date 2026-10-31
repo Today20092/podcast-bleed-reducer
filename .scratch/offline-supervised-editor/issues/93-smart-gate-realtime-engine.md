@@ -22,6 +22,20 @@ Acceptance:
 
 ## Results
 
+### Local development delivery — 2026-10-30
+
+Owner requested making Smart Gate locally usable. After merging verified
+native/preview source `54dfcf5`, reviewed helper `648f016` validated the immutable
+`2e3adbf` preview, full inventory and safe defaults. Global CLAP permission was
+denied; both formats were linked in official per-user plugin directories, with
+exact format SHA256 `274eb182915506a685389cc9f0ca19b86e055859ab406f8b318f44efe4568e31`.
+Probe/Podcast before/after links and bytes match; no host was closed/launched,
+no owner project saved or public release created. Parser, diff and filesystem
+delivery/rollback fixtures pass. [Exact installed paths, evidence, FL discovery
+caveat and link-only rollback](../../../docs/research/gate93-local-development-delivery-2026-10-30.md).
+Installed-path ABI rerun awaits the coordinator's execution slot. Actual DAW
+discovery, native arming and realtime/listening acceptance remain open; 93 stays claimed.
+
 ### Native VST3 consent verification preparation — 2026-10-30
 
 Claimed on `codex/gate-native-runtime` after callback evidence `25d384b`.

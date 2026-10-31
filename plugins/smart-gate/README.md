@@ -127,9 +127,14 @@ exit 43), with exact diagnostics; generic panics cannot pass. Earlier `80eac5c`
 negatives remain unqualified because its runner accepted any nonzero exit.
 See ticket 93 for the exact candidate, module paths, limits and receipts.
 
-Reserved future Windows links are `%COMMONPROGRAMFILES%/CLAP/CleanSlate Smart Gate.clap`
-and `%COMMONPROGRAMFILES%/VST3/CleanSlate Smart Gate.vst3`. They are distinct from
-probe and Podcast paths. This ticket/build script creates no installed links.
+The build script creates no installed links. The separate reviewed
+`scripts/link-smart-gate.ps1` can link a verified preview as a local development
+install. On this machine the global CLAP folder denied access, so the official
+user locations now contain Gate-only junctions: `%LOCALAPPDATA%/Programs/Common/CLAP/CleanSlate Smart Gate/`
+and `%LOCALAPPDATA%/Programs/Common/VST3/CleanSlate Smart Gate.vst3`.
+New/restored instances remain bypassed and unarmed. Probe/Podcast links are
+unchanged. [Exact paths, hashes, scan guidance and rollback](../../docs/research/gate93-local-development-delivery-2026-10-30.md).
+Actual host discovery and native/armed behavior remain separate acceptance.
 
 ### Prepared native VST3 consent check (unverified)
 
