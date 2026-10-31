@@ -55,7 +55,19 @@ AAX/AU, native host or other-platform compatibility is claimed.
 
 ## Windows candidate workflow
 
-Use `scripts/build-smart-gate.ps1` from this product checkout. It keeps locked,
+Use `scripts/build-smart-gate.ps1 -RuntimeDirectory <verified-flat-runtime-directory> -RuntimeReceipt docs/licenses/directml-1.15.4-runtime.json`
+from this product checkout. Both runtime inputs are explicit; this entrypoint and
+`scripts/package-smart-gate.ps1` never download dependencies. The package helper
+checks the runtime and all three official notices against the pinned observed
+NuGet inventory, copies the DLL next to both format binaries, and publishes a
+new candidate with an atomic directory rename after copy/hash verification.
+It also retains the repository's existing embedded-model, dependency and MSVC
+notices. The staging fixture is
+`scripts/test-package-smart-gate.ps1 -VerifiedRuntimeDirectory <verified-flat-runtime-directory>`;
+it loads no native code and uses a synthetic plugin solely to test copying.
+See [the provenance record](../../docs/research/gate93-directml-provenance-2026-10-30.md).
+
+The build entrypoint keeps locked,
 offline dependencies, the shared local Cargo target, one build job, incremental
 compilation, global single-compiler coordination, timeout, cancellation and owned
 cleanup. The owner's 2026-10-30 override removes RAM/commit launch thresholds,
@@ -72,6 +84,10 @@ and a hash/source receipt. Earlier candidates and installed paths are untouched.
 The entrypoint rejects linked or non-directory output parents before build setup
 and rechecks them before creating candidate outputs.
 These are development candidates, not a distributable signed installer.
+The pinned inventory currently covers DirectML and its notices. The new Gate
+DLL's actual imports still need inspection before deciding which MSVC files must
+also be staged. Inherited development search paths can satisfy existing ABI
+checks, so these checks do not prove candidate-local runtime completeness.
 
 `scripts/test-smart-gate-hosts.ps1 -PluginDirectory <candidate>` reuses the
 maintained guarded host runner's timeout, PASS contract and per-child isolated

@@ -1,5 +1,5 @@
 #requires -Version 7.0
-param([string]$TargetDir, [string]$ProbeBinary)
+param([string]$TargetDir, [string]$ProbeBinary, [string]$RuntimeDirectory, [string]$RuntimeReceipt)
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 if ([Environment]::OSVersion.Platform -ne 'Win32NT') { throw 'This candidate script currently targets Windows x64 only.' }
@@ -18,6 +18,9 @@ function Assert-GateOutputParents {
     }
 }
 Assert-GateOutputParents
+if (-not $RuntimeDirectory -or -not $RuntimeReceipt) {
+    throw 'Explicit verified -RuntimeDirectory and -RuntimeReceipt are required; the build entrypoint does not download runtimes.'
+}
 $manifest = Join-Path $root 'plugins/smart-gate/Cargo.toml'
 $settings = & (Join-Path $PSScriptRoot 'local-build-settings.ps1') -TargetDir $TargetDir
 function Invoke-GateCargo([string[]]$Arguments) {
@@ -29,25 +32,16 @@ Invoke-GateCargo (@('test', '--manifest-path', $manifest, '--all-targets') + $se
 Invoke-GateCargo (@('clippy', '--manifest-path', $manifest, '--all-targets') + $settings.CargoArguments + @('--', '-D', 'warnings'))
 Invoke-GateCargo (@('build', '--manifest-path', $manifest, '--lib', '--examples') + $settings.CargoArguments)
 Assert-GateOutputParents
-New-Item -ItemType Directory -Path $parent -Force | Out-Null
-$candidate = Join-Path $parent ([Guid]::NewGuid().ToString('N'))
-New-Item -ItemType Directory -Path $candidate | Out-Null
-$bundle = Join-Path $candidate 'CleanSlate Smart Gate.vst3/Contents/x86_64-win'
-New-Item -ItemType Directory -Path $bundle -Force | Out-Null
 $dll = Join-Path $settings.TargetDir 'debug/cleanslate_smart_gate.dll'
+$candidate = & (Join-Path $PSScriptRoot 'package-smart-gate.ps1') -PluginBinary $dll -RuntimeDirectory $RuntimeDirectory -RuntimeReceipt $RuntimeReceipt -OutputParent $parent
+$bundle = Join-Path $candidate 'CleanSlate Smart Gate.vst3/Contents/x86_64-win'
 $artifacts = @((Join-Path $candidate 'CleanSlate Smart Gate.clap'), (Join-Path $bundle 'CleanSlate Smart Gate.vst3'))
-foreach ($path in $artifacts) { Copy-Item -LiteralPath $dll -Destination $path }
-Copy-Item -LiteralPath (Join-Path $root 'plugins/smart-gate/README.md') -Destination $candidate
-Copy-Item -LiteralPath (Join-Path $root 'LICENSE') -Destination $candidate
 & (Join-Path $PSScriptRoot 'test-smart-gate-hosts.ps1') -PluginDirectory $candidate -TargetDir $settings.TargetDir -ProbeBinary $ProbeBinary
-$receipt = [ordered]@{
-    source_commit = (& git -C $root rev-parse HEAD)
-    source_dirty = [bool](& git -C $root status --porcelain)
-    candidate = $candidate
-    artifact_hashes = @($artifacts | Get-FileHash -Algorithm SHA256 | Select-Object Path, Hash)
-    installed = $false
-    qualification = 'Pass-through prototype; no detector, gating, native GUI or release acceptance.'
-}
-$receipt | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $candidate 'build-receipt.json') -Encoding utf8
+$receipt = Get-Content -LiteralPath (Join-Path $candidate 'build-receipt.json') -Raw | ConvertFrom-Json -AsHashtable
+$receipt.source_dirty = [bool](& git -C $root status --porcelain)
+$receipt.candidate = $candidate
+$receipt.artifact_hashes = @($artifacts | Get-FileHash -Algorithm SHA256 | Select-Object Path, Hash)
+$receipt.qualification = 'Uninstalled engineering candidate; reviewed DirectML inventory and unarmed ABI host checks passed. Independent loader, armed gating, native GUI and release acceptance remain unqualified.'
+$receipt | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $candidate 'build-receipt.json') -Encoding utf8
 Write-Output "Checked candidate preserved: $candidate"
 # Installation links have distinct reserved names documented in the product README; this script never creates them.

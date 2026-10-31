@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "source": {
+    "package": "Microsoft.AI.DirectML",
+    "version": "1.15.4",
+    "url": "https://www.nuget.org/api/v2/package/Microsoft.AI.DirectML/1.15.4",
+    "license_url": "https://www.nuget.org/packages/Microsoft.AI.DirectML/1.15.4/License",
+    "package_bytes": 202292617,
+    "package_sha256": "4e7cb7ddce8cf837a7a75dc029209b520ca0101470fcdf275c1f49736a3615b9"
+  },
+  "files": [
+    {
+      "path": "DirectML.dll",
+      "archive_entry": "bin/x64-win/DirectML.dll",
+      "bytes": 18527776,
+      "sha256": "9c9e6d822561c6c41b90e6994b3e8857cf1d66dbfb1e0c4c799c7c89b4e92da1"
+    },
+    {
+      "path": "LICENSE.txt",
+      "archive_entry": "LICENSE.txt",
+      "bytes": 10439,
+      "sha256": "a05138e3a085ff60a44881eedfa58dccb03ecc1d7b1f6ae888418e8c2fec4b8d"
+    },
+    {
+      "path": "LICENSE-CODE.txt",
+      "archive_entry": "LICENSE-CODE.txt",
+      "bytes": 1093,
+      "sha256": "903df5512f7d02609fed0c780a9b704f5a3eeb6e4d84ebe42a29845c81899a3c"
+    },
+    {
+      "path": "ThirdPartyNotices.txt",
+      "archive_entry": "ThirdPartyNotices.txt",
+      "bytes": 4577,
+      "sha256": "2c95795c13ff48a58b6ed916f37901c23d964b5d9d601af422f17ad2172e7950"
+    }
+  ]
+}

@@ -23,11 +23,46 @@ Acceptance:
 ## Results
 
 Native/runtime continuation is claimed on `codex/gate-native-runtime`, initially
-based on `0e56096`. This sub-slice prepares candidate staging and independent
-loader proof; merge the latest tested Gate readiness source before building.
-Current authorization is source preparation only: no build, native launch or
-runtime package download has run. Existing build/host script seams govern tests;
+based on `0e56096`, with tested readiness `8f95ba8` merged at `613cbe3` before
+any new native build. This sub-slice prepares candidate staging and independent
+loader proof. The coordinator subsequently granted filesystem fixtures and the
+official DirectML provenance download; no compiler/native host/model/installer
+launch has run in this sub-slice. Existing build/host script seams govern tests;
 redistributables require verified provenance and applicable notices before staging.
+
+### Verified DirectML staging preparation — 2026-10-30
+
+The no-network `scripts/package-smart-gate.ps1` validates an explicit runtime
+directory/receipt against the pinned official NuGet inventory, checks source and
+copy hashes, rejects linked ancestors and malformed/duplicate paths, and stages
+the runtime beside both CLAP and VST3 native binaries. All three official notice
+files and the existing repository notices are retained. New candidates publish
+by same-parent atomic rename with no overwrite; earlier candidates remain intact.
+The existing build caller now delegates packaging and records the current narrow
+unarmed ABI qualification rather than the stale pass-through-only claim.
+
+Official DirectML 1.15.4 archive SHA256 is
+`4e7cb7ddce8cf837a7a75dc029209b520ca0101470fcdf275c1f49736a3615b9`.
+The extracted x64 Windows DLL matches the previously recorded cache hash exactly.
+See `docs/research/gate93-directml-provenance-2026-10-30.md` for download, entry
+validation, hashes, observed version terms and retained machine-local evidence.
+No archive or native binary is committed; no existing cache bytes were changed.
+
+Public-CLI filesystem fixtures used an explicitly supplied verified runtime
+directory and a synthetic plugin, without loading either. Happy copy/notice and
+corruption cases went RED then GREEN. A self-consistent forged DLL/receipt also
+went RED then GREEN after pinning the observed inventory. Missing notice, unknown
+version, invalid/duplicate path, input/output junction and new-candidate preservation
+checks pass. Final fixture evidence:
+`%TEMP%/cleanslate-gate-package-08ad417a-a87d-45b5-bc3b-c9a962d9fd2c/`.
+Existing output-parent refusal fixtures pass with outside sentinels unchanged:
+`%TEMP%/cleanslate-gate-output-f559b09c-d6bd-414d-96ee-f9ebd1127dbc/`.
+
+This completes only the DirectML staging preparation. Actual new DLL imports,
+verified MSVC staging inventory, candidate-local/sanitized-loader module evidence,
+armed native processing and the remaining acceptance above are still required.
+The modified full build caller has not been executed; no native build slot was
+granted for this slice. Ticket 93 remains claimed.
 
 ### Resumed source-valid detection feedback — 2026-10-30
 
