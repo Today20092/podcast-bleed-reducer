@@ -26,6 +26,7 @@ const QUEUE: usize = 128;
 const MAX_SECONDS: i64 = 7200;
 const MAX_RANGES: usize = 8192;
 const MAX_LABELS: usize = 256;
+const GAIN_EDGES_PER_COLUMN: usize = 8;
 static NEXT_KEY: AtomicU64 = AtomicU64::new(1);
 static GROUPS: OnceLock<Mutex<[Weak<SessionCapture>; 8]>> = OnceLock::new();
 
@@ -313,7 +314,7 @@ pub struct SessionCapture {
     queue: ArrayQueue<Packet>,
     commands: Mutex<Vec<Command>>,
     state: Mutex<State>,
-    analysis: RwLock<Option<Published>>,
+    analysis: RwLock<Option<Arc<Published>>>,
     revision: AtomicU64,
     overrun: AtomicBool,
     cancel: Arc<AtomicBool>,
@@ -346,6 +347,7 @@ pub struct TrackGain {
 }
 #[derive(Debug)]
 pub struct AnalysisGainView {
+    capture: Weak<SessionCapture>,
     pub revision: u64,
     pub tracks: Vec<TrackGain>,
 }
@@ -835,17 +837,115 @@ impl SessionCapture {
         self.commands.lock().push(Command::Clear);
         Ok(())
     }
+    /// Exact cached Analysis gain for verified source columns, independent of
+    /// the current audio callback's replay-verification ring.
     pub fn analysis_view(
-        &self,
-        _start: i64,
-        _end: i64,
-        _columns: usize,
-        _member_mask: u8,
+        self: &Arc<Self>,
+        start: i64,
+        end: i64,
+        columns: usize,
+        member_mask: u8,
     ) -> Option<AnalysisGainView> {
-        None
+        let published = self.analysis.try_read()?.as_ref()?.clone();
+        let revision = self.revision.load(SeqCst);
+        if published.revision != revision
+            || published.analysis.rate != self.rate
+            || self.overrun.load(SeqCst)
+        {
+            return None;
+        }
+        let total = i64::from(self.rate) * MAX_SECONDS;
+        let start = start.clamp(0, total);
+        let end = end.clamp(0, total);
+        if start >= end {
+            return None;
+        }
+        let columns = columns.clamp(1, 2048).min((end - start) as usize);
+        let state = self.state.try_lock()?;
+        let mut verified = Vec::new();
+        for (member, track) in state.tracks.iter().enumerate() {
+            if member_mask & (1 << member) == 0 {
+                continue;
+            }
+            let Some(index) = published.member_map[member] else {
+                continue;
+            };
+            let Some(envelope) = published.analysis.envelopes.get(index) else {
+                continue;
+            };
+            if envelope.sample_rate() != self.rate {
+                continue;
+            }
+            let Some(envelope_end) = i64::try_from(envelope.sample_count())
+                .ok()
+                .and_then(|count| published.analysis.origin.checked_add(count))
+            else {
+                continue;
+            };
+            let mut ranges = Vec::new();
+            for column in 0..columns {
+                let a = (start + (end - start) * column as i64 / columns as i64)
+                    .max(published.analysis.origin);
+                let b = (start + (end - start) * (column + 1) as i64 / columns as i64)
+                    .min(published.analysis.end)
+                    .min(envelope_end);
+                if track.verified.covers(a, b) {
+                    ranges.push((a, b));
+                }
+            }
+            verified.push((member, index, ranges));
+        }
+        drop(state);
+        let mut tracks = Vec::new();
+        for (member, index, ranges) in verified {
+            let envelope = &published.analysis.envelopes[index];
+            let mut columns = Vec::new();
+            for (start, end) in ranges {
+                let (Ok(a), Ok(b)) = (
+                    usize::try_from(start - published.analysis.origin),
+                    usize::try_from(end - published.analysis.origin),
+                ) else {
+                    continue;
+                };
+                let detail = match envelope.gain_bounds_bounded(a, b, GAIN_EDGES_PER_COLUMN) {
+                    rust_app::BoundedGainBounds::Bounds(low, high)
+                        if low.is_finite()
+                            && high.is_finite()
+                            && (0.0..=1.0).contains(&low)
+                            && (low..=1.0).contains(&high) =>
+                    {
+                        GainDetail::Bounds(low, high)
+                    }
+                    rust_app::BoundedGainBounds::TooDense => GainDetail::TooDense,
+                    _ => continue,
+                };
+                columns.push(GainColumn { start, end, detail });
+            }
+            tracks.push(TrackGain { member, columns });
+        }
+        // Trust can be withdrawn while extrema are evaluated. Recheck only the
+        // bounded copied columns, never clone the full capture range index.
+        let state = self.state.try_lock()?;
+        for track in &mut tracks {
+            track.columns.retain(|column| {
+                state.tracks[track.member]
+                    .verified
+                    .covers(column.start, column.end)
+            });
+        }
+        tracks.retain(|track| !track.columns.is_empty());
+        let view = AnalysisGainView {
+            capture: Arc::downgrade(self),
+            revision,
+            tracks,
+        };
+        self.analysis_view_is_current(&view).then_some(view)
     }
-    pub fn analysis_view_is_current(&self, _view: &AnalysisGainView) -> bool {
-        false
+    /// A cached projection is usable only by its original capture and revision.
+    pub fn analysis_view_is_current(&self, view: &AnalysisGainView) -> bool {
+        std::ptr::eq(view.capture.as_ptr(), self)
+            && self.revision.load(SeqCst) == view.revision
+            && !self.overrun.load(SeqCst)
     }
     pub fn view(
         &self,
@@ -1301,7 +1401,7 @@ impl SessionCapture {
                         let mut full_hashes=vec![Vec::new();MEMBERS];
                         let mut member_map=[None;MEMBERS];
                         for ((n,&slot),hash) in active.iter().enumerate().zip(hashes) {member_map[slot]=Some(n);full_hashes[slot]=hash;}
-                        *engine.analysis.write()=Some(Published{revision,analysis,hashes:full_hashes,member_map});
+                        *engine.analysis.write()=Some(Arc::new(Published{revision,analysis,hashes:full_hashes,member_map}));
                         state.message="Analysis ready. Enable processing and replay to validate the source audio. Unverified sections stay original.".into();
                     }
                     Err(e)=>state.message=format!("Analysis stopped: {e}"),

@@ -13,7 +13,7 @@ fn analysis_gain_view_clips_exact_bounds_and_maps_only_visible_members() {
     direct_capture(engine, 2, 0, 4096, false);
     let mut member_map = [None; MEMBERS];
     member_map[2] = Some(0);
-    *engine.analysis.write() = Some(Published {
+    *engine.analysis.write() = Some(Arc::new(Published {
         revision: engine.revision.load(SeqCst),
         analysis: Analysis {
             origin: 500,
@@ -23,7 +23,7 @@ fn analysis_gain_view_clips_exact_bounds_and_maps_only_visible_members() {
         },
         hashes: vec![Vec::new(); MEMBERS],
         member_map,
-    });
+    }));
     let view = engine.analysis_view(0, 4096, 4, 0b101).unwrap();
     assert!(engine.analysis_view_is_current(&view));
     assert_eq!(view.tracks.len(), 1);
@@ -55,6 +55,185 @@ fn analysis_gain_view_clips_exact_bounds_and_maps_only_visible_members() {
             .tracks
             .is_empty()
     );
+    let tiny = engine.analysis_view(500, 503, 2048, 0b100).unwrap();
+    assert_eq!(tiny.tracks[0].columns.len(), 3);
+    assert_eq!(tiny.tracks[0].columns[0].start, 500);
+    assert_eq!(tiny.tracks[0].columns[2].end, 503);
+}
+
+#[test]
+fn analysis_gain_view_refuses_dense_detail_and_zoom_recovers_exact_extrema() {
+    let fixture = Fixture::new(1);
+    let engine = fixture.engine();
+    let envelope = display_test_envelope(&fixture);
+    publish_display_analysis(engine, 0, 0, envelope);
+    let dense = engine.analysis_view(0, 8192, 1, 1).unwrap();
+    assert_eq!(
+        dense.tracks[0].columns,
+        vec![GainColumn {
+            start: 0,
+            end: 8192,
+            detail: GainDetail::TooDense,
+        }]
+    );
+    let detailed = engine.analysis_view(0, 8192, 32, 1).unwrap();
+    assert_eq!(detailed.tracks[0].columns.len(), 32);
+    // Independent linear ramps: 0.25 -> 0.75 in 256 samples, with the
+    // right endpoint belonging to the next half-open column.
+    assert_eq!(
+        detailed.tracks[0].columns[0].detail,
+        GainDetail::Bounds(0.25, 0.7480469)
+    );
+    assert_eq!(
+        detailed.tracks[0].columns[1].detail,
+        GainDetail::Bounds(0.25195313, 0.75)
+    );
+}
+
+pub(crate) fn display_test_envelope(fixture: &Fixture) -> GainEnvelope {
+    use rust_app::{
+        EnvelopePoint, ManualGainEdit, SourceBinding, SourceTimebase, TemporalEvidence,
+        TemporalEvidenceGrid, TemporalOwnershipCache, TemporalSettings,
+    };
+    let engine = fixture.engine();
+    direct_capture(engine, 0, 0, 8192, false);
+    let path = engine.path.join("gain-display.wav");
+    snapshot_wav(
+        &mut File::open(engine.path.join("mic-0.pcm")).unwrap(),
+        &path,
+        0,
+        8192,
+        RATE,
+        1,
+        None,
+    )
+    .unwrap();
+    let mut project =
+        rust_app::Project::create(engine.path.join("gain-display.cleanslate"), vec![path]).unwrap();
+    project.set_supplied_alignment(true).unwrap();
+    let source = &project.sources[0];
+    let source_grid = SourceTimebase::new(RATE, 8192).unwrap();
+    let duration = source_grid.duration().unwrap();
+    let frames = duration.div_ceil(rust_app::OWNERSHIP_FRAME_TICKS) as usize;
+    let evidence = TemporalEvidenceGrid::new(
+        vec![source.track_id],
+        duration,
+        vec![vec![
+            TemporalEvidence {
+                probability: Some(0.01),
+                raw_speech: Some(0.01),
+                assigned_activity: Some(0.01),
+                preservation_reason: None
+            };
+            frames
+        ]],
+        vec![0.01; frames],
+    )
+    .unwrap();
+    let ownership = TemporalOwnershipCache::default()
+        .optimize_project_evidence(&project, &evidence, TemporalSettings::default(), None)
+        .unwrap();
+    let edits = vec![ManualGainEdit {
+        id: 1,
+        source: SourceBinding {
+            track: source.track_id,
+            fingerprint: source.fingerprint.clone(),
+        },
+        points: (0..=32)
+            .map(|index| EnvelopePoint {
+                time: source_grid
+                    .time_at_frame(index * 256, rust_app::Rounding::Floor)
+                    .unwrap(),
+                gain: if index % 2 == 0 { 0.25 } else { 0.75 },
+            })
+            .collect(),
+        interpolation: Default::default(),
+    }];
+    project.replace_manual_gain_edits(edits).unwrap();
+    let effective = rust_app::EffectiveEnvelopeCache::default()
+        .update(
+            &project,
+            &ownership,
+            rust_app::GainFadeSettings {
+                attenuation: 0.5,
+                fade_in: 0,
+                fade_out: 0,
+                minimum_gap: 0,
+            },
+            None,
+        )
+        .unwrap();
+    effective.envelopes[0].clone()
+}
+
+#[test]
+fn analysis_gain_view_omits_unverified_columns_and_rejects_stale_capture_identity() {
+    let mut fixture = Fixture::new(1);
+    direct_capture(fixture.engine(), 0, 0, 4096, false);
+    publish_display_analysis(
+        fixture.engine(),
+        0,
+        0,
+        GainEnvelope::constant_at_rate(4096, RATE, 0.25).unwrap(),
+    );
+    fixture.engine().state.lock().tracks[0]
+        .verified
+        .remove(1024, 2048);
+    let view = fixture.engine().analysis_view(0, 4096, 4, 1).unwrap();
+    assert_eq!(
+        view.tracks[0]
+            .columns
+            .iter()
+            .map(|column| (column.start, column.end))
+            .collect::<Vec<_>>(),
+        vec![(0, 1024), (2048, 3072), (3072, 4096)]
+    );
+    fixture.with_worker_lock(|| {
+        assert!(fixture.engine().analysis_view(0, 4096, 4, 1).is_none());
+    });
+    let other = Fixture::new(1);
+    assert!(!other.engine().analysis_view_is_current(&view));
+    fixture.reopen();
+    assert!(!fixture.engine().analysis_view_is_current(&view));
+    assert!(fixture.engine().analysis_view(0, 4096, 4, 1).is_none());
+    direct_capture(fixture.engine(), 0, 0, 4096, false);
+    publish_display_analysis(
+        fixture.engine(),
+        0,
+        0,
+        GainEnvelope::constant_at_rate(4096, RATE, 0.25).unwrap(),
+    );
+    let current = fixture.engine().analysis_view(0, 4096, 4, 1).unwrap();
+    fixture
+        .engine()
+        .set_settings(Settings {
+            reduction_db: -18.0,
+            ..Default::default()
+        })
+        .unwrap();
+    assert!(!fixture.engine().analysis_view_is_current(&current));
+    assert!(fixture.engine().analysis_view(0, 4096, 4, 1).is_none());
+}
+
+pub(crate) fn publish_display_analysis(
+    engine: &SessionCapture,
+    member: usize,
+    origin: i64,
+    envelope: GainEnvelope,
+) {
+    let mut member_map = [None; MEMBERS];
+    member_map[member] = Some(0);
+    *engine.analysis.write() = Some(Arc::new(Published {
+        revision: engine.revision.load(SeqCst),
+        analysis: Analysis {
+            origin,
+            end: origin + envelope.sample_count() as i64,
+            rate: engine.rate,
+            envelopes: vec![envelope],
+        },
+        hashes: vec![Vec::new(); MEMBERS],
+        member_map,
+    }));
 }
 
 #[test]
@@ -406,7 +585,7 @@ fn install_constant_analysis(engine: &SessionCapture, samples: &[f32]) {
     hashes[0].push(Sha256::digest(&bytes).into());
     let mut member_map = [None; MEMBERS];
     member_map[0] = Some(0);
-    *engine.analysis.write() = Some(Published {
+    *engine.analysis.write() = Some(Arc::new(Published {
         revision: engine.revision.load(SeqCst),
         analysis: Analysis {
             origin: 0,
@@ -416,7 +595,7 @@ fn install_constant_analysis(engine: &SessionCapture, samples: &[f32]) {
         },
         hashes,
         member_map,
-    });
+    }));
 }
 
 #[test]
