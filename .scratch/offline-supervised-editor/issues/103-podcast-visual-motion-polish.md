@@ -20,6 +20,16 @@ Implement the owner's FabFilter/sonible quality target in the existing Podcast e
 
 ## Results
 
+2026-10-30 coordinator-granted normal ABI execution passes from the preserved
+d8b79686 candidate and preserved sourceb41d51e hosts, via existing timeout-only
+`test-plugin-hosts.ps1 -Product Podcast`. CLAP validates1,858 bit-exact blocks,
+1,168 shared PCM windows and normal Podcast state round-trip; VST3 validates two
+actual instances,4,048 blocks/3,392 windows and listed normal buffer/transport
+cases. Receipt `230706-9133d720` finalizes root0/empty/cleanup verified. Exact
+commands, hashes and exclusions are in [the native handoff report](../../../docs/research/podcast103-normal-native-2026-10-30.md#granted-normal-abi-execution).
+Runtime isolation, full Session VST3 state, native presentation, listening/PDC/
+export and final comparisons remain unqualified. 103/native80 remain open.
+
 2026-10-30 normal native build handoff: source `b41d51e` compiles the actual
 Podcast DLL and named CLAP/VST3 ABI hosts; strict examples Clippy passes. Normal
 exports/imports are inventoried, and a fresh uninstalled hash-pinned candidate

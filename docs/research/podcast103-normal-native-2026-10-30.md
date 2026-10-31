@@ -75,3 +75,40 @@ That pair covers normal CLAP state round-trip and existing ABI/process checks;
 it does not establish runtime isolation, full Session VST3 state, host-native
 editor presentation, listening, PDC/export acceptance or native80 completion.
 Full Session VST3 state requires the separate acceptance-driver workflow.
+
+## Granted normal ABI execution
+
+The coordinator subsequently granted the normal pair, using **only** the
+preserved candidate/hosts. Exact invocation:
+
+```powershell
+& 'C:/Users/User/orca/workspaces/podcast-automix-rust-gui/podcast-seek-resume/scripts/test-plugin-hosts.ps1' -Product Podcast -PluginDirectory 'C:/Users/User/AppData/Local/CleanSlate/Podcast/NativeCheckpoints/normal-438e85edaa8a497c8be1385296b9fe22/candidate' -TargetDir 'C:/Users/User/AppData/Local/CleanSlate/Podcast/NativeCheckpoints/normal-438e85edaa8a497c8be1385296b9fe22'
+```
+
+Both actual normal ABI hosts pass. CLAP reports1,858 bit-exact mono/stereo blocks,
+1,168 validated shared PCM windows, foreign Probe-state disconnection and
+Podcast-state round-trip, offline activation/manual-export label and host restart
+request on active render-mode change. Runtime0.72 seconds; largest sampled
+process working set23.79MiB. The CLAP host's VST3 factory-symbol observation is
+not itself a VST3 process test.
+
+The separate VST3 host reports two actual instances, discovered/set controls,
+mono/stereo44.1/48kHz realtime/offline processing,4,048 bit-exact blocks and3,392
+shared PCM windows, in-place/separate buffers, missing transport and seeks.
+Editor construction/release succeeds without opening a window. Runtime1.01
+seconds; largest sampled process working set24.55MiB. Sampling is10ms and covers
+these test processes only, not total product/native presentation performance.
+
+Receipt `20261030-230706-9133d7203f934ff3a1c01a707c754a4b` finalizes root0,
+no remaining recorded job PIDs and cleanup verified. The receipt/log/diagnostics
+and `normal-host-pair.json` are preserved in the checkpoint. That JSON records
+the exact script/arguments/hash, artifact sourceb41d51e, execution source241fdd8
+(documentation-only delta), both host paths/hashes and scope exclusions. Plugin
+and host hashes were rechecked after execution. Staging inventories retain their
+historical pre-execution hold; this later receipt supersedes that execution
+status only. No DLL or installed-link replacement occurred.
+
+Normal pair success does not prove runtime isolation, complete Session VST3
+state, native window/DPI/presentation, listening/PDC/export acceptance, native80
+or whole103 completion. The compiler/heavy slot was explicitly released after
+this pair for coordinator CPU benchmark work.
