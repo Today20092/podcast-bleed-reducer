@@ -203,3 +203,30 @@ synthetic fresh paths. Negative controls must match their intended reason,
 including cases that print a PASS before later assertions. Runtime isolation,
 native editor presentation, owner listening and DAW PDC/export remain separate.
 This is an unexecuted plan pending the coordinator's compiler/inference slot.
+
+### Durable existing-runner preparation
+
+The coordinator requested a small durable fix in the existing workflow instead
+of the staged workaround. `check-podcast-workflow.ps1` now resolves actual Cargo
+and Rustc from the repository's `rust-toolchain.toml` through read-only
+`rustup which --toolchain`. It invokes those paths directly, pins RUSTC and
+prepends that toolchain's bin directory while existing helpers/subcommands run.
+An outer finally restores the caller's PATH/RUSTC. Shared target/profile settings
+and all existing normal/driver checks remain in their existing helpers; no new
+runner framework, test hook, dependency or memory gate was added.
+
+Feature-enabled stages now have a finally that invokes the existing normal
+no-feature build/check helper on ordinary success/failure paths. An acceptance
+failure is also saved before rethrowing, so a separate restoration failure cannot
+erase its reason. The normal initial and final helper checks are retained; this
+preparation does not substitute a copied DLL for correct Cargo fingerprints.
+The saved d8 normal candidate remains immutable.
+
+PowerShell parsing, indentation/diff checks and static control-flow checks pass:
+no bare cargo/rustc launch remains, feature stages have the restoration finally,
+and both reason-matched expected negatives plus the final process-exit0 check
+are unchanged. These are source/parser checks only. Actual workflow execution
+and its restoration outcome remain unverified. Finally cannot run after forceful
+termination of the enclosing process; a restoration build can itself fail.
+Either case must be reported explicitly rather than claiming the shared target
+was restored. The preserved verified normal candidate remains available.
