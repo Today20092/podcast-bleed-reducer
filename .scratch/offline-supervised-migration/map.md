@@ -1,5 +1,15 @@
 # Plan the offline supervised CleanSlate migration
 
+2026-10-31 GUI CHECKPOINT: GUI117's bounded first polish iteration is preserved
+on `codex/smart-gate-gui-polish` (`0853097`, evidence `bc1c717`), with a runnable
+preview and independent baseline/after review. All three Orca Tasks succeeded;
+workers released. Tests/lint and both format checks pass. Full native GUI117
+acceptance remains open: interaction/DPI observation unavailable, compact native
+negotiation rejected, and idle/hidden performance unqualified. See
+[117 results](../offline-supervised-editor/issues/117-smart-gate-gui-polish.md).
+No DSP implementation resumed, primary integration, install replacement or
+release occurred; retain the GUI workspace/artifacts for owner iteration.
+
 2026-10-31 GUI RESUMPTION: owner explicitly authorizes supervised parallel GUI
 implementation and visual/performance refinement now. Claimed
 [117](../offline-supervised-editor/issues/117-smart-gate-gui-polish.md) owns a
