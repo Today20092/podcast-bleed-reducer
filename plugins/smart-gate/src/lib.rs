@@ -12,7 +12,7 @@ use nice_plug::prelude::*;
 use nice_plug_egui::{
     EguiEditor, EguiEditorState, EguiNiceSettings, RepaintNotifier, create_egui_editor,
 };
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 pub const BYPASS_ID: &str = "smart_gate_bypass";
@@ -26,6 +26,14 @@ enum Consent {
     Unavailable,
     Ready,
     Armed,
+}
+
+#[must_use]
+#[repr(u8)]
+pub(crate) enum DetectionState {
+    Waiting,
+    Current,
+    Failed,
 }
 
 #[derive(Params)]
@@ -49,7 +57,7 @@ pub struct SmartGate {
     params: Arc<GateParams>,
     editor_state: Arc<EguiEditorState>,
     consent: Arc<AtomicU64>,
-    processing_failed: Arc<AtomicBool>,
+    detection_state: Arc<AtomicU8>,
     repaint: RepaintNotifier,
     engine: Option<engine::Engine>,
 }
@@ -60,7 +68,7 @@ impl Default for SmartGate {
             params: Arc::new(GateParams::default()),
             editor_state: EguiEditorState::from_size(LogicalSize::new(640.0, 440.0), 1.0),
             consent: Arc::new(AtomicU64::new(Consent::Unavailable as u64)),
-            processing_failed: Arc::new(AtomicBool::new(false)),
+            detection_state: Arc::new(AtomicU8::new(DetectionState::Waiting as u8)),
             repaint: RepaintNotifier::new(),
             engine: None,
         }
@@ -100,8 +108,9 @@ impl SmartGate {
         self.repaint.request_repaint();
     }
 
-    fn publish_processing_failure(&self, failed: bool) {
-        if self.processing_failed.swap(failed, Ordering::AcqRel) != failed {
+    fn publish_detection_state(&self, state: DetectionState) {
+        let state = state as u8;
+        if self.detection_state.swap(state, Ordering::AcqRel) != state {
             self.repaint.request_repaint();
         }
     }
@@ -141,7 +150,7 @@ impl Plugin for SmartGate {
             editor::Panel::new(
                 Arc::clone(&self.params),
                 Arc::clone(&self.consent),
-                Arc::clone(&self.processing_failed),
+                Arc::clone(&self.detection_state),
             ),
         )
     }
@@ -166,7 +175,7 @@ impl Plugin for SmartGate {
         context: &mut impl ActivateContext<Self>,
     ) -> bool {
         self.invalidate_consent();
-        self.publish_processing_failure(false);
+        self.publish_detection_state(DetectionState::Waiting);
         self.engine = None;
         if ![44_100.0, 48_000.0, 96_000.0].contains(&config.sample_rate) {
             return false;
@@ -192,19 +201,19 @@ impl Plugin for SmartGate {
         self.invalidate_consent();
         if let Some(engine) = &mut self.engine {
             engine.reset();
-            let failed = engine.failed();
-            self.publish_processing_failure(failed);
+            let state = engine.detection_state();
+            self.publish_detection_state(state);
             self.consent
                 .fetch_or(Consent::Ready as u64, Ordering::Release);
             self.repaint.request_repaint();
         } else {
-            self.publish_processing_failure(false);
+            self.publish_detection_state(DetectionState::Waiting);
         }
     }
 
     fn deactivate(&mut self) {
         self.invalidate_consent();
-        self.publish_processing_failure(false);
+        self.publish_detection_state(DetectionState::Waiting);
         self.engine = None;
     }
 
@@ -217,8 +226,8 @@ impl Plugin for SmartGate {
         let enabled = self.experimental_armed() && !self.params.bypass.value();
         if let Some(engine) = &mut self.engine {
             engine.process(buffer, enabled);
-            let failed = engine.failed();
-            self.publish_processing_failure(failed);
+            let state = engine.detection_state();
+            self.publish_detection_state(state);
         }
         ProcessStatus::Normal
     }

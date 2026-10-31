@@ -46,6 +46,20 @@ impl Engine {
         self.fault || self.worker.failed()
     }
 
+    pub(crate) fn detection_state(&self) -> crate::DetectionState {
+        if self.failed() {
+            crate::DetectionState::Failed
+        } else if self
+            .gain
+            .evidence_age(self.position.saturating_sub(1))
+            .is_some()
+        {
+            crate::DetectionState::Current
+        } else {
+            crate::DetectionState::Waiting
+        }
+    }
+
     pub(crate) fn process(&mut self, buffer: &mut Buffer, enabled: bool) {
         if !enabled {
             if self.enabled {
