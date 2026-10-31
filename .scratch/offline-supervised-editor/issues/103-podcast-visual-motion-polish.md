@@ -20,6 +20,26 @@ Implement the owner's FabFilter/sonible quality target in the existing Podcast e
 
 ## Results
 
+2026-10-30 hidden-workspace continuation: the actual Podcast manifest
+`plugins/podcast/Cargo.toml` now passes all 79 tests, strict library/test Clippy,
+formatting and diff checks. Hidden Catch up RED reproduced an obsolete viewport
+jump; hidden gesture RED reproduced committing a stale primary selection.
+The invisible component now reuses the existing close cancellation path and
+returns before layout/query/animation work. Viewport, committed selection and
+follow are retained; selection/Alt zoom/Middle pan are covered. No source-capture
+locking, gain display, processing or native window behavior changed.
+RED receipts `215052-7f23c247` and `215735-e555976e`; final compile
+`215747-d0eb0d85`, full suite `215915-cfa01c35` (79 passed, 1.35 seconds),
+strict Clippy `215918-fb1a2b08`. All finalized through the timeout-only wrapper,
+without memory gates. Actual native visibility remains unqualified.
+
+Manifest qualification correction: the first resumed Clippy command used the
+legacy `fl-probe` manifest. It did not qualify the Podcast product. A subsequent
+zero-match test run was likewise not a test pass. The final results above use
+the actual Podcast target and its exact compiler-artifact executable, explicitly
+superseding those attempts. Failed harness type/array initialization checks were
+corrected before semantic evidence; no lint suppression or dependency change.
+
 2026-10-30 owner resumed. Indicator strict library/test Clippy now passes in
 `20261030-213701-9008c2abe68a4142ac644bf1d5acd7ac`: root exit 0, completed,
 recorded cleanup verified and no remaining job PIDs. The initial resumed check

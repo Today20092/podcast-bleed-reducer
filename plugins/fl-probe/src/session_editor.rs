@@ -166,6 +166,10 @@ impl SessionUi {
         setter: Option<&ParamSetter<'_>>,
         state: &GuiState,
     ) {
+        if !ui.is_visible() {
+            self.editor_closed();
+            return;
+        }
         ui.painter()
             .rect_filled(ui.max_rect(), 0.0, Color32::from_rgb(32, 34, 38));
         let capture = state.capture.lock().clone();
@@ -1251,6 +1255,69 @@ mod tests {
     }
 
     #[test]
+    fn hidden_workspace_stops_catch_up_without_changing_selection_or_follow() {
+        use crate::session_mode::integration_tests::{Fixture, direct_capture};
+        let fixture = Fixture::new(2);
+        for member in 0..2 {
+            direct_capture(fixture.engine(), member, 0, 160000, false);
+        }
+        let state = GuiState::new();
+        *state.capture.lock() = Some(fixture.engine().clone());
+        let probe = crate::FlProbe::default();
+        let context = egui::Context::default();
+        crate::editor::style(&context);
+        let mut workspace = SessionUi::default();
+        workspace_frame(&context, &mut workspace, &probe.params, &state, vec![]);
+        workspace.viewport = Some((0, 80000));
+        workspace.selection = Some((20000, 30000));
+        click_control(&context, &mut workspace, &probe.params, &state, "Catch up");
+        state
+            .playing
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+        state
+            .position
+            .store(150000, std::sync::atomic::Ordering::Relaxed);
+        let frame = |workspace: &mut SessionUi, now, visible: bool| {
+            let mut output = context.run_ui(
+                egui::RawInput {
+                    time: Some(now),
+                    screen_rect: Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(720.0, 560.0))),
+                    ..Default::default()
+                },
+                |ui| {
+                    if !visible {
+                        ui.set_invisible();
+                    }
+                    workspace.show(ui, &probe.params, None, &state);
+                },
+            );
+            output.textures_delta.clear();
+            output.viewport_output[&egui::ViewportId::ROOT].repaint_delay
+        };
+        frame(&mut workspace, 10.0, true);
+        frame(&mut workspace, 10.125, true);
+        let interrupted = workspace.viewport;
+        frame(&mut workspace, 10.250, false);
+        assert_eq!(
+            workspace.viewport, interrupted,
+            "Hidden work must not advance Catch up"
+        );
+        frame(&mut workspace, 10.300, false);
+        let delay = frame(&mut workspace, 10.350, false);
+        assert!(
+            delay > Duration::from_millis(20),
+            "Hidden playback must not keep requesting frames"
+        );
+        frame(&mut workspace, 10.400, true);
+        assert_eq!(
+            workspace.viewport, interrupted,
+            "Showing again must not resume the old slide"
+        );
+        assert_eq!(workspace.selection, Some((20000, 30000)));
+        assert_eq!(workspace.follow, 1);
+    }
+
+    #[test]
     fn catch_up_reduced_motion_snaps_and_stop_cancels_a_slide() {
         use crate::session_mode::integration_tests::{Fixture, direct_capture};
         let fixture = Fixture::new(2);
@@ -1638,76 +1705,97 @@ mod tests {
     }
 
     #[test]
-    fn closing_editor_cancels_unfinished_pointer_gestures() {
-        for (button, modifiers) in [
-            (egui::PointerButton::Primary, egui::Modifiers::NONE),
-            (egui::PointerButton::Primary, egui::Modifiers::ALT),
-            (egui::PointerButton::Middle, egui::Modifiers::NONE),
-        ] {
-            let context = egui::Context::default();
-            let original_selection = Some((800000, 900000));
-            let mut workspace = SessionUi {
-                selection: original_selection,
-                follow: 1,
-                ..Default::default()
-            };
-            let view = navigation_view();
-            navigation_frame(
-                &context,
-                &mut workspace,
-                &view,
-                vec![egui::Event::PointerMoved(Pos2::new(530.0, 200.0))],
-                modifiers,
-            );
-            navigation_frame(
-                &context,
-                &mut workspace,
-                &view,
-                vec![egui::Event::PointerButton {
-                    pos: Pos2::new(530.0, 200.0),
-                    button,
-                    pressed: true,
+    fn closing_or_hiding_workspace_cancels_unfinished_pointer_gestures() {
+        for hidden in [false, true] {
+            for (button, modifiers) in [
+                (egui::PointerButton::Primary, egui::Modifiers::NONE),
+                (egui::PointerButton::Primary, egui::Modifiers::ALT),
+                (egui::PointerButton::Middle, egui::Modifiers::NONE),
+            ] {
+                let context = egui::Context::default();
+                let original_selection = Some((800000, 900000));
+                let mut workspace = SessionUi {
+                    selection: original_selection,
+                    follow: 1,
+                    ..Default::default()
+                };
+                let view = navigation_view();
+                navigation_frame(
+                    &context,
+                    &mut workspace,
+                    &view,
+                    vec![egui::Event::PointerMoved(Pos2::new(530.0, 200.0))],
                     modifiers,
-                }],
-                modifiers,
-            );
-            navigation_frame(
-                &context,
-                &mut workspace,
-                &view,
-                vec![egui::Event::PointerMoved(Pos2::new(430.0, 200.0))],
-                modifiers,
-            );
-            if button == egui::PointerButton::Primary && !modifiers.alt {
-                assert_ne!(workspace.selection, original_selection);
-            }
-            let interrupted_viewport = workspace.viewport;
-            workspace.editor_closed();
-            let reopened_context = egui::Context::default();
-            navigation_frame(
-                &reopened_context,
-                &mut workspace,
-                &view,
-                vec![
-                    egui::Event::PointerMoved(Pos2::new(700.0, 200.0)),
-                    egui::Event::PointerButton {
-                        pos: Pos2::new(700.0, 200.0),
+                );
+                navigation_frame(
+                    &context,
+                    &mut workspace,
+                    &view,
+                    vec![egui::Event::PointerButton {
+                        pos: Pos2::new(530.0, 200.0),
                         button,
-                        pressed: false,
+                        pressed: true,
                         modifiers,
-                    },
-                ],
-                modifiers,
-            );
-            assert_eq!(
-                workspace.selection, original_selection,
-                "Closing must cancel {button:?}/{modifiers:?} without committing its draft selection"
-            );
-            assert_eq!(
-                workspace.viewport, interrupted_viewport,
-                "A release after reopening must not resume {button:?}/{modifiers:?} navigation"
-            );
-            assert_eq!(workspace.follow, 1);
+                    }],
+                    modifiers,
+                );
+                navigation_frame(
+                    &context,
+                    &mut workspace,
+                    &view,
+                    vec![egui::Event::PointerMoved(Pos2::new(430.0, 200.0))],
+                    modifiers,
+                );
+                if button == egui::PointerButton::Primary && !modifiers.alt {
+                    assert_ne!(workspace.selection, original_selection);
+                }
+                let interrupted_viewport = workspace.viewport;
+                if hidden {
+                    let probe = crate::FlProbe::default();
+                    let state = GuiState::new();
+                    let mut output = context.run_ui(
+                        egui::RawInput {
+                            screen_rect: Some(Rect::from_min_size(
+                                Pos2::ZERO,
+                                egui::vec2(1000.0, 440.0),
+                            )),
+                            ..Default::default()
+                        },
+                        |ui| {
+                            ui.set_invisible();
+                            workspace.show(ui, &probe.params, None, &state);
+                        },
+                    );
+                    output.textures_delta.clear();
+                } else {
+                    workspace.editor_closed();
+                }
+                let reopened_context = egui::Context::default();
+                navigation_frame(
+                    &reopened_context,
+                    &mut workspace,
+                    &view,
+                    vec![
+                        egui::Event::PointerMoved(Pos2::new(700.0, 200.0)),
+                        egui::Event::PointerButton {
+                            pos: Pos2::new(700.0, 200.0),
+                            button,
+                            pressed: false,
+                            modifiers,
+                        },
+                    ],
+                    modifiers,
+                );
+                assert_eq!(
+                    workspace.selection, original_selection,
+                    "Closing must cancel {button:?}/{modifiers:?} without committing its draft selection"
+                );
+                assert_eq!(
+                    workspace.viewport, interrupted_viewport,
+                    "A release after reopening must not resume {button:?}/{modifiers:?} navigation"
+                );
+                assert_eq!(workspace.follow, 1);
+            }
         }
     }
 
