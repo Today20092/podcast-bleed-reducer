@@ -24,13 +24,22 @@ CI are unchanged by the separate product work below.
   candidate. CLAP Cargo succeeded but completion required scoped termination of
   its verified owned MSVC telemetry helper; VST3 completed normally. This is the
   known ticket 109 cleanup limitation, not a memory-limit qualification stop.
-- Gate staging pins official DirectML archive/file hashes and retains its notices
-  beside both format binaries. Filesystem fixtures cover tampering and invalid
-  paths. Microsoft runtime inventory and complete standalone-bundle notice reach
-  are still being completed; no installed plugin or previous candidate changed.
+- Gate staging `ef94023` pins official DirectML and four signed installed MSVC
+  redistributable hashes, with runtime files/notices beside both formats and
+  project/model/dependency notices inside standalone VST3 resources. Filesystem
+  fixtures cover tampering, missing files and invalid paths. The staged receipt
+  separates DLL source `2e3adbf` from packaging source `ef94023`; no installed
+  plugin or previous candidate changed.
+- Isolated loader hosts `80eac5c` compile and pass strict example Clippy and
+  formatting. Candidate-local load and missing-DirectML controls are the next
+  execution step. These hosts do not preload DirectML, but preload
+  `VCRUNTIME140.dll`; complete C++ runtime isolation is not claimed.
 
 Native build evidence is preserved under
 `%LOCALAPPDATA%/CleanSlate/VerifiedBuilds/gate93/20261030-native-2e3adbf/`.
+The uninstalled candidate is its
+`candidates/86f0d392624b4b70b3f357e9c7d8914a/` directory; updated loader hosts
+are under sibling `20261030-loader-80eac5c/`.
 
 ## Remaining work
 
@@ -38,8 +47,8 @@ Podcast needs bounded source-valid Analysis gain
 display, comparable performance/capture checks and final independent review.
 Native sound/PDC/export acceptance remains separate from component tests.
 
-Gate needs verified complete runtime staging, isolated candidate-local loader
-checks, actual native arming/inference, callback deadline/allocation and PDC
+Gate needs isolated candidate-local loader checks, actual native
+arming/inference, callback deadline/allocation and PDC
 checks, GUI qualification and listening acceptance. An explicit test-host DLL
 search strategy does not prove ordinary DAW deployment. Existing ABI hosts cannot
 arm the prototype, so activation alone cannot count as actual gating.
