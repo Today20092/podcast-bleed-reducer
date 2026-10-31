@@ -3,9 +3,6 @@ param(
     [string[]]$ArgumentList = @(),
     [string]$WorkingDirectory = (Get-Location).Path,
     [string]$ReceiptPath,
-    [ValidateRange(0, 1048576)][double]$MinAvailableGiB = 14,
-    [ValidateRange(0, 1048576)][double]$ReserveGiB = 8,
-    [ValidateRange(0.0625, 1024)][double]$MaxCommitGiB = 6,
     [ValidateRange(1, 86400)][int]$TimeoutSeconds = 1800
 )
 $ErrorActionPreference = 'Stop'
@@ -49,6 +46,7 @@ $receipt = [ordered]@{
     process_id=$null
     root_exit_code=$null
     remaining_process_ids=@()
+    job_limit_flags=$null
     cleanup_verified=$true
     elapsed_seconds=0
     peak_private_bytes=0L
@@ -57,7 +55,7 @@ $receipt = [ordered]@{
     minimum_available_physical_bytes=$null
     minimum_available_commit_bytes=$null
     max_active_processes=0
-    policy=@{ min_available_gib=$MinAvailableGiB; reserve_gib=$ReserveGiB; max_commit_gib=$MaxCommitGiB; timeout_seconds=$TimeoutSeconds }
+    policy=@{ timeout_seconds=$TimeoutSeconds }
     competing_processes=@()
     error=$null
 }
@@ -69,15 +67,14 @@ try {
     $memory = [CleanSlate.Build.OwnedTask]::Memory()
     $receipt.minimum_available_physical_bytes=$memory.AvailablePhysical
     $receipt.minimum_available_commit_bytes=$memory.AvailableCommit
-    if ($memory.AvailablePhysical -lt $MinAvailableGiB*1GB) { $receipt.reason='low-memory-before-start'; throw 'Available physical memory is below the start requirement.' }
-    if ($memory.AvailableCommit -lt $MaxCommitGiB*1GB) { $receipt.reason='low-commit-before-start'; throw 'System commit headroom is below the owned-task budget.' }
     $receipt.competing_processes=@(Get-Process -Name cargo,rustc,rust-analyzer,link,lld-link,ida,ida64,ghidra -ErrorAction SilentlyContinue | Select-Object Id,ProcessName)
     if ($receipt.competing_processes.Count) { $receipt.reason='unowned-heavy-process'; throw 'An existing compiler/analyzer must finish before starting this task.' }
-    $task = [CleanSlate.Build.OwnedTask]::new($executable, $ArgumentList, $WorkingDirectory, [uint64]($MaxCommitGiB*1GB), $logPath)
+    $task = [CleanSlate.Build.OwnedTask]::new($executable, $ArgumentList, $WorkingDirectory, $logPath)
     $receipt.process_id=$task.ProcessId
     while ($true) {
         $sample=$task.Sample(); $memory=[CleanSlate.Build.OwnedTask]::Memory()
         $receipt.remaining_process_ids=@($sample.ProcessIds)
+        $receipt.job_limit_flags=$sample.JobLimitFlags
         if ($null -ne $sample.RootExitCode -and $null -eq $receipt.root_exit_code) {
             $receipt.root_exit_code=$sample.RootExitCode
             # Persist once before waiting for real descendants, so a stalled run retains evidence.
@@ -89,9 +86,6 @@ try {
         $receipt.max_active_processes=[Math]::Max($receipt.max_active_processes,[int]$sample.ActiveProcesses)
         $receipt.minimum_available_physical_bytes=[Math]::Min([long]$receipt.minimum_available_physical_bytes,[long]$memory.AvailablePhysical)
         $receipt.minimum_available_commit_bytes=[Math]::Min([long]$receipt.minimum_available_commit_bytes,[long]$memory.AvailableCommit)
-        if ($sample.MemoryLimitHit) { $receipt.reason='job-memory-limit'; break }
-        if ($memory.AvailablePhysical -lt $ReserveGiB*1GB) { $receipt.reason='low-memory-running'; break }
-        if ($memory.AvailableCommit -lt $ReserveGiB*1GB) { $receipt.reason='low-commit-running'; break }
         if ($timer.Elapsed.TotalSeconds -ge $TimeoutSeconds) { $receipt.reason='timeout'; break }
         if ($sample.ActiveProcesses -eq 0) {
             $receipt.exit_code=$task.ExitCode
@@ -103,7 +97,7 @@ try {
     if ($receipt.status -ne 'done') { throw "Guarded task stopped: $($receipt.reason)." }
 } catch {
     $receipt.error=$_.Exception.Message
-    if ($receipt.reason -in @('heavy-task-busy','low-memory-before-start','low-commit-before-start','unowned-heavy-process','job-memory-limit','low-memory-running','low-commit-running','timeout')) { $receipt.status='resource-blocked' }
+    if ($receipt.reason -in @('heavy-task-busy','unowned-heavy-process','timeout')) { $receipt.status='resource-blocked' }
 } finally {
     try {
         if ($task) {
