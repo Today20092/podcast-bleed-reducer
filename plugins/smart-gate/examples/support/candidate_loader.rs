@@ -73,22 +73,47 @@ mod windows {
         let loaded = module_path(module);
         println!("DIRECTML_PATH: {}", loaded.display());
         report_crt("AFTER_GATE");
-        let expected = std::fs::canonicalize(
-            std::path::Path::new(binary)
-                .parent()
-                .unwrap()
-                .join("DirectML.dll"),
-        )
-        .unwrap();
-        assert_eq!(
-            loaded, expected,
-            "DirectML must resolve from the candidate sidecar"
-        );
+        let binary = std::fs::canonicalize(binary).unwrap();
+        let expected = binary.parent().unwrap().join("DirectML.dll");
+        if loaded != expected {
+            eprintln!(
+                "LOADER_RUNTIME_PATH_REJECTED: loaded {}; expected {}",
+                loaded.display(),
+                expected.display()
+            );
+            std::process::exit(42);
+        }
     }
 }
 
 #[cfg(windows)]
 pub use windows::{configure, verify};
+
+/// Loads the trusted engineering candidate, classifying only Windows error 126.
+///
+/// # Safety
+/// The caller must satisfy the plugin library's initialization requirements.
+pub unsafe fn load(path: &str, isolated: bool) -> libloading::Library {
+    // SAFETY: the ABI host caller owns the candidate's initialization contract.
+    match unsafe { libloading::Library::new(path) } {
+        Ok(library) => library,
+        Err(error) => {
+            #[cfg(windows)]
+            if isolated
+                && matches!(error, libloading::Error::LoadLibraryExW { .. })
+                && std::error::Error::source(&error)
+                    .and_then(|source| source.downcast_ref::<std::io::Error>())
+                    .and_then(std::io::Error::raw_os_error)
+                    == Some(126)
+            {
+                eprintln!("LOADER_DEPENDENCY_MISSING: Windows error 126");
+                std::process::exit(43);
+            }
+            let _ = isolated;
+            panic!("Cannot load plugin: {error}");
+        }
+    }
+}
 
 #[cfg(not(windows))]
 pub fn configure(_: &str) {

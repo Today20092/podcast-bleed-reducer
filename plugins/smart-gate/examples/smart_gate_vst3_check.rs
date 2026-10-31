@@ -109,9 +109,9 @@ struct Bundle {
     id: TUID,
 }
 impl Bundle {
-    unsafe fn load(path: &str, expected: [u8; 16]) -> Self {
+    unsafe fn load(path: &str, expected: [u8; 16], isolated: bool) -> Self {
         unsafe {
-            let library = libloading::Library::new(path).unwrap();
+            let library = candidate_loader::load(path, isolated);
             if let Ok(init) = library.get::<unsafe extern "system" fn() -> bool>(b"InitDll\0") {
                 assert!(init());
             }
@@ -327,8 +327,8 @@ fn main() {
     );
     // COM objects are released before factory/ExitDll and library unloading; streams and audio storage outlive every ABI call.
     unsafe {
-        let gate = Bundle::load(&paths[0], *b"CleanSlateGate01");
-        let probe = (!isolated).then(|| Bundle::load(&paths[1], *b"CleanSlateProbe1"));
+        let gate = Bundle::load(&paths[0], *b"CleanSlateGate01", isolated);
+        let probe = (!isolated).then(|| Bundle::load(&paths[1], *b"CleanSlateProbe1", false));
         if let Some(probe) = &probe {
             assert_ne!(gate.id, probe.id);
             let old = probe.create();

@@ -25,9 +25,9 @@ struct Bundle {
     factory: *const clap_plugin_factory,
 }
 impl Bundle {
-    unsafe fn load(path: &str, expected: &str) -> Self {
+    unsafe fn load(path: &str, expected: &str, isolated: bool) -> Self {
         unsafe {
-            let library = libloading::Library::new(path).unwrap();
+            let library = candidate_loader::load(path, isolated);
             let entry = *library
                 .get::<*const clap_plugin_entry>(b"clap_entry\0")
                 .unwrap();
@@ -268,8 +268,8 @@ fn main() {
     );
     // Libraries, host callbacks and audio storage stay live until each instance is stopped/destroyed.
     unsafe {
-        let gate = Bundle::load(&paths[0], "org.cleanslate.smart-gate");
-        let probe = (!isolated).then(|| Bundle::load(&paths[1], "org.cleanslate.fl-probe"));
+        let gate = Bundle::load(&paths[0], "org.cleanslate.smart-gate", isolated);
+        let probe = (!isolated).then(|| Bundle::load(&paths[1], "org.cleanslate.fl-probe", false));
         let host = clap_host {
             clap_version: CLAP_VERSION,
             host_data: ptr::null_mut(),

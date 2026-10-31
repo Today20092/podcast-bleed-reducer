@@ -101,8 +101,12 @@ runtime is rejected before any host process starts, using only a disposable file
 This explicit `AddDllDirectory` strategy verifies an engineering loader only.
 It does not establish that FL Studio, OBS or another ordinary host discovers the
 sidecars, nor does it prove candidate-local CRT loading, arming, inference or
-realtime behavior. Both format positives and missing-sidecar negative controls
-passed at loader source `80eac5c`; see ticket 93 for exact candidate and receipts.
+realtime behavior. Both format positives passed at loader source `80eac5c`.
+Its negative controls are unqualified: the original runner accepted any nonzero
+exit. Updated source requires a defined runtime-path rejection (exit 42) or
+recognized missing-DLL dependency (Windows error 126, exit 43), with exact
+diagnostics; generic panics cannot pass. Those classified native reruns remain
+pending. See ticket 93 for the exact candidate and receipts.
 
 Reserved future Windows links are `%COMMONPROGRAMFILES%/CLAP/CleanSlate Smart Gate.clap`
 and `%COMMONPROGRAMFILES%/VST3/CleanSlate Smart Gate.vst3`. They are distinct from

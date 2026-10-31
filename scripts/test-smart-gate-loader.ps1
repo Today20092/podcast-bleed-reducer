@@ -5,6 +5,7 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+. (Join-Path $PSScriptRoot 'smart-gate-loader-results.ps1')
 $PluginDirectory = (Resolve-Path -LiteralPath $PluginDirectory).Path
 $HostDirectory = (Resolve-Path -LiteralPath $HostDirectory).Path
 $reviewed = Get-Content -LiteralPath (Join-Path $PSScriptRoot '../docs/licenses/directml-1.15.4-runtime.json') -Raw | ConvertFrom-Json
@@ -73,7 +74,7 @@ foreach ($case in $cases) {
             $outText | Set-Content -LiteralPath (Join-Path $run 'stdout.txt')
             $errorText | Set-Content -LiteralPath (Join-Path $run 'stderr.txt')
             if ($negative) {
-                if ($process.ExitCode -eq 0 -or $outText -match '(?m)^PASS:') { throw 'Missing-sidecar negative control unexpectedly passed.' }
+                Assert-GateLoaderNegativeResult $process.ExitCode $outText $errorText
                 Write-Output "PASS: $($case.Host) missing-DirectML control rejected (exit $($process.ExitCode))."
             } else {
                 if ($process.ExitCode -ne 0 -or $outText -notmatch '(?m)^PASS:') { throw "Isolated loader failed: $errorText" }

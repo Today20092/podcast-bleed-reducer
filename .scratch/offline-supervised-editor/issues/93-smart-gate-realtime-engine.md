@@ -24,6 +24,18 @@ Acceptance:
 
 ### Candidate-loader verification source prepared — 2026-10-30
 
+Independent review correction: the two original negative controls are
+**UNQUALIFIED**. Their generic exit-101 NotFound panics were accepted too broadly
+by the runner; positive candidate-local path/hash proof remains valid. The
+filesystem classification regression observed RED (`Unclassified exit 101 was
+accepted as loader proof`) against the original behavior, then GREEN after
+requiring the exact defined marker plus exit code. Source now derives the
+expected sidecar from the canonical existing binary's parent without resolving
+the intentionally absent sidecar. Fallback paths exit 42 with
+`LOADER_RUNTIME_PATH_REJECTED`; only recognized Windows LoadLibrary error 126
+can exit 43 with `LOADER_DEPENDENCY_MISSING`. Generic panics/assertions cannot
+qualify. These Rust changes await compilation and actual negative reruns.
+
 Follow-up diagnostics (source only): observed DirectML path now prints before
 the expected-sidecar lookup, so missing-sidecar fallback paths remain visible.
 The same existing CRT module helper reports before/after-Gate paths for all
@@ -45,7 +57,7 @@ and receipts are preserved at
 The CLAP compile left its own `vctip.exe` telemetry child alive after Cargo
 exited; exact PID/parent/name were verified before stopping only that helper.
 
-Actual isolated invocation passed against candidate
+Actual isolated invocation's positive path/hash checks passed against candidate
 `20261030-native-2e3adbf/candidates/86f0d392624b4b70b3f357e9c7d8914a`
 (plugin source `2e3adbf`, packaging source `ef94023`). Receipt
 `20261030-222749-bba396a47aa24137b0af417499188ed3.json` completed in 20.51 s:
@@ -57,7 +69,8 @@ Gate.vst3/Contents/x86_64-win/DirectML.dll`, both beneath that fixture and both
 matching pinned SHA256
 `9c9e6d822561c6c41b90e6994b3e8857cf1d66dbfb1e0c4c799c7c89b4e92da1`.
 Both missing-sidecar controls exited 101 at the missing expected sidecar check;
-an alternate loaded DirectML was never accepted. This version does not print
+these negatives are UNQUALIFIED because the runner accepted any nonzero exit.
+An alternate loaded DirectML was never accepted. This version does not print
 the alternate module path before rejecting the missing candidate path.
 Both hosts report `VCRUNTIME140.dll` preloaded from
 `C:/Windows/System32/vcruntime140.dll`; the other three imported CRT modules
@@ -73,7 +86,8 @@ module paths are reported, not qualified. No dependencies or arming seam added.
 
 PowerShell parser, path-prefix normalization self-check and diff whitespace
 check pass; Rust examples were formatted with the pinned rustfmt. Compilation
-and actual candidate/negative-control checks passed as recorded above; runtime
+and actual positive candidate checks passed as recorded above; original
+negative controls are unqualified pending explicit classified reruns. Runtime
 acceptance is limited to this explicit engineering-host loader strategy.
 `AddDllDirectory` is an explicit engineering-host strategy; ordinary DAW runtime
 discovery, candidate-local CRT loading, actual armed inference and realtime

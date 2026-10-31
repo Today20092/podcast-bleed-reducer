@@ -1,5 +1,20 @@
 #requires -Version 7.0
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'smart-gate-loader-results.ps1')
+foreach ($case in @(
+    @{ Code = 101; Out = ''; Err = 'generic panic' },
+    @{ Code = 42; Out = ''; Err = 'generic assertion failure' },
+    @{ Code = 101; Out = ''; Err = 'LOADER_RUNTIME_PATH_REJECTED: fallback' },
+    @{ Code = 43; Out = ''; Err = 'LOADER_DEPENDENCY_MISSING: Windows error 127' },
+    @{ Code = 0; Out = 'PASS: unexpected'; Err = 'LOADER_RUNTIME_PATH_REJECTED: fallback' }
+)) {
+    $rejected = $false
+    try { Assert-GateLoaderNegativeResult $case.Code $case.Out $case.Err } catch { $rejected = $true }
+    if (-not $rejected) { throw "Unclassified exit $($case.Code) was accepted as loader proof." }
+}
+Assert-GateLoaderNegativeResult 42 '' 'LOADER_RUNTIME_PATH_REJECTED: fallback'
+Assert-GateLoaderNegativeResult 43 '' 'LOADER_DEPENDENCY_MISSING: Windows error 126'
+Write-Output 'PASS: negative classification rejects generic panics and requires a defined loader failure.'
 $fixture = Join-Path ([IO.Path]::GetTempPath()) "gate-loader-tamper-$([Guid]::NewGuid().ToString('N'))"
 New-Item -ItemType Directory -Path $fixture | Out-Null
 try {
