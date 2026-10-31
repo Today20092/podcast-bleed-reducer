@@ -20,6 +20,18 @@ Implement the owner's FabFilter/sonible quality target in the existing Podcast e
 
 ## Results
 
+2026-10-30 fresh CPU tranche at test-only `b5052b2`: the unchanged waveform test
+passes against untouched historical `d2b30c91` and current production base
+`b41d51e`, using managed scoped worktrees and matched fixture/lock/profile/tool
+hashes. Three current exact tests and the one baseline filter pass; current
+strict library/test Clippy and formatting pass. Separate refresh/cached/gap/
+dense/stale gain and actual egui dispatch spans report p50/p95/p99 with zero
+observed warm CPU-budget exceedances in 40 samples per case. This does not
+establish presentation misses or 60 Hz. [Raw artifacts, stage tables, receipt
+cleanup and remaining acceptance](../../../docs/research/podcast103-cpu-benchmark-results-2026-10-30.md).
+Only test/fixture/report source changed; no stable production checkout or native
+DLL changed. All broader 103 and native acceptance remain open.
+
 2026-10-30 bounded Analysis gain checkpoint: core `9881369` projects exact extrema
 only for verified native source columns and visible members, using the selective
 three-file shared110 aggregate from `e29cb58..942420f`. Arc publication snapshots

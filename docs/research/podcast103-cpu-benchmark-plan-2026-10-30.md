@@ -1,6 +1,8 @@
 # Podcast 103 comparable CPU benchmark preparation
 
-Prepared, uncompiled and unrun. No benchmark result or 60 Hz qualification.
+Executed at benchmark source `b5052b2`; see
+[the measured results](podcast103-cpu-benchmark-results-2026-10-30.md).
+No native presentation or 60 Hz qualification.
 Managed child worktrees, with setup hooks skipped:
 
 - `podcast103-cpu-baseline`, branch `codex/podcast103-cpu-baseline`, exact
