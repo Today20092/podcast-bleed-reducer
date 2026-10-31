@@ -785,8 +785,24 @@ impl GainEnvelope {
     /// Query exact extrema while limiting the indexed candidate edges inspected.
     /// The budget counts effective-envelope edges (including interval endpoints)
     /// or legacy retargets strictly inside the clipped range, not output points.
-    pub fn gain_bounds_bounded(&self, start: usize, end: usize, _max_edges: usize) -> BoundedGainBounds {
-        // RED scaffold: budget refusal is deliberately absent until its test fails.
+    pub fn gain_bounds_bounded(&self, start: usize, end: usize, max_edges: usize) -> BoundedGainBounds {
+        let end = end.min(self.sample_count);
+        if start >= end {
+            return BoundedGainBounds::Empty;
+        }
+        let count = if let Some(effective) = &self.effective {
+            let Some(count) = effective.bounds_edge_count(self.source_grid(), start, end) else {
+                return BoundedGainBounds::Empty;
+            };
+            count
+        } else {
+            let first = self.points.partition_point(|point| point.sample <= start);
+            let last = self.points.partition_point(|point| point.sample < end);
+            last - first
+        };
+        if count > max_edges {
+            return BoundedGainBounds::TooDense;
+        }
         self.gain_bounds(start, end).map_or(BoundedGainBounds::Empty, |(low, high)| BoundedGainBounds::Bounds(low, high))
     }
 }
