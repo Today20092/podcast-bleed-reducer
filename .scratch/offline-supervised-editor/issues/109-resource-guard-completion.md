@@ -15,8 +15,24 @@ Diagnose the two post-command guard stalls recorded in [the resumption receipt](
 - [x] Add a failing diagnostic regression before the diagnostic implementation; no root-cause fix without reproduction.
 - [x] Pass the existing disposable resource-guard suite and the regression.
 - [x] Record remaining limitations and scoped evidence. Direct execution of all 74 Podcast tests passes with a finalized guarded receipt; a complete product build using the alternative linker remains pending.
+- [ ] Prove named-job membership for the actual Cargo/compiler chain before another heavy run. Receipt statistics alone do not establish descendant containment.
 
 ## Results
+
+### Actual compiler containment gap — 2026-10-30
+
+Ticket 110's selected root-library budget test produced the expected semantic RED on source `a27daac`: `Bounds(0.25, 0.75)` instead of `TooDense`. Compilation took 7 minutes 48 seconds and the outer receipt `20261030-195338-aa9aeffff95149bfa6fb863f5634232f` finalized with root exit 101 and cleanup of its recorded job. However, it recorded only one active process and 36,892,672 bytes peak job commit while a read-only observation saw rustc using about 1,849 MiB private memory. Therefore its compiler owned-memory cap and cleanup are **not proven**. Global minimum physical/commit availability remained about 16.8/16.3 GiB, but that does not repair the missing ownership proof. All further heavy execution stopped; ticket 110's prepared GREEN source remains unrun.
+
+Tiny self-membership probes now establish a real gap, beyond a sampling anomaly:
+
+- Direct current-host PowerShell payload: `IsContained` is true for the exact inherited named job. Its executable is the same regular file as the receipt (`Program Files/WindowsApps/.../pwsh.exe`); the PATH aliases are zero-length reparse points, but were not used in this launch. Receipt `20261030-200353-dcef404a9f78482f8fab2ff2201f45ca`.
+- Contained PowerShell root launching the same real PowerShell child directly: both report named membership true; the receipt records two active processes and 154,439,680 bytes peak job commit. Receipt `20261030-200427-304a0ccad14a45f3b2a49dcd633e0dff`.
+- The same root through `rustup.exe run 1.99.0` to the same tiny child: root membership true, child membership false, despite inheriting the identical job name. Receipt `20261030-200505-0fdba295bd944199a3dadb61288d90d1`. Launching real rustup directly as the guarded root repeats it (`20261030-200659-3ef6c536b52c4f049789ae6a69b74124`): child is in some job, the named job opens successfully, but `IsProcessInJob` for that named job is false. This is not merely an inaccessible named-job handle.
+- Bypassing rustup is not sufficient: guarded pinned actual Cargo with `RUSTC` set to a disposable `.cmd` version-probe stub launches that stub's actual PowerShell child outside the named job too. The stub exits 23 during Cargo's `-vV` check, before any Rust source compilation. Receipt `20261030-200804-3727cce7a15a4c9d95f32829ac662731`.
+
+Each child only printed membership and slept three seconds; the probes used 2 GiB start / 1 GiB reserve / 0.5 GiB owned cap / 15 seconds. Probe children exited normally and the mutex is free. An unknown VCTIP PID 19516 was observed afterward, without Cargo/rustc; it was not terminated because ownership is not established. No further compiler or guessed resolver fix followed. The disposable scripts remain at `%TEMP%/cleanslate109-membership.ps1`, `%TEMP%/cleanslate109-rustc-probe.cmd` and `%TEMP%/cleanslate109-cargo/`.
+
+[Microsoft's job documentation](https://learn.microsoft.com/en-us/windows/win32/procthread/job-objects) says ordinary CreateProcess children inherit job membership absent permitted breakaway, and explicitly identifies brokered WMI launches as an exception. [Pinned Rust 1.99 process source](https://github.com/rust-lang/rust/blob/1.99.0/library/std/src/sys/process/windows.rs) calls CreateProcessW, while [rustup's command source](https://github.com/rust-lang/rustup/blob/main/src/command.rs) calls `cmd.status()`. Those sources do not establish the cause of this machine's observed escape. Do not label it intentional rustup breakaway or assume a generic guard fix. Context7 quota was already exhausted, so primary sources were consulted directly. The actual chain must be made fail-closed and requalified before heavy work resumes; checking only the wrapper's own membership is insufficient.
 
 Latest selected-target proof: Gate lifecycle source `bdb94e9` was compiled with
 the pinned Rust linker and passed all 18 library tests. Initial selected-target
