@@ -25,6 +25,65 @@ builder `task_1a34670fad19` / `ctx_15b57d6dfc49`; FabFilter REA
 `task_26e0c176dfc3` / `ctx_4cf772ad4d8d`. Builder is sole production writer and
 compiler; investigation workers own only their separate research reports.
 
+Mechanics task succeeded; report retained and worker released. Structured-chat
+reuse through `worker-start --terminal` was refused in preflight
+(`terminal_unsupported_for_agent_session`); request/state inspection confirmed
+no extra Task or Dispatch. A fresh independent reviewer started successfully:
+`task_612e8758294e` / `ctx_65a9b636e074`.
+
+Revision acceptance (supersedes first-pass visual acceptance):
+- [ ] Real native resize from640x440 through larger sizes, correct host/editor
+  agreement and same-instance reopen, without merely stretching parent chrome.
+- [ ] Crafted internal title/toolbar, precise Range dial and custom controls;
+  materially improved rendered compact/full states and independent visual review.
+- [ ] Correct Windows delayed repaint scheduling, active motion pacing and
+  measured bounded idle behavior, without changing DSP timing or claiming FPS
+  from requested intervals.
+- [ ] Safe labeled live-signal preview and quick local build/run workflow so
+  waveform/control motion can be evaluated without a DAW or audio device.
+- [ ] Focused FabFilter Pro-G/Pro-L2/Pro-Q4 CLAP report with exact identities,
+  evidence-backed conclusions/unknowns; preserved revised candidate and reports.
+
+The coordinator authorizes a minimal reproducible patch of pinned baseview0.4.1
+inside the plugin workspace if needed to honor the Windows repaint-message
+delay. Preserve exact upstream/license provenance, add focused scheduling
+verification and avoid registry edits, upgrades or desktop dependency changes.
+
+2026-10-31 real-audio preview steering: owner supplies
+`C:/Users/User/Documents/podcast-automix-rust-gui/test-audio/quick-test-10min/261005-channel-1-10min.wav`.
+Header verified: RIFF float32 (tag3), mono48kHz,600s,115200000 data bytes.
+Owner explicitly selects **waveform/meters only**, not audible playback. Extend
+the preview host with read-only real-WAV input at realtime cadence, paused
+startup, host playback/position controls and clear source labeling. Do not open
+an audio output device or copy the media into Git. Retain synthetic mode only
+as a separately labeled optional fixture. This extends the same active GUI task.
+
+Owner iteration window opened by coordinator: PID21820, preserved
+`Gui117/revision-final-7140295/smart_gate_vst3_check.exe`, paused preview.
+Owner explicitly asks to keep the UI open for feedback. It is user-owned and
+must remain separate from worker cleanup; coordinator will switch it to the
+WAV-enabled candidate when ready. This does not retain any agent terminal.
+
+Revision checkpoint: UI commit1ba729a, focused event-pump/gesture7140295 and
+host assertion phase27e67da are preserved. Final foreground UI-entry sample:
+median15.829ms, p9531.056ms, max32.934ms; UI-body median0.186ms. This is UI-call
+timing, not physical FPS or a controlled comparison with earlier occlusion.
+Foreground idle tail median269.133ms and processCPU234.375/5004.605ms were
+observed.38 tests/lint/build and both format checks passed for that checkpoint;
+new WAV-mode checks and exact final source/host identity remain pending.
+REA and mechanics Tasks succeeded and their workers were released; reports are
+retained uncommitted in the GUI workspace for coordinator preservation after
+builder commits. Fresh Pro-G CLAP report cites29 verified EvidenceIDs from a
+74-record bundle; detailed L2/Q4 CLAP internals and vendor runtime/FPS remain
+explicit gaps. Reviewer and builder remain active for real-WAV completion.
+
+Build coordination note: an external completed compiler root (exit0) left only
+VCTIP31452 in its owned job, holding the global wrapper. Coordinator checked
+`20261031-144746-e5913e0f0a154735a8de3786d3b25256.diagnostics.log`, exact MSVC
+14.44.35207 helper path/creation time, and absence of compiler6832/rustc28756/
+parent26868 before stopping only that orphan helper. No active build, memory
+limit or coordination bypass was changed; the queued GUI rebuild then completed.
+
 2026-10-31: Owner explicitly requests supervised GUI implementation now, using
 the FabFilter and sonible reference research to produce a clean, professional,
 well-animated and responsive vocal/podcast plugin. This authorizes this bounded
