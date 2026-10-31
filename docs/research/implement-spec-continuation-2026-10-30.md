@@ -104,5 +104,16 @@ search strategy does not prove ordinary DAW deployment. Existing ABI hosts canno
 arm the prototype, so activation alone cannot count as actual gating.
 
 Tickets 93 and 103 remain claimed; 94 and the existing native-acceptance-dependent
-follow-ups remain blocked. No release publication or installed-link change is
-part of these checkpoints.
+follow-ups remain blocked. The owner subsequently prioritized getting Smart Gate
+usable for GUI work and explicitly requested subagent continuation. A verified
+development preview is preserved under
+`%LOCALAPPDATA%/CleanSlate/GuiPreviews/SmartGate/2e3adbf-274eb182/`; development
+plugin links are being delivered separately from release publication. Probe and
+Podcast installed links/bytes remain unchanged. No public release occurred.
+
+The actual Gate VST3 editor host reached editor-ready and exact unarmed unity,
+but both Windows UI automation backends lacked their native pipe. No consent
+input or armed render occurred; the bounded run exited unqualified after its
+own timeout, with recorded cleanup verified. This is not armed-ABI or native
+presentation qualification. A safe default-bypassed GUI preview and continued
+realtime measurements are delegated while local development delivery proceeds.

@@ -8,7 +8,9 @@ format/performance acceptance remains open. Gate consolidated `dcc573b` preserve
 27 passing tests, strict lint/formatting, verified runtime staging and corrected
 CLAP/VST3 isolated-loader checks. Debug Rust callback allocation/alignment checks
 pass; native arming/inference/deadlines/PDC remain open. Memory guards remain
-removed. No installed plugin or release changed. See the
+removed. The owner now prioritizes a usable Smart Gate GUI development install;
+its verified preview/delivery and remaining realtime checks are delegated.
+Probe/Podcast installed files stay unchanged; no public release occurred. See the
 [continuation record](../../docs/research/implement-spec-continuation-2026-10-30.md).
 
 Owner explicitly resumed implementation after the pause below. Continue from
