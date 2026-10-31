@@ -1,5 +1,10 @@
 # CleanSlate Podcast workspace
 
+2026-10-30 owner instruction: local build/test execution has no memory threshold,
+reserve or cap after the upgrade to 40 GB RAM. Keep timeouts, cancellation and one
+compiler globally. Memory measurements are informational; older memory profiles
+are superseded by ticket 111.
+
 Branch: `codex/plugin-podcast`
 Product ticket: [86](.scratch/offline-supervised-editor/issues/86-podcast-plugin.md)
 First implementation leaf: [95](.scratch/offline-supervised-editor/issues/95-podcast-product-identity.md), after 87/88 are done.
