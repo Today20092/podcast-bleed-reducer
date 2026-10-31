@@ -31,6 +31,31 @@ before any host runs. `scripts/test-smart-gate-loader-preflight.ps1` passes:
 same-length tampered runtime rejected before host execution, without builds or
 native plugin loading.
 
+At source `80eac5c`, both updated hosts compile (CLAP 24.94 s, VST3 2.57 s),
+strict example Clippy passes (0.87 s), and Cargo formatting passes. Executables
+and receipts are preserved at
+`%LOCALAPPDATA%/CleanSlate/VerifiedBuilds/gate93/20261030-loader-80eac5c/`.
+The CLAP compile left its own `vctip.exe` telemetry child alive after Cargo
+exited; exact PID/parent/name were verified before stopping only that helper.
+
+Actual isolated invocation passed against candidate
+`20261030-native-2e3adbf/candidates/86f0d392624b4b70b3f357e9c7d8914a`
+(plugin source `2e3adbf`, packaging source `ef94023`). Receipt
+`20261030-222749-bba396a47aa24137b0af417499188ed3.json` completed in 20.51 s:
+exit 0, `cleanup_verified=true`, `remaining_process_ids=[]`. Fixture retained at
+`%LOCALAPPDATA%/CleanSlate/PluginLoaderChecks/62b21e0e466b4791a9e7243935f124ff/`.
+CLAP loaded `smart_gate_clap_check.exe-missing-False/candidate/DirectML.dll`;
+VST3 loaded `smart_gate_vst3_check.exe-missing-False/candidate/CleanSlate Smart
+Gate.vst3/Contents/x86_64-win/DirectML.dll`, both beneath that fixture and both
+matching pinned SHA256
+`9c9e6d822561c6c41b90e6994b3e8857cf1d66dbfb1e0c4c799c7c89b4e92da1`.
+Both missing-sidecar controls exited 101 at the missing expected sidecar check;
+an alternate loaded DirectML was never accepted. This version does not print
+the alternate module path before rejecting the missing candidate path.
+Both hosts report `VCRUNTIME140.dll` preloaded from
+`C:/Windows/System32/vcruntime140.dll`; the other three imported CRT modules
+were absent before Gate load. CRT completeness remains unqualified.
+
 Added an explicit `--candidate-loader` mode to both existing ABI hosts and
 `scripts/test-smart-gate-loader.ps1` accepting preserved candidate/host paths.
 The default coexistence checks remain intact. Dedicated processes exclude
@@ -41,8 +66,8 @@ module paths are reported, not qualified. No dependencies or arming seam added.
 
 PowerShell parser, path-prefix normalization self-check and diff whitespace
 check pass; Rust examples were formatted with the pinned rustfmt. Compilation
-and actual candidate/negative-control execution are pending the shared compiler
-slot and native staging. No PASS receipt or runtime acceptance is claimed.
+and actual candidate/negative-control checks passed as recorded above; runtime
+acceptance is limited to this explicit engineering-host loader strategy.
 `AddDllDirectory` is an explicit engineering-host strategy; ordinary DAW runtime
 discovery, candidate-local CRT loading, actual armed inference and realtime
 qualification remain open.

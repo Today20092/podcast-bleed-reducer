@@ -101,7 +101,8 @@ runtime is rejected before any host process starts, using only a disposable file
 This explicit `AddDllDirectory` strategy verifies an engineering loader only.
 It does not establish that FL Studio, OBS or another ordinary host discovers the
 sidecars, nor does it prove candidate-local CRT loading, arming, inference or
-realtime behavior. Loader mode source is prepared; execution is still pending.
+realtime behavior. Both format positives and missing-sidecar negative controls
+passed at loader source `80eac5c`; see ticket 93 for exact candidate and receipts.
 
 Reserved future Windows links are `%COMMONPROGRAMFILES%/CLAP/CleanSlate Smart Gate.clap`
 and `%COMMONPROGRAMFILES%/VST3/CleanSlate Smart Gate.vst3`. They are distinct from
