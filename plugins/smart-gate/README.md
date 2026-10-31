@@ -1,5 +1,23 @@
 # CleanSlate Smart Gate 0.0.1
 
+## Engineering waveform editor (2026-10-31)
+
+The editor shows 5.12 seconds of original (gray) and processed (teal) peak
+envelopes from real host audio. Purple is the maximum applied reduction in
+each matching 10 ms interval. IN/OUT meters are in dBFS; the header shows
+current reduction in dB. Stopped callbacks clear current meters after 250 ms;
+the retained history stays available to inspect. No input produces an empty
+display, not a demonstration waveform.
+
+Bypass preserves original audio. Arm is temporary and does not clear Bypass.
+Range sets the maximum reduction between 0 and 6 dB and is host automatable;
+restoring a saved project restores a valid Range while forcing safe Bypass.
+Freeze pauses only the history display; live meters and processing continue.
+Original/Processed toggle drawing independently. Fixed detector thresholds,
+hold/ramp timing and evidence expiry are described below the controls.
+
+The historical checkpoints below retain their original verification scope.
+
 The last checked native candidate is a pass-through prototype for one mono/stereo
 insert. Current ticket 93 source connects the embedded speech detector, bounded
 worker and finite gain policy. Current engineering source passes 25 library/editor

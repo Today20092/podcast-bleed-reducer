@@ -13,6 +13,8 @@ pub(crate) struct Engine {
     pending: Option<Event>,
     enabled: bool,
     fault: bool,
+    pub(crate) minimum_gain: f32,
+    recorder: crate::history::Recorder,
 }
 
 impl Engine {
@@ -27,6 +29,8 @@ impl Engine {
             pending: None,
             enabled: false,
             fault: false,
+            minimum_gain: 1.0,
+            recorder: crate::history::Recorder::new(rate),
         };
         engine.reset();
         Ok(engine)
@@ -40,6 +44,7 @@ impl Engine {
         self.pending = None;
         self.enabled = false;
         self.fault = false;
+        self.recorder.reset();
     }
 
     pub(crate) fn failed(&self) -> bool {
@@ -60,11 +65,35 @@ impl Engine {
         }
     }
 
-    pub(crate) fn process(&mut self, buffer: &mut Buffer, enabled: bool) {
+    fn record_original(
+        &mut self,
+        buffer: &Buffer,
+        start: usize,
+        history: &crate::history::History,
+    ) {
+        for frame in start..buffer.samples() {
+            let peak = buffer
+                .as_slice_immutable()
+                .iter()
+                .fold(0.0_f32, |peak, channel| peak.max(channel[frame].abs()));
+            self.recorder.observe(peak, peak, 1.0, history);
+        }
+    }
+
+    pub(crate) fn process(
+        &mut self,
+        buffer: &mut Buffer,
+        enabled: bool,
+        range: f32,
+        history: &crate::history::History,
+    ) {
+        self.minimum_gain = 1.0;
+        self.gain.set_range_db(range);
         if !enabled {
             if self.enabled {
                 self.reset();
             }
+            self.record_original(buffer, 0, history);
             return;
         }
         if !self.enabled {
@@ -72,6 +101,7 @@ impl Engine {
             self.enabled = true;
         }
         if self.fault || self.worker.failed() {
+            self.record_original(buffer, 0, history);
             return;
         }
         if buffer.channels() != self.channels
@@ -81,6 +111,7 @@ impl Engine {
                 .any(|channel| channel.iter().any(|sample| !sample.is_finite()))
         {
             self.fault = true;
+            self.record_original(buffer, 0, history);
             return;
         }
 
@@ -90,6 +121,7 @@ impl Engine {
             let end = (start + 256).min(buffer.samples());
             let Some(processed_end) = self.position.checked_add((end - start) as u64) else {
                 self.fault = true;
+                self.record_original(buffer, start, history);
                 return;
             };
             let channels = buffer.as_slice_immutable();
@@ -98,6 +130,7 @@ impl Engine {
                 || (self.offline && !self.worker.wait_until_processed(processed_end))
             {
                 self.fault = true;
+                self.record_original(buffer, start, history);
                 return;
             }
             if self.pending.is_none() {
@@ -118,14 +151,25 @@ impl Engine {
                 }
                 if self.worker.failed() {
                     self.fault = true;
+                    self.record_original(buffer, frame, history);
                     return;
                 }
                 let gain = self.gain.next_gain(self.position, true);
+                self.minimum_gain = self.minimum_gain.min(gain);
+                let input = buffer
+                    .as_slice_immutable()
+                    .iter()
+                    .fold(0.0_f32, |peak, channel| peak.max(channel[frame].abs()));
                 if gain != 1.0 {
                     for channel in buffer.as_slice() {
                         channel[frame] *= gain;
                     }
                 }
+                let output = buffer
+                    .as_slice_immutable()
+                    .iter()
+                    .fold(0.0_f32, |peak, channel| peak.max(channel[frame].abs()));
+                self.recorder.observe(input, output, gain, history);
                 self.position += 1;
             }
         }

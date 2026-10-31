@@ -18,6 +18,7 @@ pub struct GainPolicy {
     hold_until: u64,
     gain: f32,
     rise_remaining: u32,
+    floor: f32,
 }
 
 impl GainPolicy {
@@ -34,9 +35,19 @@ impl GainPolicy {
             hold_until: 0,
             gain: 1.0,
             rise_remaining: 0,
+            floor: FLOOR,
         };
         policy.reset(0);
         Ok(policy)
+    }
+
+    pub(crate) fn set_range_db(&mut self, range: f32) {
+        self.floor = if range.is_finite() {
+            10.0_f32.powf(-range.clamp(0.0, 6.0) / 20.0)
+        } else {
+            1.0
+        };
+        self.gain = self.gain.max(self.floor);
     }
 
     /// A new source/rate/reset epoch starts at original audio, not the old gain.
@@ -119,7 +130,7 @@ impl GainPolicy {
             }
         } else {
             self.rise_remaining = 0;
-            self.gain = (self.gain - (1.0 - FLOOR) / (self.rate / 4) as f32).max(FLOOR);
+            self.gain = (self.gain - (1.0 - self.floor) / (self.rate / 4) as f32).max(self.floor);
         }
         self.gain
     }

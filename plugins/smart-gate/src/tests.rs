@@ -386,8 +386,21 @@ fn actual_gate_editor_states_remain_visible_at_declared_size() {
                 assert_eq!(audio[0][0].to_bits(), 0x7fc0_1234);
             }
             if name == "current" {
-                for _ in 0..2 {
-                    let mut audio = vec![vec![0.0001; 1536]];
+                for block in 0..120 {
+                    let mut audio = vec![
+                        (0..1536)
+                            .map(|i| {
+                                let sample = block * 1536 + i;
+                                if block < 85 {
+                                    (sample as f32 * 0.018).sin()
+                                        * (sample as f32 * 0.00013).sin().abs()
+                                        * 0.7
+                                } else {
+                                    0.0001
+                                }
+                            })
+                            .collect(),
+                    ];
                     process_test_block(&mut gate, &mut audio);
                 }
             }
@@ -436,6 +449,38 @@ fn actual_gate_editor_states_remain_visible_at_declared_size() {
             status,
             "{name} status must be drawn within the declared editor size"
         );
+    }
+}
+
+#[test]
+fn applied_reduction_display_expires_when_audio_callbacks_stop() {
+    let params = Arc::new(GateParams {
+        bypass: BoolParam::new("Bypass", false).make_bypass(),
+        meter: AtomicU64::new((1_u64 << 32) | u64::from(0.501_187_2_f32.to_bits())),
+        ..GateParams::default()
+    });
+    let consent = Arc::new(AtomicU64::new(Consent::Armed as u64));
+    let mut panel = editor::Panel::new(
+        params.clone(),
+        consent,
+        Arc::new(AtomicU8::new(DetectionState::Current as u8)),
+    );
+    let context = egui::Context::default();
+    for (time, expected) in [(0.0, "Attenuating"), (0.3, "No recent audio callback")] {
+        let mut output = context.run_ui(
+            egui::RawInput {
+                time: Some(time),
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(640.0, 440.0),
+                )),
+                ..Default::default()
+            },
+            |ui| panel.show(ui),
+        );
+        output.textures_delta.clear();
+        assert!(output.shapes.iter().any(|shape| matches!(&shape.shape,
+            egui::Shape::Text(text) if text.galley.job.text == expected)));
     }
 }
 
@@ -502,6 +547,38 @@ fn fresh_absence_can_attenuate_but_expiring_evidence_returns_to_original() {
     }
     assert_eq!(gain.next_gain(expiry, true), 1.0);
     assert_eq!(gain.next_gain(expiry + 1, true), 1.0);
+}
+
+#[test]
+fn range_limits_actual_gain_and_round_trips_without_arming() {
+    use cleanslate_gate_detector::Event;
+    let mut policy = gain::GainPolicy::new(48_000).unwrap();
+    policy.set_range_db(3.0);
+    let mut last = 1.0;
+    for position in 0..30_720 {
+        if position > 0 && position % 1536 == 0 {
+            policy.observe(Event {
+                epoch: 0,
+                end_16k: position / 3,
+                available_at: position,
+                probability: 0.0,
+            });
+        }
+        last = policy.next_gain(position, true);
+    }
+    assert!((last - 10.0_f32.powf(-3.0 / 20.0)).abs() < 0.00001);
+    policy.set_range_db(0.0);
+    assert_eq!(policy.next_gain(30_720, true), 1.0);
+    for value in [3.0, f32::NAN, -1.0, 7.0] {
+        let mut state = PluginState {
+            version: SmartGate::VERSION.into(),
+            params: BTreeMap::from([("smart_gate_range".into(), ParamValue::F32(value))]),
+            fields: BTreeMap::new(),
+        };
+        SmartGate::filter_state(&mut state);
+        assert!(matches!(state.params[BYPASS_ID], ParamValue::Bool(true)));
+        assert_eq!(state.params.contains_key("smart_gate_range"), value == 3.0);
+    }
 }
 
 #[test]
@@ -737,8 +814,9 @@ fn gate_has_distinct_stable_format_and_state_identity() {
     assert_ne!(SmartGate::VST3_CLASS_ID, *b"CleanSlateProbe1");
     let gate = SmartGate::default();
     assert_eq!(gate.params.serialize_fields()[STATE_KEY], "2");
-    assert_eq!(gate.params.param_map().len(), 1);
+    assert_eq!(gate.params.param_map().len(), 2);
     assert_eq!(gate.params.param_map()[0].0, BYPASS_ID);
+    assert_eq!(gate.params.param_map()[1].0, "smart_gate_range");
 }
 
 #[test]
@@ -846,6 +924,13 @@ fn explicitly_armed_offline_callback_applies_one_finite_gain_and_reset_restores_
             process_test_block(&mut gate, &mut audio);
         }
         let gain = audio[0][1535] / original[0][1535];
+        let packet = gate.params.meter.load(Ordering::Relaxed);
+        assert_ne!(
+            packet >> 32,
+            0,
+            "callback must publish a fresh meter packet"
+        );
+        assert!((f32::from_bits(packet as u32) - gain).abs() < 0.00001);
         assert!(
             (0.50..0.51).contains(&gain),
             "armed absence did not reach finite reduction: {gain}"
@@ -858,6 +943,10 @@ fn explicitly_armed_offline_callback_applies_one_finite_gain_and_reset_restores_
         audio.clone_from(&original);
         process_test_block(&mut gate, &mut audio);
         assert_eq!(audio, original, "bypass overrides explicit arming");
+        assert_eq!(
+            f32::from_bits(gate.params.meter.load(Ordering::Relaxed) as u32),
+            1.0
+        );
         Arc::get_mut(&mut gate.params).unwrap().bypass =
             BoolParam::new("Bypass", false).make_bypass();
         audio.clone_from(&original);

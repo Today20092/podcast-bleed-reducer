@@ -18,6 +18,13 @@ for the last processed block, including valid absence. Exact source-age expiry,
 epoch and reset boundaries are checked; native realtime timing is not qualified.
 No Session setup is needed.
 
+2026-10-31 engineering GUI: real original/processed 10 ms peak envelopes and
+aligned applied-reduction history cover 5.12 seconds, with live input/output
+meters. Freeze and waveform visibility affect display only. Range is now a
+host parameter from 0 to 6 dB, saved independently of temporary consent; restored
+projects remain bypassed. No confidence curve is invented from gain. Detector
+thresholds, hold, ramps and evidence expiry remain fixed and visibly described.
+
 The probe retains its own source, format identifiers, state and installed links.
 This package has no desktop GUI, ownership trainer or probe dependency. Prototype
 version 0.0.1 does not inherit the desktop's stable-release promise.

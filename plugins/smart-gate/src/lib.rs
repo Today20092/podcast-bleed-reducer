@@ -4,6 +4,7 @@ mod editor;
 mod editor_capture;
 mod engine;
 pub mod gain;
+mod history;
 pub mod worker;
 
 use nice_plug::editor::dpi::LogicalSize;
@@ -42,6 +43,11 @@ pub struct GateParams {
     bypass: BoolParam,
     #[persist = "org.cleanslate.smart-gate.state-version"]
     state_version: Mutex<u32>,
+    // One coherent last-block gain and generation; no GUI work on the callback.
+    meter: AtomicU64,
+    history: history::History,
+    #[id = "smart_gate_range"]
+    range: FloatParam,
 }
 
 impl Default for GateParams {
@@ -49,6 +55,10 @@ impl Default for GateParams {
         Self {
             bypass: BoolParam::new("Bypass", true).make_bypass(),
             state_version: Mutex::new(STATE_VERSION),
+            meter: AtomicU64::new(0),
+            history: history::History::default(),
+            range: FloatParam::new("Range", 6.0, FloatRange::Linear { min: 0.0, max: 6.0 })
+                .with_unit(" dB"),
         }
     }
 }
@@ -99,6 +109,8 @@ impl SmartGate {
     }
 
     fn invalidate_consent(&self) {
+        self.params.history.clear();
+        self.params.meter.store(0, Ordering::Relaxed);
         // Changing generation retires a press/focus that predates this lifecycle boundary.
         let _ = self
             .consent
@@ -157,7 +169,16 @@ impl Plugin for SmartGate {
 
     fn filter_state(state: &mut PluginState) {
         // Restoring a project is never consent to experimental attenuation.
+        let range = state.params.get("smart_gate_range").cloned();
         state.params.clear();
+        if let Some(ParamValue::F32(value)) = range
+            && value.is_finite()
+            && (0.0..=6.0).contains(&value)
+        {
+            state
+                .params
+                .insert("smart_gate_range".into(), ParamValue::F32(value));
+        }
         state
             .params
             .insert(BYPASS_ID.into(), ParamValue::Bool(true));
@@ -225,7 +246,18 @@ impl Plugin for SmartGate {
     ) -> ProcessStatus {
         let enabled = self.experimental_armed() && !self.params.bypass.value();
         if let Some(engine) = &mut self.engine {
-            engine.process(buffer, enabled);
+            engine.process(
+                buffer,
+                enabled,
+                self.params.range.value(),
+                &self.params.history,
+            );
+            let sequence = (self.params.meter.load(Ordering::Relaxed) >> 32) as u32;
+            self.params.meter.store(
+                (u64::from(sequence.wrapping_add(1)) << 32)
+                    | u64::from(engine.minimum_gain.to_bits()),
+                Ordering::Relaxed,
+            );
             let state = engine.detection_state();
             self.publish_detection_state(state);
         }

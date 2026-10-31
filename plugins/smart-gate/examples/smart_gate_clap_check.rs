@@ -111,7 +111,7 @@ unsafe fn bypass(plugin: *const clap_plugin, value: bool) {
     unsafe {
         let params = &*((*plugin).get_extension.unwrap())(plugin, CLAP_EXT_PARAMS.as_ptr())
             .cast::<clap_plugin_params>();
-        assert_eq!((params.count.unwrap())(plugin), 1);
+        assert_eq!((params.count.unwrap())(plugin), 2);
         let mut info = mem::zeroed();
         assert!((params.get_info.unwrap())(plugin, 0, &mut info));
         assert_eq!(

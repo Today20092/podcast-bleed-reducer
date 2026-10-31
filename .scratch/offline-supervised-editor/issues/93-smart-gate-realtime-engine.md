@@ -1,6 +1,12 @@
 # Single-input gate DSP and actual-format checks
 
 Status: claimed
+2026-10-31 owner explicitly authorizes waveform/attenuation GUI, usable controls, native inspection and checked development install. Codex claims this bounded continuation; historical 94 dependency does not postpone this owner-requested engineering GUI. Full engine/performance/listening qualification remains separate.
+Current slice: Codex — owner-requested applied-reduction feedback and visible engineering controls, 2026-10-31. Full ticket 94 remains dependency-blocked; no native qualification implied.
+
+Final slice verification: 28/28 direct guarded tests pass (`20261031-000559-f0f12021b854427e8da308e2ab51004e.json`); final strict library/test Clippy passes (`20261031-000608-7e246b4d5d904a23ab303cc96d3b61ef.json`). Both guards completed normally. No installation/native qualification.
+
+2026-10-31 feedback slice: callback publishes coherent last-block minimum applied gain and generation in one atomic packet. The actual editor now shows reduction dB / meter / Attenuating, clears stale packets after 250 ms, exposes fixed policy values, and paints the charcoal background explicitly. Existing Bypass/Arm consent and fallback labels remain. All 28 library tests pass, including real mono/stereo callback-to-meter agreement, bypass unity, stale display and five 640×440 state renders. Strict library/test Clippy passes before the final fixture-only texture cleanup; final check recorded by the current session. CPU bypass render visually inspected in `%LOCALAPPDATA%/CleanSlate/GateFeedbackCaptures/`. Cargo compiler guards required explicit cancellation after successful tests because owned VCTIP remained; direct executable verification is separate. Source changes are uncommitted atop `2212416`; no plugin DLL build, installation or native acceptance. Adjustable controls, confidence/input/output displays and full 94 design remain pending. REA tools absent; doctor observed registration drift/missing native engines, without setup writes.
 Assignee: Codex (Gate realtime prototype; resumed arming/readiness slice)
 Readiness: ready-for-agent
 Type: task

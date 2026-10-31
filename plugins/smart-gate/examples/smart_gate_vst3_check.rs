@@ -182,7 +182,7 @@ struct Instance {
 impl Instance {
     unsafe fn bypass(&self, enabled: bool) {
         unsafe {
-            assert_eq!(self.controller.getParameterCount(), 1);
+            assert_eq!(self.controller.getParameterCount(), 2);
             let mut info: ParameterInfo = mem::zeroed();
             assert_eq!(self.controller.getParameterInfo(0, &mut info), kResultOk);
             let end = info.title.iter().position(|&unit| unit == 0).unwrap();

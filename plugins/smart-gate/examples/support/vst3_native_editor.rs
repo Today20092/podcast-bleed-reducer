@@ -47,30 +47,32 @@ impl IPlugFrameTrait for Frame {
 
 const PENDING: u64 = 1 << 63;
 struct Handler {
-    id: ParamID,
-    value: Arc<AtomicU64>,
+    ids: [ParamID; 2],
+    values: [Arc<AtomicU64>; 2],
 }
 impl Class for Handler {
     type Interfaces = (IComponentHandler,);
 }
 impl IComponentHandlerTrait for Handler {
     unsafe fn beginEdit(&self, id: ParamID) -> tresult {
-        if id == self.id {
+        if self.ids.contains(&id) {
             kResultOk
         } else {
             kInvalidArgument
         }
     }
     unsafe fn performEdit(&self, id: ParamID, value: f64) -> tresult {
-        if id != self.id || !value.is_finite() || !(0.0..=1.0).contains(&value) {
+        let Some(index) = self.ids.iter().position(|candidate| *candidate == id) else {
+            return kInvalidArgument;
+        };
+        if !value.is_finite() || !(0.0..=1.0).contains(&value) {
             return kInvalidArgument;
         }
-        self.value
-            .store(value.to_bits() | PENDING, Ordering::Release);
+        self.values[index].store(value.to_bits() | PENDING, Ordering::Release);
         kResultOk
     }
     unsafe fn endEdit(&self, id: ParamID) -> tresult {
-        if id == self.id {
+        if self.ids.contains(&id) {
             kResultOk
         } else {
             kInvalidArgument
@@ -109,20 +111,18 @@ impl IParamValueQueueTrait for Point {
         kNotImplemented
     }
 }
-struct Changes(ComPtr<IParamValueQueue>);
+struct Changes(Vec<ComPtr<IParamValueQueue>>);
 impl Class for Changes {
     type Interfaces = (IParameterChanges,);
 }
 impl IParameterChangesTrait for Changes {
     unsafe fn getParameterCount(&self) -> i32 {
-        1
+        self.0.len() as i32
     }
     unsafe fn getParameterData(&self, index: i32) -> *mut IParamValueQueue {
-        if index == 0 {
-            self.0.as_ptr()
-        } else {
-            ptr::null_mut()
-        }
+        self.0
+            .get(index as usize)
+            .map_or(ptr::null_mut(), ComPtr::as_ptr)
     }
     unsafe fn addParameterData(&self, _: *const ParamID, _: *mut i32) -> *mut IParamValueQueue {
         ptr::null_mut()
@@ -140,8 +140,8 @@ struct Report {
 }
 fn render(
     processor: &ComPtr<IAudioProcessor>,
-    id: ParamID,
-    pending: &AtomicU64,
+    ids: [ParamID; 2],
+    pending: &[Arc<AtomicU64>; 2],
     armed: bool,
 ) -> Result<Report, String> {
     const REFERENCE: f32 = 1.0 / 8192.0;
@@ -168,16 +168,24 @@ fn render(
             .collect();
         let mut input = vec![vec![REFERENCE; frames], markers.clone()];
         let mut output = vec![vec![f32::NAN; frames]; 2];
-        let edit = pending.swap(0, Ordering::AcqRel);
-        let changes = if edit & PENDING != 0 {
-            let point = ComWrapper::new(Point {
-                id,
-                value: f64::from_bits(edit & !PENDING),
+        let points: Vec<_> = ids
+            .iter()
+            .zip(pending)
+            .filter_map(|(&id, value)| {
+                let edit = value.swap(0, Ordering::AcqRel);
+                (edit & PENDING != 0).then(|| {
+                    ComWrapper::new(Point {
+                        id,
+                        value: f64::from_bits(edit & !PENDING),
+                    })
+                    .to_com_ptr::<IParamValueQueue>()
+                    .unwrap()
+                })
             })
-            .to_com_ptr::<IParamValueQueue>()
-            .unwrap();
+            .collect();
+        let changes = if !points.is_empty() {
             Some(
-                ComWrapper::new(Changes(point))
+                ComWrapper::new(Changes(points))
                     .to_com_ptr::<IParameterChanges>()
                     .unwrap(),
             )
@@ -242,13 +250,16 @@ pub enum Mode {
 
 pub fn run(instance: &Instance, mode: Mode) -> Result<(), String> {
     let preview = mode == Mode::GuiPreview;
-    let pending = Arc::new(AtomicU64::new(0));
+    let pending = [Arc::new(AtomicU64::new(0)), Arc::new(AtomicU64::new(0))];
     // SAFETY: ParameterInfo is the SDK's plain integer/fixed-array output record.
     let mut info: ParameterInfo = unsafe { mem::zeroed() };
+    // SAFETY: ParameterInfo is a plain SDK output record, filled below.
+    let mut range_info: ParameterInfo = unsafe { mem::zeroed() };
     // SAFETY: these main-thread ABI calls configure this retained instance before processing starts.
     unsafe {
-        if instance.controller.getParameterCount() != 1
+        if instance.controller.getParameterCount() != 2
             || instance.controller.getParameterInfo(0, &mut info) != kResultOk
+            || instance.controller.getParameterInfo(1, &mut range_info) != kResultOk
         {
             return Err("Expected the existing bypass parameter".into());
         }
@@ -261,8 +272,8 @@ pub fn run(instance: &Instance, mode: Mode) -> Result<(), String> {
         }
     }
     let handler = ComWrapper::new(Handler {
-        id: info.id,
-        value: Arc::clone(&pending),
+        ids: [info.id, range_info.id],
+        values: pending.clone(),
     })
     .to_com_ptr::<IComponentHandler>()
     .unwrap();
@@ -310,7 +321,7 @@ pub fn run(instance: &Instance, mode: Mode) -> Result<(), String> {
         }
         if !preview {
             let processor = instance.processor.clone();
-            let pending = Arc::clone(&pending);
+            let pending = pending.clone();
             worker = Some(std::thread::spawn(move || {
                 // SAFETY: this sole processing thread owns all process/start/stop calls.
                 unsafe {
@@ -319,12 +330,18 @@ pub fn run(instance: &Instance, mode: Mode) -> Result<(), String> {
                         return;
                     }
                 }
-                let _ = reports.send(render(&processor, info.id, &pending, false));
+                let _ = reports.send(render(
+                    &processor,
+                    [info.id, range_info.id],
+                    &pending,
+                    false,
+                ));
                 while let Ok(run) = requests.recv() {
                     if !run {
                         break;
                     }
-                    let _ = reports.send(render(&processor, info.id, &pending, true));
+                    let _ =
+                        reports.send(render(&processor, [info.id, range_info.id], &pending, true));
                 }
                 // SAFETY: no process call remains in flight on this sole processing thread.
                 unsafe {
