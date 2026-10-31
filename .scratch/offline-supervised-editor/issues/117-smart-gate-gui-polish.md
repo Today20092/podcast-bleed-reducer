@@ -21,6 +21,16 @@ editor and original CleanSlate identity. Do not make a framework migration,
 replace vendor artwork, change the detector/gain algorithm or alter identities.
 One worker owns production UI files; an independent worker reviews evidence.
 
+## Live orchestration
+
+- Run: `run_84f8a85fc7e0` (coordinator: this lusca session).
+- Workspace: `../smart-gate-gui-polish`, branch `codex/smart-gate-gui-polish`.
+- Builder: task `task_66769da7a67c`, dispatch `ctx_243a06c24d7b`.
+- Independent reference review: task `task_9b4f7480779b`, dispatch `ctx_03b0684c0728`.
+- Both structured workers started successfully, 2026-10-31 18:01 UTC.
+- Production GUI edits and builds belong only to the builder. Reviewer owns its
+  report; coordinator owns this ticket and cross-workspace integration decisions.
+
 ## Acceptance
 
 - [ ] Establish rendered baseline and a concise design/motion brief from the
