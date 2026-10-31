@@ -8,6 +8,10 @@ Read AGENTS.md, the active map, [product boundaries](docs/plugin-products.md) an
 
 Product-specific code stays on this branch. Shared engine changes need focused integration through development and desktop checks. Do not alter installed probe links, write into the primary checkout's dist, overwrite user projects, or merge the entire plugin branch into desktop. Default to one guarded heavy task globally and no unattended DAW.
 
+Before executing checks, follow the current owner memory override in AGENTS.md:
+historical memory thresholds/caps no longer apply. Shared timeout, serialization,
+cancellation and cleanup requirements remain; memory accounting is informational.
+
 ## Ticket 91 source checkpoint
 
 `plugins/smart-gate` is a separate 0.0.1 pass-through candidate on the temporary

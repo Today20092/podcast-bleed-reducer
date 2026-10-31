@@ -23,7 +23,7 @@ $settings = & (Join-Path $PSScriptRoot 'local-build-settings.ps1') -TargetDir $T
 function Invoke-GateCargo([string[]]$Arguments) {
     & (Join-Path $PSScriptRoot 'resource-guard.ps1') -FilePath cargo -ArgumentList $Arguments -WorkingDirectory $root
 }
-# All Cargo steps keep the heavy policy; callers cannot relabel compilation as lightweight.
+# Cargo steps keep shared timeout/ownership; memory accounting is informational.
 Invoke-GateCargo (@('fmt', '--manifest-path', $manifest, '--all', '--', '--check'))
 Invoke-GateCargo (@('test', '--manifest-path', $manifest, '--all-targets') + $settings.CargoArguments)
 Invoke-GateCargo (@('clippy', '--manifest-path', $manifest, '--all-targets') + $settings.CargoArguments + @('--', '-D', 'warnings'))

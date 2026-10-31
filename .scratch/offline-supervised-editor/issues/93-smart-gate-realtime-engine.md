@@ -178,6 +178,21 @@ compiler job followed the stop. Keep this incomplete worktree and all preserved
 artifacts; 93 remains claimed and 94 remains blocked. Resume only after the shared
 containment path is repaired and proved, followed by a new execution-slot grant.
 
+### Owner memory override — 2026-10-30
+
+The owner reports 40 GB RAM and explicitly removes memory guards under accepted
+ticket 111 (`df9d707`). This supersedes every older RAM/commit preflight, reserve,
+cap and memory-recovery wait above; historical receipts retain their original
+measurements. Active Gate instructions/README now state the override. Gate's
+build and host wrapper contain no explicit memory arguments or preflight refusal.
+The common product `scripts/test-plugin-hosts.ps1` still has the three memory
+arguments in this checkpoint and is reserved for the coordinator's shared caller
+patch, alongside the revised guard API. Timeouts, global compiler serialization,
+cancellation and owned cleanup remain. Shared files/runner and prior UI drafts
+were not changed by this policy documentation patch. No build/test/native/capture
+execution occurred. Compiler-membership investigation 109 is a separate remaining
+blocker; removing memory caps does not establish containment or close 93/94.
+
 ### Resumed all-target check — 2026-10-30
 
 Fresh preflight recovered to 26.26 GiB physical / 28.69 GiB commit with no

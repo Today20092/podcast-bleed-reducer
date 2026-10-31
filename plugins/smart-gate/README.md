@@ -50,7 +50,11 @@ AAX/AU, native host or other-platform compatibility is claimed.
 
 Use `scripts/build-smart-gate.ps1` from this product checkout. It keeps locked,
 offline dependencies, the shared local Cargo target, one build job, incremental
-compilation and the global 14/8/6 GiB resource policy. It formats/checks/tests this
+compilation, global single-compiler coordination, timeout, cancellation and owned
+cleanup. The owner's 2026-10-30 override removes RAM/commit launch thresholds,
+running reserves and job memory caps; memory metrics are informational. Shared
+execution changes are being integrated separately from these product callers.
+The entrypoint formats/checks/tests this
 separate manifest and builds uniquely named actual-format check executables.
 The graph contains no `rust-app`, ownership trainer or probe dependency.
 
