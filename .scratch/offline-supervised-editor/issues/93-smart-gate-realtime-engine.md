@@ -193,6 +193,23 @@ were not changed by this policy documentation patch. No build/test/native/captur
 execution occurred. Compiler-membership investigation 109 is a separate remaining
 blocker; removing memory caps does not establish containment or close 93/94.
 
+Memory-removal integration is now present: core guard `791a5ed` (focused
+`ce046a3`), shared host caller `bc95a5a`, and active docs/queue `b13cd31`
+(focused `259db7c`). The host caller preserves Gate's `ProbeBinary` arguments and
+90-second timeout while dropping the three memory arguments. Runner patch
+`2c91266` was skipped because coordinator scripts are intentionally absent from
+this product branch; it did not reintroduce them. Coordination remains centralized
+in the desktop checkout. The resource-policy documentation conflict retained the
+accepted memory-removal text and its separate containment caveat.
+
+Static checks: all 27 product PowerShell scripts parse; no obsolete memory CLI
+arguments or memory admission/pressure checks remain in active `scripts/*.ps1`;
+`git diff --check` passes. All four shared guard/helper/fixture files have exactly
+the coordinator root's SHA256 hashes, so its passing common tests apply to these
+identical files without a redundant suite run. No product compiler, inference,
+native host, UI capture or new test executed; the prepared UI/callback drafts and
+their unverified status are unchanged. Ticket 93 remains claimed, 94 blocked.
+
 ### Resumed all-target check — 2026-10-30
 
 Fresh preflight recovered to 26.26 GiB physical / 28.69 GiB commit with no

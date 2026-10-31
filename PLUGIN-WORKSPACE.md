@@ -11,6 +11,8 @@ Product-specific code stays on this branch. Shared engine changes need focused i
 Before executing checks, follow the current owner memory override in AGENTS.md:
 historical memory thresholds/caps no longer apply. Shared timeout, serialization,
 cancellation and cleanup requirements remain; memory accounting is informational.
+The overnight coordinator runs from the canonical desktop checkout; its runner
+scripts are intentionally absent from this product worktree.
 
 ## Ticket 91 source checkpoint
 
