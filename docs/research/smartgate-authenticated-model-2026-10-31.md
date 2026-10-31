@@ -158,3 +158,123 @@ The earlier broader wrapper inspection started mid-function and is retained only
 as discovery material, not proof of instruction boundaries. Validated API-slot
 claims above use complete `.pdata`-bounded functions.
 
+## Follow-up: exact model mathematics and active state
+
+The following is static graph interpretation for both authenticated profiles,
+not a runtime experiment. Selected scalar constants were decoded from their
+typed initializer bytes. No learned weight values are printed.
+
+### Activity head
+
+The active learned path reaches GRU_349 (forward, hidden192), then
+Squeeze/Transpose/Reshape, Einsum_368 (`btgi,gih->btgh`), PRelu_378/Transpose,
+then GRU_383 (forward, hidden96). The last head is:
+
+`GRU_383 -> Squeeze_385 -> Transpose_386 -> MatMul_388 -> Add_390 -> Sigmoid_391 -> Squeeze_392`.
+
+MatMul_388 uses initializer `onnx::MatMul_810`, dimensions`[96,1]`; Add_390 adds
+a single float bias tensor. Let the resulting sigmoid scalar be `a`.
+Mul_394, Sub_396, Div_398 and Pow_400 then compute exactly:
+
+`out_activity = 10^((72*a - 72)/20)`.
+
+Thus the exposed activity is an amplitude-like mapping of the sigmoid result,
+with mathematical endpoints `10^-3.6` (approximately0.00025119) and1 when `a`
+is0 and1. It is not simply the sigmoid probability. This proves neither a
+calibrated probability nor the final product's Level Bias/threshold mapping.
+
+### Spectral output: complete overwrite, not learned separation
+
+out_y has exactly two producer nodes:
+
+1. ScatterND_414 takes in_x_complex `[2,1025]`, index tensor`[[0]]` (int64),
+   and a `[1,1025]` initializer containing only float1.
+2. ScatterND_428 takes that result, index tensor`[[1]]` (int64), and another
+   `[1,1025]` initializer containing only float0.
+
+Each index has depth1 and replaces one complete1025-element row. The two
+distinct rows cover all2050 output elements. Consequently **out_y is always
+row0=ones, row1=zeros** under these graph operators; the original complex input
+is fully overwritten. This is compatible with a unity complex multiplier, but
+the native product's interpretation is not established. It is not evidence of
+learned denoised/separated audio or a learned frequency mask in these models.
+An ordinary syntactic ancestor walk still lists in_x_complex as the base input;
+the complete-overwrite proof is the stronger semantic result.
+
+### Mode and state: five exposed tensors do not affect prediction
+
+Greater_430 evaluates `in_mode > 0.5`; If_432 uses that condition. The exact
+branch outputs, mapped to their parent outputs, are:
+
+| Parent output | False branch | True branch |
+| --- | --- | --- |
+| h0_out | Identity(h0_in) | h0_in × scalar initializer684=0 |
+| h1_out | Identity(h1_in) | h1_in × scalar initializer686=0 |
+| h2_out | Identity(h2_in) | h2_in × scalar initializer688=0 |
+| h3_out | Identity(h3_in) | h3_in × scalar initializer690=0 |
+| h_emb_out | Identity(h_emb_in) | h_emb_in × scalar initializer682=0 |
+
+For finite states the true branch returns zero (possibly signed zero).
+Multiplication is not a guaranteed NaN/Infinity sanitizer. The numeric host mode
+values, when it sets mode, and how it initializes state are not proven here.
+
+Graph reachability includes explicit and implicit inputs. The five h0–h3/h_emb
+inputs have **no path** into out_activity, cache_out, h_bn_out or h_sad_out.
+Their only use is that pass-through/zero branch. in_mode likewise does not affect
+those active outputs. In these serialized graphs it does not reset the two GRU
+states or the convolution cache. No personalized/learned speaker identity should
+be inferred from h_emb naming; the graph gives it no role in the activity score.
+
+| Active output | Actual external graph inputs with paths into it |
+| --- | --- |
+| out_activity | in_x_complex, in_x_mel, cache_in, h_bn_in, h_sad_in |
+| cache_out | in_x_complex, in_x_mel, cache_in |
+| h_bn_out | in_x_complex, in_x_mel, cache_in, h_bn_in |
+| h_sad_out | in_x_complex, in_x_mel, cache_in, h_bn_in, h_sad_in |
+
+This is three active history/state inputs (cache and two recurrent states),
+plus five prediction-inactive exposed state inputs. It does not establish why
+the interface contains the latter or prove they are unused elsewhere in native
+product code.
+
+### Feature paths and convolution attributes
+
+in_x_complex is unsqueezed, squared and summed into a power-like feature. Gather,
+ScatterND and reductions feed a clipped/logarithmic level branch, then Conv_291
+and PRelu_293. in_x_mel is unsqueezed and passes through a clipped/logarithmic
+branch before Conv_287/288/PRelu_290. Add_295 combines these branches, and
+Concat_296 joins cache_in along axis−2. Slice_301 produces cache_out; the
+convolution stack consumes the joined tensor. Thus the model uses both supplied
+features and a level-derived feature; calling the entire model intrinsically
+level-independent would go beyond the graph. Native feature generation and
+the product's separate Level Bias remain to be traced.
+
+All listed Conv dilations are`[1,1]`:
+
+| Conv | Stored weight dimensions | Kernel | Stride | Groups | Pads |
+| --- | --- | --- | --- | ---: | --- |
+| 287 | `[8,1,1,3]` | `[1,3]` | `[1,1]` | 2 | `[0,1,0,1]` |
+| 288 | `[8,8,1,1]` | `[1,1]` | `[1,1]` | 1 | zeros |
+| 291 | `[8,1,1,1]` | `[1,1]` | `[1,1]` | 1 | zeros |
+| 303 | `[16,1,3,3]` | `[3,3]` | `[1,1]` | 8 | `[0,1,0,1]` |
+| 304 | `[16,16,1,1]` | `[1,1]` | `[1,1]` | 1 | zeros |
+| 308 / 313 / 318 | each`[16,1,1,3]` | `[1,3]` | `[1,2]` | 16 | `[0,1,0,1]` |
+| 309 / 314 / 319 | each`[16,16,1,1]` | `[1,1]` | `[1,1]` | 1 | zeros |
+
+The saved tensor graph includes all attributes and exact connectivity. Stored
+node ordering is not asserted to be execution order. Do not infer a temporal
+hop, latency or sample rate from kernel dimensions without the native mapping
+of tensor axes and feature construction.
+
+Additional external evidence:
+
+| File | SHA256 |
+| --- | --- |
+| ort-output-traces.json | `3e72b227f0ad04b5920655e250f31db69b10d7b176f63f825ef42613bfee3733` |
+| ort-graph-constants.json | `36afed04c4d7674a81abb734138499f0fb2d0bf006e5ee037aa623d2382b8264` |
+| ort-graph-reachability.json | `3b2442007767ea8935e3fc7339d232e3487e3546ace25eb953b6a1c4da6c7714` |
+
+These are metadata/selected-constant analyses. The next native checks are which
+outputs the product actually consumes, how it supplies/cache-resets active
+states and features, and how activity reaches Level Bias/Tolerance/Impact gain.
+
