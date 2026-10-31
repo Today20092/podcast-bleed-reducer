@@ -167,3 +167,19 @@ _Avoid_: Exponential-shaped fade, one-pole time constant
 **Review state**:
 Historical review-interface metadata recording reviewed or unreviewed warnings. Retained project metadata does not imply a current GUI review queue.
 _Avoid_: Dismissed warning
+
+**Speech probability**:
+The Silero score for one microphone: how speech-like the current frame is. It is not local ownership and it is not the gate's gain.
+_Avoid_: Confidence, ownership estimate
+
+**Smoothed level**:
+A causal level of one microphone, compared with its recent noise floor. Clip gain must not retune it.
+_Avoid_: Peak meter, dBFS threshold
+
+**Level Bias**:
+How far the single-microphone gate lets smoothed level pull activity away from the speech probability. Low stays speech-first. High behaves more like a level gate.
+_Avoid_: Threshold, tolerance, sensitivity
+
+**Activity**:
+The single number the Smart Gate threshold watches, blended from speech probability and smoothed level by Level Bias.
+_Avoid_: Gain, speech probability, ownership estimate
