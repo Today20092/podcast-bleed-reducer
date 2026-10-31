@@ -29,6 +29,22 @@ Acceptance:
 
 ## Results
 
+### Tested consent continuation — 2026-10-30
+
+Scoped `Today20092/gate93-resume` source `146b057` exposes temporary Arm/Disarm
+through the actual Panel UI while preserving bypass. Actual pointer, Tab/Enter,
+reset/deactivate/reactivate and preparation-copy regressions pass with all 20
+library tests and formatting. Lifecycle generation retires a pre-reset click;
+consent does not claim processing readiness. Final guarded runs have exit 0,
+no remaining job PIDs and verified cleanup. The tested executable SHA256 is
+`6aed9cfcea707f193fefd0865f65cc5b15e116e1a3b859d78da0a6aadedd1194`, under
+`%LOCALAPPDATA%/CleanSlate/VerifiedBuilds/gate93/20261030-editor-consent/`.
+The source's CLAP description was corrected after that compile as a text-only
+change; no new native plugin artifact or metadata qualification is claimed.
+Callback fault/stale readiness, isolated runtime deployment, actual-format
+arming/inference, deadlines/PDC and listening remain open. 93 stays claimed and
+94 blocked. Selected-target compilation uses 109's pinned-linker workaround.
+
 ### Resumed all-target check — 2026-10-30
 
 Fresh preflight recovered to 26.26 GiB physical / 28.69 GiB commit with no
