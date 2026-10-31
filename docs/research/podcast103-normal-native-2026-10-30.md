@@ -112,3 +112,94 @@ Normal pair success does not prove runtime isolation, complete Session VST3
 state, native window/DPI/presentation, listening/PDC/export acceptance, native80
 or whole103 completion. The compiler/heavy slot was explicitly released after
 this pair for coordinator CPU benchmark work.
+
+## Proposed Session acceptance-driver regression — unrun
+
+Source-only inspection of `scripts/check-podcast-workflow.ps1`, both existing
+format hosts, `support/podcast_acceptance.rs`, `support/vst3_state.rs` and
+`product-build.rs` identifies a relevant regression after Published moved to Arc.
+The graph transport was closed; pinned checkout source supplied the evidence.
+No compiler, driver host, release guard or model inference was run for this plan.
+
+The existing workflow checks two actual instances of each format. Its synthetic
+48 kHz fixture has196,608 frames per microphone, complete fingerprint blocks,
+room/solo/overlap labels and nonzero first/last markers. Maintained Analyze and
+independently prepared Float32 final-render WAVs supply the comparison. Realtime
+and host-offline Original/Processed/Removed must agree within2e-6, including
+latency padding and both ends. Sign-flipping one source must invalidate analysis,
+preserve Original and reject Analyze pending example review.
+
+After that processing loop, both format adapters save their real format state,
+destroy/recreate two instances, load it and capture40 further blocks. Binding/
+flush must succeed, all four examples must remain and readiness must be0 until
+explicit Analyze. VST3 uses real bounded IBStream getState/setState calls. This
+closes the bounded machine restore regression gap if it passes; it does not
+establish owner DAW, acoustic/listening or analysis-persistence acceptance.
+The `PASS actual-format Session:` line is printed before the restore assertions,
+so a valid receipt must require that line **and final process exit0**.
+
+Proposed execution preserves those exact existing fixtures/assertions while
+using the established pinned, serialized per-stage commands:
+
+1. Recheck the preserved d8b79686 normal candidate and normal-host hashes. Copy
+   its DLL as a new acceptance directory's normal reference; never use the
+   overwritten shared-cache DLL as that reference. Keep the existing normal
+   checkpoint/candidate immutable. Mark the fresh directory DO-NOT-INSTALL.
+2. Pinned Cargo `clippy --manifest-path plugins/podcast/Cargo.toml --features
+   acceptance-driver --all-targets` plus shared locked/offline/single-job args
+   and `-- -D warnings`. Build the driver DLL with pinned `cargo rustc --lib
+   --features acceptance-driver`, then each named host using `--example
+   podcast_host_check` / `podcast_vst3_host_check` with that feature. Each selected
+   target gets the same explicit pinned LLD arguments used above. Capture exact
+   JSON artifacts, feature sets, source/hash and receipts before later builds
+   can overwrite outputs. Preserve all acceptance-only artifacts separately.
+3. Stage the already verified DirectML/four CRTs and notices next to the driver
+   DLL and both driver hosts, hash checked against the preserved runtime
+   inventory. Driver hosts themselves call the maintained analysis oracle and
+   therefore need those dependencies. No download or new runtime selection.
+4. Compile the exact existing `product-build.rs` with pinned actual Rustc and
+   LLD to a small guard-check executable. Run with child-only package
+   `cleanslate-podcast`, feature env1 and PROFILE=release. Require nonzero exit
+   **and** `acceptance driver must never ship` in stderr; no release dependency
+   graph or installable release artifact is built.
+5. Run each driver host against the copied normal reference. Each must reject
+   it with nonzero exit **and** `Acceptance mode requires the debug-only driver`.
+   An unrelated loader error/panic is not a passing negative. Normal export
+   inventory/normal hosts must also still show driver absence. Then run each
+   driver host against the acceptance DLL, requiring its actual-format PASS
+   line and final exit0 after state restoration. Use fresh child-only
+   LOCALAPPDATA caches and preserve stdout/stderr/exit status. Existing oracle
+   paths under fresh TEMP directories are retained and recorded separately.
+6. A finally-style restoration phase, after verified job cleanup, rebuilds the
+   ordinary no-feature DLL and both no-feature hosts with the pinned commands.
+   Recheck driver absence, ordinary features/JSON identities and preserve the
+   restored outputs. Never repair Cargo's shared target by merely copying DLLs
+   over feature-built outputs: its artifact fingerprints must reflect the normal
+   builds. Record restoration as its own outcome even if acceptance fails. The
+   untouched d8 checkpoint remains usable if restoration itself fails.
+
+The stock top-level script invokes unpinned PATH cargo/rustc, repeats the normal
+build/check package at both ends and restores normal outputs only on its success
+path. Its acceptance children have no individual external timeout. Therefore the
+proposed staged invocation reuses its existing checks rather than running it
+unchanged or adding a new framework/test seam. Source scripts need no edit.
+Each compiler stage uses the existing timeout-only wrapper; positive driver
+hosts can be bounded at120 seconds each, negatives/guard at30 seconds. No RAM
+preflight/reserve/cap. All jobs remain serialized under the coordinator's slot.
+
+Planning estimate: roughly3–6 minutes warm, excluding a lingering helper; allow
+up to10 minutes for feature relinking, two oracle/Analyze runs and normal restore.
+Historical full workflow197.99 seconds included helper waiting and is not a
+current timing guarantee. Cold dependency invalidation can add minutes. Actual
+Analyze already has its own30-second poll deadline and restored-view polling a
+3-second deadline. Do not extend those assertions to obtain a pass. If VCTIP
+again holds a finished compiler's job, apply only the recorded exact-owned
+identity/diagnostic cleanup and preserve the intervention separately.
+
+Risks before execution: driver feature builds overwrite shared DLL/host outputs;
+normal restoration must finish or be explicitly reported incomplete. Both hosts
+perform genuine model inference and filesystem-backed oracle/export work on
+synthetic fresh paths. Negative controls must match their intended reason,
+including cases that print a PASS before later assertions. Runtime isolation,
+native editor presentation, owner listening and DAW PDC/export remain separate.
+This is an unexecuted plan pending the coordinator's compiler/inference slot.
