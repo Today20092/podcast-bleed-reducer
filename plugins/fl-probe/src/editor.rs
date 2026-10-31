@@ -115,6 +115,12 @@ impl NiceEguiApp for Panel {
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _: &mut nice_plug_egui::Frame) {
+        self.show(ui);
+    }
+}
+
+impl Panel {
+    fn show(&mut self, ui: &mut egui::Ui) {
         let Some(context) = self.context.clone() else {
             return;
         };
@@ -747,6 +753,115 @@ fn time(sample: i64, rate: f32) -> String {
 mod tests {
     use super::*;
     use nice_plug::params::InternalParamMut;
+    use nice_plug::{
+        context::{PluginApi, gui::GuiContextInner},
+        params::internals::ParamPtr,
+        plugin::PluginState,
+    };
+
+    struct IdleHost;
+
+    impl GuiContextInner for IdleHost {
+        fn plugin_api(&self) -> PluginApi {
+            PluginApi::Clap
+        }
+        unsafe fn raw_begin_set_parameter(&self, _: ParamPtr) {
+            panic!("Rendering must not begin host automation");
+        }
+        unsafe fn raw_set_parameter_normalized(&self, _: ParamPtr, _: f32) {
+            panic!("Rendering must not change host parameters");
+        }
+        unsafe fn raw_end_set_parameter(&self, _: ParamPtr) {
+            panic!("Rendering must not end host automation");
+        }
+        fn get_state(&self) -> PluginState {
+            panic!("Rendering must not serialize host state");
+        }
+        fn set_state(&self, _: PluginState) {
+            panic!("Rendering must not restore host state");
+        }
+        fn request_restart(&self) {
+            panic!("Rendering must not restart the host");
+        }
+    }
+
+    #[test]
+    fn actual_panel_stops_polling_while_hidden_and_resumes_visible_polling() {
+        for session_mode in [false, true] {
+            for playing in [false, true] {
+                let probe = FlProbe::default();
+                // The test owns the parameters and uses a declared boolean value.
+                unsafe {
+                    probe
+                        .params
+                        .session_mode
+                        ._internal_set_plain_value(session_mode)
+                };
+                let state = Arc::new(GuiState::new());
+                state.playing.store(playing, Relaxed);
+                let mut panel = Panel::new(
+                    probe.params.clone(),
+                    AsyncExecutor::new(
+                        Arc::new(|_| panic!("Rendering must not schedule training")),
+                        Arc::new(|_| panic!("Rendering must not schedule host tasks")),
+                    ),
+                    state,
+                );
+                panel.context = Some(GuiContext::new(Arc::new(IdleHost)));
+                let context = egui::Context::default();
+                style(&context);
+                let mut now = 0.0;
+                let mut frame = |panel: &mut Panel, hidden| {
+                    now += 1.0;
+                    let mut output = context.run_ui(
+                        egui::RawInput {
+                            time: Some(now),
+                            screen_rect: Some(Rect::from_min_size(
+                                Pos2::ZERO,
+                                egui::vec2(1000.0, 680.0),
+                            )),
+                            ..Default::default()
+                        },
+                        |ui| {
+                            if hidden {
+                                ui.set_invisible();
+                            }
+                            panel.show(ui);
+                        },
+                    );
+                    output.textures_delta.clear();
+                    output.viewport_output[&egui::ViewportId::ROOT].repaint_delay
+                };
+                let polling = Duration::from_millis(if cfg!(cleanslate_podcast) || session_mode {
+                    if playing { 16 } else { 100 }
+                } else {
+                    50
+                });
+                for _ in 0..3 {
+                    frame(&mut panel, false);
+                }
+                assert_eq!(frame(&mut panel, false), polling);
+                panel.workspace.drag_anchor = Some(12);
+                panel.workspace.selection = Some((12, 24));
+                panel.workspace.frozen = true;
+                for _ in 0..3 {
+                    frame(&mut panel, true);
+                }
+                assert!(
+                    frame(&mut panel, true) > Duration::from_secs(1),
+                    "Hidden native adapter must stop its playing/idle polling clock"
+                );
+                assert_eq!(panel.workspace.drag_anchor, None);
+                assert_eq!(panel.workspace.selection, Some((12, 24)));
+                assert!(panel.workspace.frozen);
+                for _ in 0..3 {
+                    frame(&mut panel, false);
+                }
+                assert_eq!(frame(&mut panel, false), polling);
+            }
+        }
+    }
+
     #[test]
     fn editor_bundles_readable_fonts_without_host_resources() {
         assert!(!egui::FontDefinitions::default().font_data.is_empty());
