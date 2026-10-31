@@ -1,5 +1,15 @@
 # Plan the offline supervised CleanSlate migration
 
+2026-10-31 owner sequencing: finish the actual sonible smart:gate VST3 native
+investigation, then present a complete vocal/podcast-focused algorithm and
+parameter recommendation and create its backend implementation ticket. Implement
+and minimally verify the DSP, parameter/state contract and actual VST3/CLAP audio
+processing before separately refining the GUI. Keep checks focused on loading,
+real parameter effects/attenuation, state and audio stability; avoid expanding
+the verification matrix or treating an attractive GUI as a working gate. Native
+analysis is running; its model architecture and any quality advantage remain
+unproven. Existing GUI-owner files and installed candidates stay untouched.
+
 Resumed verification: Podcast gain core `9881369` / UI `d3ebcbe` pass all 86
 actual-product tests, strict library/test Clippy and independent review. Hidden
 motion/gestures and actual-adapter repaint cancellation are verified. Bounded
