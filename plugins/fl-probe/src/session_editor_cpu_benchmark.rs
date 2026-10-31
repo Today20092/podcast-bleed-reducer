@@ -42,6 +42,7 @@ fn fixture() -> Fixture {
 }
 
 #[test]
+#[ignore = "CPU measurement: run serialized with --ignored --test-threads=1"]
 fn gain_projection_cpu_measurement() {
     for mode in ["refresh", "cached", "gap-refresh", "dense-refresh", "stale"] {
         let fixture = fixture();
@@ -180,6 +181,7 @@ fn gain_projection_cpu_measurement() {
 }
 
 #[test]
+#[ignore = "CPU measurement: run serialized with --ignored --test-threads=1"]
 fn egui_dispatch_to_observed_state_cpu_measurement() {
     let fixture = fixture();
     let view = fixture.engine().view(Some(0), Some(64000), 1000).unwrap();

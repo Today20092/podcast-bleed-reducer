@@ -19,6 +19,11 @@ optional gain argument existed. Both query/render the same eight-track fixture,
 clipped vertical scroll height. One cold plus 40 warm samples; nearest index
 `ceil((n-1)*p)` over warm samples only, matching the existing historical summary.
 
+Only the two added timing tests are ignored in ordinary suites. Their real
+33 ms cache-hit assertion and CPU observations require explicit serialized runs,
+avoiding unrelated parallel-test scheduling. The historical waveform test's
+registration is unchanged.
+
 ## Additional current cases
 
 `session_editor::cpu_benchmark::gain_projection_cpu_measurement` logs separately
@@ -80,9 +85,16 @@ cargo rustc --manifest-path plugins/podcast/Cargo.toml --lib --profile test
 
 Preserve the exact JSON compiler-artifact test executable outside the shared cache
 immediately after each build. Run that preserved executable through the current
-wrapper with a fresh receipt, `--exact --nocapture --test-threads=1` and each test
-name above. Run the unchanged waveform test in both checkouts. Run the two new
-tests only in current. Keep `CLEANSLATE_PLUGIN_CAPTURES` unset; CPU raster export
+wrapper with a fresh receipt and the exact test name:
+
+- Unchanged waveform test, both checkouts:
+  `session_editor::tests::waveform_render_work_measurement --exact --nocapture --test-threads=1`.
+- Added gain timing test, current only:
+  `session_editor::cpu_benchmark::gain_projection_cpu_measurement --exact --ignored --nocapture --test-threads=1`.
+- Added event timing test, current only:
+  `session_editor::cpu_benchmark::egui_dispatch_to_observed_state_cpu_measurement --exact --ignored --nocapture --test-threads=1`.
+
+Keep `CLEANSLATE_PLUGIN_CAPTURES` unset; CPU raster export
 is unrelated observer work. Run current strict library/test Clippy after checks.
 
 Historical raw log and preserved old executables are absent at their documented

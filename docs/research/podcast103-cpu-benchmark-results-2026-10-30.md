@@ -11,6 +11,14 @@ untouched `d2b30c91fa5a7f078ca75cdbf6999defc69ed513`. Both are scoped managed Or
 children of the stable Podcast checkout. No production branch, DLL, installed
 file, native editor or owner audio was changed by this benchmark tranche.
 
+Subsequent integration review marks only the two added CPU tests ignored in
+ordinary suites: unrelated parallel scheduling could expire the real 33 ms
+cache-hit assertion. Explicit future runs add `--ignored` and retain
+`--exact --nocapture --test-threads=1`, as listed in the preparation record.
+The unchanged historical waveform test remains ordinarily registered. This is
+registration metadata only; no timing rerun or artifact identity change is
+claimed. The preserved measurements and executables remain source `b5052b2`.
+
 ## Method and reproducibility
 
 Both checkouts used actual `plugins/podcast/Cargo.toml`, pinned Rust 1.99 Cargo/
