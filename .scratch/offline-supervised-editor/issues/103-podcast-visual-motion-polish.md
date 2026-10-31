@@ -30,6 +30,18 @@ Implement the owner's FabFilter/sonible quality target in the existing Podcast e
 
 ## Results
 
+2026-10-30 normal native regression: artifact source `b41d51e`, evidence tip
+`9d700cb`, preserves ordinary DLL SHA256
+`d8b796862e9c0547d1c82a568708044bc8a64f42fd42023bb59e618e07eba6e2`
+and its named normal ABI hosts outside the cache. Verified runtime files/notices
+are beside both uninstalled format binaries. Receipt `230706-9133d720` passes
+the actual normal CLAP and VST3 pair: Podcast state/foreign-Probe checks and
+two-instance/channel/rate/buffer/transport cases. VST3 creates/releases an editor
+without a window. No acceptance driver is exported. Full Session VST3 restoration,
+runtime isolation, native presentation, listening/PDC/export and comparable
+performance remain unqualified; 103 stays claimed. The overwritten cache DLL
+is not the tested artifact; preserved candidate hashes are authoritative.
+
 2026-10-30 bounded gain continuation: core `9881369` and UI `d3ebcbe` pass all
 86 actual Podcast tests, strict library/test Clippy, formatting and independent
 Standards/Spec reviews. The additive projection snapshots immutable analysis,

@@ -25,6 +25,17 @@ CI are unchanged by the separate product work below.
   compact views plus dense and unverified samples. Native presentation and
   comparative performance remain unqualified. Last-Arc destruction during a
   publication replacement is not bounded by the envelope edge budget.
+- Normal Podcast artifact source `b41d51e` (evidence tip `9d700cb`) builds with
+  ordinary exports and no acceptance driver. Preserved DLL SHA256 is
+  `d8b796862e9c0547d1c82a568708044bc8a64f42fd42023bb59e618e07eba6e2`.
+  Its fresh uninstalled candidate contains hash-verified runtime files/notices.
+  Actual normal CLAP/VST3 hosts pass using only preserved candidate/host paths:
+  CLAP covers Podcast state round-trip and foreign-Probe disconnection; VST3
+  covers two-instance/channel/rate/buffer/transport cases and constructs/releases
+  the editor without opening a window. Receipt `230706-9133d720` records clean
+  completion. Full Session VST3 restore, runtime isolation, native presentation,
+  listening/PDC/export remain outside this normal pair. Shared-cache DLL output
+  changed during example compilation, so the tested preserved DLL is authoritative.
 - Gate readiness `57e2cc2` / `8f95ba8` passes 25 tests, strict lint/formatting and
   five actual CPU widget captures. These do not establish native presentation,
   readiness wake timing or real-host gating.
@@ -69,7 +80,9 @@ are under sibling `20261030-loader-cdf5ce0/`.
 
 ## Remaining work
 
-Podcast needs normal DLL/format regression and comparable performance checks.
+Podcast needs the broader Session/state regression and comparable performance
+checks. The existing workflow is source-reviewed with pinned tools and normal
+output restoration after ordinary failures; its execution remains queued.
 Native sound/PDC/export acceptance remains separate from component tests.
 
 Gate needs actual native arming/inference, sustained realtime deadlines and host PDC
