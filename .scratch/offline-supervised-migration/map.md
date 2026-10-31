@@ -1,5 +1,11 @@
 # Plan the offline supervised CleanSlate migration
 
+Owner explicitly resumed implementation after the pause below. Continue from
+the preserved Podcast/Gate worktrees: finish Podcast indicator lint/review, then
+bounded gain display; run Gate's prepared readiness regression before changing
+its feedback. Memory guards remain removed under completed 111. Product source
+stays separate; native qualification and publication remain unclaimed.
+
 2026-10-30 OWNER PAUSE: all implementation and local checks stopped; no automatic
 resume. [Pause receipt](../../docs/research/implement-spec-pause-2026-10-30.md)
 records clean product checkpoints, 78 passing Podcast tests (indicator Clippy

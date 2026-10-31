@@ -2,6 +2,10 @@
 
 Status: paused by owner. Resume only on an explicit owner request.
 
+Continuation: the owner subsequently said “okay continue.” That explicitly
+resumes the saved work; the pause and verification details below are historical.
+Memory limits remain removed.
+
 All local builds/checks and implementer work are stopped. Podcast Clippy session
 51578 was cancelled, owned compiler processes exited, and the compiler lock was
 verified free. No new implementation or check followed the pause request.
