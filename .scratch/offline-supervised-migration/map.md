@@ -1,5 +1,16 @@
 # Plan the offline supervised CleanSlate migration
 
+2026-10-31 GUI RESUMPTION: owner explicitly authorizes supervised parallel GUI
+implementation and visual/performance refinement now. Claimed
+[117](../offline-supervised-editor/issues/117-smart-gate-gui-polish.md) owns a
+professional original CleanSlate surface informed by FabFilter/sonible research,
+with one UI writer and independent review. It uses committed product GUI base
+`a6ca1f6` in `codex/smart-gate-gui-polish`; source, DSP and installed previews are
+kept separate from this coordinator checkout. Backend tickets remain unfinished;
+real control wiring must never imply unimplemented processing. The earlier
+research stop is superseded for this GUI scope only; no REA restart or public
+release is authorized.
+
 2026-10-31 TICKET PLANNING ONLY: the owner asks how to turn the finished research
 into separate backend and GUI work. Drafts [114](../offline-supervised-editor/issues/114-smart-gate-algorithm-parameter-contract.md),
 [115](../offline-supervised-editor/issues/115-smart-gate-processing-controls.md) and
