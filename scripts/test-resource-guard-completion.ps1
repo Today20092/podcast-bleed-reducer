@@ -11,7 +11,7 @@ $childCommand = "`$timer=[Diagnostics.Stopwatch]::StartNew(); while (-not (Test-
 $encodedChild = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($childCommand))
 $rootCommand = "Start-Process -FilePath '$shell' -ArgumentList @('-NoProfile','-EncodedCommand','$encodedChild') -WindowStyle Hidden; exit 17"
 try {
-    & $guard -FilePath $shell -ArgumentList @('-NoProfile','-Command',$rootCommand) -ReceiptPath $receipt -MinAvailableGiB 1 -ReserveGiB 1 -MaxCommitGiB 0.5 -TimeoutSeconds 10
+    & $guard -FilePath $shell -ArgumentList @('-NoProfile','-Command',$rootCommand) -ReceiptPath $receipt -TimeoutSeconds 10
     throw 'Nonzero root exit was accepted.'
 } catch { if (-not (Test-Path -LiteralPath $receipt)) { throw } }
 $result = Get-Content -LiteralPath $receipt -Raw | ConvertFrom-Json
