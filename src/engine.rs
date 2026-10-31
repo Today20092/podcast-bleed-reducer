@@ -437,17 +437,47 @@ mod preview_tests {
             sample_rate: crate::timebase::DETECTOR_SAMPLE_RATE,
             effective: None,
             points: vec![
-                GainPoint { sample: 0, gain: 0.25, alpha: 0.0, target: 0.25 },
-                GainPoint { sample: 10, gain: 0.75, alpha: 0.0, target: 0.75 },
-                GainPoint { sample: 20, gain: 0.5, alpha: 0.0, target: 0.5 },
+                GainPoint {
+                    sample: 0,
+                    gain: 0.25,
+                    alpha: 0.0,
+                    target: 0.25,
+                },
+                GainPoint {
+                    sample: 10,
+                    gain: 0.75,
+                    alpha: 0.0,
+                    target: 0.75,
+                },
+                GainPoint {
+                    sample: 20,
+                    gain: 0.5,
+                    alpha: 0.0,
+                    target: 0.5,
+                },
             ],
         };
-        assert_eq!(envelope.gain_bounds_bounded(0, 40, 1), BoundedGainBounds::TooDense);
-        assert_eq!(envelope.gain_bounds_bounded(0, 40, 2), BoundedGainBounds::Bounds(0.25, 0.75));
-        assert_eq!(envelope.gain_bounds_bounded(10, 20, 0), BoundedGainBounds::Bounds(0.75, 0.75));
-        assert_eq!(envelope.gain_bounds_bounded(20, usize::MAX, 0), BoundedGainBounds::Bounds(0.5, 0.5));
+        assert_eq!(
+            envelope.gain_bounds_bounded(0, 40, 1),
+            BoundedGainBounds::TooDense
+        );
+        assert_eq!(
+            envelope.gain_bounds_bounded(0, 40, 2),
+            BoundedGainBounds::Bounds(0.25, 0.75)
+        );
+        assert_eq!(
+            envelope.gain_bounds_bounded(10, 20, 0),
+            BoundedGainBounds::Bounds(0.75, 0.75)
+        );
+        assert_eq!(
+            envelope.gain_bounds_bounded(20, usize::MAX, 0),
+            BoundedGainBounds::Bounds(0.5, 0.5)
+        );
         for (start, end) in [(40, 50), (20, 20), (20, 10)] {
-            assert_eq!(envelope.gain_bounds_bounded(start, end, 0), BoundedGainBounds::Empty);
+            assert_eq!(
+                envelope.gain_bounds_bounded(start, end, 0),
+                BoundedGainBounds::Empty
+            );
         }
     }
 
@@ -785,7 +815,12 @@ impl GainEnvelope {
     /// Query exact extrema while limiting the indexed candidate edges inspected.
     /// The budget counts effective-envelope edges (including interval endpoints)
     /// or legacy retargets strictly inside the clipped range, not output points.
-    pub fn gain_bounds_bounded(&self, start: usize, end: usize, max_edges: usize) -> BoundedGainBounds {
+    pub fn gain_bounds_bounded(
+        &self,
+        start: usize,
+        end: usize,
+        max_edges: usize,
+    ) -> BoundedGainBounds {
         let end = end.min(self.sample_count);
         if start >= end {
             return BoundedGainBounds::Empty;
@@ -803,7 +838,10 @@ impl GainEnvelope {
         if count > max_edges {
             return BoundedGainBounds::TooDense;
         }
-        self.gain_bounds(start, end).map_or(BoundedGainBounds::Empty, |(low, high)| BoundedGainBounds::Bounds(low, high))
+        self.gain_bounds(start, end)
+            .map_or(BoundedGainBounds::Empty, |(low, high)| {
+                BoundedGainBounds::Bounds(low, high)
+            })
     }
 }
 
