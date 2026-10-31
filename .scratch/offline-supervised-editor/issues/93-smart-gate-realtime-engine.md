@@ -264,6 +264,21 @@ changed. Stale-evidence feedback, native arming/readiness/wake, runtime deployme
 deadline/PDC/allocations and listening acceptance remain open; 93 is claimed and
 94 blocked. The global execution slot is released after this checked slice.
 
+The next readiness regression is prepared, unrun, at the same public callback
+and actual Panel seam. Armed consent before any callback must show waiting for
+current detection data / original audio. Two real offline blocks then provide
+accepted data while the initial hold still preserves original audio; the copy
+must describe the last block's current detection data, including valid absence,
+without claiming continuous playback, speech presence or quality. Reset/rearm
+must return to waiting rather than revive old data. No feedback implementation
+or new semantic RED is claimed before the next execution-slot grant.
+
+After that RED, one existing GainPolicy validity predicate should own accepted
+event/fault/source-age validity and be reused by gain evaluation and feedback.
+The approved deterministic GainPolicy/Event seam can check exact expiry and
+unity fallback without scheduling a real worker or forging GUI flags. No new
+dependency, callback lock/allocation or duplicated expiry/epoch formula is planned.
+
 ### Resumed all-target check — 2026-10-30
 
 Fresh preflight recovered to 26.26 GiB physical / 28.69 GiB commit with no

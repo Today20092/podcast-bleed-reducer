@@ -270,6 +270,63 @@ fn editor_reports_original_fallback_when_an_armed_callback_faults() {
     );
 }
 
+#[test]
+fn editor_distinguishes_waiting_from_current_last_block_data_and_reset() {
+    let mut gate = SmartGate::default();
+    Arc::get_mut(&mut gate.params).unwrap().bypass = BoolParam::new("Bypass", false).make_bypass();
+    assert!(gate.activate(
+        &SmartGate::AUDIO_IO_LAYOUTS[1],
+        &BufferConfig {
+            sample_rate: 48_000.0,
+            min_buffer_size: None,
+            max_buffer_size: 1536,
+            process_mode: ProcessMode::Offline,
+        },
+        &mut ActivationHost
+    ));
+    gate.arm_experimental();
+    let context = egui::Context::default();
+    let mut panel = editor::Panel::new(
+        Arc::clone(&gate.params),
+        Arc::clone(&gate.consent),
+        Arc::clone(&gate.processing_failed),
+    );
+    let has_status = |output: &egui::FullOutput, expected: &str| {
+        output.shapes.iter().any(|shape| matches!(
+            &shape.shape,
+            egui::Shape::Text(text) if text.galley.job.text == expected
+        ))
+    };
+    let waiting = "Waiting for current detection data · original audio";
+    let current = "Last block · current detection data";
+    let output = draw_gate_panel(&context, &mut panel, Vec::new());
+    assert!(
+        has_status(&output, waiting),
+        "temporary consent is not proof that detection data has arrived"
+    );
+    for _ in 0..2 {
+        let mut audio = vec![vec![0.0001; 1536]];
+        process_test_block(&mut gate, &mut audio);
+        assert!(audio[0].iter().all(|sample| *sample == 0.0001));
+    }
+    let output = draw_gate_panel(&context, &mut panel, Vec::new());
+    assert!(
+        has_status(&output, current),
+        "real detection data can be current while the gain still preserves original audio"
+    );
+    gate.reset();
+    assert!(!gate.experimental_armed());
+    let output = draw_gate_panel(&context, &mut panel, Vec::new());
+    assert!(has_status(&output, "Not armed · original audio"));
+    assert!(!has_status(&output, current));
+    gate.arm_experimental();
+    let output = draw_gate_panel(&context, &mut panel, Vec::new());
+    assert!(
+        has_status(&output, waiting),
+        "rearming after reset cannot revive the preceding stream's detection data"
+    );
+}
+
 fn draw_gate_panel(
     context: &egui::Context,
     panel: &mut editor::Panel,
