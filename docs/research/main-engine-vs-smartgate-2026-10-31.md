@@ -186,7 +186,7 @@ ticket, additional build, installation change or GUI change follows this audit.
 The [authenticated model report](smartgate-authenticated-model-2026-10-31.md)
 now supplies direct artifact evidence for both sonible profiles and our bundled
 Silero model. This supersedes comparisons based only on vendor documentation or
-the old, incorrect Silero v5 label. The audited Desktop model asset and the seven
+the old, incorrect Silero v5 label. The audited Desktop model asset and the
 core VAD/acoustic/ownership source files are unchanged between `a2606de` and the
 later primary development checkpoint `348a9cf` (scoped Git diff is empty).
 
