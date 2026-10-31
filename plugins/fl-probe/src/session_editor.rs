@@ -2,7 +2,7 @@
 use crate::{
     ListenMode, ProbeParams,
     runtime::{GuiState, RuntimeStatus},
-    session_mode::SessionView,
+    session_mode::{AnalysisGainView, GainDetail, SessionCapture, SessionView},
 };
 use egui::{Align2, Color32, FontId, Pos2, Rect, Sense, Stroke, StrokeKind, Vec2};
 use nice_plug::{context::gui::ParamSetter, prelude::*};
@@ -15,6 +15,9 @@ const TEAL: Color32 = Color32::from_rgb(111, 190, 183);
 const BLUE: Color32 = Color32::from_rgb(119, 155, 199);
 const BORDER: Color32 = Color32::from_rgb(61, 67, 76);
 const ERROR: Color32 = Color32::from_rgb(219, 139, 139);
+// Match the desktop's Analysis gain and attenuation layers.
+const GAIN: Color32 = Color32::from_rgb(210, 130, 245);
+const ATTENUATION: Color32 = Color32::from_rgb(220, 65, 65);
 
 #[derive(Clone, Copy)]
 enum Navigation {
@@ -76,6 +79,9 @@ pub struct SessionUi {
     catch_up: Option<CatchUp>,
     reduced_motion: bool,
     sound_indicators: [Option<SoundIndicator>; 3],
+    analysis_gain: Option<AnalysisGainView>,
+    gain_query: Option<(u64, i64, i64, usize, u8)>,
+    gain_refresh: Option<Instant>,
 }
 
 struct CatchUp {
@@ -361,10 +367,11 @@ impl SessionUi {
                 }
                 ui.label(egui::RichText::new(format!("{} – {}", time(view.start, view.rate), time(view.end, view.rate))).small().color(MUTED));
             });
-            let reserved = if self.replacement.is_some() { 325.0 } else { 285.0 };
-            let height = (ui.available_height() - reserved).clamp(140.0, 390.0);
+            // Include the full readiness area and wrapped shared-sound row.
+            let reserved = if self.replacement.is_some() { 340.0 } else { 300.0 };
+            let height = (ui.available_height() - reserved).clamp(120.0, 390.0);
             egui::ScrollArea::vertical().id_salt("session-lanes").max_height(height).scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysVisible).scroll_source(egui::scroll_area::ScrollSource { scroll_bar: true, drag: egui::scroll_area::DragScroll::Never, mouse_wheel: false }).auto_shrink([false; 2]).show(ui, |ui| {
-                self.waveforms(ui, &view, (view.tracks.len() as f32 * 64.0 + 52.0).max(height));
+                self.waveforms(ui, &view, (view.tracks.len() as f32 * 64.0 + 52.0).max(height), Some(&capture));
             });
             self.navigator(ui, &view);
             ui.horizontal_wrapped(|ui| {
@@ -707,7 +714,52 @@ impl SessionUi {
         );
     }
 
-    fn waveforms(&mut self, ui: &mut egui::Ui, view: &SessionView, height: f32) {
+    fn refresh_analysis_gain(
+        &mut self,
+        capture: &Arc<SessionCapture>,
+        view: &SessionView,
+        columns: usize,
+        member_mask: u8,
+    ) {
+        if member_mask == 0 {
+            self.analysis_gain = None;
+            self.gain_query = None;
+            return;
+        }
+        if self
+            .analysis_gain
+            .as_ref()
+            .is_some_and(|gain| !capture.analysis_view_is_current(gain))
+        {
+            self.analysis_gain = None;
+            self.gain_query = None;
+        }
+        let revision = self.analysis_gain.as_ref().map_or(0, |gain| gain.revision);
+        let query = (revision, view.start, view.end, columns, member_mask);
+        let changed = self.gain_query != Some(query);
+        if changed
+            || self
+                .gain_refresh
+                .is_none_or(|last| last.elapsed() >= Duration::from_millis(33))
+        {
+            if let Some(gain) = capture.analysis_view(view.start, view.end, columns, member_mask) {
+                self.gain_query = Some((gain.revision, view.start, view.end, columns, member_mask));
+                self.analysis_gain = Some(gain);
+                self.gain_refresh = Some(Instant::now());
+            } else if changed {
+                self.analysis_gain = None;
+                self.gain_query = None;
+            }
+        }
+    }
+
+    fn waveforms(
+        &mut self,
+        ui: &mut egui::Ui,
+        view: &SessionView,
+        height: f32,
+        capture: Option<&Arc<SessionCapture>>,
+    ) {
         let (rect, response) = ui.allocate_exact_size(
             Vec2::new(ui.available_width(), height),
             Sense::click_and_drag(),
@@ -795,6 +847,53 @@ impl SessionUi {
                 + (((i128::from(sample) - i128::from(view.start)) as f64 / span) as f32
                     * plot.width())
         };
+        let lane_height = plot.height() / view.tracks.len() as f32;
+        let lane_rect = |index: usize| {
+            let top = plot.top() + lane_height * index as f32;
+            Rect::from_min_max(
+                Pos2::new(rect.left(), top),
+                Pos2::new(rect.right(), top + lane_height),
+            )
+        };
+        let member_mask = view
+            .tracks
+            .iter()
+            .enumerate()
+            .filter(|(index, _)| lane_rect(*index).intersects(ui.clip_rect()))
+            .fold(0, |mask, (_, track)| mask | (1 << track.member));
+        if let Some(capture) = capture {
+            self.refresh_analysis_gain(
+                capture,
+                view,
+                (plot.width().ceil() as usize).clamp(1, 2048),
+                member_mask,
+            );
+        } else {
+            self.analysis_gain = None;
+            self.gain_query = None;
+        }
+        let gains = self
+            .analysis_gain
+            .as_ref()
+            .filter(|gain| capture.is_some_and(|capture| capture.analysis_view_is_current(gain)));
+        if let Some(gains) = gains.filter(|gains| !gains.tracks.is_empty()) {
+            let dense = gains
+                .tracks
+                .iter()
+                .flat_map(|track| &track.columns)
+                .any(|column| column.detail == GainDetail::TooDense);
+            painter.text(
+                Pos2::new(rect.left() + 13.0, rect.top() + 5.0),
+                Align2::LEFT_TOP,
+                if dense {
+                    "Analysis gain\nZoom in for detail"
+                } else {
+                    "Analysis gain"
+                },
+                FontId::proportional(11.0),
+                GAIN,
+            );
+        }
         for step in 0..=5 {
             let xx = plot.left() + plot.width() * step as f32 / 5.0;
             painter.line_segment(
@@ -818,15 +917,30 @@ impl SessionUi {
                 MUTED,
             );
         }
-        let lane_height = plot.height() / view.tracks.len() as f32;
         for (index, track) in view.tracks.iter().enumerate() {
             let center = plot.top() + lane_height * (index as f32 + 0.5);
-            let lane = Rect::from_min_max(
-                Pos2::new(rect.left(), center - lane_height / 2.0),
-                Pos2::new(rect.right(), center + lane_height / 2.0),
-            );
+            let lane = lane_rect(index);
             if !lane.intersects(ui.clip_rect()) {
                 continue;
+            }
+            let gain = gains
+                .and_then(|gains| gains.tracks.iter().find(|gain| gain.member == track.member));
+            if let Some(gain) = gain {
+                let mut mesh = egui::Mesh::default();
+                for column in &gain.columns {
+                    if let GainDetail::Bounds(low, _) = column.detail
+                        && low < 1.0
+                    {
+                        mesh.add_colored_rect(
+                            Rect::from_min_max(
+                                Pos2::new(x(column.start), lane.top()),
+                                Pos2::new(x(column.end), lane.bottom()),
+                            ),
+                            ATTENUATION.gamma_multiply(0.24),
+                        );
+                    }
+                }
+                painter.add(egui::Shape::mesh(mesh));
             }
             painter.line_segment(
                 [
@@ -889,6 +1003,23 @@ impl SessionUi {
                 );
             }
             painter.add(egui::Shape::mesh(mesh));
+            if let Some(gain) = gain {
+                let mut mesh = egui::Mesh::default();
+                for column in &gain.columns {
+                    if let GainDetail::Bounds(low, high) = column.detail {
+                        let top = lane.top() + 7.0 + (1.0 - high) * (lane_height - 14.0);
+                        let bottom = lane.top() + 7.0 + (1.0 - low) * (lane_height - 14.0);
+                        mesh.add_colored_rect(
+                            Rect::from_min_max(
+                                Pos2::new(x(column.start), top),
+                                Pos2::new(x(column.end), bottom.max(top + 1.0)),
+                            ),
+                            GAIN,
+                        );
+                    }
+                }
+                painter.add(egui::Shape::mesh(mesh));
+            }
         }
         for label in &view.labels {
             if label.end <= view.start || label.start >= view.end {
@@ -1017,6 +1148,245 @@ impl SessionUi {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn painted_gain_columns(output: &egui::FullOutput) -> usize {
+        output
+            .shapes
+            .iter()
+            .map(|shape| match &shape.shape {
+                egui::Shape::Mesh(mesh) => {
+                    mesh.vertices
+                        .iter()
+                        .filter(|vertex| vertex.color == GAIN)
+                        .count()
+                        / 4
+                }
+                egui::Shape::Rect(rect) if rect.fill == GAIN => 1,
+                _ => 0,
+            })
+            .sum()
+    }
+
+    #[test]
+    fn analysis_gain_is_labelled_and_stale_cache_disappears_during_capture_contention() {
+        use crate::session_mode::integration_tests::{
+            Fixture, direct_capture, publish_display_analysis,
+        };
+        let fixture = Fixture::new(1);
+        direct_capture(fixture.engine(), 0, 0, 8192, false);
+        publish_display_analysis(
+            fixture.engine(),
+            0,
+            0,
+            rust_app::GainEnvelope::constant_at_rate(8192, 8000, 0.25).unwrap(),
+        );
+        let state = GuiState::new();
+        *state.capture.lock() = Some(fixture.engine().clone());
+        let probe = crate::FlProbe::default();
+        let context = egui::Context::default();
+        crate::editor::style(&context);
+        let mut workspace = SessionUi::default();
+        let frame = |workspace: &mut SessionUi| {
+            let mut output = context.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(720.0, 560.0))),
+                    ..Default::default()
+                },
+                |ui| workspace.show(ui, &probe.params, None, &state),
+            );
+            let widgets = output
+                .shapes
+                .iter()
+                .filter_map(|shape| match &shape.shape {
+                    egui::Shape::Text(text) => Some((
+                        text.galley.job.text.clone(),
+                        Rect::from_min_size(text.pos, text.galley.size()),
+                        shape.clip_rect,
+                    )),
+                    _ => None,
+                })
+                .collect::<Vec<_>>();
+            let gain_columns = painted_gain_columns(&output);
+            output.textures_delta.clear();
+            (widgets, gain_columns)
+        };
+        let (widgets, gain_columns) = frame(&mut workspace);
+        assert!(
+            gain_columns > 0 && gain_columns <= 2048,
+            "Exact gain bands must be painted with bounded geometry"
+        );
+        assert!(
+            widgets
+                .iter()
+                .any(|(text, bounds, clip)| text == "Analysis gain" && clip.contains_rect(*bounds)),
+            "Verified cached Analysis gain must have a visible legend"
+        );
+        fixture.with_worker_lock(|| {
+            fixture.engine().cancel_analysis();
+            let (widgets, gain_columns) = frame(&mut workspace);
+            assert_eq!(
+                gain_columns, 0,
+                "Stale gain geometry must disappear immediately"
+            );
+            assert!(
+                !widgets
+                    .iter()
+                    .any(|(text, _, _)| text.contains("Analysis gain")),
+                "A retained waveform must not retain invalidated gain"
+            );
+            assert!(
+                !workspace.last_view.as_ref().unwrap().tracks[0]
+                    .peaks
+                    .is_empty()
+            );
+        });
+    }
+
+    #[test]
+    fn analysis_gain_visual_states_fit_compact_full_and_scaled_workspaces() {
+        use crate::session_mode::integration_tests::{
+            Fixture, direct_capture, display_test_envelope, publish_display_analysis,
+        };
+        let fixture = Fixture::new(1);
+        let envelope = display_test_envelope(&fixture);
+        fixture.engine().label(0, 8192, Some(1)).unwrap();
+        let state = GuiState::new();
+        *state.capture.lock() = Some(fixture.engine().clone());
+        let probe = crate::FlProbe::default();
+        for mode in ["ready", "unverified", "dense", "stale"] {
+            direct_capture(fixture.engine(), 0, 0, 8192, false);
+            publish_display_analysis(fixture.engine(), 0, 0, envelope.clone());
+            if mode == "unverified" {
+                fixture.unverify_display_range(0, 2048, 4096);
+            }
+            if mode == "stale" {
+                fixture.engine().cancel_analysis();
+            }
+            for (size, width, height) in [("compact", 720, 560), ("full", 1000, 680)] {
+                for (dpi, scale) in [(100, 1.0), (150, 1.5), (200, 2.0)] {
+                    let context = egui::Context::default();
+                    crate::editor::style(&context);
+                    let mut workspace = SessionUi {
+                        capture_id: Arc::as_ptr(fixture.engine()) as usize,
+                        viewport: (mode == "dense").then_some((0, 8000 * 7200)),
+                        ..Default::default()
+                    };
+                    let mut input = egui::RawInput {
+                        screen_rect: Some(Rect::from_min_size(
+                            Pos2::ZERO,
+                            egui::vec2(width as f32, height as f32),
+                        )),
+                        ..Default::default()
+                    };
+                    input
+                        .viewports
+                        .get_mut(&egui::ViewportId::ROOT)
+                        .unwrap()
+                        .native_pixels_per_point = Some(scale);
+                    let mut occupied = Rect::NOTHING;
+                    let mut output = context.run_ui(input, |ui| {
+                        workspace.show(ui, &probe.params, None, &state);
+                        occupied = ui.min_rect();
+                    });
+                    let legend = output.shapes.iter().find_map(|shape| match &shape.shape {
+                        egui::Shape::Text(text)
+                            if text.galley.job.text.starts_with("Analysis gain") =>
+                        {
+                            let bounds = Rect::from_min_size(text.pos, text.galley.size());
+                            assert!(shape.clip_rect.contains_rect(bounds));
+                            assert!(
+                                !output.shapes.iter().any(|shape| matches!(&shape.shape,
+                                egui::Shape::Rect(rect) if rect.fill == BLUE.gamma_multiply(0.45)
+                                    && rect.rect.intersects(bounds))),
+                                "Analysis gain legend must not overlap human labels"
+                            );
+                            Some(text.galley.job.text.clone())
+                        }
+                        _ => None,
+                    });
+                    if mode == "stale" {
+                        assert!(legend.is_none());
+                    } else if mode == "dense" {
+                        assert_eq!(legend.as_deref(), Some("Analysis gain\nZoom in for detail"));
+                        assert_eq!(
+                            painted_gain_columns(&output),
+                            0,
+                            "Dense detail must not fabricate a gain band"
+                        );
+                    } else {
+                        assert_eq!(legend.as_deref(), Some("Analysis gain"));
+                    }
+                    if let Ok(directory) = std::env::var("CLEANSLATE_PLUGIN_CAPTURES") {
+                        std::fs::create_dir_all(&directory).unwrap();
+                        crate::editor_capture::write_capture(
+                            &context,
+                            &mut output,
+                            &std::path::Path::new(&directory)
+                                .join(format!("analysis-gain-{mode}-{size}-{dpi}.ppm")),
+                            (width as f32 * scale) as usize,
+                            (height as f32 * scale) as usize,
+                        )
+                        .unwrap();
+                    } else {
+                        output.textures_delta.clear();
+                    }
+                    assert!(
+                        occupied.right() <= width as f32 + 1.0,
+                        "{mode}/{size}/{dpi}: {occupied:?}"
+                    );
+                    assert!(
+                        occupied.bottom() <= height as f32,
+                        "{mode}/{size}/{dpi}: {occupied:?}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn analysis_gain_queries_and_paints_only_visible_scrolled_lanes() {
+        use crate::session_mode::integration_tests::{
+            Fixture, direct_capture, publish_display_analysis,
+        };
+        let fixture = Fixture::new(8);
+        for member in 0..8 {
+            direct_capture(fixture.engine(), member, 0, 8192, false);
+        }
+        publish_display_analysis(
+            fixture.engine(),
+            0,
+            0,
+            rust_app::GainEnvelope::constant_at_rate(8192, 8000, 0.25).unwrap(),
+        );
+        let view = fixture.engine().view(Some(0), Some(8192), 32).unwrap();
+        for offset in [0.0, 400.0] {
+            let context = egui::Context::default();
+            let mut workspace = SessionUi::default();
+            let mut output = context.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(720.0, 190.0))),
+                    ..Default::default()
+                },
+                |ui| {
+                    egui::ScrollArea::vertical()
+                        .max_height(160.0)
+                        .vertical_scroll_offset(offset)
+                        .show(ui, |ui| {
+                            workspace.waveforms(ui, &view, 564.0, Some(fixture.engine()))
+                        });
+                },
+            );
+            let gain_columns = painted_gain_columns(&output);
+            output.textures_delta.clear();
+            if offset == 0.0 {
+                assert!(gain_columns > 0 && gain_columns <= 2048);
+                assert_ne!(workspace.gain_query.unwrap().4 & 1, 0);
+            } else {
+                assert_eq!(gain_columns, 0, "Offscreen gain must not produce geometry");
+                assert_eq!(workspace.gain_query.unwrap().4 & 1, 0);
+            }
+        }
+    }
 
     fn workspace_frame(
         context: &egui::Context,
@@ -1610,7 +1980,7 @@ mod tests {
                     let scroll = egui::ScrollArea::vertical()
                         .max_height(160.0)
                         .vertical_scroll_offset(offset)
-                        .show(ui, |ui| workspace.waveforms(ui, &view, 564.0));
+                        .show(ui, |ui| workspace.waveforms(ui, &view, 564.0, None));
                     content_height = scroll.content_size.y;
                 },
             );
@@ -1697,7 +2067,7 @@ mod tests {
                     rect.min + egui::vec2(108.0, 27.0),
                     rect.max - egui::vec2(12.0, 25.0),
                 );
-                workspace.waveforms(ui, view, 390.0);
+                workspace.waveforms(ui, view, 390.0, None);
             },
         );
         output.textures_delta.clear();
@@ -2055,7 +2425,7 @@ mod tests {
                     |ui| {
                         egui::ScrollArea::vertical()
                             .max_height(height - 370.0)
-                            .show(ui, |ui| workspace.waveforms(ui, &view, 564.0));
+                            .show(ui, |ui| workspace.waveforms(ui, &view, 564.0, None));
                     },
                 );
                 let draw_us = draw_begin.elapsed().as_secs_f64() * 1e6;
@@ -2693,7 +3063,7 @@ mod tests {
                     ..Default::default()
                 },
                 |ui| {
-                    workspace.waveforms(ui, &view, 390.0);
+                    workspace.waveforms(ui, &view, 390.0, None);
                     assert!(ui.min_rect().right() <= width as f32 + 1.0);
                     assert!(ui.min_rect().bottom() <= 410.0);
                 },

@@ -469,6 +469,12 @@ impl Fixture {
         test();
     }
 
+    pub(crate) fn unverify_display_range(&self, member: usize, start: i64, end: i64) {
+        self.engine().state.lock().tracks[member]
+            .verified
+            .remove(start, end);
+    }
+
     fn register_members(&self) {
         for (member, params) in self.params.iter().enumerate() {
             self.engine().owners[member].store(member as u64 + 1, SeqCst);

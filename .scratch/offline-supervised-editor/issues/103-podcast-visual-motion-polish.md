@@ -20,6 +20,21 @@ Implement the owner's FabFilter/sonible quality target in the existing Podcast e
 
 ## Results
 
+2026-10-30 bounded Analysis gain checkpoint: core `9881369` projects exact extrema
+only for verified native source columns and visible members, using the selective
+three-file shared110 aggregate from `e29cb58..942420f`. Arc publication snapshots
+release locks before exact work; final bounded verification/revision/overrun
+checks and Weak capture identity reject stale or replaced sources. Existing
+Analyze-required sound behavior is retained. The editor draws batched purple
+gain bounds/red attenuation and explicit dense-detail guidance. Compact footer
+budgeting and real-label legend overlap were exposed by semantic REDs and fixed.
+Actual Podcast now passes all86 tests (1.43 seconds), strict lib/tests Clippy,
+formatting and 24 CPU gallery/bounds cases. First gallery has a known synthetic
+ready-message omission and remains intermediate pending the prepared test-only
+fixture correction/rerun. [Source, receipts, artifact and limitations](../../../docs/research/podcast103-analysis-gain-2026-10-30.md).
+Source query/geometry budgets do not establish total UI/native performance.
+103 remains claimed; final comparisons/captures review/native acceptance remain.
+
 2026-10-30 native adapter scheduling correction: review found that `Panel::ui`
 still scheduled 16/100 ms polling after the hidden component returned (legacy
 workspace: 50 ms). A frame-independent `Panel::show` body retains the actual
