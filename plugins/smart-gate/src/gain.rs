@@ -84,19 +84,21 @@ impl GainPolicy {
         self.evidence = Some(event);
     }
 
+    /// Only accepted current-epoch evidence survives observe/reset validation.
+    pub(crate) fn evidence_age(&self, source_sample: u64) -> Option<u64> {
+        source_sample
+            .checked_sub(self.evidence?.available_at)
+            .filter(|age| *age < u64::from(self.rate) / 10)
+    }
+
     /// Call once per source sample; `enabled` requires explicit arm and no bypass.
     /// Fresh evidence expires at 100 ms. Its final 5 ms proactively restores unity
     /// while still valid. Ordinary disable/open returns within 5 ms; close takes
     /// 250 ms after the 300 ms hold. This adds no audio delay or host latency.
     pub fn next_gain(&mut self, source_sample: u64, enabled: bool) -> f32 {
-        let Some(event) = self.evidence else {
-            self.gain = 1.0;
-            return self.gain;
-        };
-        let age = source_sample.checked_sub(event.available_at);
         let expiry = u64::from(self.rate) / 10;
         let return_samples = u64::from(self.rate) / 200;
-        let Some(age) = age.filter(|age| *age < expiry) else {
+        let Some(age) = self.evidence_age(source_sample) else {
             self.gain = 1.0;
             return self.gain;
         };

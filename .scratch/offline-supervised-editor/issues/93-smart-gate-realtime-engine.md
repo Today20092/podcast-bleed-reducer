@@ -29,6 +29,36 @@ Current authorization is source preparation only: no build, native launch or
 runtime package download has run. Existing build/host script seams govern tests;
 redistributables require verified provenance and applicable notices before staging.
 
+### Resumed source-valid detection feedback — 2026-10-30
+
+Verified source `57e2cc2` distinguishes waiting for current detection data from
+current data for the last processed source sample. Consent remains independent;
+valid absence can be current while output stays at unity. The existing gain age
+check is factored once and reused by audio gain and the callback feedback. No
+hysteresis, smoothing, delay, or detector algorithm changed. One AtomicU8 replaces
+the fault-only snapshot and uses the existing coalesced repaint notifier.
+
+The real callback/Panel regression produced semantic RED in
+`20261030-213944-e840e1d4793740b8ac8507214acce4c0.json`, then GREEN. Final
+compilation `214310-be0c68770a40429f884d5877353adbda`, all 25 library tests
+`214330-f30f94aa579046959e2cd1b8f4bc544e` (1.91 seconds), strict library/test
+Clippy `214333-7be0280b36e5443f86b89ddb57c187ad` and formatting
+`214335-0c68609802c34132b4c35913fb916f9f` pass. The three supported rates have
+explicit last-fresh/first-expired, future evidence, invalid probability, epoch
+and reset assertions. An initial bad linker path failed before linking and an
+unqualified exact filter selected zero tests; neither is counted as semantic RED.
+
+All jobs used timeout/serialization only, with no RAM preflight or cap. Job
+accounting remains observed membership only under 109's documented limitation.
+Artifacts and exact receipts are preserved outside the worktree in
+`%LOCALAPPDATA%/CleanSlate/VerifiedBuilds/gate93/20261030-readiness/`.
+Test executable SHA256:
+`332ae4b4530de6f04c7341226957819572821c81adc6d1eeb17d0de4834d8d38`.
+Five actual styled 640×440 CPU captures (unprepared, bypassed, waiting, current,
+faulted) were inspected; status text fits without clipping. Native wake, physical
+DPI, realtime worker deadlines, standalone runtime loading and host/PDC/listening
+qualification remain unverified. 93 stays claimed; 94 stays blocked.
+
 ### Arming/readiness continuation — 2026-10-30
 
 Claimed on `Today20092/gate93-resume` from preserved `d03d3ab`. The first

@@ -57,7 +57,7 @@ fn editor_arming_requires_a_click_and_keeps_bypass_enabled() {
     let mut panel = editor::Panel::new(
         Arc::clone(&gate.params),
         Arc::clone(&gate.consent),
-        Arc::clone(&gate.processing_failed),
+        Arc::clone(&gate.detection_state),
     );
     let output = draw_gate_panel(&context, &mut panel, Vec::new());
     assert!(
@@ -164,7 +164,7 @@ fn editor_lifecycle_interruptions_cancel_an_in_flight_arming_click() {
         let mut panel = editor::Panel::new(
             Arc::clone(&gate.params),
             Arc::clone(&gate.consent),
-            Arc::clone(&gate.processing_failed),
+            Arc::clone(&gate.detection_state),
         );
         let output = draw_gate_panel(&context, &mut panel, Vec::new());
         let position = output
@@ -240,7 +240,7 @@ fn editor_reports_original_fallback_when_an_armed_callback_faults() {
     let mut panel = editor::Panel::new(
         Arc::clone(&gate.params),
         Arc::clone(&gate.consent),
-        Arc::clone(&gate.processing_failed),
+        Arc::clone(&gate.detection_state),
     );
     let output = draw_gate_panel(&context, &mut panel, Vec::new());
     assert!(
@@ -289,13 +289,15 @@ fn editor_distinguishes_waiting_from_current_last_block_data_and_reset() {
     let mut panel = editor::Panel::new(
         Arc::clone(&gate.params),
         Arc::clone(&gate.consent),
-        Arc::clone(&gate.processing_failed),
+        Arc::clone(&gate.detection_state),
     );
     let has_status = |output: &egui::FullOutput, expected: &str| {
-        output.shapes.iter().any(|shape| matches!(
-            &shape.shape,
-            egui::Shape::Text(text) if text.galley.job.text == expected
-        ))
+        output.shapes.iter().any(|shape| {
+            matches!(
+                &shape.shape,
+                egui::Shape::Text(text) if text.galley.job.text == expected
+            )
+        })
     };
     let waiting = "Waiting for current detection data · original audio";
     let current = "Last block · current detection data";
@@ -352,12 +354,16 @@ fn actual_gate_editor_states_remain_visible_at_declared_size() {
     for (name, expected) in [
         ("unprepared", "Not prepared · original audio"),
         ("bypassed", "Bypassed · original audio"),
-        ("armed", "Armed · attenuation requires valid evidence"),
+        (
+            "armed",
+            "Waiting for current detection data · original audio",
+        ),
+        ("current", "Last block · current detection data"),
         ("faulted", "Processing unavailable · original audio"),
     ] {
         let mut gate = SmartGate::default();
         if name != "unprepared" {
-            if matches!(name, "armed" | "faulted") {
+            if matches!(name, "armed" | "current" | "faulted") {
                 Arc::get_mut(&mut gate.params).unwrap().bypass =
                     BoolParam::new("Bypass", false).make_bypass();
             }
@@ -371,7 +377,7 @@ fn actual_gate_editor_states_remain_visible_at_declared_size() {
                 },
                 &mut ActivationHost
             ));
-            if matches!(name, "armed" | "faulted") {
+            if matches!(name, "armed" | "current" | "faulted") {
                 gate.arm_experimental();
             }
             if name == "faulted" {
@@ -379,13 +385,19 @@ fn actual_gate_editor_states_remain_visible_at_declared_size() {
                 process_test_block(&mut gate, &mut audio);
                 assert_eq!(audio[0][0].to_bits(), 0x7fc0_1234);
             }
+            if name == "current" {
+                for _ in 0..2 {
+                    let mut audio = vec![vec![0.0001; 1536]];
+                    process_test_block(&mut gate, &mut audio);
+                }
+            }
         }
         let context = egui::Context::default();
         editor::style(&context);
         let mut panel = editor::Panel::new(
             Arc::clone(&gate.params),
             Arc::clone(&gate.consent),
-            Arc::clone(&gate.processing_failed),
+            Arc::clone(&gate.detection_state),
         );
         let mut content = egui::Rect::NOTHING;
         let mut output = context.run_ui(
@@ -490,6 +502,55 @@ fn fresh_absence_can_attenuate_but_expiring_evidence_returns_to_original() {
     }
     assert_eq!(gain.next_gain(expiry, true), 1.0);
     assert_eq!(gain.next_gain(expiry + 1, true), 1.0);
+}
+
+#[test]
+fn detection_freshness_matches_exact_source_expiry_and_invalid_reset_boundaries() {
+    use crate::gain::GainPolicy;
+    use cleanslate_gate_detector::Event;
+
+    for (rate, available_at, expiry) in [
+        (44_100, 1412, 4410),
+        (48_000, 1536, 4800),
+        (96_000, 3072, 9600),
+    ] {
+        let mut gain = GainPolicy::new(rate).unwrap();
+        gain.reset(7);
+        assert_eq!(gain.evidence_age(available_at), None);
+        let event = Event {
+            epoch: 7,
+            end_16k: 512,
+            available_at,
+            probability: 0.0,
+        };
+        gain.observe(event);
+        assert_eq!(
+            gain.evidence_age(available_at - 1),
+            None,
+            "future evidence cannot describe an earlier sample"
+        );
+        assert_eq!(gain.evidence_age(available_at), Some(0));
+        assert_eq!(
+            gain.evidence_age(available_at + expiry - 1),
+            Some(expiry - 1)
+        );
+        assert_eq!(gain.evidence_age(available_at + expiry), None);
+        assert_eq!(gain.next_gain(available_at + expiry, true), 1.0);
+        gain.reset(8);
+        assert_eq!(gain.evidence_age(available_at), None);
+        gain.observe(event);
+        assert_eq!(
+            gain.evidence_age(available_at),
+            None,
+            "preceding epoch is not current data"
+        );
+        gain.reset(7);
+        gain.observe(Event {
+            probability: f32::NAN,
+            ..event
+        });
+        assert_eq!(gain.evidence_age(available_at), None);
+    }
 }
 
 #[test]

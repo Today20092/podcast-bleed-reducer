@@ -2,7 +2,7 @@
 
 The last checked native candidate is a pass-through prototype for one mono/stereo
 insert. Current ticket 93 source connects the embedded speech detector, bounded
-worker and finite gain policy. Current engineering source passes 23 library/editor
+worker and finite gain policy. Current engineering source passes 25 library/editor
 tests, including actual callback-fault feedback and CPU captures of the real
 editor. No new native
 candidate has been built or qualified from this source. Automatic volume leveling
@@ -25,6 +25,10 @@ armed consent does not claim current inference or gain reduction.
 Callback faults report original-audio fallback independently of consent. Fault
 changes and lifecycle updates use the existing atomic editor repaint notifier;
 native wake behavior remains unqualified.
+The editor distinguishes waiting for data from current detection data for the
+last processed block. Valid absence counts as current data; this is not a claim
+of speech presence, continuous host playback or sound quality. Reset retires old
+data, and source-age expiry uses the same predicate as gain application.
 The full accepted [Gate design](../../docs/design/plugin-ui-contract.md) belongs
 to ticket 94 after detector/DSP qualification. A successful build is neither
 native UI acceptance nor evidence of a working speech gate.
@@ -94,7 +98,7 @@ installed nice-plug 0.4.2 / nice-plug-egui 0.6.0 source; the fork source control
 the actual trait signatures.
 
 Ticket 91 is done for its preserved pass-through candidate. Ticket 93 remains
-claimed: current engineering source passes 23 library/editor tests and formatting, including
+claimed: current engineering source passes 25 library/editor tests and formatting, including
 real offline non-unity callback processing, mono/stereo parity, block-size
 independence, bypass/reset, invalid-input fallback and actual pointer/keyboard
 consent interaction, latched callback-fault display and reset recovery. Strict

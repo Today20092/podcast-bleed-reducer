@@ -1,14 +1,14 @@
-use crate::{CONSENT_MASK, Consent, GateParams};
+use crate::{CONSENT_MASK, Consent, DetectionState, GateParams};
 use egui::{Color32, RichText};
 use nice_plug::context::gui::GuiContext;
 use nice_plug_egui::NiceEguiApp;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
 
 pub struct Panel {
     params: Arc<GateParams>,
     consent: Arc<AtomicU64>,
-    processing_failed: Arc<AtomicBool>,
+    detection_state: Arc<AtomicU8>,
     context: Option<GuiContext>,
 }
 
@@ -16,12 +16,12 @@ impl Panel {
     pub fn new(
         params: Arc<GateParams>,
         consent: Arc<AtomicU64>,
-        processing_failed: Arc<AtomicBool>,
+        detection_state: Arc<AtomicU8>,
     ) -> Self {
         Self {
             params,
             consent,
-            processing_failed,
+            detection_state,
             context: None,
         }
     }
@@ -90,12 +90,16 @@ impl Panel {
             let state = self.consent.load(Ordering::Acquire) & CONSENT_MASK;
             ui.label(if state == Consent::Unavailable as u64 {
                 "Not prepared · original audio"
-            } else if self.processing_failed.load(Ordering::Acquire) {
+            } else if self.detection_state.load(Ordering::Acquire) == DetectionState::Failed as u8 {
                 "Processing unavailable · original audio"
             } else if bypass {
                 "Bypassed · original audio"
             } else if state == Consent::Armed as u64 {
-                "Armed · attenuation requires valid evidence"
+                if self.detection_state.load(Ordering::Acquire) == DetectionState::Current as u8 {
+                    "Last block · current detection data"
+                } else {
+                    "Waiting for current detection data · original audio"
+                }
             } else {
                 "Not armed · original audio"
             });
