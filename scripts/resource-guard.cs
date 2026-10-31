@@ -13,12 +13,11 @@ namespace CleanSlate.Build {
         public uint ActiveProcesses;
         public int[] ProcessIds;
         public uint? RootExitCode;
+        public uint JobLimitFlags;
         public ulong PrivateBytes, WorkingSetBytes, PeakCommitBytes;
-        public bool MemoryLimitHit;
     }
     public sealed class OwnedTask : IDisposable {
-        IntPtr job, process, port;
-        bool memoryLimitHit;
+        IntPtr job, process;
         public uint ProcessId { get; private set; }
         public string JobName { get; private set; }
         [StructLayout(LayoutKind.Sequential)] struct MemoryStatus {
@@ -45,7 +44,6 @@ namespace CleanSlate.Build {
             public long User, Kernel, PeriodUser, PeriodKernel;
             public uint Faults, TotalProcesses, ActiveProcesses, TerminatedProcesses;
         }
-        [StructLayout(LayoutKind.Sequential)] struct CompletionPort { public IntPtr Key, Port; }
         [StructLayout(LayoutKind.Sequential, CharSet=CharSet.Unicode)] struct StartupInfo {
             public int Size;
             public string Reserved, Desktop, Title;
@@ -69,8 +67,6 @@ namespace CleanSlate.Build {
         [DllImport("kernel32.dll", SetLastError=true)] static extern bool CloseHandle(IntPtr handle);
         [DllImport("kernel32.dll", SetLastError=true)] static extern bool GetExitCodeProcess(IntPtr process, out uint code);
         [DllImport("kernel32.dll", SetLastError=true)] static extern uint WaitForSingleObject(IntPtr handle, uint milliseconds);
-        [DllImport("kernel32.dll", SetLastError=true)] static extern IntPtr CreateIoCompletionPort(IntPtr file, IntPtr existing, UIntPtr key, uint threads);
-        [DllImport("kernel32.dll", SetLastError=true)] static extern bool GetQueuedCompletionStatus(IntPtr port, out uint message, out UIntPtr key, out IntPtr value, uint timeout);
         [DllImport("kernel32.dll", CharSet=CharSet.Unicode, SetLastError=true)] static extern IntPtr CreateFile(string path, uint access, uint share, ref SecurityAttributes attributes, uint creation, uint flags, IntPtr template);
         static void Check(bool success) { if (!success) throw new Win32Exception(Marshal.GetLastWin32Error()); }
         static IntPtr Structure<T>(T value) {
@@ -107,14 +103,12 @@ namespace CleanSlate.Build {
             }
             b.Append('\\', slashes * 2); return b.Append('"').ToString();
         }
-        public OwnedTask(string executable, string[] arguments, string directory, ulong commitLimit, string logPath) {
+        public OwnedTask(string executable, string[] arguments, string directory, string logPath) {
             IntPtr output=IntPtr.Zero, input=IntPtr.Zero, thread=IntPtr.Zero;
             try {
                 JobName = "Local\\CleanSlate.OwnedTask." + Guid.NewGuid().ToString("N");
                 job=CreateJobObject(IntPtr.Zero, JobName); Check(job != IntPtr.Zero);
-                Set(9, new ExtendedLimits { Basic=new BasicLimits { Flags=0x2000 | 0x200 }, JobMemory=new UIntPtr(commitLimit) });
-                port=CreateIoCompletionPort(new IntPtr(-1), IntPtr.Zero, UIntPtr.Zero, 1); Check(port != IntPtr.Zero);
-                Set(7, new CompletionPort { Key=new IntPtr(1), Port=port });
+                Set(9, new ExtendedLimits { Basic=new BasicLimits { Flags=0x2000 } });
                 var attributes=new SecurityAttributes { Size=Marshal.SizeOf(typeof(SecurityAttributes)), Inherit=1 };
                 output=CreateFile(logPath, 0x40000000, 3, ref attributes, 1, 0x80, IntPtr.Zero); Check(output != new IntPtr(-1));
                 input=CreateFile("NUL", 0x80000000, 3, ref attributes, 3, 0x80, IntPtr.Zero); Check(input != new IntPtr(-1));
@@ -137,9 +131,8 @@ namespace CleanSlate.Build {
             }
         }
         public TaskSample Sample() {
-            uint message; UIntPtr key; IntPtr value;
-            while (GetQueuedCompletionStatus(port, out message, out key, out value, 0)) if (message == 9 || message == 10) memoryLimitHit=true;
-            var sample=new TaskSample { ActiveProcesses=Query<Accounting>(1).ActiveProcesses, PeakCommitBytes=Query<ExtendedLimits>(9).PeakJobMemory.ToUInt64(), MemoryLimitHit=memoryLimitHit };
+            var limits=Query<ExtendedLimits>(9);
+            var sample=new TaskSample { ActiveProcesses=Query<Accounting>(1).ActiveProcesses, PeakCommitBytes=limits.PeakJobMemory.ToUInt64(), JobLimitFlags=limits.Basic.Flags };
             uint wait=WaitForSingleObject(process, 0);
             if (wait == UInt32.MaxValue) throw new Win32Exception(Marshal.GetLastWin32Error());
             if (wait == 0) sample.RootExitCode=ExitCode;
@@ -169,7 +162,6 @@ namespace CleanSlate.Build {
         public void Dispose() {
             if (job != IntPtr.Zero) { CloseHandle(job); job=IntPtr.Zero; }
             if (process != IntPtr.Zero) { CloseHandle(process); process=IntPtr.Zero; }
-            if (port != IntPtr.Zero) { CloseHandle(port); port=IntPtr.Zero; }
         }
     }
 }
