@@ -36,6 +36,18 @@ CI are unchanged by the separate product work below.
   completion. Full Session VST3 restore, runtime isolation, native presentation,
   listening/PDC/export remain outside this normal pair. Shared-cache DLL output
   changed during example compilation, so the tested preserved DLL is authoritative.
+- Fresh CPU benchmark source `b5052b2` compares untouched baseline `d2b30c91`
+  with production base `b41d51e`, using matched fixture, dependency lock, profile
+  and pinned tools. Waveform-only correlated p99 is .991 → .939 ms compact and
+  1.355 → 1.259 ms full; these small differences do not establish improvement.
+  Current gain refresh p99 is 2.274/4.686 ms compact/full; worst observed warm
+  total across the ten gain cases is 6.253 ms. All 40-warm-sample cases have no
+  16.667 ms CPU-budget exceedance. Actual egui dispatch measurements also pass.
+  Strict lint/formatting and exact benchmark filters pass. Evidence is under
+  `%LOCALAPPDATA%/CleanSlate/VerifiedBuilds/podcast103/20261030-cpu-b5052b2/`.
+  Metadata-only tip `72cdbe5` ignores the two new timing cases in ordinary suites
+  and requires explicit serialized future runs. Native presentation, allocation
+  call counts and per-instance CPU/memory are unmeasured; no 60 Hz claim follows.
 - Gate readiness `57e2cc2` / `8f95ba8` passes 25 tests, strict lint/formatting and
   five actual CPU widget captures. These do not establish native presentation,
   readiness wake timing or real-host gating.
@@ -80,9 +92,10 @@ are under sibling `20261030-loader-cdf5ce0/`.
 
 ## Remaining work
 
-Podcast needs the broader Session/state regression and comparable performance
-checks. The existing workflow is source-reviewed with pinned tools and normal
-output restoration after ordinary failures; its execution remains queued.
+Podcast needs completion of the broader Session/state regression and remaining
+native/allocation/per-instance performance acceptance. The existing workflow is
+source-reviewed with pinned tools and normal output restoration after ordinary
+failures; its initial normal checks pass and feature workflow execution is active.
 Native sound/PDC/export acceptance remains separate from component tests.
 
 Gate needs actual native arming/inference, sustained realtime deadlines and host PDC

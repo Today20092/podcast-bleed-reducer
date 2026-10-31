@@ -30,6 +30,18 @@ Implement the owner's FabFilter/sonible quality target in the existing Podcast e
 
 ## Results
 
+2026-10-30 fresh CPU comparison: test-only `b5052b2` passes the unchanged waveform
+case against untouched `d2b30c91`, plus separate gain and actual egui dispatch
+cases. Matched source/lock/profile/tool identities and raw samples are preserved
+under `%LOCALAPPDATA%/CleanSlate/VerifiedBuilds/podcast103/20261030-cpu-b5052b2/`.
+Waveform p99 totals are .991→.939 ms compact and 1.355→1.259 ms full; small sample
+differences do not establish improvement. Gain-refresh p99 is 2.274/4.686 ms;
+worst observed warm gain-case total is 6.253 ms. No 40-sample warm case exceeds
+the 16.667 ms CPU budget. These are correlated CPU spans, not presented frames.
+Strict lint/formatting and focused benchmarks pass. Registration-only `72cdbe5`
+keeps the new timing cases out of ordinary parallel suites. Native presentation,
+allocation counts, per-instance CPU/memory and listening/PDC/export remain open.
+
 2026-10-30 normal native regression: artifact source `b41d51e`, evidence tip
 `9d700cb`, preserves ordinary DLL SHA256
 `d8b796862e9c0547d1c82a568708044bc8a64f42fd42023bb59e618e07eba6e2`
