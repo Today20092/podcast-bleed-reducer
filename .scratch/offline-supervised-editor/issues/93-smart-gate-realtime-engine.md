@@ -133,6 +133,51 @@ The next inference-linked native build must qualify its actual metadata and
 runtime packaging; the retained native candidate has not been replaced. Ticket remains
 claimed; compiler slot released to Podcast before any additional behavior.
 
+Next processing-truth regression is prepared, unrun: after an explicitly armed
+callback encounters invalid PCM, the actual editor must report Processing
+unavailable / original audio while temporary consent remains distinct and input
+bits are preserved. This uses the existing plugin callback and same public editor
+body, without writing status internals or synthesizing detector output. No new
+status implementation or semantic RED is claimed before execution-slot grant.
+
+Actual-widget visual QA is also prepared, unrun: reuse the existing test-only
+egui CPU mesh capture helper for three 640×440 / 1× states (unprepared, bypassed,
+armed consent). Native build and capture share the unchanged extracted styling.
+The opt-in `CLEANSLATE_PLUGIN_CAPTURES` directory receives PPMs from actual Panel
+output, not a recreated diagram. No renderer/dependency or DPI/native claim is
+added; the callback-fault regression remains the next execution priority.
+
+### Containment audit and unrun continuation — 2026-10-30
+
+Execution is stopped at the shared ticket 109 containment blocker. All Gate
+compiler commands above launched `C:/Users/User/.cargo/bin/cargo.exe`, currently
+a symbolic link to `rustup.exe`. No explicit `RUSTC` override was supplied; the
+compiler path selected by the historical proxy invocation was not recorded.
+Only the final linker was explicitly resolved to the actual pinned 1.99.0
+`rust-lld.exe`. Subsequent tiny shared-guard probes found that a rustup launch
+chain can escape the intended named job; no such mechanism is inferred solely
+from Gate's receipts.
+
+The first Gate compile receipt observed five active job processes and peak job
+commit 989,896,704 bytes; the final editor compile observed five and 893,108,224
+bytes. Root exit 0, empty final job PIDs and cleanup verification describe the
+observed job, not proof that every compiler descendant belonged to it. Historical
+per-compiler PID membership was not captured. The earlier compiler/accounting
+figures therefore remain observations, not complete containment qualification.
+The directly launched test executables did not use rustup; their 18/20 passing
+behavioral results and actual job cleanup evidence are unchanged.
+
+Verified consent behavior remains source `146b057` and the separately preserved
+20-test executable/hash above (with the documented later metadata-only change).
+The following continuation drafts are explicitly **uncompiled and unrun**:
+the callback-fault/editor fallback RED; test-only reuse of the existing CPU mesh
+capture helper; unchanged extraction of native style setup; and actual 640×440 / 1×
+unprepared/bypassed/armed capture fixtures. No callback status implementation,
+new capture output, native host/editor qualification, strict Clippy or further
+compiler job followed the stop. Keep this incomplete worktree and all preserved
+artifacts; 93 remains claimed and 94 remains blocked. Resume only after the shared
+containment path is repaired and proved, followed by a new execution-slot grant.
+
 ### Resumed all-target check — 2026-10-30
 
 Fresh preflight recovered to 26.26 GiB physical / 28.69 GiB commit with no

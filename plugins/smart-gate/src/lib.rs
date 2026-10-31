@@ -1,4 +1,7 @@
 mod editor;
+#[cfg(test)]
+#[path = "../../fl-probe/src/editor_capture.rs"]
+mod editor_capture;
 mod engine;
 pub mod gain;
 pub mod worker;

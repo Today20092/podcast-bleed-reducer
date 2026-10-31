@@ -2,7 +2,9 @@
 
 The last checked native candidate is a pass-through prototype for one mono/stereo
 insert. Current ticket 93 source connects the embedded speech detector, bounded
-worker and finite gain policy, with 20 passing library/editor tests. No new native
+worker and finite gain policy. Verified consent source `146b057` has 20 passing
+library/editor tests; later fault-status and CPU capture drafts are uncompiled
+and unrun pending the shared execution-containment fix. No new native
 candidate has been built or qualified from this source. Automatic volume leveling
 is outside scope; there is no group/member, Session capture or desktop prerequisite.
 
@@ -85,7 +87,7 @@ installed nice-plug 0.4.2 / nice-plug-egui 0.6.0 source; the fork source control
 the actual trait signatures.
 
 Ticket 91 is done for its preserved pass-through candidate. Ticket 93 remains
-claimed: current source passes 20 library/editor tests and formatting, including
+claimed: verified consent source `146b057` passes 20 library/editor tests and formatting, including
 real offline non-unity callback processing, mono/stereo parity, block-size
 independence, bypass/reset, invalid-input fallback and actual pointer/keyboard
 consent interaction. Earlier worker/callback source passed strict library/test

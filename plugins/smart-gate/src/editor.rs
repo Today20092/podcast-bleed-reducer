@@ -28,13 +28,7 @@ impl NiceEguiApp for Panel {
         gui: GuiContext,
         _: &mut nice_plug_egui::Frame,
     ) -> Result<(), nice_plug_egui::baseview::HandlerError> {
-        // Inherit the accepted CleanSlate plugin tokens, without depending on the desktop renderer.
-        let mut visuals = egui::Visuals::dark();
-        visuals.panel_fill = Color32::from_rgb(32, 34, 38);
-        visuals.override_text_color = Some(Color32::from_rgb(228, 231, 235));
-        visuals.widgets.inactive.bg_fill = Color32::from_rgb(52, 57, 64);
-        visuals.selection.stroke = egui::Stroke::new(2.0, Color32::from_rgb(154, 197, 255));
-        context.set_visuals(visuals);
+        style(&context);
         self.context = Some(gui);
         Ok(())
     }
@@ -46,6 +40,16 @@ impl NiceEguiApp for Panel {
     fn ui(&mut self, ui: &mut egui::Ui, _: &mut nice_plug_egui::Frame) {
         self.show(ui);
     }
+}
+
+pub(crate) fn style(context: &egui::Context) {
+    // Inherit the accepted CleanSlate plugin tokens, without depending on the desktop renderer.
+    let mut visuals = egui::Visuals::dark();
+    visuals.panel_fill = Color32::from_rgb(32, 34, 38);
+    visuals.override_text_color = Some(Color32::from_rgb(228, 231, 235));
+    visuals.widgets.inactive.bg_fill = Color32::from_rgb(52, 57, 64);
+    visuals.selection.stroke = egui::Stroke::new(2.0, Color32::from_rgb(154, 197, 255));
+    context.set_visuals(visuals);
 }
 
 impl Panel {
