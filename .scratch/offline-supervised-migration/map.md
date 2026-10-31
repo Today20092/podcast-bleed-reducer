@@ -1,5 +1,15 @@
 # Plan the offline supervised CleanSlate migration
 
+2026-10-31 OWNER RESUMPTION — native research only: the owner explicitly revokes
+the research stop, requests complete sonible VST3 reverse engineering and removes
+the artificial job deadlines/resource guards for that investigation. Use the
+available 32 logical CPUs and 40 GiB host RAM through supported Ghidra settings;
+verify the actual JVM configuration. Keep one live REA/Ghidra session through
+analysis and focused queries. Retain complete evidence and update the research
+report. This authorizes no plugin/GUI implementation or ticket after research.
+REA requires finite timers, so use its maximum supported 2,147,483,647 ms rather
+than another short deadline; remove the outer wrapper and driver expiry.
+
 2026-10-31 OWNER STOP: the bounded sonible VST3 investigation is saved in the
 [native research report](../../docs/research/smartgate-native-engine-2026-10-31.md),
 with supporting control/engine/model reports and complete external diagnostics.
