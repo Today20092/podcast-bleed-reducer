@@ -201,7 +201,7 @@ New-Item -ItemType Directory -Path $run | Out-Null
 ```
 
 The window ends after 120 seconds or explicit close. A run records 36,000 stereo
-samples at 48 kHz in offline mode, gain extrema/final gain, marked sample alignment
+samples at 48 kHz with paced realtime-mode callbacks, gain extrema/final gain, marked sample alignment
 and reported latency/tail. A PASS requires actual attenuation and successful
 teardown. Retain the log plus native editor screenshots showing the actual
 consent/status. The editor requests its existing 640×440 logical size; the host

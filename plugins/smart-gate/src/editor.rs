@@ -87,14 +87,13 @@ fn db(peak: f32) -> f32 {
 }
 impl Panel {
     fn graph(&self, ui: &mut egui::Ui, current: Option<Bin>, fresh: bool, applied: f32) {
-        let (rect, response) = ui.allocate_exact_size(
+        let (rect, _) = ui.allocate_exact_size(
             egui::vec2(
                 ui.available_width(),
                 (ui.available_height() - 34.0).max(224.0),
             ),
             egui::Sense::hover(),
         );
-        response.on_hover_text("Real 10 ms peak envelopes on a −90 to 0 dBFS level scale. Input and output share the attenuation timeline. Freeze changes display only.");
         let p = ui.painter_at(rect);
         p.rect_filled(rect, 4.0, Color32::from_rgb(18, 21, 27));
         let left = rect.left() + 14.0;

@@ -198,7 +198,7 @@ fn render(
                 processor,
                 &mut input,
                 &mut output,
-                ProcessModes_::kOffline,
+                ProcessModes_::kRealtime,
                 false,
                 changes.as_ref().map_or(ptr::null_mut(), ComPtr::as_ptr),
             )
@@ -225,6 +225,7 @@ fn render(
             report.last_gain = gain;
         }
         report.frames += frames;
+        std::thread::sleep(Duration::from_secs_f64(frames as f64 / 48_000.0));
     }
     // SAFETY: the active processor stays owned by the worker throughout this render.
     unsafe {
@@ -308,7 +309,9 @@ pub fn run(instance: &Instance, mode: Mode) -> Result<(), String> {
                 }
             }
             let mut setup = ProcessSetup {
-                processMode: ProcessModes_::kOffline,
+                // Live GUI check: pace callbacks without an audio device. Offline SDK
+                // mode propagation is tracked separately in ticket 93.
+                processMode: ProcessModes_::kRealtime,
                 symbolicSampleSize: SymbolicSampleSizes_::kSample32,
                 maxSamplesPerBlock: 256,
                 sampleRate: 48_000.0,
