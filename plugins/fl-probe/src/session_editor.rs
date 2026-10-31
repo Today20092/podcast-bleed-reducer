@@ -1146,6 +1146,10 @@ impl SessionUi {
 }
 
 #[cfg(test)]
+#[path = "session_editor_cpu_benchmark.rs"]
+mod cpu_benchmark;
+
+#[cfg(test)]
 mod tests {
     use super::*;
 

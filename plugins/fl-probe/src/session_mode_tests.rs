@@ -237,6 +237,30 @@ pub(crate) fn publish_display_analysis(
     engine.state.lock().message = "Analysis ready. Enable processing and replay to validate the source audio. Unverified sections stay original.".into();
 }
 
+/// Benchmark-only publication of eight independent, densely mapped envelopes.
+pub(crate) fn publish_benchmark_analysis(engine: &SessionCapture, envelope: GainEnvelope) {
+    *engine.analysis.write() = Some(Arc::new(Published {
+        revision: engine.revision.load(SeqCst),
+        analysis: Analysis {
+            origin: 0,
+            end: envelope.sample_count() as i64,
+            rate: engine.rate,
+            envelopes: vec![envelope; MEMBERS],
+        },
+        hashes: vec![Vec::new(); MEMBERS],
+        member_map: std::array::from_fn(Some),
+    }));
+}
+
+pub(crate) fn benchmark_pcm_hashes(engine: &SessionCapture) -> Vec<String> {
+    (0..MEMBERS)
+        .map(|member| {
+            let bytes = fs::read(engine.path.join(format!("mic-{member}.pcm"))).unwrap();
+            format!("{:x}", Sha256::digest(bytes))
+        })
+        .collect()
+}
+
 #[test]
 fn cancel_request_returns_while_capture_storage_is_locked() {
     let fixture = Fixture::new(1);
