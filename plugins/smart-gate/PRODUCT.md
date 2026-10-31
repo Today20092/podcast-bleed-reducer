@@ -13,6 +13,9 @@ processing and actual preparation availability without claiming that consent
 proves current inference or gain reduction. Do not display invented confidence,
 meters or reduction. Headless callback-fault display and reset recovery pass;
 native readiness/fault notification and stale-evidence qualification remain open.
+Source-level callback feedback now distinguishes waiting/current detection data
+for the last processed block, including valid absence. Exact source-age expiry,
+epoch and reset boundaries are checked; native realtime timing is not qualified.
 No Session setup is needed.
 
 The probe retains its own source, format identifiers, state and installed links.
