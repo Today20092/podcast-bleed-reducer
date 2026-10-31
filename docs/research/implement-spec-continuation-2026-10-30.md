@@ -31,8 +31,13 @@ CI are unchanged by the separate product work below.
   separates DLL source `2e3adbf` from packaging source `ef94023`; no installed
   plugin or previous candidate changed.
 - Isolated loader hosts `80eac5c` compile and pass strict example Clippy and
-  formatting. Candidate-local load and missing-DirectML controls are the next
-  execution step. These hosts do not preload DirectML, but preload
+  formatting. Both format positives load the pinned DirectML from their fresh
+  staged fixture directories; receipt `222749-bba396a4` completes in 20.51 seconds
+  with accounted processes empty and recorded cleanup verified. Independent
+  review invalidated the missing-sidecar controls: the runner accepted any
+  nonzero exit, including an unrelated missing-file assertion after loading a
+  fallback runtime. Those negatives remain unqualified pending explicit failure
+  classification and rerun. These hosts do not preload DirectML, but preload
   `VCRUNTIME140.dll`; complete C++ runtime isolation is not claimed.
 
 Native build evidence is preserved under
@@ -47,7 +52,7 @@ Podcast needs bounded source-valid Analysis gain
 display, comparable performance/capture checks and final independent review.
 Native sound/PDC/export acceptance remains separate from component tests.
 
-Gate needs isolated candidate-local loader checks, actual native
+Gate needs corrected negative loader controls, actual native
 arming/inference, callback deadline/allocation and PDC
 checks, GUI qualification and listening acceptance. An explicit test-host DLL
 search strategy does not prove ordinary DAW deployment. Existing ABI hosts cannot
