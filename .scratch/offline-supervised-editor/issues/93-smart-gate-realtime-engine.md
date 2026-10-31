@@ -24,6 +24,16 @@ Acceptance:
 
 ### Local development delivery — 2026-10-30
 
+Follow-up `5f9e327` supports per-format delivery: actual temporary mixed-permission
+fixture passes (CLAP denied, VST3 succeeds; ACL restored). The global VST3 Gate
+junction is now installed/hash-verified at
+`C:/Program Files/Common Files/VST3/CleanSlate Smart Gate.vst3`, supplying FL's
+documented discovery location. User CLAP remains. User VST3 duplicate removal
+was rejected before execution by automatic approval review (`blocked by policy`),
+so the identical-target duplicate remains and is explicitly recorded in
+`effective-installation.json`. Probe/Podcast remain unchanged. No native host
+was launched or compiler run in this delivery step.
+
 Owner requested making Smart Gate locally usable. After merging verified
 native/preview source `54dfcf5`, reviewed helper `648f016` validated the immutable
 `2e3adbf` preview, full inventory and safe defaults. Global CLAP permission was

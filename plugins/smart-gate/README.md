@@ -132,6 +132,10 @@ The build script creates no installed links. The separate reviewed
 install. On this machine the global CLAP folder denied access, so the official
 user locations now contain Gate-only junctions: `%LOCALAPPDATA%/Programs/Common/CLAP/CleanSlate Smart Gate/`
 and `%LOCALAPPDATA%/Programs/Common/VST3/CleanSlate Smart Gate.vst3`.
+The follow-up per-format delivery also created the documented FL route at
+`%COMMONPROGRAMFILES%/VST3/CleanSlate Smart Gate.vst3`. The identical user VST3
+duplicate remains because automatic approval review rejected link-only cleanup;
+all three junctions target the same verified immutable preview.
 New/restored instances remain bypassed and unarmed. Probe/Podcast links are
 unchanged. [Exact paths, hashes, scan guidance and rollback](../../docs/research/gate93-local-development-delivery-2026-10-30.md).
 Actual host discovery and native/armed behavior remain separate acceptance.

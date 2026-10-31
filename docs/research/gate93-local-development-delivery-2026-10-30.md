@@ -1,6 +1,7 @@
 # Smart Gate local development delivery
 
-The verified Smart Gate preview is linked into the current user's plugin paths.
+The verified Smart Gate preview is linked into the documented global VST3
+location for FL Studio and the standard current-user CLAP location.
 New/restored instances remain bypassed and unarmed. This makes verified files
 available for host discovery; an actual FL scan, native editor and armed audio
 are separate checks, not results of creating links.
@@ -8,12 +9,13 @@ are separate checks, not results of creating links.
 | Format | Installed path |
 | --- | --- |
 | CLAP binary | `C:/Users/User/AppData/Local/Programs/Common/CLAP/CleanSlate Smart Gate/CleanSlate Smart Gate.clap` |
-| VST3 bundle | `C:/Users/User/AppData/Local/Programs/Common/VST3/CleanSlate Smart Gate.vst3` |
-| VST3 binary | `C:/Users/User/AppData/Local/Programs/Common/VST3/CleanSlate Smart Gate.vst3/Contents/x86_64-win/CleanSlate Smart Gate.vst3` |
+| Primary VST3 bundle | `C:/Program Files/Common Files/VST3/CleanSlate Smart Gate.vst3` |
+| Primary VST3 binary | `C:/Program Files/Common Files/VST3/CleanSlate Smart Gate.vst3/Contents/x86_64-win/CleanSlate Smart Gate.vst3` |
+| Retained duplicate VST3 junction | `C:/Users/User/AppData/Local/Programs/Common/VST3/CleanSlate Smart Gate.vst3` |
 
 Both format files have SHA256
 `274eb182915506a685389cc9f0ca19b86e055859ab406f8b318f44efe4568e31`, plugin
-source `2e3adbf12dd9c8f73105c4b99af7a81e3cf699c7`. They resolve through two
+source `2e3adbf12dd9c8f73105c4b99af7a81e3cf699c7`. They resolve through three
 directory junctions to the preserved, fully inventoried preview:
 `C:/Users/User/AppData/Local/CleanSlate/GuiPreviews/SmartGate/2e3adbf-274eb182/`.
 The CLAP junction retains its sidecars/notices in its own product directory;
@@ -21,7 +23,7 @@ the VST3 junction retains the complete bundle. No shared runtime DLL was copied
 into another product's folder. Preview/candidate bytes remain unchanged.
 
 Canonical scoped source merged native preview/host regression `54dfcf5` at
-`e68f35d`; delivery helper source is `648f016`. No new compiler or native host ran
+`e68f35d`; delivery helper sources are `648f016` and per-format `5f9e327`. No new compiler or native host ran
 in this delivery slice. The earlier normal format regression and standalone
 loader proof are preserved separately; this slice adds installed-file evidence.
 
@@ -42,11 +44,24 @@ junctions and preserves preview bytes. Fixture:
 
 The global CLAP destination rejected creation with Access denied. Its exact error
 is retained; no unexpected installed item was replaced. The documented user
-fallback then succeeded for both formats. Delivery receipt and before/after
+fallback initially succeeded for both formats. Because Image-Line's own default
+list omits user VST3, the owner-authorized follow-up used `-Format VST3` to create
+only the reserved global VST3 junction, which was writable. Actual mixed-permission
+fixtures deny CLAP writes while allowing VST3-only linking, then restore the
+owned temporary ACL; they pass at
+`%TEMP%/gate-delivery-7072568dfd08465da6d280163381e90c/`.
+
+Automatic approval review rejected both combined and isolated verified
+nonrecursive removal of the new per-user VST3 duplicate, giving only
+`blocked by policy`. Neither removal command ran; cleanup attempts stopped.
+The duplicate remains, targeting the identical preview/hash. No rejection was
+bypassed, and the global FL discovery route is installed. Delivery receipts and before/after
 Probe/Podcast path/type/target/binary-hash snapshots are under:
 `%LOCALAPPDATA%/CleanSlate/DevelopmentInstalls/SmartGate/20261030-648f016-b0d527da2d3e48b2bc7cedc33da3cfba/`.
-`installed.json` records both created junctions, exact targets, plugin/source
-hashes, safe defaults and remaining limits. `other-products-before.json` and
+`installed.json` retains the first two user junctions; `global-vst3.json` records
+the global addition. `effective-installation.json` records all three current
+junctions, exact targets, duplicate cleanup blocker, plugin/source hashes, safe
+defaults and remaining limits. `other-products-before.json` and
 `other-products-after.json` match. No DAW was closed, project saved, owner audio
 changed, public release/tag created or Probe/Podcast installation changed.
 
@@ -62,9 +77,10 @@ In FL Studio, use Options → File settings → Manage plugins and Find installe
 plugins with Verify plugins. This follows [Image-Line's installation guide](https://www.image-line.com/fl-studio-learning/fl-studio-online-manual/html/basics_externalplugins.htm).
 Concrete scan folders are
 `C:/Users/User/AppData/Local/Programs/Common/CLAP/` and
-`C:/Users/User/AppData/Local/Programs/Common/VST3/`.
+`C:/Program Files/Common Files/VST3/`.
 Image-Line's current Windows default-location list mentions global paths only;
-actual discovery of these standard user locations remains unverified. If the
+the installed global VST3 now supplies that documented route. Actual FL discovery
+and user CLAP discovery remain unverified. If the
 host omits them, retain the installed files and use an explicit supported scan
 path rather than claiming discovery succeeded. No host scan setting was changed
 by this slice.
@@ -77,12 +93,13 @@ Native arming/readiness, host PDC, realtime deadlines and listening remain open.
 
 ## Rollback
 
-No prior Gate link existed, so rollback removes only the two links created here.
+No prior Gate link existed, so rollback concerns only the three links created here.
 The immutable preview remains available. This reviewed receipt-driven command
-has not been executed on the actual installation:
+has not been executed on the actual installation; automatic cleanup rejection
+above remains explicit:
 
 ```powershell
-$receipt = Get-Content -Raw -LiteralPath "$env:LOCALAPPDATA/CleanSlate/DevelopmentInstalls/SmartGate/20261030-648f016-b0d527da2d3e48b2bc7cedc33da3cfba/installed.json" | ConvertFrom-Json
+$receipt = Get-Content -Raw -LiteralPath "$env:LOCALAPPDATA/CleanSlate/DevelopmentInstalls/SmartGate/20261030-648f016-b0d527da2d3e48b2bc7cedc33da3cfba/effective-installation.json" | ConvertFrom-Json
 foreach ($link in $receipt.links) {
     if ($receipt.created_links -notcontains $link.Path) { continue }
     $current = Get-Item -LiteralPath $link.Path -Force -ErrorAction SilentlyContinue
