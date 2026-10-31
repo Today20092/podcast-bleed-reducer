@@ -1,5 +1,13 @@
 # Plan the offline supervised CleanSlate migration
 
+2026-10-30 owner override: remove all local build memory guards after the upgrade
+to 40 GB RAM. [111](../offline-supervised-editor/issues/111-remove-memory-limits.md)
+removes launch thresholds, running RAM/commit reserves, job memory caps and
+memory-recovery waiting. This supersedes every older memory profile below and in
+historical research. Timeouts, cancellation and single-compiler serialization
+remain. Memory statistics are informational; no hidden replacement limit is
+authorized. The compiler membership observations in 109 remain a separate issue.
+
 2026-10-30 Podcast editor-close lifecycle source `fa1f3f4` passes its RED/GREEN
 and all 75 library tests. The component close boundary clears pending Catch up
 motion while preserving selection/follow; the actual Panel close callback is
