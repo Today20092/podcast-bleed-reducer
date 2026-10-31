@@ -7,6 +7,22 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $PluginDirectory = (Resolve-Path -LiteralPath $PluginDirectory).Path
 $HostDirectory = (Resolve-Path -LiteralPath $HostDirectory).Path
+$reviewed = Get-Content -LiteralPath (Join-Path $PSScriptRoot '../docs/licenses/directml-1.15.4-runtime.json') -Raw | ConvertFrom-Json
+$runtime = @($reviewed.files | Where-Object { $_.path -ceq 'DirectML.dll' })
+if ($runtime.Count -ne 1 -or $runtime[0].sha256 -cnotmatch '^[0-9a-f]{64}$') { throw 'Invalid reviewed DirectML inventory.' }
+$expectedHash = $runtime[0].sha256
+$cases = @(
+    @{ Host = 'smart_gate_clap_check.exe'; Plugin = 'CleanSlate Smart Gate.clap' },
+    @{ Host = 'smart_gate_vst3_check.exe'; Plugin = 'CleanSlate Smart Gate.vst3/Contents/x86_64-win/CleanSlate Smart Gate.vst3' }
+)
+# Validate every format before launching any process or copying candidate files.
+foreach ($case in $cases) {
+    $sourceRuntime = Join-Path (Split-Path -Parent (Join-Path $PluginDirectory $case.Plugin)) 'DirectML.dll'
+    if ((Get-Item -LiteralPath $sourceRuntime).Length -ne $runtime[0].bytes -or
+        (Get-FileHash -LiteralPath $sourceRuntime -Algorithm SHA256).Hash.ToLowerInvariant() -cne $expectedHash) {
+        throw "Candidate DirectML differs from reviewed inventory: $sourceRuntime"
+    }
+}
 if (-not ('CleanSlate.Build.OwnedTask' -as [type])) { Add-Type -Path (Join-Path $PSScriptRoot 'resource-guard.cs') }
 if (-not [CleanSlate.Build.OwnedTask]::IsContained($env:CLEANSLATE_RESOURCE_JOB)) {
     & (Join-Path $PSScriptRoot 'resource-guard.ps1') -FilePath (Get-Process -Id $PID).Path `
@@ -17,14 +33,7 @@ if (-not [CleanSlate.Build.OwnedTask]::IsContained($env:CLEANSLATE_RESOURCE_JOB)
 $fixture = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) "CleanSlate/PluginLoaderChecks/$([Guid]::NewGuid().ToString('N'))"
 New-Item -ItemType Directory -Path $fixture | Out-Null
 Write-Output "Retained loader fixture: $fixture"
-$cases = @(
-    @{ Host = 'smart_gate_clap_check.exe'; Plugin = 'CleanSlate Smart Gate.clap' },
-    @{ Host = 'smart_gate_vst3_check.exe'; Plugin = 'CleanSlate Smart Gate.vst3/Contents/x86_64-win/CleanSlate Smart Gate.vst3' }
-)
 foreach ($case in $cases) {
-    $sourcePlugin = Join-Path $PluginDirectory $case.Plugin
-    $sourceRuntime = Join-Path (Split-Path -Parent $sourcePlugin) 'DirectML.dll'
-    $expectedHash = (Get-FileHash -LiteralPath $sourceRuntime -Algorithm SHA256).Hash
     foreach ($negative in @($false, $true)) {
         $run = Join-Path $fixture "$($case.Host)-missing-$negative"
         $candidate = Join-Path $run 'candidate'
@@ -74,7 +83,7 @@ foreach ($case in $cases) {
                 $loaded = $match.Groups[1].Value.Trim() -replace '^\\\\\?\\', ''
                 $expected = (Resolve-Path -LiteralPath (Join-Path (Split-Path -Parent $plugin) 'DirectML.dll')).Path
                 if ([IO.Path]::GetFullPath($loaded) -ne [IO.Path]::GetFullPath($expected)) { throw 'Host loaded a runtime outside the staged sidecar.' }
-                if ((Get-FileHash -LiteralPath $loaded -Algorithm SHA256).Hash -ne $expectedHash) { throw 'Loaded runtime hash differs from source candidate.' }
+                if ((Get-FileHash -LiteralPath $loaded -Algorithm SHA256).Hash.ToLowerInvariant() -cne $expectedHash) { throw 'Loaded runtime hash differs from reviewed inventory.' }
                 Write-Output $outText.Trim()
                 Write-Output "DirectML SHA256: $expectedHash"
             }

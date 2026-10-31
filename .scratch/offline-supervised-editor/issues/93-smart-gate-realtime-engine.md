@@ -24,6 +24,13 @@ Acceptance:
 
 ### Candidate-loader verification source prepared — 2026-10-30
 
+Review correction: candidate and loaded runtime hashes are now compared against
+the reviewed `docs/licenses/directml-1.15.4-runtime.json` inventory, selectively
+preserved from the native-runtime branch. Both format sidecars are validated
+before any host runs. `scripts/test-smart-gate-loader-preflight.ps1` passes:
+same-length tampered runtime rejected before host execution, without builds or
+native plugin loading.
+
 Added an explicit `--candidate-loader` mode to both existing ABI hosts and
 `scripts/test-smart-gate-loader.ps1` accepting preserved candidate/host paths.
 The default coexistence checks remain intact. Dedicated processes exclude

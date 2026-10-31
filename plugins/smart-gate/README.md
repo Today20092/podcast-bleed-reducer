@@ -90,10 +90,13 @@ data and System32-only PATH. Its `--candidate-loader <binary>` mode excludes
 application-directory, CWD and PATH DLL search, adds only the candidate binary's
 directory, and never loads the probe. Before loading Gate it rejects preloaded
 DirectML; after activation it checks the actual loaded DirectML path. The script
-compares its SHA256 with the source candidate and requires a second fresh process
+validates both candidate sidecars against the reviewed DirectML inventory before
+any host execution, checks the loaded SHA256 against that same inventory, and requires a second fresh process
 without the staged DirectML sidecars to fail. Fixtures and child logs are retained.
 The host reports the four imported MSVC CRT modules already loaded at startup,
 including their actual paths; these may mask candidate CRT sidecars.
+`scripts/test-smart-gate-loader-preflight.ps1` verifies a same-length tampered
+runtime is rejected before any host process starts, using only a disposable file.
 
 This explicit `AddDllDirectory` strategy verifies an engineering loader only.
 It does not establish that FL Studio, OBS or another ordinary host discovers the
