@@ -3,7 +3,8 @@ param(
     [Parameter(Mandatory)][string]$PreviewDirectory,
     [Parameter(Mandatory)][ValidatePattern('^[0-9a-f]{64}$')][string]$ExpectedPluginSha256,
     [Parameter(Mandatory)][string]$ReceiptPath,
-    [string]$PluginRoot = [Environment]::GetFolderPath('CommonProgramFiles')
+    [string]$PluginRoot = [Environment]::GetFolderPath('CommonProgramFiles'),
+    [ValidateSet('CLAP','VST3')][string[]]$Format = @('CLAP','VST3')
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -22,9 +23,10 @@ foreach ($file in $manifest.files) {
         (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant() -cne $file.sha256) { throw "Preview bytes changed: $($file.path)" }
 }
 $links = @(
-    @{Path=(Join-Path $PluginRoot 'CLAP/CleanSlate Smart Gate');Target=$PreviewDirectory;Binary='CleanSlate Smart Gate.clap'},
-    @{Path=(Join-Path $PluginRoot 'VST3/CleanSlate Smart Gate.vst3');Target=(Join-Path $PreviewDirectory 'CleanSlate Smart Gate.vst3');Binary='Contents/x86_64-win/CleanSlate Smart Gate.vst3'}
+    @{Format='CLAP';Path=(Join-Path $PluginRoot 'CLAP/CleanSlate Smart Gate');Target=$PreviewDirectory;Binary='CleanSlate Smart Gate.clap'},
+    @{Format='VST3';Path=(Join-Path $PluginRoot 'VST3/CleanSlate Smart Gate.vst3');Target=(Join-Path $PreviewDirectory 'CleanSlate Smart Gate.vst3');Binary='Contents/x86_64-win/CleanSlate Smart Gate.vst3'}
 )
+$links = @($links | Where-Object { $Format -contains $_.Format })
 # Validate every destination and its parents before creating either installed link.
 foreach ($link in $links) {
     if ((Get-FileHash -LiteralPath (Join-Path $link.Target $link.Binary)).Hash.ToLowerInvariant() -cne $ExpectedPluginSha256) { throw 'Format binary differs from reviewed plugin.' }

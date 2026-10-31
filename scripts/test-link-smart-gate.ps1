@@ -43,4 +43,27 @@ foreach ($relative in @('CLAP/CleanSlate Smart Gate','VST3/CleanSlate Smart Gate
     if (Get-Item -LiteralPath (Join-Path $transactionRoot $relative) -Force -ErrorAction SilentlyContinue) { throw 'Failed delivery retained a newly created link.' }
 }
 if (-not (Test-Path -LiteralPath (Join-Path $PreviewDirectory 'CleanSlate Smart Gate.clap'))) { throw 'Failed-delivery rollback removed preview target.' }
-Write-Output "PASS: reviewed-hash refusal, preflight conflict preservation, verified links, idempotence and failed-delivery link-only rollback. Retained fixture: $fixture"
+$mixedRoot = Join-Path $fixture 'mixed-permissions'
+$deniedClap = Join-Path $mixedRoot 'CLAP'
+New-Item -ItemType Directory -Path $deniedClap -Force | Out-Null
+$acl = Get-Acl -LiteralPath $deniedClap
+$originalSddl = $acl.GetSecurityDescriptorSddlForm([Security.AccessControl.AccessControlSections]::All)
+$deny = [Security.AccessControl.FileSystemAccessRule]::new([Security.Principal.WindowsIdentity]::GetCurrent().User, [Security.AccessControl.FileSystemRights]::Write, [Security.AccessControl.AccessControlType]::Deny)
+try {
+    $acl.AddAccessRule($deny)
+    Set-Acl -LiteralPath $deniedClap -AclObject $acl
+    Assert-Refused { & $helper -PreviewDirectory $PreviewDirectory -ExpectedPluginSha256 $ExpectedPluginSha256 -PluginRoot $mixedRoot -ReceiptPath (Join-Path $fixture 'mixed-both.json') } '*denied*'
+    $mixedReceipt = Join-Path $fixture 'mixed-vst3.json'
+    & $helper -PreviewDirectory $PreviewDirectory -ExpectedPluginSha256 $ExpectedPluginSha256 -PluginRoot $mixedRoot -Format VST3 -ReceiptPath $mixedReceipt
+    $mixed = Get-Content -LiteralPath $mixedReceipt -Raw | ConvertFrom-Json
+    if ($mixed.links.Count -ne 1 -or $mixed.links[0].Format -ne 'VST3' -or $mixed.created_links.Count -ne 1) { throw 'Per-format fallback did not isolate VST3.' }
+    $link = $mixed.links[0]
+    $item = Get-Item -LiteralPath $link.Path -Force
+    if ($item.LinkType -ne 'Junction' -or [IO.Path]::GetFullPath([string]$item.Target) -ne [IO.Path]::GetFullPath($link.Target)) { throw 'Unexpected mixed-permission fixture link.' }
+    Remove-Item -LiteralPath $link.Path -Force
+} finally {
+    $restore = [Security.AccessControl.DirectorySecurity]::new()
+    $restore.SetSecurityDescriptorSddlForm($originalSddl)
+    Set-Acl -LiteralPath $deniedClap -AclObject $restore
+}
+Write-Output "PASS: reviewed-hash refusal, conflict preservation, verified links, idempotence, failed-delivery rollback and mixed-permission per-format delivery. Retained fixture: $fixture"
