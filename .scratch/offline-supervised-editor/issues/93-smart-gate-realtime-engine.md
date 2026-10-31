@@ -22,6 +22,13 @@ Acceptance:
 
 ## Results
 
+Native/runtime continuation is claimed on `codex/gate-native-runtime`, initially
+based on `0e56096`. This sub-slice prepares candidate staging and independent
+loader proof; merge the latest tested Gate readiness source before building.
+Current authorization is source preparation only: no build, native launch or
+runtime package download has run. Existing build/host script seams govern tests;
+redistributables require verified provenance and applicable notices before staging.
+
 ### Arming/readiness continuation — 2026-10-30
 
 Claimed on `Today20092/gate93-resume` from preserved `d03d3ab`. The first
