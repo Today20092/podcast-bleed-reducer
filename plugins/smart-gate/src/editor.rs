@@ -7,7 +7,7 @@ use nice_plug::context::gui::GuiContext;
 use nice_plug_egui::NiceEguiApp;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
-const INPUT: Color32 = Color32::from_rgb(111, 125, 139);
+const INPUT: Color32 = Color32::from_rgb(125, 140, 155);
 const OUTPUT: Color32 = Color32::from_rgb(78, 215, 190);
 const REDUCTION: Color32 = Color32::from_rgb(191, 164, 244);
 const MUTED: Color32 = Color32::from_rgb(173, 185, 198);
@@ -88,7 +88,10 @@ fn db(peak: f32) -> f32 {
 impl Panel {
     fn graph(&self, ui: &mut egui::Ui, current: Option<Bin>, fresh: bool) {
         let (rect, response) = ui.allocate_exact_size(
-            egui::vec2(ui.available_width(), 200.0),
+            egui::vec2(
+                ui.available_width(),
+                (ui.available_height() - 150.0).max(200.0),
+            ),
             egui::Sense::hover(),
         );
         response.on_hover_text("5.12 seconds of real audio. Waveforms show 10 ms peak envelopes, combined across stereo channels. Purple shows maximum applied reduction in each matching interval. Freeze affects display only.");
@@ -97,9 +100,10 @@ impl Panel {
         let left = rect.left() + 10.0;
         let right = rect.right() - 84.0;
         let width = right - left;
-        let center = rect.top() + 70.0;
-        let height = 40.0;
-        let gain_top = rect.top() + 137.0;
+        let center = rect.top() + rect.height() * 0.35;
+        let height = rect.height() * 0.23;
+        let gain_top = rect.top() + rect.height() * 0.685;
+        let gain_height = rect.height() * 0.17;
         let text = |position, align, label: &str, color| {
             p.text(position, align, label, FontId::proportional(11.0), color);
         };
@@ -116,7 +120,7 @@ impl Panel {
             OUTPUT,
         );
         text(
-            Pos2::new(left, rect.top() + 118.0),
+            Pos2::new(left, gain_top - 19.0),
             Align2::LEFT_TOP,
             "APPLIED ATTENUATION",
             REDUCTION,
@@ -141,7 +145,7 @@ impl Panel {
             [Pos2::new(left, center), Pos2::new(right, center)],
             Stroke::new(1.0, INPUT),
         );
-        for (label, y) in [("0", gain_top), ("6 dB", gain_top + 34.0)] {
+        for (label, y) in [("0", gain_top), ("6 dB", gain_top + gain_height)] {
             p.line_segment(
                 [Pos2::new(left, y), Pos2::new(right, y)],
                 Stroke::new(1.0, Color32::from_rgb(50, 45, 64)),
@@ -168,7 +172,7 @@ impl Panel {
                     );
                 }
             }
-            let point = Pos2::new(x, gain_top + reduction(bin.gain) / 6.0 * 34.0);
+            let point = Pos2::new(x, gain_top + reduction(bin.gain) / 6.0 * gain_height);
             if let Some(old) = previous {
                 p.line_segment([old, point], Stroke::new(1.5, REDUCTION));
             }
@@ -195,7 +199,7 @@ impl Panel {
             );
             let bar = Rect::from_min_max(
                 Pos2::new(x, rect.top() + 31.0),
-                Pos2::new(x + 14.0, rect.top() + 144.0),
+                Pos2::new(x + 14.0, rect.bottom() - 56.0),
             );
             p.rect_filled(bar, 2.0, Color32::from_rgb(41, 47, 55));
             let level = if fresh {
@@ -221,7 +225,7 @@ impl Panel {
                 "−∞".into()
             };
             text(
-                Pos2::new(x + 7.0, rect.top() + 154.0),
+                Pos2::new(x + 7.0, rect.bottom() - 46.0),
                 Align2::CENTER_TOP,
                 &label,
                 MUTED,

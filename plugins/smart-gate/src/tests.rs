@@ -351,104 +351,107 @@ fn draw_gate_panel(
 
 #[test]
 fn actual_gate_editor_states_remain_visible_at_declared_size() {
-    for (name, expected) in [
-        ("unprepared", "Not prepared · original audio"),
-        ("bypassed", "Bypassed · original audio"),
-        (
-            "armed",
-            "Waiting for current detection data · original audio",
-        ),
-        ("current", "Last block · current detection data"),
-        ("faulted", "Processing unavailable · original audio"),
-    ] {
-        let mut gate = SmartGate::default();
-        if name != "unprepared" {
-            if matches!(name, "armed" | "current" | "faulted") {
-                Arc::get_mut(&mut gate.params).unwrap().bypass =
-                    BoolParam::new("Bypass", false).make_bypass();
-            }
-            assert!(gate.activate(
-                &SmartGate::AUDIO_IO_LAYOUTS[1],
-                &BufferConfig {
-                    sample_rate: 48_000.0,
-                    min_buffer_size: None,
-                    max_buffer_size: 1536,
-                    process_mode: ProcessMode::Offline,
-                },
-                &mut ActivationHost
-            ));
-            if matches!(name, "armed" | "current" | "faulted") {
-                gate.arm_experimental();
-            }
-            if name == "faulted" {
-                let mut audio = vec![vec![f32::from_bits(0x7fc0_1234)]];
-                process_test_block(&mut gate, &mut audio);
-                assert_eq!(audio[0][0].to_bits(), 0x7fc0_1234);
-            }
-            if name == "current" {
-                for block in 0..120 {
-                    let mut audio = vec![
-                        (0..1536)
-                            .map(|i| {
-                                let sample = block * 1536 + i;
-                                if block < 85 {
-                                    (sample as f32 * 0.018).sin()
-                                        * (sample as f32 * 0.00013).sin().abs()
-                                        * 0.7
-                                } else {
-                                    0.0001
-                                }
-                            })
-                            .collect(),
-                    ];
+    for (width, height) in [(640, 440), (1000, 620)] {
+        for (name, expected) in [
+            ("unprepared", "Not prepared · original audio"),
+            ("bypassed", "Bypassed · original audio"),
+            (
+                "armed",
+                "Waiting for current detection data · original audio",
+            ),
+            ("current", "Last block · current detection data"),
+            ("faulted", "Processing unavailable · original audio"),
+        ] {
+            let mut gate = SmartGate::default();
+            if name != "unprepared" {
+                if matches!(name, "armed" | "current" | "faulted") {
+                    Arc::get_mut(&mut gate.params).unwrap().bypass =
+                        BoolParam::new("Bypass", false).make_bypass();
+                }
+                assert!(gate.activate(
+                    &SmartGate::AUDIO_IO_LAYOUTS[1],
+                    &BufferConfig {
+                        sample_rate: 48_000.0,
+                        min_buffer_size: None,
+                        max_buffer_size: 1536,
+                        process_mode: ProcessMode::Offline,
+                    },
+                    &mut ActivationHost
+                ));
+                if matches!(name, "armed" | "current" | "faulted") {
+                    gate.arm_experimental();
+                }
+                if name == "faulted" {
+                    let mut audio = vec![vec![f32::from_bits(0x7fc0_1234)]];
                     process_test_block(&mut gate, &mut audio);
+                    assert_eq!(audio[0][0].to_bits(), 0x7fc0_1234);
+                }
+                if name == "current" {
+                    for block in 0..120 {
+                        let mut audio = vec![
+                            (0..1536)
+                                .map(|i| {
+                                    let sample = block * 1536 + i;
+                                    if block < 85 {
+                                        (sample as f32 * 0.018).sin()
+                                            * (sample as f32 * 0.00013).sin().abs()
+                                            * 0.7
+                                    } else {
+                                        0.0001
+                                    }
+                                })
+                                .collect(),
+                        ];
+                        process_test_block(&mut gate, &mut audio);
+                    }
                 }
             }
-        }
-        let context = egui::Context::default();
-        editor::style(&context);
-        let mut panel = editor::Panel::new(
-            Arc::clone(&gate.params),
-            Arc::clone(&gate.consent),
-            Arc::clone(&gate.detection_state),
-        );
-        let mut content = egui::Rect::NOTHING;
-        let mut output = context.run_ui(
-            egui::RawInput {
-                screen_rect: Some(egui::Rect::from_min_size(
-                    egui::Pos2::ZERO,
-                    egui::vec2(640.0, 440.0),
-                )),
-                ..Default::default()
-            },
-            |ui| {
-                panel.show(ui);
-                content = ui.min_rect();
-            },
-        );
-        let status = output.shapes.iter().any(|shape| matches!(
+            let context = egui::Context::default();
+            editor::style(&context);
+            let mut panel = editor::Panel::new(
+                Arc::clone(&gate.params),
+                Arc::clone(&gate.consent),
+                Arc::clone(&gate.detection_state),
+            );
+            let mut content = egui::Rect::NOTHING;
+            let mut output = context.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(width as f32, height as f32),
+                    )),
+                    ..Default::default()
+                },
+                |ui| {
+                    panel.show(ui);
+                    content = ui.min_rect();
+                },
+            );
+            let status = output.shapes.iter().any(|shape| matches!(
             &shape.shape,
             egui::Shape::Text(text) if text.galley.job.text == expected
                 && shape.clip_rect.contains_rect(egui::Rect::from_min_size(text.pos, text.galley.size()))
         ));
-        if let Ok(directory) = std::env::var("CLEANSLATE_PLUGIN_CAPTURES") {
-            std::fs::create_dir_all(&directory).unwrap();
-            crate::editor_capture::write_capture(
-                &context,
-                &mut output,
-                &std::path::Path::new(&directory).join(format!("gate-{name}-640x440.ppm")),
-                640,
-                440,
-            )
-            .unwrap();
-        } else {
-            output.textures_delta.clear();
+            if let Ok(directory) = std::env::var("CLEANSLATE_PLUGIN_CAPTURES") {
+                std::fs::create_dir_all(&directory).unwrap();
+                crate::editor_capture::write_capture(
+                    &context,
+                    &mut output,
+                    &std::path::Path::new(&directory)
+                        .join(format!("gate-{name}-{width}x{height}.ppm")),
+                    width,
+                    height,
+                )
+                .unwrap();
+            } else {
+                output.textures_delta.clear();
+            }
+            assert!(content.right() <= width as f32 && content.bottom() <= height as f32);
+            assert!(
+                status,
+                "{name} status must be drawn within the declared editor size"
+            );
         }
-        assert!(content.right() <= 640.0 && content.bottom() <= 440.0);
-        assert!(
-            status,
-            "{name} status must be drawn within the declared editor size"
-        );
     }
 }
 

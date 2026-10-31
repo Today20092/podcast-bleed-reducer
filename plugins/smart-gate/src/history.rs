@@ -115,6 +115,30 @@ impl Recorder {
 mod tests {
     use super::*;
     #[test]
+    fn concurrent_overwrites_never_mix_gain_and_peaks() {
+        let history = std::sync::Arc::new(History::default());
+        let writer = std::sync::Arc::clone(&history);
+        let thread = std::thread::spawn(move || {
+            for i in 0..10_000 {
+                let input = (i % 9 + 1) as f32 * 0.1;
+                let gain = if i % 2 == 0 { 0.25 } else { 0.75 };
+                writer.publish(Bin {
+                    input,
+                    output: input * gain,
+                    gain,
+                });
+            }
+        });
+        while !thread.is_finished() {
+            if let Some(bin) = history.read(history.latest.load(SeqCst)) {
+                assert_eq!(bin.output, bin.input * bin.gain);
+            }
+        }
+        thread.join().unwrap();
+        let bin = history.read(history.latest.load(SeqCst)).unwrap();
+        assert_eq!(bin.output, bin.input * bin.gain);
+    }
+    #[test]
     fn bins_are_time_based_and_overwrites_are_detected() {
         for rate in [44_100, 48_000, 96_000] {
             let history = History::default();

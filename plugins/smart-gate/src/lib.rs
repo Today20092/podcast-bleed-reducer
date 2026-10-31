@@ -76,7 +76,7 @@ impl Default for SmartGate {
     fn default() -> Self {
         Self {
             params: Arc::new(GateParams::default()),
-            editor_state: EguiEditorState::from_size(LogicalSize::new(640.0, 440.0), 1.0),
+            editor_state: EguiEditorState::from_size(LogicalSize::new(1000.0, 620.0), 1.0),
             consent: Arc::new(AtomicU64::new(Consent::Unavailable as u64)),
             detection_state: Arc::new(AtomicU8::new(DetectionState::Waiting as u8)),
             repaint: RepaintNotifier::new(),
