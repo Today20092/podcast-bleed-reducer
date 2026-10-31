@@ -278,3 +278,66 @@ These are metadata/selected-constant analyses. The next native checks are which
 outputs the product actually consumes, how it supplies/cache-resets active
 states and features, and how activity reaches Level Bias/Tolerance/Impact gain.
 
+## Optional cross-check: our bundled Silero model, structurally
+
+Our current `assets/silero_vad.onnx` is2,327,524 bytes, SHA256
+`1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3`,
+the previously hash-verified official Silero v6.2 bytes. An ordinary bounded
+protobuf reader decoded metadata with the official
+[ONNX v1.17.0 schema](https://raw.githubusercontent.com/onnx/onnx/v1.17.0/onnx/onnx.proto3),
+retained schema SHA256
+`a287acc83cd7e9ce0db16eb2ab28348defd6832ebf8bfa3583abb6f2df59d61e`.
+It did not import or execute ONNX Runtime, install packages, or alter the asset.
+This schema choice describes compatible protobuf field definitions, not the
+runtime/compiler version used to produce the asset.
+
+Model IR8, default-domain opset16. Top-level inputs are FLOAT input `[?,?]`,
+FLOAT state `[2,?,128]` and scalar INT64 sr. Outputs are FLOAT output `[?,1]`
+and FLOAT stateN with unspecified graph dimensions. The model file does not
+fix batch1 or a32ms call duration; those are the separately audited host wrapper's
+choices, which supplies16kHz audio and state `[2,1,128]`.
+
+The top-level Constant value16000 and Equal(sr,constant) drive If_0. The true
+branch is therefore the16k path; the false branch is the non16k path, used for
+8k by the supported-rate wrapper. This condition alone does not validate every
+other sample rate.
+
+| Stored branch feature | sr==16000 | False branch / supported8k |
+| --- | --- | --- |
+| STFT-labelled Conv weight shape | `[258,1,256]` | `[130,1,128]` |
+| STFT-labelled Conv stride | 128 | 64 |
+| Encoder Conv0 weights / stride | `[128,129,3]` /1 | `[128,65,3]` /1 |
+| Encoder Conv1 weights / stride | `[64,128,3]` /2 | same |
+| Encoder Conv2 weights / stride | `[64,64,3]` /2 | same |
+| Encoder Conv3 weights / stride | `[128,64,3]` /1 | same |
+| Final decoder Conv weights | `[1,128,1]` | same |
+| Recurrent operator attribute | LSTM, hidden_size128 | same |
+
+Each sample-rate branch has113 nodes in its outer graph and nested control-flow
+graphs. In each, two LSTM nodes are serialized in alternative decoder If_1
+branches. **This does not mean two sequential LSTM layers execute per call**:
+the active branch selects one alternative. The condition originates from Shape
+of state, Gather/Squeeze and Cast. Full node connectivity, input names and
+attributes are retained; no parameter-count comparison is made by summing
+duplicated control-flow tensors or interpreting file size as learned capacity.
+
+The concrete architecture comparison is consequently: our artifact exposes a
+raw-audio convolutional/STFT-plus-LSTM speech detector with128-wide recurrent
+state; these sonible profiles expose supplied spectral/mel inputs, convolutions,
+two sequential forward GRUs (192 then96), a scalar activity head and three active
+history/state inputs. Neither difference establishes better podcast preservation,
+speaker identity or audible quality. Our Desktop's supervised session/multi-mic
+ownership model is an additional application layer, absent from the present Gate;
+it is not a change in this embedded Silero artifact.
+
+External metadata evidence:
+
+| File | SHA256 |
+| --- | --- |
+| silero-graph.json | `be888241a2b5c255be2894e945085a42abcb46cd20c4aeabb3fd5697471122be` |
+| silero-comparison-summary.json | `dc80b16b22c58e2d97034f9ad194a68fd9b90f1b2fd0dcf97b49c6108dc81be3` |
+
+Scripts `inspect-silero-protobuf.cjs` and `summarize-silero.cjs` are retained
+beside these files. Their outputs contain metadata, hashes and small control
+constants, not executable inference results or copied learned weights in Git.
+
