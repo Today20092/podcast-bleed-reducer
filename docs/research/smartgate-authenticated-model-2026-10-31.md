@@ -1,9 +1,10 @@
 # smart:gate authenticated profile models and native loading route
 
 2026-10-31. Shipped-artifact investigation authorized by the owner. This tranche
-uses ordinary MSVC disassembly, PE parsing, Node authenticated cryptography and a
-schema-based FlatBuffer parser. **It is non-REA evidence**, complementing the
-separate single-engine REA/Ghidra pass. No vendor module or model was executed.
+initially used ordinary MSVC disassembly, PE parsing, Node authenticated
+cryptography and a schema-based FlatBuffer parser. Those are **non-REA evidence**;
+the final section separately records corroboration by retained REA/Ghidra native
+dossiers. No vendor module or model was executed.
 No activation, installation, GUI/product change or external audio was involved.
 Keys and decrypted model bytes remain outside Git and our product.
 
@@ -340,4 +341,69 @@ External metadata evidence:
 Scripts `inspect-silero-protobuf.cjs` and `summarize-silero.cjs` are retained
 beside these files. Their outputs contain metadata, hashes and small control
 constants, not executable inference results or copied learned weights in Git.
+
+## Actual REA native-code corroboration
+
+The separate full-index REA/Ghidra pass subsequently produced complete native
+function dossiers for the same target SHA256. I independently read their actual
+pseudocode, metadata and assembly; I did not query or start an analysis server.
+Source directory:
+`C:/Users/User/Documents/Codex/Investigations/smartgate-native-completion-2026-10-31/run-02/`.
+
+| Dossier | Actual REA evidence ID | Pseudocode SHA256 |
+| --- | --- | --- |
+| dossiers/0x180cd8610.c | `ev_5d4cf163b8bc6da53cc41d3c25448f3369608c0f91ca2d68cacbcfbf4b69d3d0` | `20cac65d6c2f472ac45c125f92db92799edc72bad5abae6d403d58540c3e8758` |
+| dossiers/0x1818ab670.c | `ev_28bfef6ee75e1fd00623ed6370935d6c00c019937c12859b5d455f749b635617` | `c669f882ea90ffcceabcd23940c0b51f7be035d6714f026610d6f948eed36063` |
+| dossiers/0x1813520f0.c | `ev_3e132206f7eaf5dc4d90e3f7bf8c0597e0384e5470994b4d92d8ea2214c92bb7` | `eb1aab5ed7c9ef51d6081c14d6a9b6eb71745c5b9fd1e8969dbe579b8aaaf1f6` |
+
+The corresponding `.metadata.json` and `.assembly.json`, plus full responses7–9,
+retain target identity, provider/function-body coverage, call edges and native
+instructions. The independent receipt `rea-corroboration.json` in this report's
+external evidence directory hashes every referenced file; its SHA256 is
+`bbf5f668a78427110abe5125d4e257dc3eae70a5d2d7e076e487a6d88c01d0b3`.
+
+There is no contradiction with the ordinary route:
+
+- `1818ab670` calls the profile resolver, invokes its two returned function
+  pointers to obtain length and data, calls `cd8610`, then passes the transformed
+  buffer and produced length to `cb6b10` for session construction. The decompiler
+  models part of the temporary output object as adjacent locals; the decoder's
+  `param_1[3]` write is the caller's local length passed into session creation.
+- `cd8610` uses the same selector and fixed key/IV global addresses already
+  authenticated offline. It configures control9 with IV length12, subtracts16
+  from the input length, processes that prefix, configures control17 with length16
+  and pointer to the trailing bytes, and accepts finalization only if positive.
+  It adds the final produced count to output offset`+0x18` and frees the cipher
+  context on the normal successful path. The REA helper names remain generic;
+  cipher naming rests on descriptor constants plus the successful authentication,
+  not invented names for the decompiled functions.
+- Errors construct an exception and call `_CxxThrowException`: numeric argument3
+  for context/setup/configuration failures,1 for processing failure and2 for
+  unsuccessful finalization/authentication. The successful return is after that
+  check. No session is created from this path when the decoder throws. The
+  function has no explicit local check for input length below16; validity of
+  arbitrary profile inputs is not established by examining this callee alone.
+- The caller's ordinary successful cleanup includes FreeLibrary for the loaded
+  profile and freeing the temporary decoded buffer after session construction.
+  Exception-path cleanup/RAII cannot be established from these success-path
+  pseudocode statements alone; this report makes no leak or complete-unwind claim.
+- `1813520f0` corroborates the exact initialization callback/descriptor addresses.
+  That dossier does not itself contain the callback's descriptor-writing body;
+  those constants remain separately validated ordinary instruction evidence.
+
+Decompiler type artifacts such as `CONCAT44` around an inferred argument are
+not treated as literal proof of a different64-bit length contract; retained x64
+assembly supplies the actual argument-register/stack evidence.
+
+These functions load and decode fixed packaged profile bytes and create an
+inference session. They contain no observed weight-fitting/training operation.
+That bounded observation does **not** establish global absence of adaptation,
+explain representative-playback initialization, or exclude native feature/state
+calibration elsewhere. The loader's retained metadata lists no resolved direct
+callers; an indirect/vtable owner or profile-selection route needs additional
+native bodies before making a learning/initialization claim. Its sole retained
+incoming DATA reference is `0x1833bd3e8`, within the PE `.pdata` section; this must
+not be assumed to be a vtable without identifying its metadata layout. The main native
+investigator has been asked for that route if it is not already covered by its
+feature/engine investigation.
 
