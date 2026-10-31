@@ -348,22 +348,44 @@ unsafe fn process_audio(
 
 fn main() {
     let mut paths: Vec<_> = std::env::args().skip(1).collect();
-    if paths.first().is_some_and(|arg| arg == "--native-editor") {
-        assert_eq!(paths.len(), 2, "--native-editor <Gate binary>");
+    if paths
+        .first()
+        .is_some_and(|arg| matches!(arg.as_str(), "--native-editor" | "--gui-preview"))
+    {
+        assert_eq!(
+            paths.len(),
+            2,
+            "--native-editor/--gui-preview <Gate binary>"
+        );
         #[cfg(windows)]
         {
             candidate_loader::configure(&paths[1]);
+            let preview = paths[0] == "--gui-preview";
             // SAFETY: the engineering candidate remains loaded until editor/audio teardown completes.
             unsafe {
                 let gate = Bundle::load(&paths[1], *b"CleanSlateGate01", true);
+                if preview {
+                    candidate_loader::verify(&paths[1]);
+                }
                 let instance = gate.create();
-                let result = vst3_native_editor::run(&instance);
-                candidate_loader::verify(&paths[1]);
+                let mode = if preview {
+                    vst3_native_editor::Mode::GuiPreview
+                } else {
+                    vst3_native_editor::Mode::ConsentCheck
+                };
+                let result = vst3_native_editor::run(&instance, mode);
+                if !preview {
+                    candidate_loader::verify(&paths[1]);
+                }
                 result.unwrap();
             }
-            println!(
-                "PASS: real-editor consent and controlled offline VST3 attenuation; no realtime/PDC/listening qualification."
-            );
+            if preview {
+                println!("GUI_PREVIEW_CLOSED: real editor closed; no armed audio qualification.");
+            } else {
+                println!(
+                    "PASS: real-editor consent and controlled offline VST3 attenuation; no realtime/PDC/listening qualification."
+                );
+            }
             return;
         }
         #[cfg(not(windows))]

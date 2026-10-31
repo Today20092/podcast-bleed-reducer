@@ -22,6 +22,24 @@ Acceptance:
 
 ## Results
 
+### User-requested standalone GUI preview — preparation
+
+The owner prioritized using Smart Gate for GUI work. Claimed a small
+`--gui-preview <Gate binary>` branch of the existing VST3 host on
+`codex/gate-native-runtime`, preserving the bounded `--native-editor` verification
+mode. Preview checks the actual default bypass on, leaves consent untouched,
+verifies loaded runtime paths before attachment, and opens the same real editor
+with a static host label. It activates the component but never starts processing,
+renders synthetic buffers or opens an audio device. Keeping processing stopped
+also lets the real GUI parameter setter update normally. Preview runs until user
+close and returns no armed PASS; normal teardown is shared.
+
+The Podcast actor explicitly released the next compiler slot before this work.
+No preview window will be opened by this worker; root owns the checked launch
+handoff. Interactive preview must run outside the global compiler mutex, with
+bounded startup/READY observation, so GUI editing and subsequent builds can
+coexist. Source remains unverified until the focused checks below run.
+
 ### Native VST3 consent verification preparation — 2026-10-30
 
 Claimed on `codex/gate-native-runtime` after callback evidence `25d384b`.

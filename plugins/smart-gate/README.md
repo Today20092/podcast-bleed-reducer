@@ -133,6 +133,21 @@ probe and Podcast paths. This ticket/build script creates no installed links.
 
 ### Prepared native VST3 consent check (unverified)
 
+For ordinary GUI development, the separate Windows mode
+`smart_gate_vst3_check.exe --gui-preview <Gate VST3 binary>` uses the plugin's
+actual default bypass on and fresh unarmed instance. It loads the real editor,
+shows a static preview label, and stays open until the user closes it. It does
+not start audio processing, render synthetic audio, open a device or claim armed
+acceptance. Real editor controls remain interactive. Use the checked preserved
+host with the separately prepared/installed GUI-preview plugin.
+
+Root performs a bounded startup watch for `GUI_PREVIEW_READY`, then leaves the
+interactive preview outside the global compiler mutex so GUI work does not block
+builds. Close produces `GUI_PREVIEW_CLOSED` after normal teardown. Do not run this
+user-close mode inside the bounded acceptance wrapper for a long GUI session.
+Compilation/normal regression must pass before the launch handoff; native
+presentation remains observational until that launch is inspected.
+
 The Windows-only optional mode `smart_gate_vst3_check.exe --native-editor <candidate VST3 binary>`
 embeds the actual editor in a new host-owned parent. It first configures bypass
 off through the ABI, starts processing, and checks an unarmed unity baseline.
