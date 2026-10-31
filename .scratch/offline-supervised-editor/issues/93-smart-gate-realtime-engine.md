@@ -24,6 +24,29 @@ Acceptance:
 
 ### Candidate-loader verification source prepared — 2026-10-30
 
+**Current verified loader checkpoint: `cdf5ce0`.** Both ABI examples compile
+(CLAP 2.01 s, VST3 2.43 s), strict example Clippy passes (0.90 s), and formatting
+passes. Executables plus build/check/run receipts are preserved at
+`%LOCALAPPDATA%/CleanSlate/VerifiedBuilds/gate93/20261030-loader-cdf5ce0/`.
+Actual four-case rerun against the same `86f0d392624b4b70b3f357e9c7d8914a`
+candidate completed in 20.43 s, receipt
+`20261030-223232-8c628442b93d48cc9fed04aadbb4a793.json`: exit 0,
+`cleanup_verified=true`, no remaining process IDs. Both positive cases load
+candidate-local DirectML with the pinned hash. Both negative cases load
+`C:/Windows/System32/directml.dll` and explicitly reject that fallback via
+`LOADER_RUNTIME_PATH_REJECTED`, exit 42; neither is a generic panic.
+Fixture retained at
+`%LOCALAPPDATA%/CleanSlate/PluginLoaderChecks/5acdb1f8d52f4a0dbda7f67f882fdfe2/`.
+Each positive format's observed `MSVCP140.dll`, `MSVCP140_1.dll` and
+`VCRUNTIME140_1.dll` resolve beside its candidate binary; `VCRUNTIME140.dll`
+remains preloaded from System32 before/after Gate. Full CRT isolation is still
+unqualified. Ordinary DAW discovery, arming, inference and realtime acceptance
+remain open. No installed files changed.
+
+Build receipts: `20261030-223224-74a2c362311b4eaf8cdae51599260415` (CLAP),
+`20261030-223226-fbaf02596a564965bb48b030977ede80` (VST3),
+`20261030-223229-e14175f642c94f9e8f5d59f1e7b2b11f` (Clippy).
+
 Independent review correction: the two original negative controls are
 **UNQUALIFIED**. Their generic exit-101 NotFound panics were accepted too broadly
 by the runner; positive candidate-local path/hash proof remains valid. The
@@ -34,14 +57,14 @@ expected sidecar from the canonical existing binary's parent without resolving
 the intentionally absent sidecar. Fallback paths exit 42 with
 `LOADER_RUNTIME_PATH_REJECTED`; only recognized Windows LoadLibrary error 126
 can exit 43 with `LOADER_DEPENDENCY_MISSING`. Generic panics/assertions cannot
-qualify. These Rust changes await compilation and actual negative reruns.
+qualify. These Rust changes are verified by the current checkpoint above.
 
 Follow-up diagnostics (source only): observed DirectML path now prints before
 the expected-sidecar lookup, so missing-sidecar fallback paths remain visible.
 The same existing CRT module helper reports before/after-Gate paths for all
-four CRT imports. This change has formatting/whitespace checks only; it has not
-been compiled or executed. The verified runtime checkpoint remains `80eac5c`
-and its preserved 20.51 s receipt below.
+four CRT imports. That diagnostic change is included in the current verified
+checkpoint above. The earlier `80eac5c` checkpoint and its original 20.51 s
+receipt remain preserved below for provenance.
 
 Review correction: candidate and loaded runtime hashes are now compared against
 the reviewed `docs/licenses/directml-1.15.4-runtime.json` inventory, selectively
