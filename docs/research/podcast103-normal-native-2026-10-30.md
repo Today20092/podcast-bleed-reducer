@@ -230,3 +230,67 @@ and its restoration outcome remain unverified. Finally cannot run after forceful
 termination of the enclosing process; a restoration build can itself fail.
 Either case must be reported explicitly rather than claiming the shared target
 was restored. The preserved verified normal candidate remains available.
+
+## Executed Session acceptance-driver workflow
+
+The coordinator granted the reviewed existing runner on source
+`a12f224a5dece960f7726cb0f1fbc680879c33e4`. It completed under an explicit
+1,200-second timeout-only outer job in **201.19 seconds**. Exact outer invocation
+used the current actual PowerShell executable with `-NoProfile -File
+scripts/check-podcast-workflow.ps1`, working directory this checkout. The runner
+resolved the repository's actual pinned Cargo/Rustc and retained the existing
+locked/offline/shared-profile settings. No installed links or owner projects
+were changed.
+
+The initial ordinary build passes86 tests, doctests, strict all-target Clippy,
+normal library/examples builds and both normal ABI hosts. Driver all-target
+Clippy passes (6.86 compiler seconds); driver DLL/examples builds pass (47.94 /
+16.29 seconds). Both expected normal-reference rejections contain the exact
+debug-driver-required reason and GetProcAddress error127. The release-feature
+guard rejects PROFILE=release with the exact never-ship reason. Existing script
+checks require nonzero exits for these negatives; exact negative exit numbers
+are not emitted by the runner and are not inferred here.
+
+Both actual-format driver hosts pass the full Session parity workflow and exit0
+after their save/destroy/recreate assertions. This matters because their parity
+PASS line precedes those final assertions. Realtime/offline Original/Processed/
+Removed match the independently rendered Float32 files, including nonzero
+first/last markers and the fixed headless latency offset. Changed PCM preserves
+Original, invalidates analysis and requires example review. Actual CLAP and VST3
+state restoration retain four examples, bind/flush and remain unready until
+explicit Analyze. This requalifies that bounded machine Session/VST3 restore
+path after the Arc publication change; it is not analysis persistence or owner
+DAW/PDC/listening acceptance.
+
+The finally block then completes the ordinary restoration:86 tests, doctests,
+strict normal all-target Clippy, normal DLL/examples builds and both normal ABI
+hosts pass. Final export inspection confirms no driver symbol in the restored
+cache DLL. Both restored candidate formats and cache DLL have SHA256
+`b38818a7a0953701bdf42693f2476e1d9c359d9f31bff291576c054429b9e772`.
+That new ordinary artifact has its own checks/source; it does not replace the
+immutable d8 candidate's earlier normal-pair/runtime-inventory evidence. The
+acceptance-only DLL has SHA256
+`d0dab40e4292abe2731596f0b89707b981d2597ea5f5cd1f6f80902cabc615a3` and retains
+the explicit driver export and DO-NOT-INSTALL marker. Its saved normal reference
+does not export the driver.
+
+Final `workflow.json` records statusdone/root0, no remaining recorded job PIDs
+and cleanup verified. No helper intervention was needed. Separately, VCTIP22208
+was observed outside that final named-job accounting, parent22168, created
+`2026-10-30T23:24:23.2008530-04:00`, executable
+`C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Tools/MSVC/14.44.35207/bin/HostX64/x64/VCTIP.EXE`.
+The observation is preserved as ticket109's accounting caveat, without an
+ownership/complete-descendant-cleanup claim or termination of that process.
+
+Full evidence checkpoint:
+`%LOCALAPPDATA%/CleanSlate/Podcast/NativeCheckpoints/session-workflow-82f00617e69f4fc2a9b1d4ce1b14fbac/`.
+It contains the outer receipt/log/diagnostics, driver/reference/restored export
+inventories, the entire acceptance-only directory (208 verified files), restored
+normal candidate (eight files), both oracle directories (ten files each) and
+separately preserved restored normal hosts/hashes. Every copied evidence file is
+verified in `preservation-manifest.json`; the restored host copies have their own
+manifest. The previous d8 normal candidate hash was rechecked unchanged.
+
+Runtime isolation, native editor/DPI/presentation, owner recording/listening,
+DAW PDC/export acceptance and whole103/native80 completion remain separate.
+The compiler/heavy slot was released to Gate immediately after finalization.

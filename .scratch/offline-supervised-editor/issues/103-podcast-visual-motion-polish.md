@@ -20,6 +20,20 @@ Implement the owner's FabFilter/sonible quality target in the existing Podcast e
 
 ## Results
 
+2026-10-30 reviewed runner `a12f224` completes the broader actual-format Session
+workflow in201.19 seconds: driver processing parity, intended normal/release
+negative controls and both CLAP/VST3 save/destroy/recreate assertions pass with
+final exit0. Four examples survive restore; explicit Analyze remains required.
+Finally restores ordinary outputs and passes86 tests, strict normal all-target
+Clippy and both ordinary ABI hosts. Restored DLL b38818a7 has no driver export;
+acceptance-only d0dab40e remains marked/uninstalled. The authoritative earlier
+d8 candidate stays unchanged. Full acceptance/normal/oracle evidence is
+hash-preserved outside this worktree. Final named job is empty/cleanup verified;
+outside-job VCTIP observation is separately recorded as109 accounting limitation.
+[Exact scope, receipt and artifacts](../../../docs/research/podcast103-normal-native-2026-10-30.md#executed-session-acceptance-driver-workflow).
+This closes the bounded machine Session/VST3 restore regression gap, not owner
+native/listening/PDC/export acceptance or whole103/native80.
+
 2026-10-30 coordinator-granted normal ABI execution passes from the preserved
 d8b79686 candidate and preserved sourceb41d51e hosts, via existing timeout-only
 `test-plugin-hosts.ps1 -Product Podcast`. CLAP validates1,858 bit-exact blocks,
