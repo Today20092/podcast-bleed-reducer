@@ -5,7 +5,6 @@ use super::{
     process_audio,
 };
 use std::{
-    ffi::c_void,
     mem, ptr,
     sync::{
         Arc,
@@ -261,7 +260,7 @@ pub fn run(instance: &Instance) -> Result<(), String> {
     let mut view: Option<ComPtr<IPlugView>> = None;
     let mut frame: Option<ComPtr<IPlugFrame>> = None;
     let mut attached = false;
-    let outcome = (|| {
+    let outcome: Result<(), String> = (|| {
         // SAFETY: setup uses valid stereo buses and a retained component handler.
         unsafe {
             if instance.controller.setComponentHandler(handler.as_ptr()) != kResultOk {
@@ -377,11 +376,11 @@ pub fn run(instance: &Instance) -> Result<(), String> {
     })();
     let _ = commands.send(false);
     let mut teardown_ok = true;
-    if let Some(worker) = worker {
-        if worker.join().is_err() {
-            eprintln!("Native processing worker panicked");
-            teardown_ok = false;
-        }
+    if let Some(worker) = worker
+        && worker.join().is_err()
+    {
+        eprintln!("Native processing worker panicked");
+        teardown_ok = false;
     }
     // SAFETY: processing has stopped; detach/release UI before destroying its parent and component.
     unsafe {
