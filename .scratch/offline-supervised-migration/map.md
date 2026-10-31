@@ -10,6 +10,20 @@ report. This authorizes no plugin/GUI implementation or ticket after research.
 REA requires finite timers, so use its maximum supported 2,147,483,647 ms rather
 than another short deadline; remove the outer wrapper and driver expiry.
 
+Research checkpoint: the first unrestricted import succeeded (89,365 procedure
+entries retained), then an ordinary output-budget error exposed an incorrect
+client close-on-error branch. The reviewed v2 client retains the session on tool,
+transport and partial-request errors and closes only on explicit stop. Its live
+run is `Documents/Codex/Investigations/smartgate-native-completion-2026-10-31/run-02/`;
+driver 33484, REA 30044 and Ghidra 26560 started 06:16 UTC. JVM flags verified
+32 GiB heap and 32-worker analysis pool. The independent
+[authenticated-model report](../../docs/research/smartgate-authenticated-model-2026-10-31.md)
+now recovers Speech/Vocals graphs, activity mathematics and artifact-backed
+Silero comparison without vendor/model execution. Full native preprocessing,
+output consumption and post-gate DSP tracing continue. External worktree cleanup
+left only development and lusca registered; all live analysis/evidence is outside
+those retired worktrees. No product or GUI implementation is authorized here.
+
 2026-10-31 OWNER STOP: the bounded sonible VST3 investigation is saved in the
 [native research report](../../docs/research/smartgate-native-engine-2026-10-31.md),
 with supporting control/engine/model reports and complete external diagnostics.
