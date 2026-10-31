@@ -17,12 +17,13 @@ remain. Memory statistics are informational; no hidden replacement limit is
 authorized. The compiler membership observations in 109 remain a separate issue.
 
 2026-10-30 [110 — bounded exact gain query](../offline-supervised-editor/issues/110-bounded-exact-gain-query.md)
-is claimed as the shared prerequisite for 103's accepted bounded Analysis gain
-display. The public query budget regression produced semantic RED; the prepared
-minimal implementation and exact manual/protection tests remain unverified.
-Resume using 111's execution policy after the coordinator grants the sole compiler
-slot, without a RAM threshold or cap. Preserve existing envelope query APIs and
-source semantics; no GUI implementation or ticket 103 completion is claimed.
+is done as the shared prerequisite for 103's accepted bounded Analysis gain display.
+Behavioral source `4df16d4` passes 100 library tests (seven ignored), 14 effective-
+envelope tests and three timebase tests; final lint-only source `1106d3e` passes
+standard strict library Clippy and formatting. The additive public API refuses
+over-budget indexed work before exact evaluation, preserving old APIs and source/
+manual/protection semantics. Ticket 111's timeout-only policy applies; 109's job
+accounting caveat remains separate. No GUI or ticket 103 completion is claimed.
 
 2026-10-30 Podcast editor-close lifecycle source `fa1f3f4` passes its RED/GREEN
 and all 75 library tests. The component close boundary clears pending Catch up
