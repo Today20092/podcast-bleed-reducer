@@ -1,14 +1,15 @@
 # Plan the offline supervised CleanSlate migration
 
-Resumed verification: Podcast hidden-workspace source `d16ef0d` passes all 80
-actual-product tests, strict library/test Clippy and formatting. Hidden Catch up
-and interrupted gestures use the existing close cancellation path; the actual
-Panel caller also stops hidden timed repaint. Bounded
-Analysis gain display remains next. Gate readiness `57e2cc2` / `8f95ba8` passes
-25 tests, strict lint/formatting and five actual CPU captures. Feedback shares
-the existing gain validity predicate; native qualification remains open. Memory
-guards remain removed. Separate native-candidate staging work has not installed
-or released a plugin.
+Resumed verification: Podcast gain core `9881369` / UI `d3ebcbe` pass all 86
+actual-product tests, strict library/test Clippy and independent review. Hidden
+motion/gestures and actual-adapter repaint cancellation are verified. Bounded
+source-valid Analysis gain and 24 CPU gallery cases are implemented; native
+format/performance acceptance remains open. Gate consolidated `dcc573b` preserves
+27 passing tests, strict lint/formatting, verified runtime staging and corrected
+CLAP/VST3 isolated-loader checks. Debug Rust callback allocation/alignment checks
+pass; native arming/inference/deadlines/PDC remain open. Memory guards remain
+removed. No installed plugin or release changed. See the
+[continuation record](../../docs/research/implement-spec-continuation-2026-10-30.md).
 
 Owner explicitly resumed implementation after the pause below. Continue from
 the preserved Podcast/Gate worktrees: finish Podcast indicator lint/review, then

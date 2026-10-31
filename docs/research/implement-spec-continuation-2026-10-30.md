@@ -13,6 +13,18 @@ CI are unchanged by the separate product work below.
   repaint request after the hidden return; the actual caller regression now
   fails before the fix and passes after it. Visible playback/idle polling and
   committed state are preserved. Native window delivery remains unqualified.
+- Podcast gain core `9881369` and UI `d3ebcbe` pass all 86 actual-product tests,
+  strict library/test Clippy, formatting and independent Standards/Spec review.
+  Source-valid cached Analysis gain uses exact eight-edge-budget queries outside
+  processing locks, bounded visible-column meshes, source gaps and explicit
+  dense-detail guidance. Tests reject stale/cross-capture data and exercise
+  scrolled lanes. Compact footer overflow and label/legend overlap regressions
+  fail before their fixes. Twenty-four CPU cases cover four states, two sizes
+  and three scales. A test-only publication-message correction separately passes
+  all 24 gallery/bounds cases; root visually inspected coherent ready/stale
+  compact views plus dense and unverified samples. Native presentation and
+  comparative performance remain unqualified. Last-Arc destruction during a
+  publication replacement is not bounded by the envelope edge budget.
 - Gate readiness `57e2cc2` / `8f95ba8` passes 25 tests, strict lint/formatting and
   five actual CPU widget captures. These do not establish native presentation,
   readiness wake timing or real-host gating.
@@ -40,6 +52,14 @@ CI are unchanged by the separate product work below.
   loaded resolve beside the candidate. `VCRUNTIME140.dll` is preloaded from
   System32, so complete C++ runtime isolation remains unclaimed. This explicit
   test-host loader strategy does not establish ordinary DAW deployment.
+- Gate callback source `3c2e529` (format/evidence tip `25d384b`, consolidated
+  `dcc573b`) passes all 27 library tests and strict library/test/example Clippy,
+  formatting and diff checks. Existing allocator instrumentation now surrounds
+  direct Rust callbacks with an explicit debug-profile precondition. Prepared
+  realtime lifecycle/fallback and marked stereo alignment at 44.1/48/96 kHz pass
+  without monitored Rust allocator violations. No semantic allocation failure
+  was observed. This excludes foreign/worker allocators and does not qualify
+  sustained realtime deadlines, armed ABI behavior or native host PDC.
 
 Native build evidence is preserved under
 `%LOCALAPPDATA%/CleanSlate/VerifiedBuilds/gate93/20261030-native-2e3adbf/`.
@@ -49,11 +69,10 @@ are under sibling `20261030-loader-cdf5ce0/`.
 
 ## Remaining work
 
-Podcast needs bounded source-valid Analysis gain
-display, comparable performance/capture checks and final independent review.
+Podcast needs normal DLL/format regression and comparable performance checks.
 Native sound/PDC/export acceptance remains separate from component tests.
 
-Gate needs actual native arming/inference, callback deadline/allocation and PDC
+Gate needs actual native arming/inference, sustained realtime deadlines and host PDC
 checks, GUI qualification and listening acceptance. An explicit test-host DLL
 search strategy does not prove ordinary DAW deployment. Existing ABI hosts cannot
 arm the prototype, so activation alone cannot count as actual gating.
