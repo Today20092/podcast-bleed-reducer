@@ -1,5 +1,26 @@
 # Offline supervised editor implementation sequence
 
+2026-10-31 Smart Gate draft completion plan (ticket planning, not execution):
+
+1. Existing93: finish the actual detector/worker/audio foundation.
+2. [114](../offline-supervised-editor/issues/114-smart-gate-algorithm-parameter-contract.md):
+   settle the original vocal/podcast algorithm and full parameter contract;
+   can be planned alongside93.
+3. [115](../offline-supervised-editor/issues/115-smart-gate-processing-controls.md):
+   implement that complete processing/control contract after93 and114.
+4. [116](../offline-supervised-editor/issues/116-smart-gate-working-plugin-delivery.md):
+   verify and deliver the actual working VST3/CLAP candidate after115.
+5. Existing94: separately refine/wire the GUI against the stable backend;
+   reconcile its expanded dependencies after114 is accepted.
+
+114–116 are draft needs-triage tickets, not new AFK-ready work. Research recommends
+the existing Silero v6.2 weights plus independently defined gate DSP, not copying
+the vendor's extracted models. Numeric defaults, feature boundaries and GUI
+contract must be fixed in114. Keep verification focused on actual changed audio,
+parameter/state behavior and a short listening check. No code, build or GUI work
+was started by this planning update. Earlier memory-guard records below remain
+historical under completed111 and the owner's later overrides.
+
 2026-10-28 Gate 93 checkpoint: scoped worker `64c5525` / callback `af4d921` pass 17 library tests, formatting and strict library/test Clippy after actual worker/stereo/callback RED/GREEN. Owner-authorized unused tool-server cleanup restored warm-test headroom; guards remained unchanged. [Current report](../../docs/research/smart-gate-resumption-2026-10-28.md) preserves the tested executable and receipts. Native compilation preflight 9.76/7.82 GiB fails the separate 10/9 GiB requirement, so no larger build/host ran. Native arming/readiness, realtime deadline/allocation, CLAP/VST3/PDC/runtime packaging and listening remain; 93 claimed, 94 blocked, no permanent-lane integration. Earlier pass-through statements apply to historical source/native candidates.
 
 2026-10-28 [Google Rust correction scope](rust-guidelines-corrections.md) is implemented: 104–107 done, combined 618aed8 four-platform GREEN, Standards 0 / Spec 0, integrated 31e2c33. [Verification and cleanup receipt](../../docs/research/rust-guidelines-corrections-2026-10-28.md) retains actual RED/GREEN sources, the refused local default-policy check and remaining in-use worktree archives; no local build/native/listening or release qualification is claimed. Earlier ready/pending descriptions of this batch are historical.

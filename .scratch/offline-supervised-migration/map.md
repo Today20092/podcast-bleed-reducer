@@ -1,5 +1,16 @@
 # Plan the offline supervised CleanSlate migration
 
+2026-10-31 TICKET PLANNING ONLY: the owner asks how to turn the finished research
+into separate backend and GUI work. Drafts [114](../offline-supervised-editor/issues/114-smart-gate-algorithm-parameter-contract.md),
+[115](../offline-supervised-editor/issues/115-smart-gate-processing-controls.md) and
+[116](../offline-supervised-editor/issues/116-smart-gate-working-plugin-delivery.md)
+propose contract → expanded processing → verified VST3/CLAP delivery, reusing
+existing foundation93 and GUI94. All new drafts are needs-triage; exact parameter
+choices still belong to114. No implementation, GUI edits, build or REA restart
+is authorized by this planning step. See the draft sequence at the top of the
+[implementation tracker](implementation.md). The research-stop records below
+remain applicable to execution until a new implementation instruction.
+
 2026-10-31 RESEARCH COMPLETE / OWNER STOP AFTER REPORT: the
 [completed native report](../../docs/research/smartgate-native-engine-2026-10-31.md)
 and linked model, DSP, parameter and comparison reports are saved. Full Ghidra

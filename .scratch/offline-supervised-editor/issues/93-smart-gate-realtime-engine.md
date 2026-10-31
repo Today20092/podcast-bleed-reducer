@@ -16,6 +16,14 @@ Related: 85, 86
 
 ## Scope and acceptance
 
+2026-10-31 planning handoff: retain this ticket as the detector/worker and
+actual-audio foundation. The proposed [114 control contract](114-smart-gate-algorithm-parameter-contract.md),
+[115 processing expansion](115-smart-gate-processing-controls.md) and
+[116 candidate delivery](116-smart-gate-working-plugin-delivery.md) separate the
+new research-derived feature set from this existing work. Foundation fixes can
+be planned in parallel with 114. Draft tickets do not qualify the latest plugin
+or restart implementation. Existing acceptance/results below remain authoritative.
+
 Implement the detector/result contract accepted in 92 in the Gate workspace. Keep confidence estimation separate from gain policy. Single-input mono/stereo must apply one consistent envelope without peer dependence; document channel-selection/downmix semantics.
 
 Acceptance:
