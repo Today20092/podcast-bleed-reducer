@@ -612,6 +612,7 @@ fn sequential_gain_matches_random_access_across_seeks() {
 }
 
 /// Result of an exact source-frame extrema query with an indexed edge budget.
+#[must_use]
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum BoundedGainBounds {
     /// Exact lower and upper linear gain in the clipped half-open range.
