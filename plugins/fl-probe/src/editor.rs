@@ -121,6 +121,11 @@ impl NiceEguiApp for Panel {
 
 impl Panel {
     fn show(&mut self, ui: &mut egui::Ui) {
+        if !ui.is_visible() {
+            self.session_ui.editor_closed();
+            self.workspace.drag_anchor = None;
+            return;
+        }
         let Some(context) = self.context.clone() else {
             return;
         };

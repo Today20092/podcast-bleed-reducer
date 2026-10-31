@@ -20,6 +20,19 @@ Implement the owner's FabFilter/sonible quality target in the existing Podcast e
 
 ## Results
 
+2026-10-30 native adapter scheduling correction: review found that `Panel::ui`
+still scheduled 16/100 ms polling after the hidden component returned (legacy
+workspace: 50 ms). A frame-independent `Panel::show` body retains the actual
+trait caller with a one-line forwarder. Its public egui regression reproduced
+the hidden polling clock before the fix, then passed after an early invisible
+return cancels Session transients and the legacy drag anchor. Committed legacy
+selection/frozen history and visible polling are preserved. Actual Podcast now
+passes all 80 tests (1.36 seconds), strict library/test Clippy, formatting and
+diff checks. [Exact receipts and preserved executable](../../../docs/research/podcast103-seek-2026-10-30.md#native-panel-hidden-scheduling).
+This qualifies the adapter's scheduling logic, not native window visibility or
+presentation. Bounded Analysis gain, final comparisons and native acceptance
+remain; 103 stays claimed. No memory gate was used.
+
 2026-10-30 hidden-workspace continuation: the actual Podcast manifest
 `plugins/podcast/Cargo.toml` now passes all 79 tests, strict library/test Clippy,
 formatting and diff checks. Hidden Catch up RED reproduced an obsolete viewport
