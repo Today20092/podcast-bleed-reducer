@@ -234,7 +234,14 @@ fn render(
     Ok(report)
 }
 
-pub fn run(instance: &Instance) -> Result<(), String> {
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Mode {
+    ConsentCheck,
+    GuiPreview,
+}
+
+pub fn run(instance: &Instance, mode: Mode) -> Result<(), String> {
+    let preview = mode == Mode::GuiPreview;
     let pending = Arc::new(AtomicU64::new(0));
     // SAFETY: ParameterInfo is the SDK's plain integer/fixed-array output record.
     let mut info: ParameterInfo = unsafe { mem::zeroed() };
@@ -245,7 +252,13 @@ pub fn run(instance: &Instance) -> Result<(), String> {
         {
             return Err("Expected the existing bypass parameter".into());
         }
-        instance.bypass(false);
+        if preview {
+            if instance.controller.getParamNormalized(info.id) != 1.0 {
+                return Err("GUI preview requires the plugin's default bypass on".into());
+            }
+        } else {
+            instance.bypass(false);
+        }
     }
     let handler = ComWrapper::new(Handler {
         id: info.id,
@@ -295,33 +308,35 @@ pub fn run(instance: &Instance) -> Result<(), String> {
                 return Err("Cannot prepare Gate".into());
             }
         }
-        let processor = instance.processor.clone();
-        let pending = Arc::clone(&pending);
-        worker = Some(std::thread::spawn(move || {
-            // SAFETY: this sole processing thread owns all process/start/stop calls.
-            unsafe {
-                if processor.setProcessing(1) != kResultOk {
-                    let _ = reports.send(Err("Cannot start processing".into()));
-                    return;
+        if !preview {
+            let processor = instance.processor.clone();
+            let pending = Arc::clone(&pending);
+            worker = Some(std::thread::spawn(move || {
+                // SAFETY: this sole processing thread owns all process/start/stop calls.
+                unsafe {
+                    if processor.setProcessing(1) != kResultOk {
+                        let _ = reports.send(Err("Cannot start processing".into()));
+                        return;
+                    }
                 }
-            }
-            let _ = reports.send(render(&processor, info.id, &pending, false));
-            while let Ok(run) = requests.recv() {
-                if !run {
-                    break;
+                let _ = reports.send(render(&processor, info.id, &pending, false));
+                while let Ok(run) = requests.recv() {
+                    if !run {
+                        break;
+                    }
+                    let _ = reports.send(render(&processor, info.id, &pending, true));
                 }
-                let _ = reports.send(render(&processor, info.id, &pending, true));
-            }
-            // SAFETY: no process call remains in flight on this sole processing thread.
-            unsafe {
-                assert_eq!(processor.setProcessing(0), kResultOk);
-            }
-        }));
-        let baseline = results
-            .recv_timeout(Duration::from_secs(10))
-            .map_err(|error| error.to_string())??;
-        println!("NATIVE_UNARMED_BASELINE: {baseline:?}");
-        window = Some(Window::new()?);
+                // SAFETY: no process call remains in flight on this sole processing thread.
+                unsafe {
+                    assert_eq!(processor.setProcessing(0), kResultOk);
+                }
+            }));
+            let baseline = results
+                .recv_timeout(Duration::from_secs(10))
+                .map_err(|error| error.to_string())??;
+            println!("NATIVE_UNARMED_BASELINE: {baseline:?}");
+        }
+        window = Some(Window::new(!preview)?);
         let parent = window.as_ref().unwrap();
         // SAFETY: the real editor, host frame and parent survive until explicit detach below.
         unsafe {
@@ -336,39 +351,47 @@ pub fn run(instance: &Instance) -> Result<(), String> {
             }
         }
         attached = true;
-        println!(
-            "NATIVE_EDITOR_READY: processing started; click the real Arm button, then Run armed ABI check. No audio device is opened."
-        );
+        if preview {
+            println!(
+                "GUI_PREVIEW_READY: default bypass on, unarmed; no audio processing/device. Close this window when finished."
+            );
+        } else {
+            println!(
+                "NATIVE_EDITOR_READY: processing started; click the real Arm button, then Run armed ABI check. No audio device is opened."
+            );
+        }
         let deadline = Instant::now() + Duration::from_secs(120);
         let mut busy = false;
         let mut passed = false;
-        while Instant::now() < deadline {
+        while preview || Instant::now() < deadline {
             match parent.pump() {
                 Some(Action::Close) => break,
-                Some(Action::Run) if !busy => {
+                Some(Action::Run) if !preview && !busy => {
                     commands.send(true).map_err(|error| error.to_string())?;
                     busy = true;
                 }
                 _ => {}
             }
-            match results.try_recv() {
-                Ok(Ok(report)) => {
-                    println!("NATIVE_ARMED_OUTPUT: {report:?}");
-                    passed = true;
-                    busy = false;
+            if !preview {
+                match results.try_recv() {
+                    Ok(Ok(report)) => {
+                        println!("NATIVE_ARMED_OUTPUT: {report:?}");
+                        passed = true;
+                        busy = false;
+                    }
+                    Ok(Err(error)) => {
+                        eprintln!("NATIVE_CHECK_UNQUALIFIED: {error}");
+                        busy = false;
+                    }
+                    Err(mpsc::TryRecvError::Disconnected) => {
+                        return Err("Processing worker ended unexpectedly".into());
+                    }
+                    Err(mpsc::TryRecvError::Empty) => {}
                 }
-                Ok(Err(error)) => {
-                    eprintln!("NATIVE_CHECK_UNQUALIFIED: {error}");
-                    busy = false;
-                }
-                Err(mpsc::TryRecvError::Disconnected) => {
-                    return Err("Processing worker ended unexpectedly".into());
-                }
-                Err(mpsc::TryRecvError::Empty) => {}
             }
             std::thread::sleep(Duration::from_millis(8));
         }
-        if passed {
+        if preview || passed {
             Ok(())
         } else {
             Err("No qualified real-editor armed render completed before close/timeout".into())

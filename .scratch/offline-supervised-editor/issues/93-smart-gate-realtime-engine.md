@@ -43,8 +43,49 @@ Probe/Podcast before/after links and bytes match; no host was closed/launched,
 no owner project saved or public release created. Parser, diff and filesystem
 delivery/rollback fixtures pass. [Exact installed paths, evidence, FL discovery
 caveat and link-only rollback](../../../docs/research/gate93-local-development-delivery-2026-10-30.md).
-Installed-path ABI rerun awaits the coordinator's execution slot. Actual DAW
-discovery, native arming and realtime/listening acceptance remain open; 93 stays claimed.
+The later installed-path no-build normal ABI pair passes at delivery source
+`be43fea`: user CLAP 2.24 s and global VST3 4.13 s. Receipts
+`installed-clap.json` / `installed-vst3.json` in the same delivery evidence folder
+record root 0, cleanup verified and no remaining PIDs; private caches and preserved
+Probe94cf0d were used. Both formats preserve identity/state/bypass/layout/rate/
+unity/latency behavior; VST3 covers realtime/offline. No GUI window or armed audio
+was exercised. Actual DAW discovery, native arming and realtime/listening
+acceptance remain open; 93 stays claimed.
+
+### User-requested standalone GUI preview — preparation
+
+The owner prioritized using Smart Gate for GUI work. Claimed a small
+`--gui-preview <Gate binary>` branch of the existing VST3 host on
+`codex/gate-native-runtime`, preserving the bounded `--native-editor` verification
+mode. Preview checks the actual default bypass on, leaves consent untouched,
+verifies loaded runtime paths before attachment, and opens the same real editor
+with a static host label. It activates the component but never starts processing,
+renders synthetic buffers or opens an audio device. Keeping processing stopped
+also lets the real GUI parameter setter update normally. Preview runs until user
+close and returns no armed PASS; normal teardown is shared.
+
+The Podcast actor explicitly released the next compiler slot before this work.
+No preview window will be opened by this worker; root owns the checked launch
+handoff. Interactive preview must run outside the global compiler mutex, with
+bounded startup/READY observation, so GUI editing and subsequent builds can
+coexist. Source remains unverified until the focused checks below run.
+
+Clean source `aaf9f44` subsequently compiled the selected VST3 host in 3.58
+seconds. Strict example Clippy, formatting and ordinary VST3 coexistence
+regression all pass, using the newly installed user Gate VST3 bundle and the
+preserved known Probe copy. Successful wrappers record exit 0, empty job PIDs
+and verified cleanup. The normal run opens no editor and confirms the original
+IDs/state/bypass/mono-stereo/rates/realtime-offline/unity/latency contract remains.
+
+Preserved host/receipts:
+`%LOCALAPPDATA%/CleanSlate/VerifiedBuilds/gate93/20261030-gui-preview/`.
+Compiled source: `aaf9f44ac2ff4292580938efa7971a95a99817e1`.
+Host SHA256: `ad5b646877663d2dbd1e2192bf6ea422fe7cc215b35e9b1b7542e34777e8e65e`.
+`host-artifact.json` records the exact installed Gate path and both input hashes.
+The worker did not launch a GUI window; root received the checked explicit
+`--gui-preview` invocation and owns its bounded-startup/interactive handoff.
+Live preview presentation and user-close cleanup remain observational until
+that run occurs; no armed, realtime deadline or DAW PDC claim is added.
 
 ### Native VST3 consent verification preparation — 2026-10-30
 

@@ -23,9 +23,27 @@ the VST3 junction retains the complete bundle. No shared runtime DLL was copied
 into another product's folder. Preview/candidate bytes remain unchanged.
 
 Canonical scoped source merged native preview/host regression `54dfcf5` at
-`e68f35d`; delivery helper sources are `648f016` and per-format `5f9e327`. No new compiler or native host ran
-in this delivery slice. The earlier normal format regression and standalone
-loader proof are preserved separately; this slice adds installed-file evidence.
+`e68f35d`; delivery helper sources are `648f016` and per-format `5f9e327`. The
+checked standalone GUI-preview source `debb6a6` is also consolidated into this
+scoped branch, preserving its native worker's evidence and delivery records.
+No engine or detector implementation changed for delivery. No new compiler ran.
+
+The granted no-build normal host pair subsequently passed against the effective
+installed paths at delivery source `be43fea`: user CLAP 2.24 seconds, global VST3
+4.13 seconds. `installed-clap.json` and `installed-vst3.json` in the delivery
+evidence directory record root exit 0, verified cleanup and no remaining process
+IDs. Each child had its own retained application-data cache. The known preserved
+Probe bytes match SHA256
+`94cf0dc682447677e1d942397dfc8aea929c9fe697a5a0035127968dace54aaa`;
+the installed Probe was not loaded or edited. Preserved host hashes are
+`fed7ad5bb985538048b11b4f90da65dc0ba098ff71e213a67ad7ad83344ee433`
+(CLAP source `cdf5ce0`) and
+`ad5b646877663d2dbd1e2192bf6ea422fe7cc215b35e9b1b7542e34777e8e65e`
+(VST3 source `aaf9f44`). Normal invocations preserve independent identities/state
+round trips, bypass, mono/stereo, 44.1/48/96 kHz, exact unity and zero latency;
+VST3 additionally covers realtime/offline. Editor construction/contract is
+checked, without opening a native window. These normal checks do not arm Gate
+or prove native attenuation, presentation, realtime deadlines or listening.
 
 ## Delivery checks and evidence
 

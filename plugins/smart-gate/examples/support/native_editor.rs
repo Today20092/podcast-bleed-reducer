@@ -127,7 +127,7 @@ pub struct Window {
 }
 
 impl Window {
-    pub fn new() -> Result<Self, String> {
+    pub fn new(render_button: bool) -> Result<Self, String> {
         // SAFETY: all UTF-16 strings and class storage outlive their corresponding API calls.
         unsafe {
             let instance = GetModuleHandleW(ptr::null());
@@ -150,7 +150,12 @@ impl Window {
             let handle = CreateWindowExW(
                 0,
                 class.as_ptr(),
-                wide("CleanSlate Gate — engineering VST3 consent check").as_ptr(),
+                wide(if render_button {
+                    "CleanSlate Gate — engineering VST3 consent check"
+                } else {
+                    "CleanSlate Smart Gate — GUI preview"
+                })
+                .as_ptr(),
                 STYLE,
                 100,
                 100,
@@ -167,9 +172,18 @@ impl Window {
             }
             let button = CreateWindowExW(
                 0,
-                wide("BUTTON").as_ptr(),
-                wide("Run armed ABI check").as_ptr(),
-                0x50010000,
+                wide(if render_button { "BUTTON" } else { "STATIC" }).as_ptr(),
+                wide(if render_button {
+                    "Run armed ABI check"
+                } else {
+                    "GUI preview · no audio device"
+                })
+                .as_ptr(),
+                if render_button {
+                    0x50010000
+                } else {
+                    0x50000000
+                },
                 16,
                 448,
                 250,
