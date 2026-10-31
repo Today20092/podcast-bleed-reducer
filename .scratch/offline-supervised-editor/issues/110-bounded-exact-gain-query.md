@@ -4,7 +4,7 @@ Status: claimed
 Assignee: Codex bounded gain-query implementer
 Readiness: ready-for-agent
 Type: task
-Blocked by: 109
+Blocked by: none
 Related: 103
 
 ## Scope and acceptance
@@ -17,6 +17,12 @@ Provide the shared query prerequisite for ticket 103's accepted bounded Analysis
 - [ ] Observe semantic RED before production implementation, then relevant tests, formatting and independent review.
 
 ## Results
+
+Owner override: completed ticket 111 removes the earlier RAM-cap qualification
+gate. Resume this prepared GREEN under the timeout/single-compiler wrapper,
+without memory preflight, reserve or cap. Ticket 109's cleanup/accounting caveat
+remains separate. Earlier stopped-checkpoint instructions below are historical;
+they do not authorize reintroducing a memory gate.
 
 Claimed 2026-10-30 from integration `56d5d82` in an isolated managed worktree. Code graph transport is unavailable; direct source and caller searches cover the affected query paths. Public API/source proposal sent to the coordinator before test or production edits. No compiler, tests or production implementation started; Gate owns the sole execution slot, followed by Podcast's prepared gesture regression.
 
