@@ -29,6 +29,21 @@ Acceptance:
 
 ## Results
 
+### Resumed readiness verification
+
+Gate behavior `57e2cc2`, checkpoint `8f95ba8`, passes 25 tests, strict
+library/test Clippy and formatting. Waiting/current/failed feedback describes the
+last processed block and reuses the audio policy's exact evidence-age check.
+Real callback/render tests and deterministic expiry/future/invalid/reset cases
+cover all supported rates. Five actual 640×440 CPU captures were inspected.
+Artifacts and receipts are preserved under
+`%LOCALAPPDATA%/CleanSlate/VerifiedBuilds/gate93/20261030-readiness/`;
+test executable SHA256:
+`332ae4b4530de6f04c7341226957819572821c81adc6d1eeb17d0de4834d8d38`.
+Native wake, timing, isolated deployment, ABI arming/PDC and listening remain
+unqualified. 93 stays claimed and 94 blocked. Native candidate work uses a
+separate scoped worktree and does not change installed links.
+
 ### Tested consent continuation — 2026-10-30
 
 Scoped `Today20092/gate93-resume` source `146b057` exposes temporary Arm/Disarm
