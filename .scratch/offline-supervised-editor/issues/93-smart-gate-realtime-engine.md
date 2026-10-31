@@ -22,6 +22,20 @@ Acceptance:
 
 ## Results
 
+### Scoped source consolidation — 2026-10-30
+
+Merged native packaging source `ef94023` into loader/readiness checkpoint
+`7505617`, preserving both result histories below. No engine, detector, consent
+or feedback implementation changed in this merge. Existing candidate binary
+provenance remains `2e3adbf`; packaging/loader source does not require rebuilding
+that DLL. Combined 25 library tests and strict example lint are queued for the
+next compiler slot. No Desktop or permanent product branch was changed.
+Filesystem-only consolidation checks pass: all six affected PowerShell sources
+parse, negative-result classification and same-length tamper preflight pass,
+and actual verified-runtime/synthetic-plugin packaging fixtures pass without
+loading code. Fixture evidence:
+`%TEMP%/cleanslate-gate-package-5d992e9e-6d43-47a0-9e04-a5644434328e/`.
+
 ### Candidate-loader verification source prepared — 2026-10-30
 
 **Current verified loader checkpoint: `cdf5ce0`.** Both ABI examples compile
@@ -115,6 +129,90 @@ acceptance is limited to this explicit engineering-host loader strategy.
 `AddDllDirectory` is an explicit engineering-host strategy; ordinary DAW runtime
 discovery, candidate-local CRT loading, actual armed inference and realtime
 qualification remain open.
+
+### Historical native staging preparation — 2026-10-30
+
+Native/runtime continuation is claimed on `codex/gate-native-runtime`, initially
+based on `0e56096`, with tested readiness `8f95ba8` merged at `613cbe3` before
+any new native build. This sub-slice prepares candidate staging and independent
+loader proof. The coordinator subsequently granted filesystem fixtures and the
+official DirectML provenance download; no compiler/native host/model/installer
+launch has run in this sub-slice. Existing build/host script seams govern tests;
+redistributables require verified provenance and applicable notices before staging.
+
+### Verified DirectML staging preparation — 2026-10-30
+
+The no-network `scripts/package-smart-gate.ps1` validates an explicit runtime
+directory/receipt against the pinned official NuGet inventory, checks source and
+copy hashes, rejects linked ancestors and malformed/duplicate paths, and stages
+the runtime beside both CLAP and VST3 native binaries. All three official notice
+files and the existing repository notices are retained. New candidates publish
+by same-parent atomic rename with no overwrite; earlier candidates remain intact.
+The existing build caller now delegates packaging and records the current narrow
+unarmed ABI qualification rather than the stale pass-through-only claim.
+
+Official DirectML 1.15.4 archive SHA256 is
+`4e7cb7ddce8cf837a7a75dc029209b520ca0101470fcdf275c1f49736a3615b9`.
+The extracted x64 Windows DLL matches the previously recorded cache hash exactly.
+See `docs/research/gate93-directml-provenance-2026-10-30.md` for download, entry
+validation, hashes, observed version terms and retained machine-local evidence.
+No archive or native binary is committed; no existing cache bytes were changed.
+
+Public-CLI filesystem fixtures used an explicitly supplied verified runtime
+directory and a synthetic plugin, without loading either. Happy copy/notice and
+corruption cases went RED then GREEN. A self-consistent forged DLL/receipt also
+went RED then GREEN after pinning the observed inventory. Missing notice, unknown
+version, invalid/duplicate path, input/output junction and new-candidate preservation
+checks pass. Final fixture evidence:
+`%TEMP%/cleanslate-gate-package-08ad417a-a87d-45b5-bc3b-c9a962d9fd2c/`.
+Parent review identified that the standalone VST3 bundle also needs the official
+notices alongside its runtime. The added public-CLI assertions failed on missing
+bundled `LICENSE.txt`; the helper now retains all four pinned inventory files
+beside both format binaries, preserving the three notices when the bundle moves.
+GREEN fixture evidence:
+`%TEMP%/cleanslate-gate-package-14606d2c-dd13-4192-813e-5687a635ac89/`;
+PowerShell source parsing and `git diff --check` also pass.
+Existing output-parent refusal fixtures pass with outside sentinels unchanged:
+`%TEMP%/cleanslate-gate-output-f559b09c-d6bd-414d-96ee-f9ebd1127dbc/`.
+
+This initial checkpoint completed DirectML staging preparation. The continuation
+below adds actual import evidence and the verified MSVC staging inventory.
+Candidate-local/sanitized-loader module evidence,
+armed native processing and the remaining acceptance above are still required.
+The modified full build caller has not been executed; no native build slot was
+granted for this slice. Ticket 93 remains claimed.
+
+### Native/import and CRT staging checkpoint — 2026-10-30
+
+After an explicit compiler-slot grant, the actual DLL and both existing ABI
+hosts compiled from clean `2e3adbf`. The DLL SHA256 is
+`274eb182915506a685389cc9f0ca19b86e055859ab406f8b318f44efe4568e31`.
+DLL/VST3 compilation completed normally; CLAP Cargo succeeded but required
+coordinator-authorized termination of its sole accounted VCTIP descendant after
+exact identity checks. This intervention is separately recorded and is not
+normal wrapper completion. All artifacts/receipts are retained outside this
+worktree at `%LOCALAPPDATA%/CleanSlate/VerifiedBuilds/gate93/20261030-native-2e3adbf/`.
+
+Static Gate and transitive runtime imports establish the four required app-local
+MSVC DLLs. Existing desktop discovery selects installed VS2022 Build Tools redist
+14.44.35112 x64 CRT; all four files have Valid Microsoft signatures and version
+14.44.35211.0. Their exact hashes/provenance are pinned. The helper now accepts an
+explicit MSVC directory and reuses common reparse/hash/copy verification for both
+runtime inventories. The public fixture verifies every CRT beside both format
+binaries and rejects missing/tampered CRT bytes, without loading code.
+
+A second notice-reach regression failed on missing VST3 model/dependency notice;
+the bundle now retains the project LICENSE and existing notices in
+`Contents/Resources/licenses` as well as the outer candidate copies. Final real-
+runtime/synthetic-plugin fixture evidence:
+`%TEMP%/cleanslate-gate-package-0e855e0d-854d-41ca-b18c-28b809ec88c5/`.
+The package API also requires the actual plugin source commit and expected build
+artifact SHA256. It records plugin and packaging commits separately and rejects
+changed plugin bytes; this keeps an older preserved binary's provenance distinct
+from a newer packaging-only revision.
+Both baseline hosts statically import VCRUNTIME140.dll before plugin loading;
+independent loader qualification must account for this preload. No host/model
+execution or installation has run. Compiler slot was released after builds.
 
 ### Resumed source-valid detection feedback — 2026-10-30
 
