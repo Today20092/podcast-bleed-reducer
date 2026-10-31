@@ -2050,6 +2050,83 @@ mod tests {
         assert!(clip.contains_rect(*rect), "Gap recovery must be visible");
     }
     #[test]
+    fn sound_indicators_ease_for_110_ms_without_delaying_shared_values() {
+        use crate::session_mode::integration_tests::{Fixture, direct_capture};
+        let fixture = Fixture::new(2);
+        for member in 0..2 {
+            direct_capture(fixture.engine(), member, 0, 160000, false);
+        }
+        let mut settings = crate::session_analysis::Settings {
+            reduction_db: -48.0,
+            ..Default::default()
+        };
+        fixture.engine().set_settings(settings).unwrap();
+        let state = GuiState::new();
+        *state.capture.lock() = Some(fixture.engine().clone());
+        let probe = crate::FlProbe::default();
+        let context = egui::Context::default();
+        crate::editor::style(&context);
+        let mut workspace = SessionUi::default();
+        let mut frame = |now| {
+            let mut output = context.run_ui(
+                egui::RawInput {
+                    time: Some(now),
+                    screen_rect: Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(720.0, 560.0))),
+                    ..Default::default()
+                },
+                |ui| workspace.show(ui, &probe.params, None, &state),
+            );
+            let text: Vec<_> = output
+                .shapes
+                .iter()
+                .filter_map(|shape| match &shape.shape {
+                    egui::Shape::Text(text) => Some(text.galley.job.text.clone()),
+                    _ => None,
+                })
+                .collect();
+            let cues: Vec<_> = output
+                .shapes
+                .iter()
+                .filter_map(|shape| match &shape.shape {
+                    egui::Shape::Circle(circle) if circle.radius == 8.0 => output
+                        .shapes
+                        .iter()
+                        .find_map(|shape| match &shape.shape {
+                            egui::Shape::LineSegment { points, stroke }
+                                if stroke.color == TEAL
+                                    && ((points[1] - circle.center).length() - 7.0).abs() < 0.01 =>
+                            {
+                                Some((points[1] - circle.center) / 7.0)
+                            }
+                            _ => None,
+                        }),
+                    _ => None,
+                })
+                .collect();
+            output.textures_delta.clear();
+            (text, cues)
+        };
+        let (_, initial) = frame(10.0);
+        assert_eq!(initial.len(), 3, "Each shared numeric control needs a visual cue");
+        assert!((initial[0] - egui::vec2(-0.707107, 0.707107)).length() < 0.001);
+        settings.reduction_db = 0.0;
+        fixture.engine().set_settings(settings).unwrap();
+        // Shared snapshots refresh at 33 ms; the synthetic animation clock stays explicit.
+        std::thread::sleep(Duration::from_millis(35));
+        let (text, changed) = frame(10.0);
+        assert!(text.windows(2).any(|pair| pair[0] == "0.0" && pair[1] == " dB"));
+        assert_eq!(fixture.engine().view(None, None, 32).unwrap().settings, settings);
+        assert!((changed[0] - initial[0]).length() < 0.001);
+        let (_, middle) = frame(10.055);
+        assert!(
+            (middle[0] - egui::vec2(0.980785, 0.195090)).length() < 0.001,
+            "The 55 ms cue follows the established cubic ease-out: {:?}", middle[0]
+        );
+        let (_, settled) = frame(10.110);
+        assert!((settled[0] - egui::vec2(0.707107, 0.707107)).length() < 0.001);
+    }
+
+    #[test]
     fn compact_workspace_shows_actual_shared_sound_values_and_analysis_readiness() {
         use crate::session_mode::integration_tests::{Fixture, visual_capture};
         let fixture = Fixture::new(8);
