@@ -30,6 +30,20 @@ Implement the owner's FabFilter/sonible quality target in the existing Podcast e
 
 ## Results
 
+2026-10-30 hidden-workspace continuation: product source `72727be` on
+`Today20092/podcast-seek-resume` passes all 79 tests from the actual
+`plugins/podcast/Cargo.toml` target, strict library/test Clippy, formatting and
+diff checks. Hidden Catch up and stale primary-selection regressions fail before
+the fix; the invisible component now reuses close cancellation before layout,
+queries or animation. Selection, Alt zoom and Middle pan interruption are
+covered while viewport, committed selection and follow are retained.
+Final suite receipt `215915-cfa01c351edc438c9a969c1ece2dd43d` reports 79 passed
+in 1.35 seconds; strict Clippy `215918-fb1a2b08882e4e77a2cd6be1bdf6141f`
+passes in 3.91 seconds. Checks use the timeout-only policy without memory gates.
+Earlier legacy-manifest lint and zero-match test attempts do not qualify the
+product; these actual-target results supersede them. Native visibility,
+bounded gain display and broader acceptance remain open; 103 stays claimed.
+
 ### Tested continuation — 2026-10-30
 
 Scoped `Today20092/podcast-seek-resume` now contains backward-seek cancellation

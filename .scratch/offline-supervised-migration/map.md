@@ -1,7 +1,9 @@
 # Plan the offline supervised CleanSlate migration
 
-Resumed verification: Podcast indicator lint is green (`0d06aea`); its
-hidden-Catch-up regression is next. Gate readiness `57e2cc2` / `8f95ba8` passes
+Resumed verification: Podcast hidden-workspace source `72727be` passes all 79
+actual-product tests, strict library/test Clippy and formatting. Hidden Catch up
+and interrupted gestures use the existing close cancellation path; bounded
+Analysis gain display remains next. Gate readiness `57e2cc2` / `8f95ba8` passes
 25 tests, strict lint/formatting and five actual CPU captures. Feedback shares
 the existing gain validity predicate; native qualification remains open. Memory
 guards remain removed. Separate native-candidate staging work has not installed
