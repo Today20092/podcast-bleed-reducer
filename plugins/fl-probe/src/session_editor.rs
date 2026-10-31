@@ -75,12 +75,30 @@ pub struct SessionUi {
     manual_navigation: Option<Instant>,
     catch_up: Option<CatchUp>,
     reduced_motion: bool,
+    sound_indicators: [Option<SoundIndicator>; 3],
 }
 
 struct CatchUp {
     began: f64,
     from: (i64, i64),
     target: (i64, i64),
+}
+
+struct SoundIndicator {
+    from: f32,
+    target: f32,
+    began: f64,
+}
+
+impl SoundIndicator {
+    fn value(&self, now: f64) -> f32 {
+        let progress = ((now - self.began) / 0.110).clamp(0.0, 1.0) as f32;
+        if progress >= 1.0 {
+            self.target
+        } else {
+            self.from + (self.target - self.from) * (1.0 - (1.0 - progress).powi(3))
+        }
+    }
 }
 
 fn set<P: Param>(setter: Option<&ParamSetter<'_>>, parameter: &P, value: P::Plain) {
@@ -127,6 +145,7 @@ fn sample_at(x: f32, plot: Rect, start: i64, end: i64) -> i64 {
 impl SessionUi {
     pub(crate) fn editor_closed(&mut self) {
         self.catch_up = None;
+        self.sound_indicators = Default::default();
         self.cancel_gesture();
     }
 
@@ -450,13 +469,14 @@ impl SessionUi {
             let mut draft = view.settings;
             ui.horizontal_wrapped(|ui| {
                 ui.strong("Shared sound").on_hover_text("Sound changes take effect after Analyze; settings apply to the whole session.");
-                for (title, value, min, max, suffix) in [
+                for (index, (title, value, min, max, suffix)) in [
                     ("Reduction", &mut draft.reduction_db, -48.0, 0.0, " dB"),
                     ("Fade in", &mut draft.attack_ms, 5.0, 80.0, " ms"),
                     ("Fade out", &mut draft.release_ms, 10.0, 150.0, " ms"),
-                ] {
+                ].into_iter().enumerate() {
                     ui.label(title);
                     ui.add(egui::DragValue::new(value).range(min..=max).suffix(suffix).fixed_decimals(1).speed(0.1));
+                    self.sound_indicator(ui, index, (*value - min) / (max - min));
                 }
             });
             if draft != view.settings {
@@ -542,6 +562,45 @@ impl SessionUi {
                 })
                 .map(|mask| (start, end, mask));
         }
+    }
+
+    fn sound_indicator(&mut self, ui: &mut egui::Ui, index: usize, target: f32) {
+        if !target.is_finite() {
+            return;
+        }
+        let (rect, _) = ui.allocate_exact_size(Vec2::splat(18.0), Sense::hover());
+        if !ui.is_rect_visible(rect) {
+            self.sound_indicators[index] = None;
+            return;
+        }
+        let target = target.clamp(0.0, 1.0);
+        let now = ui.input(|input| input.time);
+        let motion = self.sound_indicators[index].get_or_insert(SoundIndicator {
+            from: target,
+            target,
+            began: now,
+        });
+        if self.reduced_motion {
+            motion.from = target;
+            motion.target = target;
+        } else if motion.target != target {
+            motion.from = motion.value(now);
+            motion.target = target;
+            motion.began = now;
+        }
+        let value = motion.value(now);
+        if motion.from != motion.target && now - motion.began < 0.110 {
+            ui.ctx().request_repaint();
+        }
+        let center = rect.center();
+        let angle = (135.0 + value * 270.0).to_radians();
+        let direction = egui::vec2(angle.cos(), angle.sin());
+        ui.painter()
+            .circle_stroke(center, 8.0, Stroke::new(1.0, BORDER));
+        ui.painter().line_segment(
+            [center + direction * 3.0, center + direction * 7.0],
+            Stroke::new(2.0, TEAL),
+        );
     }
 
     fn zoom(&mut self, view: &SessionView, factor: f64) {
@@ -2067,7 +2126,7 @@ mod tests {
         let context = egui::Context::default();
         crate::editor::style(&context);
         let mut workspace = SessionUi::default();
-        let mut frame = |now| {
+        let frame = |workspace: &mut SessionUi, now| {
             let mut output = context.run_ui(
                 egui::RawInput {
                     time: Some(now),
@@ -2088,42 +2147,204 @@ mod tests {
                 .shapes
                 .iter()
                 .filter_map(|shape| match &shape.shape {
-                    egui::Shape::Circle(circle) if circle.radius == 8.0 => output
-                        .shapes
-                        .iter()
-                        .find_map(|shape| match &shape.shape {
+                    egui::Shape::Circle(circle) if circle.radius == 8.0 => {
+                        output.shapes.iter().find_map(|shape| match &shape.shape {
                             egui::Shape::LineSegment { points, stroke }
                                 if stroke.color == TEAL
-                                    && ((points[1] - circle.center).length() - 7.0).abs() < 0.01 =>
+                                    && ((points[1] - circle.center).length() - 7.0).abs()
+                                        < 0.01 =>
                             {
                                 Some((points[1] - circle.center) / 7.0)
                             }
                             _ => None,
-                        }),
+                        })
+                    }
                     _ => None,
                 })
                 .collect();
             output.textures_delta.clear();
-            (text, cues)
+            (
+                text,
+                cues,
+                output.viewport_output[&egui::ViewportId::ROOT].repaint_delay,
+            )
         };
-        let (_, initial) = frame(10.0);
-        assert_eq!(initial.len(), 3, "Each shared numeric control needs a visual cue");
+        let (_, initial, _) = frame(&mut workspace, 10.0);
+        assert_eq!(
+            initial.len(),
+            3,
+            "Each shared numeric control needs a visual cue"
+        );
         assert!((initial[0] - egui::vec2(-0.707107, 0.707107)).length() < 0.001);
         settings.reduction_db = 0.0;
         fixture.engine().set_settings(settings).unwrap();
         // Shared snapshots refresh at 33 ms; the synthetic animation clock stays explicit.
         std::thread::sleep(Duration::from_millis(35));
-        let (text, changed) = frame(10.0);
-        assert!(text.windows(2).any(|pair| pair[0] == "0.0" && pair[1] == " dB"));
-        assert_eq!(fixture.engine().view(None, None, 32).unwrap().settings, settings);
+        let (text, changed, _) = frame(&mut workspace, 10.0);
+        assert!(
+            text.windows(2)
+                .any(|pair| pair[0] == "0.0" && pair[1] == " dB")
+        );
+        let shared = fixture.engine().view(None, None, 32).unwrap();
+        assert_eq!(shared.settings, settings);
+        assert!(
+            !shared.ready,
+            "Sound changes retain explicit Analyze semantics"
+        );
+        assert!(
+            text.iter()
+                .any(|label| label.contains("Sound settings changed. Analyze again"))
+        );
+        assert!(text.iter().any(|label| label == "Original audio preserved"));
         assert!((changed[0] - initial[0]).length() < 0.001);
-        let (_, middle) = frame(10.055);
+        let (_, middle, _) = frame(&mut workspace, 10.055);
         assert!(
             (middle[0] - egui::vec2(0.980785, 0.195090)).length() < 0.001,
-            "The 55 ms cue follows the established cubic ease-out: {:?}", middle[0]
+            "The 55 ms cue follows the established cubic ease-out: {:?}",
+            middle[0]
         );
-        let (_, settled) = frame(10.110);
+        let (_, settled, _) = frame(&mut workspace, 10.110);
         assert!((settled[0] - egui::vec2(0.707107, 0.707107)).length() < 0.001);
+        settings.reduction_db = -48.0;
+        fixture.engine().set_settings(settings).unwrap();
+        std::thread::sleep(Duration::from_millis(35));
+        frame(&mut workspace, 10.200);
+        let (_, reversing, _) = frame(&mut workspace, 10.255);
+        settings.reduction_db = -24.0;
+        fixture.engine().set_settings(settings).unwrap();
+        std::thread::sleep(Duration::from_millis(35));
+        let (_, retargeted, _) = frame(&mut workspace, 10.255);
+        assert!(
+            (retargeted[0] - reversing[0]).length() < 0.001,
+            "Repeated input retargets from the current visual position"
+        );
+        let (_, settled, _) = frame(&mut workspace, 10.365);
+        assert!((settled[0] - egui::vec2(0.0, -1.0)).length() < 0.001);
+        click_control(
+            &context,
+            &mut workspace,
+            &probe.params,
+            &state,
+            "Shared sound & cache…",
+        );
+        click_control(
+            &context,
+            &mut workspace,
+            &probe.params,
+            &state,
+            "Reduced motion",
+        );
+        settings.reduction_db = 0.0;
+        fixture.engine().set_settings(settings).unwrap();
+        std::thread::sleep(Duration::from_millis(35));
+        let now = context.input(|input| input.time);
+        let (_, snapped, _) = frame(&mut workspace, now);
+        assert!((snapped[0] - egui::vec2(0.707107, 0.707107)).length() < 0.001);
+        workspace_frame(
+            &context,
+            &mut workspace,
+            &probe.params,
+            &state,
+            vec![egui::Event::Key {
+                key: egui::Key::Escape,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: egui::Modifiers::NONE,
+            }],
+        );
+        click_control(
+            &context,
+            &mut workspace,
+            &probe.params,
+            &state,
+            "Shared sound & cache…",
+        );
+        click_control(
+            &context,
+            &mut workspace,
+            &probe.params,
+            &state,
+            "Reduced motion",
+        );
+        workspace_frame(
+            &context,
+            &mut workspace,
+            &probe.params,
+            &state,
+            vec![egui::Event::Key {
+                key: egui::Key::Escape,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: egui::Modifiers::NONE,
+            }],
+        );
+        settings.reduction_db = -48.0;
+        fixture.engine().set_settings(settings).unwrap();
+        std::thread::sleep(Duration::from_millis(35));
+        let now = context.input(|input| input.time) + 0.1;
+        frame(&mut workspace, now);
+        let (_, moving, _) = frame(&mut workspace, now + 0.055);
+        assert!((moving[0] - initial[0]).length() > 0.1);
+        workspace.editor_closed();
+        let (_, reopened, _) = frame(&mut workspace, now + 0.055);
+        assert!(
+            (reopened[0] - initial[0]).length() < 0.001,
+            "Reopening snaps to the accepted setting"
+        );
+        frame(&mut workspace, now + 0.2);
+        let (_, _, settled_delay) = frame(&mut workspace, now + 0.3);
+        assert!(
+            settled_delay > Duration::ZERO,
+            "Settled cues must not keep requesting frames"
+        );
+    }
+
+    #[test]
+    fn hidden_sound_controls_do_not_keep_requesting_animation_frames() {
+        use crate::session_mode::integration_tests::{Fixture, direct_capture};
+        let fixture = Fixture::new(2);
+        for member in 0..2 {
+            direct_capture(fixture.engine(), member, 0, 160000, false);
+        }
+        let mut settings = crate::session_analysis::Settings {
+            reduction_db: -48.0,
+            ..Default::default()
+        };
+        fixture.engine().set_settings(settings).unwrap();
+        let state = GuiState::new();
+        *state.capture.lock() = Some(fixture.engine().clone());
+        let probe = crate::FlProbe::default();
+        let context = egui::Context::default();
+        let mut workspace = SessionUi::default();
+        let mut frame = |now, hidden| {
+            let mut output = context.run_ui(
+                egui::RawInput {
+                    time: Some(now),
+                    screen_rect: Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(720.0, 560.0))),
+                    ..Default::default()
+                },
+                |ui| {
+                    if hidden {
+                        ui.set_invisible();
+                    }
+                    workspace.show(ui, &probe.params, None, &state);
+                },
+            );
+            output.textures_delta.clear();
+            output.viewport_output[&egui::ViewportId::ROOT].repaint_delay
+        };
+        frame(10.0, false);
+        settings.reduction_db = 0.0;
+        fixture.engine().set_settings(settings).unwrap();
+        std::thread::sleep(Duration::from_millis(35));
+        frame(10.0, true);
+        frame(10.020, true);
+        assert!(
+            frame(10.040, true) > Duration::ZERO,
+            "Hidden controls must not drive a visual interpolation clock"
+        );
     }
 
     #[test]
