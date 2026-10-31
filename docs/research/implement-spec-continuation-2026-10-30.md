@@ -7,11 +7,12 @@ CI are unchanged by the separate product work below.
 
 ## Verified checkpoints
 
-- Podcast `72727be` passes all 79 actual-product tests, strict library/test Clippy,
+- Podcast `d16ef0d` passes all 80 actual-product tests, strict library/test Clippy,
   formatting and diff checks. Hidden component motion and stale gestures cancel
-  through the existing close path. Independent review found the outer native
-  adapter still requests timed repaint after that hidden return; its corrective
-  regression is the current work, so hidden scheduling is not yet complete.
+  through the existing close path. Independent review found an outer-adapter
+  repaint request after the hidden return; the actual caller regression now
+  fails before the fix and passes after it. Visible playback/idle polling and
+  committed state are preserved. Native window delivery remains unqualified.
 - Gate readiness `57e2cc2` / `8f95ba8` passes 25 tests, strict lint/formatting and
   five actual CPU widget captures. These do not establish native presentation,
   readiness wake timing or real-host gating.
@@ -33,7 +34,7 @@ Native build evidence is preserved under
 
 ## Remaining work
 
-Podcast needs the adapter repaint correction, bounded source-valid Analysis gain
+Podcast needs bounded source-valid Analysis gain
 display, comparable performance/capture checks and final independent review.
 Native sound/PDC/export acceptance remains separate from component tests.
 

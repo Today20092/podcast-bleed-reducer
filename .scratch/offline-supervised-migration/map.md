@@ -1,8 +1,9 @@
 # Plan the offline supervised CleanSlate migration
 
-Resumed verification: Podcast hidden-workspace source `72727be` passes all 79
+Resumed verification: Podcast hidden-workspace source `d16ef0d` passes all 80
 actual-product tests, strict library/test Clippy and formatting. Hidden Catch up
-and interrupted gestures use the existing close cancellation path; bounded
+and interrupted gestures use the existing close cancellation path; the actual
+Panel caller also stops hidden timed repaint. Bounded
 Analysis gain display remains next. Gate readiness `57e2cc2` / `8f95ba8` passes
 25 tests, strict lint/formatting and five actual CPU captures. Feedback shares
 the existing gain validity predicate; native qualification remains open. Memory

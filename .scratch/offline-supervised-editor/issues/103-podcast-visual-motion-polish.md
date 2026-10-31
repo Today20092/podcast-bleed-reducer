@@ -30,6 +30,19 @@ Implement the owner's FabFilter/sonible quality target in the existing Podcast e
 
 ## Results
 
+2026-10-30 independent review correction: actual native-adapter body source
+`d16ef0d` stops hidden timed repaints before context/setter/workspace access,
+reuses session cancellation and clears only the legacy drag anchor. A thin
+trait forwarder reaches the tested frame-independent body. Actual caller RED
+`222330-4d1e078d` fails before the guard; final actual-product suite
+`222421-34b240de` passes all 80 tests and strict library/test Clippy
+`222430-97e25e45` passes. Visible playback/idle polling resumes correctly;
+committed selection/history stay intact. Root source review found no further
+issue. Preserved executable SHA256:
+`276f90b0115cb952533d49865528d9f6aa309bae83850ec8ac3223731ec2c87f`.
+Component/adapter evidence does not establish native window delivery or broader
+103 acceptance. Bounded Analysis gain remains next; ticket stays claimed.
+
 2026-10-30 hidden-workspace continuation: product source `72727be` on
 `Today20092/podcast-seek-resume` passes all 79 tests from the actual
 `plugins/podcast/Cargo.toml` target, strict library/test Clippy, formatting and
