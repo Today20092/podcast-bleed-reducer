@@ -24,7 +24,7 @@ if (-not [CleanSlate.Build.OwnedTask]::IsContained($env:CLEANSLATE_RESOURCE_JOB)
     if ($ProbeBinary) { $arguments += @('-ProbeBinary', $ProbeBinary) }
     & (Join-Path $PSScriptRoot 'resource-guard.ps1') -FilePath (Get-Process -Id $PID).Path `
         -ArgumentList $arguments `
-        -WorkingDirectory $root -MinAvailableGiB 2 -ReserveGiB 1 -MaxCommitGiB 0.5 -TimeoutSeconds 90
+        -WorkingDirectory $root -TimeoutSeconds 90
     return
 }
 $cases = if ($Product -eq 'SmartGate') { @(
