@@ -4,7 +4,7 @@ Status: claimed
 Assignee: Codex bounded gain-query implementer
 Readiness: ready-for-agent
 Type: task
-Blocked by: none
+Blocked by: 109
 Related: 103
 
 ## Scope and acceptance
@@ -31,3 +31,5 @@ On clean source `a27daac`, immediate native preflight measured 21.03 GiB availab
 This proves functional RED, **not contained compiler execution**: the receipt recorded only one active process and 36,892,672 bytes peak job commit, while a read-only observation saw rustc at about 1,849 MiB private memory. Ticket 109's subsequent tiny actual-membership probes reproduce children outside the named job even with actual Cargo and matching no-breakaway job flags. No heavy GREEN run is authorized until that prerequisite is resolved. Global minimum physical/commit availability stayed about 16.8/16.3 GiB, which does not establish the missing owned-process cap.
 
 The minimal GREEN source is preserved but unrun: clip and reject empty ranges, count legacy retargets or effective sorted edges with partition points, return `TooDense` before evaluation when over budget, otherwise delegate unchanged exact extrema. Added effective tests cover offscreen edges consuming no budget and an exclusive endpoint consuming candidate budget without contributing its gain. No existing caller, old API, dependency, UI, format or audio behavior was changed. Formatting and GREEN checks remain unrun. The exact RED executable, receipt and log are preserved outside the worktree under `%LOCALAPPDATA%/CleanSlate/VerifiedBuilds/ticket110/20261030-red-a27daac/`; it is a failing test executable, not an application build.
+
+RED executable SHA256 is `7dfa2fcccd9d699f012640d3ef135b19d6aad7ec422882df142f33068925ef4c`, matching the copied artifact. Prepared GREEN commit `5f6cc42` is deliberately unverified and must not be integrated as completed behavior. Keep this incomplete worktree and branch until 109 proves actual compiler-chain containment and the scoped GREEN checks can run. Status remains claimed; no resource threshold, generic guard semantics or release claim was changed.
