@@ -44,6 +44,22 @@ results, physical DPI/presentation and all new host behavior remain unverified;
 this draft cannot establish realtime deadlines, ordinary-host PDC or listening
 acceptance. CLAP native attachment remains a subsequent slice.
 
+Following the compiler-only grant, selected host compilation exposed an
+ambiguous closure Result type and unused import; strict example Clippy then
+identified a collapsible conditional. These were fixed narrowly in `1297164`.
+The clean final host compiled in 2.59 seconds; strict VST3-example Clippy,
+formatting and diff checks pass. Build/check receipts report exit 0, no remaining
+job PIDs and verified cleanup. These are compile/lint results, not semantic
+native consent evidence.
+
+Preserved executable and receipts:
+`%LOCALAPPDATA%/CleanSlate/VerifiedBuilds/gate93/20261030-native-editor-c163f73/`.
+Exact compiled source: `129716466670a082883cc7dadbb399ca653cc863`.
+Host SHA256: `06d49321300e821a4de016ecb3b3db9485025ebfeff997e45ce9b69bc1871f01`.
+`host-artifact.json` records the prepared candidate path. No host/window was
+executed by this worker; the coordinator owns the real-GUI launch/observation
+handoff. The normal invocation also awaits execution after ABI block extraction.
+
 ### Callback allocation/alignment continuation claimed — 2026-10-30
 
 Claimed on `codex/gate-native-runtime` after fast-forwarding consolidated Gate

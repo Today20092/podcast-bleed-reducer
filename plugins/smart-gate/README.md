@@ -161,8 +161,9 @@ consent/status. The editor requests its existing 640×440 logical size; the host
 adds a 48-unit control strip and uses default process DPI behavior. No global
 display setting changes. Physical presentation, realtime performance, ordinary
 DAW/PDC behavior and listening acceptance require separate evidence. This mode
-has not yet been compiled or launched; ordinary coexistence invocation remains
-unchanged.
+compiled successfully at `1297164`, with strict example Clippy and formatting
+passing. It has not yet been launched; ordinary coexistence invocation remains
+unchanged but also awaits execution after the shared ABI block extraction.
 
 ## Source/checkpoint
 
