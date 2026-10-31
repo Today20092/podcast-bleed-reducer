@@ -30,6 +30,22 @@ Implement the owner's FabFilter/sonible quality target in the existing Podcast e
 
 ## Results
 
+2026-10-30 bounded gain continuation: core `9881369` and UI `d3ebcbe` pass all
+86 actual Podcast tests, strict library/test Clippy, formatting and independent
+Standards/Spec reviews. The additive projection snapshots immutable analysis,
+queries outside processing locks and rechecks source verification/revision;
+visible columns have an eight-edge exact budget. Stale, unverified and dense
+detail never becomes invented unity. UI meshes preserve gaps, legend avoids
+human labels, and compact footer overflow is corrected. Source peaks and
+Analyze-required sound semantics remain unchanged. Test-only fixture `b41d51e`
+then passes all 24 ready/unverified/dense/stale compact/full 100/150/200% CPU
+gallery cases with coherent production messages; representative images were
+visually inspected. These are CPU geometry/capture results, not native DPI,
+presentation or comparable performance acceptance. Last-Arc destruction is
+outside the query budget. Normal DLL/format regression and performance work
+continue; 103 stays claimed. See the
+[continuation record](../../../docs/research/implement-spec-continuation-2026-10-30.md).
+
 2026-10-30 independent review correction: actual native-adapter body source
 `d16ef0d` stops hidden timed repaints before context/setter/workspace access,
 reuses session cancellation and clears only the legacy drag anchor. A thin

@@ -29,6 +29,19 @@ Acceptance:
 
 ## Results
 
+2026-10-30 callback instrumentation continuation: tested source `3c2e529`,
+format/evidence tip `25d384b` and consolidated `dcc573b` pass all 27 library
+tests, strict library/test/example Clippy, formatting and diff checks. Direct
+Rust callbacks now use the existing allocator assertion with an explicit debug
+profile precondition. Prepared realtime lifecycle/fallback, existing armed
+offline processing and marked stereo alignment at 44.1/48/96 kHz pass without
+monitored Rust allocator violations. No semantic allocation RED was observed.
+Worker/foreign allocators, sustained realtime deadlines, armed ABI and native
+host PDC remain unqualified. No production engine code changed in this slice;
+the preserved native candidate's source/hash remains unchanged. Evidence:
+`%LOCALAPPDATA%/CleanSlate/VerifiedBuilds/gate93/20261030-callback-allocation/`.
+Ticket stays claimed and 94 remains blocked.
+
 2026-10-30 scoped native checkpoint: Gate DLL source `2e3adbf` builds and its
 uninstalled candidate is staged by `ef94023` with pinned DirectML, four verified
 MSVC redistributables and notices for both formats. Receipts distinguish plugin
