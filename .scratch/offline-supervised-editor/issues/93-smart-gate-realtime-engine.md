@@ -22,6 +22,20 @@ Acceptance:
 
 ## Results
 
+### Callback allocation/alignment continuation claimed — 2026-10-30
+
+Claimed on `codex/gate-native-runtime` after fast-forwarding consolidated Gate
+`dc186c7`. Scope: instrument the existing direct Rust callback helper with the
+already-locked allocator checker; add prepared realtime lifecycle/fallback and
+marked stereo alignment cases. Preparation only while Podcast owns the compiler;
+no new compilation or model/test execution is claimed. This establishes Rust
+callback evidence only, not armed ABI, host PDC or realtime deadline acceptance.
+Locked offline `cargo metadata --no-deps` confirms the exact existing 1.0.0 dev
+dependency and matching root package lock entry; no package was added/downloaded.
+The callback/realtime/alignment draft is committed as an explicitly unrun baseline;
+compilation, allocation-check instrumentation and behavioral results remain
+unverified until the coordinator grants a compiler/test slot.
+
 ### Scoped source consolidation — 2026-10-30
 
 Merged native packaging source `ef94023` into loader/readiness checkpoint

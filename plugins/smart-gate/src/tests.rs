@@ -930,6 +930,112 @@ fn offline_callback_gain_is_independent_of_host_block_size() {
     assert_eq!(rendered[0], rendered[2]);
 }
 
+#[test]
+fn prepared_realtime_callbacks_preserve_initial_bypass_fault_and_reset_audio() {
+    for rate in [44_100, 48_000, 96_000] {
+        for channels in [1, 2] {
+            let mut gate = SmartGate::default();
+            Arc::get_mut(&mut gate.params).unwrap().bypass =
+                BoolParam::new("Bypass", false).make_bypass();
+            assert!(gate.activate(
+                &SmartGate::AUDIO_IO_LAYOUTS[if channels == 1 { 1 } else { 0 }],
+                &BufferConfig {
+                    sample_rate: rate as f32,
+                    min_buffer_size: None,
+                    max_buffer_size: 256,
+                    process_mode: ProcessMode::Realtime,
+                },
+                &mut ActivationHost
+            ));
+            let original: Vec<Vec<f32>> = (0..channels)
+                .map(|channel| vec![if channel == 0 { 0.0001 } else { -0.0001 }; 256])
+                .collect();
+            let mut audio = original.clone();
+            gate.arm_experimental();
+            process_test_block(&mut gate, &mut audio);
+            // 256 source samples cannot yet complete a detector frame at these rates.
+            assert_eq!(
+                audio, original,
+                "initial realtime evidence must preserve input"
+            );
+            Arc::get_mut(&mut gate.params).unwrap().bypass =
+                BoolParam::new("Bypass", true).make_bypass();
+            process_test_block(&mut gate, &mut audio);
+            assert_eq!(audio, original, "bypass must preserve input");
+            Arc::get_mut(&mut gate.params).unwrap().bypass =
+                BoolParam::new("Bypass", false).make_bypass();
+            audio[0][127] = f32::from_bits(0x7fc0_1234);
+            process_test_block(&mut gate, &mut audio);
+            for channel in 0..channels {
+                for frame in 0..256 {
+                    let expected = if channel == 0 && frame == 127 {
+                        0x7fc0_1234
+                    } else {
+                        original[channel][frame].to_bits()
+                    };
+                    assert_eq!(audio[channel][frame].to_bits(), expected);
+                }
+            }
+            audio.clone_from(&original);
+            process_test_block(&mut gate, &mut audio);
+            assert_eq!(audio, original, "fault fallback must preserve subsequent input");
+            gate.reset();
+            process_test_block(&mut gate, &mut audio);
+            assert_eq!(audio, original, "reset must disarm and preserve input");
+            gate.arm_experimental();
+            process_test_block(&mut gate, &mut audio);
+            assert_eq!(audio, original, "new realtime epoch starts at original audio");
+            gate.deactivate();
+        }
+    }
+}
+
+#[test]
+fn armed_offline_stereo_markers_stay_at_their_source_sample_at_supported_rates() {
+    const REFERENCE: f32 = 1.0 / 8192.0;
+    for rate in [44_100, 48_000, 96_000] {
+        let mut gate = SmartGate::default();
+        Arc::get_mut(&mut gate.params).unwrap().bypass =
+            BoolParam::new("Bypass", false).make_bypass();
+        assert!(gate.activate(
+            &SmartGate::AUDIO_IO_LAYOUTS[0],
+            &BufferConfig {
+                sample_rate: rate as f32,
+                min_buffer_size: None,
+                max_buffer_size: 256,
+                process_mode: ProcessMode::Offline,
+            },
+            &mut ActivationHost
+        ));
+        gate.arm_experimental();
+        let source: Vec<f32> = (0..rate * 3 / 4)
+            .map(|frame| {
+                if frame % 257 == 0 {
+                    REFERENCE / 2.0
+                } else if frame % 251 == 0 {
+                    -REFERENCE / 4.0
+                } else {
+                    0.0
+                }
+            })
+            .collect();
+        let mut last_gain = 1.0;
+        for markers in source.chunks(256) {
+            let mut audio = vec![vec![REFERENCE; markers.len()], markers.to_vec()];
+            process_test_block(&mut gate, &mut audio);
+            for (frame, original) in markers.iter().enumerate() {
+                // A power-of-two reference recovers the exact shared gain without rounding.
+                let gain = audio[0][frame] / REFERENCE;
+                assert!((0.50..=1.0).contains(&gain));
+                assert_eq!(audio[1][frame].to_bits(), (original * gain).to_bits());
+                last_gain = gain;
+            }
+        }
+        assert!(last_gain < 0.6, "alignment must exercise attenuated audio");
+        gate.deactivate();
+    }
+}
+
 fn process_test_block(gate: &mut SmartGate, audio: &mut [Vec<f32>]) {
     let frames = audio[0].len();
     let mut buffer = Buffer::default();
@@ -939,7 +1045,9 @@ fn process_test_block(gate: &mut SmartGate, audio: &mut [Vec<f32>]) {
             slices.extend(audio.iter_mut().map(Vec::as_mut_slice))
         });
     }
-    assert!(matches!(
+    // The existing nice-plug allocator guards only this callback thread.
+    // Buffer setup, assertions, model preparation and teardown stay outside.
+    let status = nice_assert_no_alloc::assert_no_alloc(|| {
         gate.process(
             &mut buffer,
             &mut AuxiliaryBuffers {
@@ -947,9 +1055,9 @@ fn process_test_block(gate: &mut SmartGate, audio: &mut [Vec<f32>]) {
                 outputs: &mut [],
             },
             &mut UnusedHost
-        ),
-        ProcessStatus::Normal
-    ));
+        )
+    });
+    assert!(matches!(status, ProcessStatus::Normal));
 }
 
 struct ActivationHost;

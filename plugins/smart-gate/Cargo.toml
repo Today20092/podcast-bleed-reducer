@@ -18,6 +18,7 @@ nice-plug-egui = "=0.6.0"
 egui = { version = "=0.37.0", default-features = false, features = ["default_fonts"] }
 
 [dev-dependencies]
+nice-assert-no-alloc = "=1.0.0"
 serde_json = "1.0"
 clap-sys = "=0.5.0"
 libloading = "=0.8.9"
