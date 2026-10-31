@@ -1,5 +1,11 @@
 # Resource-conscious overnight development plan
 
+2026-10-30 owner override: all RAM/commit thresholds, running reserves, memory
+caps and memory-recovery waiting are removed after the upgrade to 40 GB RAM.
+See [111](../.scratch/offline-supervised-editor/issues/111-remove-memory-limits.md)
+and the current [execution wrapper](resource-guard.md). Older observations and
+refusal records below are historical, not current launch requirements.
+
 2026-10-26 implementation update: [88](../.scratch/offline-supervised-editor/issues/88-memory-bounded-execution.md) is complete, including desktop/plugin entrypoint integration, disposable process tests and representative guarded checks of preserved binaries. [99](../.scratch/offline-supervised-editor/issues/99-overnight-checkpoint-runner.md) supplies the [explicit sequential command coordinator](overnight-runner.md), atomic claims/checkpoints and bounded disposable restart/failure tests. Heavy builds refused safely below 14 GiB available; none were launched. No real overnight queue or schedule was started. Historical planning statements below do not describe a running coordinator.
 
 Prepared 2026-10-25; no overnight run is scheduled or launched by this document. Product split: [85 Smart Gate](../.scratch/offline-supervised-editor/issues/85-smart-gate-plugin.md), [86 Podcast](../.scratch/offline-supervised-editor/issues/86-podcast-plugin.md), [87 workspace organization](../.scratch/offline-supervised-editor/issues/87-separate-plugin-products-workspaces.md). The [active map](../.scratch/offline-supervised-migration/map.md) remains authoritative. This is a dependency queue, not a promise that every product will be complete in one night.
@@ -20,12 +26,12 @@ One ticket at a time is the default even though the workspaces are separate. Wor
 
 - One global heavy process tree: Rust compile/link/test, deep REA, model profiling or a native host. No overlapping heavy tasks across branches. Default agent concurrency is one.
 - Current build scripts already use Cargo -j1, the shared application-data target, incremental builds and 16 root codegen units. Reuse them; do not wipe caches, run release/LTO by default or run redundant full matrices.
-- Proposed conservative defaults for this 31.9 GiB machine: start heavy work only with at least 14 GiB physical RAM available, reserve 8 GiB during execution, cap owned heavy-tree committed memory at 6 GiB where enforceable, sample every second and time out a task after 30 minutes. Check system commit headroom too. These are adjustable starting protections, not measured optimal settings.
+- Tasks keep a 30-minute timeout and one-second accounting. There is no memory launch threshold, running reserve or memory cap.
 - A bounded input file size does not cap tool RAM. A shared REA MCP session is not automatically contained by a shell watchdog. If exact provider ownership/limits/cancellation cannot be enforced, skip deep analysis overnight; use manuals/resources/focused static evidence and checkpoint unknowns.
-- On resource pressure, retain logs/last-good outputs and stop only owned work. At most one retry after recovery, then resource-blocked. Never close user services/ChatGPT or unrelated applications to reclaim memory.
+- On timeout, retain logs/last-good outputs and stop only owned work. At most one retry, then blocked. Never close unrelated applications to reclaim memory.
 - Native FabFilter/FL/OBS/Resolve interaction, subjective listening and private release signing are separate attended/integration lanes. Do not leave a DAW running overnight as the default test harness.
 
-Planning-time observation: 31.9 GiB visible RAM and 18.0 GiB available. This snapshot is not a capacity guarantee; remeasure at task start.
+Historical planning-time observation: 31.9 GiB visible RAM and 18.0 GiB available. The owner reports 40 GB installed after the upgrade; neither value is a launch gate.
 
 ## Dependency queue
 
@@ -34,7 +40,7 @@ Planning-time observation: 31.9 GiB visible RAM and 18.0 GiB available. This sna
 | Ticket | Deliverable | Depends on |
 | --- | --- | --- |
 | 87 | Preserve baseline and separate workspaces | none |
-| 88 | Global memory guard / owned-process limits | 87 |
+| 88 | Execution coordination / owned-process cleanup; memory policy superseded by 111 | 87 |
 | 99 | Resumable coordinator and dry run | 88 |
 | 89 | REA UI/performance/gate reference ledger | 88 |
 | 90 | Separate original UI designs and interaction contract | 89 |

@@ -1,83 +1,69 @@
-# Local Windows resource guard
+# Local Windows execution wrapper
 
-`scripts/gui-dev.ps1` and `scripts/check.ps1 -Local` run Cargo through
-`scripts/resource-guard.ps1`. Hosted `check.ps1` checks retain their existing
-cross-platform behavior. Locked/offline dependencies, the shared Cargo target,
-incremental compilation and one Cargo job remain in `local-build-settings.ps1`.
+## Memory limits removed — 2026-10-30
 
-The independent Podcast and Smart Gate workspaces also guard every Cargo command
-in `scripts/build-fl-probe.ps1`. Their `scripts/test-plugin-hosts.ps1` runner wraps
-the existing sequential CLAP/VST3 hosts in an explicit lightweight 0.5 GiB job,
-requiring 2 GiB available before start and retaining 1 GiB while running, with a
-90-second outer timeout. Each native host still has its own 30-second deadline
-and isolated child cache. These smaller budgets apply to existing test binaries;
-plugin compilation keeps the default heavy policy. See [ticket 88's measured
-integration checks](../.scratch/offline-supervised-editor/issues/88-memory-bounded-execution.md).
+The owner upgraded to 40 GB RAM and explicitly requested removal of all memory
+guards. [Ticket 111](../.scratch/offline-supervised-editor/issues/111-remove-memory-limits.md)
+supersedes every older RAM/commit profile, including the historical 14/8/6,
+10/5/4 and 8/3/2.5 GiB instructions. There is no free-memory launch threshold,
+running reserve, process/job memory cap or wait for memory recovery. Do not add
+an equivalent preflight outside the wrapper. Memory measurements are informational.
 
-The guard acquires the machine-wide `Global\CleanSlate.HeavyTask.v1` mutex,
-refuses existing compiler/analyzer work, and checks available physical memory
-and system commit headroom. Defaults are 14 GiB available before launch,
-8 GiB physical/commit reserve while running, 6 GiB committed memory for the
-owned process tree, one-second sampling and a 30-minute timeout. It never
-terminates an unrelated process or automatically retries a failed task.
+`scripts/gui-dev.ps1` and `scripts/check.ps1 -Local` still use
+`scripts/resource-guard.ps1` for execution coordination. Hosted checks keep their
+existing behavior. The pinned toolchain, locked/offline dependencies, shared
+Cargo target, incremental compilation and Cargo `-j1` are unchanged.
 
-The child is created suspended, assigned to a Windows Job Object, then resumed.
-The job applies an aggregate committed-memory limit and kill-on-close; descendants
-inherit containment. A containment failure terminates the still-suspended child
-and fails the command. Runtime memory pressure, a reported job limit violation
-or a timeout stops only that job. Normal completion waits for all descendants.
-Final cleanup verifies that the job has no active processes. Parent process
-death closes its job handle and terminates the owned descendants as well.
+## Execution behavior
 
-For a bounded task outside the normal build entry points:
+The wrapper acquires `Global\CleanSlate.HeavyTask.v1`, refuses an already running
+compiler/analyzer, and uses a 30-minute default timeout. It never terminates an
+unrelated process or automatically retries a failed command.
+
+The root process is created suspended, assigned to a Windows Job Object and
+resumed. Its job has kill-on-close enabled, with no memory-limit flags. Failure to
+assign the root fails before execution. A timeout or cancellation stops the
+recorded owned job; normal completion waits for its recorded processes to exit.
+The sequential plugin-host runner retains its 90-second outer timeout and each
+host's own 30-second deadline and isolated child cache.
+
+[Ticket 109](../.scratch/offline-supervised-editor/issues/109-resource-guard-completion.md)
+records observed Cargo/tool descendants outside the named job on this machine.
+Job statistics and cleanup describe recorded members; they do not prove that
+every compiler descendant was contained or stopped. Removing memory caps does
+not fix this cleanup/accounting limitation. Do not claim a memory guarantee.
 
 ```powershell
-& ./scripts/resource-guard.ps1 -FilePath (Get-Command pwsh).Source `
+& ./scripts/resource-guard.ps1 -FilePath (Get-Process -Id $PID).Path `
     -ArgumentList @('-NoProfile', '-File', 'C:/path/to/check.ps1') `
-    -WorkingDirectory 'C:/path/to/workspace' -ReceiptPath 'C:/logs/check-001.json'
+    -WorkingDirectory 'C:/path/to/workspace' `
+    -ReceiptPath 'C:/logs/check-001.json' -TimeoutSeconds 1800
 ```
 
-Arguments are passed directly with Windows quoting, without a shell command
-string. Use a new receipt path for every attempt. Otherwise receipts/logs go
-under `%LOCALAPPDATA%/CleanSlate/BuildReceipts`. A receipt records source commit,
-executable hash, policy, exit status, stop reason, elapsed time, sampled private
-bytes/working set, kernel job peak commit, minimum available physical/commit
-headroom and verified cleanup. Failed attempts preserve their log and existing
-outputs. The executable hash identifies the launched command, not every artifact
-it may produce; record built-artifact hashes in the ticket's build receipt.
+Arguments are passed directly with Windows quoting. Choose a new receipt path;
+existing evidence is never overwritten. Defaults are under
+`%LOCALAPPDATA%/CleanSlate/BuildReceipts`. Receipts retain source/executable
+identity, exit/status, timeout policy, native job flags, observed memory/time,
+process accounting and cleanup results. Built artifacts need their own hashes.
 
-A nested guard verifies actual membership in the inherited named job before
-reusing its containment, lock and outer receipt. A forged environment string does
-not bypass the lock. Nested work honors its working directory, propagates failure
-and must omit `ReceiptPath`. Its budget is the outer task's budget. Do not wrap a
-build in a lightweight test budget: the queue runner must validate the task's
-required policy before launch.
+A nested call verifies actual membership in the inherited named job before
+reusing the outer lock/receipt. It must omit `ReceiptPath`, honors its working
+directory and propagates failure. An environment string alone cannot bypass
+the lock.
 
-If a command root exits while descendants remain, the guard still waits for the
-actual job to empty. It writes one adjacent `.diagnostics.log` with the root exit
-code, active job count and actual job PIDs immediately after observing root exit.
-The receipt records `diagnostic_path`, `root_exit_code` and the latest
-`remaining_process_ids`; these are diagnostics, not a relaxation of completion.
-`scripts/test-resource-guard-completion.ps1` checks delayed descendant completion
-and root failure propagation through the public guard command.
+When the root exits before other recorded job members, an adjacent
+`.diagnostics.log` records its exit, active count and actual job PIDs. The final
+receipt includes `root_exit_code` and `remaining_process_ids`.
 
-Small disposable tests use explicit budgets of 0.125–0.5 GiB and physical/commit
-reserves of 1 GiB. These are separate test budgets, not relaxed build defaults.
-Run `./scripts/test-resource-guard.ps1`; it retains evidence in a new temporary
-directory. The memory-limit fixture deliberately fails a native allocation under
-a 128 MiB cap. Kernel `PeakJobMemoryUsed` can include a rejected allocation charge;
-do not interpret it as sampled resident memory or as a whole-machine guarantee.
+## Verification
 
-OS sampling cannot enforce a hard whole-machine RAM guarantee: unrelated programs
-may consume memory between samples. The job's commit cap is separate from physical
-working set. Notification delivery for hard job limits is best effort; the kernel
-still denies excess allocations even when no notification arrives, and failure
-or timeout remains authoritative. Deep REA in a shared MCP server is skipped
-unattended unless that exact provider can be owned, limited and cancelled without
-affecting unrelated server work. No native DAW or vendor installation is started.
+Run `scripts/test-resource-guard.ps1` and
+`scripts/test-resource-guard-completion.ps1`. They verify native job flags have
+no memory limits, output/exit propagation, timeout, nested execution, lock
+exclusion, controller-death cleanup and delayed-child completion. No allocation
+stress or low-memory refusal fixture remains. Evidence is retained in fresh
+temporary directories.
 
-Platform references consulted through Context7 and Microsoft Learn:
-
-- [Job Objects](https://learn.microsoft.com/en-us/windows/win32/procthread/job-objects)
-- [Extended job limits](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-jobobject_extended_limit_information)
-- [Completion-port notification guarantees](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-jobobject_associate_completion_port)
+Earlier measurements remain in historical tickets/research; they are not active
+execution requirements. Native listening, publication and private signing retain
+their separate acceptance boundaries.
