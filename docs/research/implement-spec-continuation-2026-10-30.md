@@ -95,7 +95,14 @@ are under sibling `20261030-loader-cdf5ce0/`.
 Podcast needs completion of the broader Session/state regression and remaining
 native/allocation/per-instance performance acceptance. The existing workflow is
 source-reviewed with pinned tools and normal output restoration after ordinary
-failures; its initial normal checks pass and feature workflow execution is active.
+failures. Source `a12f224` completes the full debug acceptance workflow with
+final exit 0: independent Float32 processing parity, changed-source fallback,
+actual CLAP/VST3 save/destroy/recreate restoration, reason-matched normal-driver
+negatives and the release guard. Normal driver-free outputs/tests/lint/ABI checks
+were restored. Evidence tip `89dbba9` and combined timing-only tip `d9d0918`
+preserve the immutable earlier normal candidate and separately checked restored
+artifact. A VCTIP process outside job accounting remains documented under 109;
+it was not terminated without ownership proof.
 Native sound/PDC/export acceptance remains separate from component tests.
 
 Gate needs actual native arming/inference, sustained realtime deadlines and host PDC
@@ -111,9 +118,40 @@ development preview is preserved under
 plugin links are being delivered separately from release publication. Probe and
 Podcast installed links/bytes remain unchanged. No public release occurred.
 
+Development delivery is now verified at the global VST3 location
+`C:/Program Files/Common Files/VST3/CleanSlate Smart Gate.vst3` and official
+per-user CLAP location. Both installed paths pass the preserved normal ABI hosts.
+The stable preview contains source `2e3adbf` / SHA256 `274eb182…e31`, starts
+bypassed/unarmed and keeps verified runtime files/notices together. Delivery
+helper filesystem fixtures cover hash refusal, conflicts, idempotence,
+rollback and mixed folder permissions. Automatic approval review rejected
+removing the duplicate per-user VST3 junction, stating only “blocked by policy”;
+it remains an identical-target link. No removal workaround was attempted.
+
 The actual Gate VST3 editor host reached editor-ready and exact unarmed unity,
 but both Windows UI automation backends lacked their native pipe. No consent
 input or armed render occurred; the bounded run exited unqualified after its
 own timeout, with recorded cleanup verified. This is not armed-ABI or native
 presentation qualification. A safe default-bypassed GUI preview and continued
 realtime measurements are delegated while local development delivery proceeds.
+
+The safe `--gui-preview` host subsequently reached READY and CLOSED normally;
+the owner confirmed seeing and closing its window. Desktop/Start-menu shortcuts
+are verified. This confirms basic native preview use, not armed-audio or DPI/
+presentation qualification. The owner now handles GUI work in a separate Orca
+chat editing the canonical Gate checkout; backend changes stay in isolated
+worktrees and installed previews are not repointed by this session mid-edit.
+
+Backend realtime evidence is preserved separately: the first paced observation
+latched Failed/unity in mono/128 after an 87 ms late wake; its cause remains
+unproven. A controlled six-case repeat passes with state-separated callback
+timings, fresh Current before NaN injection and exact fault/reset checks.
+Deterministic test source `f2178f4` / report tip `3b36e07` then proves actual
+32-record audio-queue overflow preserves input and reset/rearm recovers fresh
+Current inference/attenuation. All 28 functional tests, strict lint/formatting
+and independent source review pass; added pause/observation machinery is test-
+only. No production queue/policy change was justified. Integration with committed
+GUI checkpoint `4afa18a` is prepared in isolated `198dbf6`, still awaiting checks.
+The new GUI Range parameter also requires the host/preview adapter to enumerate
+parameters rather than assume a count of one; that compatibility work is isolated
+from the GUI owner and remains unqualified until its builds/runtime checks pass.
