@@ -11,7 +11,8 @@ adds explicit temporary Arm / Disarm alongside saved Bypass; arming never clears
 bypass and lifecycle changes retire old consent/gestures. Describe experimental
 processing and actual preparation availability without claiming that consent
 proves current inference or gain reduction. Do not display invented confidence,
-meters or reduction. Native readiness/fault/stale qualification remains open.
+meters or reduction. Headless callback-fault display and reset recovery pass;
+native readiness/fault notification and stale-evidence qualification remain open.
 No Session setup is needed.
 
 The probe retains its own source, format identifiers, state and installed links.

@@ -54,7 +54,11 @@ fn editor_arming_requires_a_click_and_keeps_bypass_enabled() {
         &mut ActivationHost
     ));
     let context = egui::Context::default();
-    let mut panel = editor::Panel::new(Arc::clone(&gate.params), Arc::clone(&gate.consent));
+    let mut panel = editor::Panel::new(
+        Arc::clone(&gate.params),
+        Arc::clone(&gate.consent),
+        Arc::clone(&gate.processing_failed),
+    );
     let output = draw_gate_panel(&context, &mut panel, Vec::new());
     assert!(
         !gate.experimental_armed(),
@@ -157,7 +161,11 @@ fn editor_lifecycle_interruptions_cancel_an_in_flight_arming_click() {
             &mut ActivationHost
         ));
         let context = egui::Context::default();
-        let mut panel = editor::Panel::new(Arc::clone(&gate.params), Arc::clone(&gate.consent));
+        let mut panel = editor::Panel::new(
+            Arc::clone(&gate.params),
+            Arc::clone(&gate.consent),
+            Arc::clone(&gate.processing_failed),
+        );
         let output = draw_gate_panel(&context, &mut panel, Vec::new());
         let position = output
             .shapes
@@ -209,8 +217,7 @@ fn editor_lifecycle_interruptions_cancel_an_in_flight_arming_click() {
 #[test]
 fn editor_reports_original_fallback_when_an_armed_callback_faults() {
     let mut gate = SmartGate::default();
-    Arc::get_mut(&mut gate.params).unwrap().bypass =
-        BoolParam::new("Bypass", false).make_bypass();
+    Arc::get_mut(&mut gate.params).unwrap().bypass = BoolParam::new("Bypass", false).make_bypass();
     assert!(gate.activate(
         &SmartGate::AUDIO_IO_LAYOUTS[1],
         &BufferConfig {
@@ -230,7 +237,11 @@ fn editor_reports_original_fallback_when_an_armed_callback_faults() {
         "consent is separate from processing health"
     );
     let context = egui::Context::default();
-    let mut panel = editor::Panel::new(Arc::clone(&gate.params), Arc::clone(&gate.consent));
+    let mut panel = editor::Panel::new(
+        Arc::clone(&gate.params),
+        Arc::clone(&gate.consent),
+        Arc::clone(&gate.processing_failed),
+    );
     let output = draw_gate_panel(&context, &mut panel, Vec::new());
     assert!(
         output.shapes.iter().any(|shape| matches!(
@@ -238,6 +249,24 @@ fn editor_reports_original_fallback_when_an_armed_callback_faults() {
             egui::Shape::Text(text) if text.galley.job.text == "Processing unavailable · original audio"
         )),
         "the editor must report callback fallback, rather than only armed consent"
+    );
+    let mut valid_audio = vec![vec![0.0001; 1536]];
+    process_test_block(&mut gate, &mut valid_audio);
+    assert!(valid_audio[0].iter().all(|sample| *sample == 0.0001));
+    let output = draw_gate_panel(&context, &mut panel, Vec::new());
+    assert!(output.shapes.iter().any(|shape| matches!(
+        &shape.shape,
+        egui::Shape::Text(text) if text.galley.job.text == "Processing unavailable · original audio"
+    )), "valid audio alone must not hide a latched processing fault");
+    gate.reset();
+    assert!(!gate.experimental_armed());
+    let output = draw_gate_panel(&context, &mut panel, Vec::new());
+    assert!(
+        output.shapes.iter().any(|shape| matches!(
+            &shape.shape,
+            egui::Shape::Text(text) if text.galley.job.text == "Not armed · original audio"
+        )),
+        "successful engine reset must publish recovered original-audio state"
     );
 }
 
@@ -267,10 +296,11 @@ fn actual_gate_editor_states_remain_visible_at_declared_size() {
         ("unprepared", "Not prepared · original audio"),
         ("bypassed", "Bypassed · original audio"),
         ("armed", "Armed · attenuation requires valid evidence"),
+        ("faulted", "Processing unavailable · original audio"),
     ] {
         let mut gate = SmartGate::default();
         if name != "unprepared" {
-            if name == "armed" {
+            if matches!(name, "armed" | "faulted") {
                 Arc::get_mut(&mut gate.params).unwrap().bypass =
                     BoolParam::new("Bypass", false).make_bypass();
             }
@@ -284,13 +314,22 @@ fn actual_gate_editor_states_remain_visible_at_declared_size() {
                 },
                 &mut ActivationHost
             ));
-            if name == "armed" {
+            if matches!(name, "armed" | "faulted") {
                 gate.arm_experimental();
+            }
+            if name == "faulted" {
+                let mut audio = vec![vec![f32::from_bits(0x7fc0_1234)]];
+                process_test_block(&mut gate, &mut audio);
+                assert_eq!(audio[0][0].to_bits(), 0x7fc0_1234);
             }
         }
         let context = egui::Context::default();
         editor::style(&context);
-        let mut panel = editor::Panel::new(Arc::clone(&gate.params), Arc::clone(&gate.consent));
+        let mut panel = editor::Panel::new(
+            Arc::clone(&gate.params),
+            Arc::clone(&gate.consent),
+            Arc::clone(&gate.processing_failed),
+        );
         let mut content = egui::Rect::NOTHING;
         let mut output = context.run_ui(
             egui::RawInput {

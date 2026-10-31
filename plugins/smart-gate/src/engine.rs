@@ -42,6 +42,10 @@ impl Engine {
         self.fault = false;
     }
 
+    pub(crate) fn failed(&self) -> bool {
+        self.fault || self.worker.failed()
+    }
+
     pub(crate) fn process(&mut self, buffer: &mut Buffer, enabled: bool) {
         if !enabled {
             if self.enabled {

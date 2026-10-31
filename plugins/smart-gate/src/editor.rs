@@ -3,19 +3,25 @@ use egui::{Color32, RichText};
 use nice_plug::context::gui::GuiContext;
 use nice_plug_egui::NiceEguiApp;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 pub struct Panel {
     params: Arc<GateParams>,
     consent: Arc<AtomicU64>,
+    processing_failed: Arc<AtomicBool>,
     context: Option<GuiContext>,
 }
 
 impl Panel {
-    pub fn new(params: Arc<GateParams>, consent: Arc<AtomicU64>) -> Self {
+    pub fn new(
+        params: Arc<GateParams>,
+        consent: Arc<AtomicU64>,
+        processing_failed: Arc<AtomicBool>,
+    ) -> Self {
         Self {
             params,
             consent,
+            processing_failed,
             context: None,
         }
     }
@@ -84,6 +90,8 @@ impl Panel {
             let state = self.consent.load(Ordering::Acquire) & CONSENT_MASK;
             ui.label(if state == Consent::Unavailable as u64 {
                 "Not prepared · original audio"
+            } else if self.processing_failed.load(Ordering::Acquire) {
+                "Processing unavailable · original audio"
             } else if bypass {
                 "Bypassed · original audio"
             } else if state == Consent::Armed as u64 {

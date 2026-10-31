@@ -210,6 +210,57 @@ identical files without a redundant suite run. No product compiler, inference,
 native host, UI capture or new test executed; the prepared UI/callback drafts and
 their unverified status are unchanged. Ticket 93 remains claimed, 94 blocked.
 
+### Verified callback-fault feedback and actual editor captures — 2026-10-30
+
+This supersedes the uncompiled/unrun status of the fault/capture drafts above.
+Under owner policy 111, no RAM/commit preflight, reserve or job memory cap was
+used. The prepared public callback/editor regression produced semantic RED in
+`20261030-204415-fef4ebc0312a4744a63c2494c12c666d.json`: invalid input was preserved
+and consent remained explicit, but the editor lacked processing-fallback status.
+The engine now exposes its existing fault/worker-failure result; the callback
+publishes that result through one atomic Boolean, separate from consent. Faults
+remain visible while later valid PCM stays original, and reset publishes actual
+post-reset engine health. Unprepared state retains priority over fault status;
+fault status precedes generic bypass/armed copy. No DSP policy changed.
+
+Pinned egui-baseview source showed that its timer only polls a repaint notifier;
+an atomic fault flag alone would leave an idle editor unchanged until input.
+SmartGate now shares its existing notifier with the editor and requests repaint
+only when processing health changes or consent/lifecycle publication changes.
+The callback adds no allocation, locks, polling loop or unconditional repaint.
+Native wake behavior is source-reviewed but unqualified because the notifier's
+consuming method is private and no native editor was opened.
+
+Final selected-target compile `20261030-205348-c85801da791a4aaea76826a1e45971fd.json`
+passes (15.97 compiler seconds). All 23 tests pass in 5.44 test seconds
+(`20261030-205419-722aebb51f664060925edc03a2ab4989.json`), including the actual
+callback fault/recovery, earlier consent/lifecycle tests, bounded actual-widget
+capture checks and the reused CPU renderer's own clipping check. Strict
+library/test Clippy `20261030-205508-9e57a8f08b3b494ebb4f669132fbb750.json`,
+formatting `20261030-205510-dd64a3bee0b44f64b0f543872e66f36c.json` and diff checks
+pass. These receipts report root exit 0, empty recorded job PIDs, cleanup verified
+and native job flags `0x2000` (no memory-limit flags). Informational job peaks are
+922,767,360 bytes for the compile and 68,288,512 bytes for the full test run.
+Actual pinned Cargo/RUSTC and final-target lld paths were selected explicitly;
+the known 109 accounting/cleanup limitation is not claimed fixed by these results.
+
+Actual `Panel::show` captures use exactly the native style setup and existing
+test-only egui mesh/font renderer. Four 640×440 / 1× states—unprepared, bypassed,
+armed and faulted—fit within the declared editor bounds. The faulted capture uses
+real invalid PCM through the armed callback, never a forged status flag. PNGs
+converted from retained PPMs with the existing ImageMagick executable were
+visually inspected; no clipping was observed. These are CPU layout/copy evidence,
+not native fonts, DPI negotiation, editor wake timing, FPS or sound acceptance.
+
+The updated test executable, receipts and both original/final capture batches
+are preserved under `%LOCALAPPDATA%/CleanSlate/VerifiedBuilds/gate93/20261030-fault-feedback/`.
+Executable SHA256: `594e46b5091215be99fe4e7e6903a41640a36e0612e816f987ae034e72001fcb`.
+The older 20-test source/executable remain separately preserved above. No normal
+plugin candidate, native host, install link, product integration or release was
+changed. Stale-evidence feedback, native arming/readiness/wake, runtime deployment,
+deadline/PDC/allocations and listening acceptance remain open; 93 is claimed and
+94 blocked. The global execution slot is released after this checked slice.
+
 ### Resumed all-target check — 2026-10-30
 
 Fresh preflight recovered to 26.26 GiB physical / 28.69 GiB commit with no
