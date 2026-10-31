@@ -1,5 +1,12 @@
 # Plan the offline supervised CleanSlate migration
 
+2026-10-31 latest owner override: finish only the current bounded sonible VST3
+investigation, save all findings, evidence pointers and limitations in a research
+report, then stop this chat's work and subagents. Do not proceed to the previously
+requested implementation ticket, backend changes or GUI iteration. Resume those
+only on a new owner instruction. The native pass remains in progress until its
+completed or explicitly limited report and owned-resource cleanup are saved.
+
 2026-10-31 owner sequencing: finish the actual sonible smart:gate VST3 native
 investigation, then present a complete vocal/podcast-focused algorithm and
 parameter recommendation and create its backend implementation ticket. Implement

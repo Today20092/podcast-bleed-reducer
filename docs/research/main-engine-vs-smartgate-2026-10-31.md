@@ -130,3 +130,53 @@ No quality-superiority conclusion follows from model size, neural versus
 logistic architecture, richer feature count, stable Desktop status or numerical
 test success. `tests/session_ownership.rs::unlabelled_quiet_overlap_remains_a_quality_qualification_gate`
 is explicitly ignored; owner acceptance did not turn it into passing evidence.
+
+## Later native-host diagnosis and unselected design ideas
+
+Read-only follow-up inspected canonical Gate `a6ca1f6`. Its detector/envelope
+still matches the earlier production snapshot; the host now paces real-time
+callbacks. The latest preserved Live candidate is
+`GuiPreviews/SmartGate/Live/124870c09ed24883bd715318b9c831f9`, plugin SHA256
+`6f74cc0182976c1386e7a39eabf6c7decd2c01b1e67fe67b83ef42234d48d2d5`.
+Installed preview links still target the earlier `2e3adbf` source/hash recorded
+in the [controls report](sonible-smartgate-controls-2026-10-31.md).
+
+Latest native attempts explicitly remain unqualified with unity output. One
+records a real consent transition, but neither that transition nor unity gain
+establishes whether Bypass, Range, detector readiness and classification allowed
+attenuation. The logs do not capture enough public parameter/readiness state to
+identify a unique cause. No post-consent reset was found in the latest host path.
+
+Two concrete host-contract findings are separate from that unresolved cause:
+
+- Pinned nice-plug `0.4.2` constructs its buffer configuration using the previous
+  processing mode before installing the requested mode. A first Offline setup
+  can consequently activate the plugin as Realtime. Latest paced-Realtime host
+  work avoids that specific mismatch; it does not prove successful gating.
+- Canonical native qualification still assumes a fixed floor and gain below
+  `0.6`. Correct 3 dB Range attenuation is approximately `0.708`, so this oracle
+  can reject working partial attenuation. Reviewed host source `56feace` contains
+  Range-aware qualification and SDK metadata discovery, but was not integrated
+  into the inspected canonical host. The latest real-time path also retains an
+  outdated offline label in its success text.
+
+The narrow diagnostic proposed, but not run, was to characterize the exact
+36,000-frame native fixture through the actual Rust processing callback, then
+record public host Bypass/Range readback and readiness. The 0.75-second native
+fixture is shorter than the ordinary 1.024-second floor test. This would
+distinguish configuration, fixture timing and protected fallback before changing
+thresholds. No private consent ABI or fabricated native pass was proposed.
+
+Additional source limitations: after the gate has closed, zero audio delay cannot
+recover a speech onset preceding delivery of fresh detector evidence. Range
+changes can clamp existing attenuation upward immediately; smoothing and click
+behavior need attention before extending depth or making automation claims.
+
+No final parameter ranges or defaults were selected. Candidate latency values,
+deeper attenuation and level/ML blending were brainstorming, not measured
+recommendations. A proposed log-odds hysteresis-width control was not adopted as
+Sonible-like Tolerance: hysteresis and a gradual activity transition are distinct.
+The [full control outline](sonible-smartgate-controls-2026-10-31.md) retains that
+distinction and lists the actual routing, crossover, state and monitoring work.
+The owner's latest instruction stops after saving research; no implementation
+ticket, additional build, installation change or GUI change follows this audit.
