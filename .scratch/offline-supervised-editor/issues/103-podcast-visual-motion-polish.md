@@ -20,6 +20,18 @@ Implement the owner's FabFilter/sonible quality target in the existing Podcast e
 
 ## Results
 
+2026-10-30 owner resumed. Indicator strict library/test Clippy now passes in
+`20261030-213701-9008c2abe68a4142ac644bf1d5acd7ac`: root exit 0, completed,
+recorded cleanup verified and no remaining job PIDs. The initial resumed check
+found six approximate diagonal constants in the test oracle; they now use
+`std::f32::consts::FRAC_1_SQRT_2`, preserving the independent mathematical
+expectation. No production indicator behavior changed; the existing 78-test
+runtime/capture evidence remains applicable. Formatting and diff checks pass.
+The wrapper has timeout-only policy, with no memory preflight, reserve or cap.
+The first failed lint's owned VCTIP wait was cancelled and the compiler lock
+released before the successful warm check. Hidden Catch up and bounded gain
+consumer work remain; native and broader 103 acceptance are not closed.
+
 2026-10-30 OWNER PAUSE: indicator source `18fcba8` is preserved after 78 passing
 library tests, actual CPU captures and formatting. Three110ms decorative cues
 preserve immediate settings/Analyze-required staleness; retarget, reduced-motion,

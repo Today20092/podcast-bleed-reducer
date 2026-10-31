@@ -2175,7 +2175,15 @@ mod tests {
             3,
             "Each shared numeric control needs a visual cue"
         );
-        assert!((initial[0] - egui::vec2(-0.707107, 0.707107)).length() < 0.001);
+        assert!(
+            (initial[0]
+                - egui::vec2(
+                    -std::f32::consts::FRAC_1_SQRT_2,
+                    std::f32::consts::FRAC_1_SQRT_2
+                ))
+            .length()
+                < 0.001
+        );
         settings.reduction_db = 0.0;
         fixture.engine().set_settings(settings).unwrap();
         // Shared snapshots refresh at 33 ms; the synthetic animation clock stays explicit.
@@ -2204,7 +2212,15 @@ mod tests {
             middle[0]
         );
         let (_, settled, _) = frame(&mut workspace, 10.110);
-        assert!((settled[0] - egui::vec2(0.707107, 0.707107)).length() < 0.001);
+        assert!(
+            (settled[0]
+                - egui::vec2(
+                    std::f32::consts::FRAC_1_SQRT_2,
+                    std::f32::consts::FRAC_1_SQRT_2
+                ))
+            .length()
+                < 0.001
+        );
         settings.reduction_db = -48.0;
         fixture.engine().set_settings(settings).unwrap();
         std::thread::sleep(Duration::from_millis(35));
@@ -2239,7 +2255,15 @@ mod tests {
         std::thread::sleep(Duration::from_millis(35));
         let now = context.input(|input| input.time);
         let (_, snapped, _) = frame(&mut workspace, now);
-        assert!((snapped[0] - egui::vec2(0.707107, 0.707107)).length() < 0.001);
+        assert!(
+            (snapped[0]
+                - egui::vec2(
+                    std::f32::consts::FRAC_1_SQRT_2,
+                    std::f32::consts::FRAC_1_SQRT_2
+                ))
+            .length()
+                < 0.001
+        );
         workspace_frame(
             &context,
             &mut workspace,
