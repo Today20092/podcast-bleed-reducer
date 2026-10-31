@@ -318,6 +318,7 @@ dependencies = [
  "cleanslate-gate-detector",
  "egui",
  "libloading",
+ "nice-assert-no-alloc",
  "nice-plug",
  "nice-plug-egui",
  "serde_json",
