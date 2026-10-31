@@ -36,20 +36,29 @@ Each child only printed membership and slept three seconds; the probes used 2 Gi
 
 Final bounded identity/flags probe `20261030-201034-8e00397c85ca40eea54f2b632f1b42f7` confirms both processes receive exactly `Local\CleanSlate.OwnedTask.e380f9b70a154feb84a8c6015a9a0687`. The root reports named membership true, the child false; both can open that same job and query `LimitFlags = 0x2200` (kill on close plus job memory limit, neither breakaway permission). Thus the observation is not a mismatched inherited GUID or an accidentally enabled breakaway flag. The existing three-second child exited normally. No real compiler-chain build followed: no supported root-cause fix or proven complete containment exists at this checkpoint. Keep ticket 109 claimed and all heavy checks externally blocked pending platform/launch diagnosis; preserve ticket 110's unrun GREEN source.
 
-Latest selected-target proof: Gate lifecycle source `bdb94e9` was compiled with
+Historical selected-target functional result: Gate lifecycle source `bdb94e9` was compiled with
 the pinned Rust linker and passed all 18 library tests. Initial selected-target
 compile receipt `20261030-192712-6402e179b21c41e49b1f02ea627c2f56.json`
-completed with root/command exit 0, no remaining job PIDs and verified cleanup.
+recorded root/command exit 0, no remaining recorded job PIDs and cleanup of that
+recorded job. Actual compiler descendant containment is not proven by this receipt.
 GREEN compilation and full-suite receipts are
 `20261030-193511-f5c8d7449ae0480da812e81e7e00b950.json` and
 `20261030-193549-e7f29a8e46414a82964c846c29a95639.json`.
 The executable SHA256 is
 `03a78fb905f0d8092aa5904947d1427aee15c4c42a2a0ce9fa8fff4d011a5134`,
 preserved in `%LOCALAPPDATA%/CleanSlate/VerifiedBuilds/gate93/20261030-lifecycle/`.
-This supersedes the earlier pending selected-target check below. It verifies a
-scoped unit-test link/runtime workaround; ordinary MSVC builds, fresh native C
+This supersedes the earlier pending functional selected-target check below. It
+records a successful scoped unit-test link/runtime workaround, not proof of the
+compiler's owned-memory cap or complete cleanup. Ordinary MSVC builds, fresh native C
 dependencies and native plugin packaging retain their helper-completion blocker.
 No default linker, containment or completion policy changed. Ticket stays claimed.
+
+The actual membership failures above require auditing prior Gate and Podcast
+compiler receipts as observed job statistics, not proof that all compiler
+descendants were contained or covered by the reported cap and cleanup. Their
+source-level RED/GREEN and direct test-executable results remain valid functional
+evidence. No new native, listening, resource-safety or release qualification follows.
+All further heavy execution is blocked until the complete launch chain is proved.
 
 Claimed 2026-10-30 from integration `6877e73`. Scripts are excluded from graph indexing, so direct source inspection is used for this graph coverage gap.
 
