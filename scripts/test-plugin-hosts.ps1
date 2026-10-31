@@ -13,7 +13,7 @@ if (-not ('CleanSlate.Build.OwnedTask' -as [type])) { Add-Type -Path (Join-Path 
 if (-not [CleanSlate.Build.OwnedTask]::IsContained($env:CLEANSLATE_RESOURCE_JOB)) {
     & (Join-Path $PSScriptRoot 'resource-guard.ps1') -FilePath (Get-Process -Id $PID).Path `
         -ArgumentList @('-NoProfile', '-File', $PSCommandPath, '-PluginDirectory', $PluginDirectory, '-TargetDir', $settings.TargetDir, '-Product', $Product) `
-        -WorkingDirectory $root -MinAvailableGiB 2 -ReserveGiB 1 -MaxCommitGiB 0.5 -TimeoutSeconds 90
+        -WorkingDirectory $root -TimeoutSeconds 90
     return
 }
 $cases = @(
