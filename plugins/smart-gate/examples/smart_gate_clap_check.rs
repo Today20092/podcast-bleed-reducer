@@ -293,7 +293,7 @@ fn main() {
             .cast::<clap_plugin_gui>();
         let (mut width, mut height) = (0, 0);
         assert!((gui.get_size.unwrap())(plugin, &mut width, &mut height));
-        assert_eq!((width, height), (640, 440));
+        assert_eq!((width, height), (1000, 620));
         let configs =
             &*((*plugin).get_extension.unwrap())(plugin, CLAP_EXT_AUDIO_PORTS_CONFIG.as_ptr())
                 .cast::<clap_plugin_audio_ports_config>();

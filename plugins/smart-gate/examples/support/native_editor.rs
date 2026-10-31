@@ -148,7 +148,8 @@ impl Window {
                 return Err("Cannot register native check window".into());
             }
             let handle = CreateWindowExW(
-                0,
+                // Keep this bounded engineering check visible over other host windows.
+                if render_button { 0x00000008 } else { 0 },
                 class.as_ptr(),
                 wide(if render_button {
                     "CleanSlate Gate — engineering VST3 consent check"
@@ -198,7 +199,7 @@ impl Window {
                 instance,
                 class,
             };
-            if button.is_null() || !resize(handle as usize, 640, 440) {
+            if button.is_null() || !resize(handle as usize, 1000, 620) {
                 return Err("Cannot prepare native render button".into());
             }
             ShowWindow(handle, 5);

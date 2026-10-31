@@ -65,7 +65,7 @@ fn editor_arming_requires_a_click_and_keeps_bypass_enabled() {
         "opening the editor is not consent"
     );
     let button = output.shapes.iter().find_map(|shape| match &shape.shape {
-        egui::Shape::Text(text) if text.galley.job.text == "Arm experimental gate" => {
+        egui::Shape::Text(text) if text.galley.job.text == "Enable gate" => {
             Some(text.pos + text.galley.size() / 2.0)
         }
         _ => None,
@@ -94,12 +94,17 @@ fn editor_arming_requires_a_click_and_keeps_bypass_enabled() {
         gate.params.bypass.value(),
         "consent must not disable bypass"
     );
-    let output = draw_gate_panel(&context, &mut panel, Vec::new());
-    assert!(output.shapes.iter().any(|shape| matches!(
-        &shape.shape,
-        egui::Shape::Text(text) if text.galley.job.text == "Bypassed · original audio"
-    )));
-    for _ in 0..2 {
+    draw_gate_panel(&context, &mut panel, Vec::new());
+    assert!(panel.status() == "Bypassed · original audio");
+    let mut arm_focused = false;
+    for _ in 0..20 {
+        arm_focused = context
+            .memory(|memory| memory.focused())
+            .and_then(|id| context.read_response(id))
+            .is_some_and(|response| response.rect.contains(position));
+        if arm_focused {
+            break;
+        }
         for pressed in [true, false] {
             draw_gate_panel(
                 &context,
@@ -114,6 +119,10 @@ fn editor_arming_requires_a_click_and_keeps_bypass_enabled() {
             );
         }
     }
+    assert!(
+        arm_focused,
+        "explicit arming must remain keyboard reachable"
+    );
     for expected in [false, true] {
         for pressed in [true, false] {
             draw_gate_panel(
@@ -135,12 +144,9 @@ fn editor_arming_requires_a_click_and_keeps_bypass_enabled() {
         );
     }
     gate.deactivate();
-    let output = draw_gate_panel(&context, &mut panel, Vec::new());
+    draw_gate_panel(&context, &mut panel, Vec::new());
     assert!(
-        output.shapes.iter().any(|shape| matches!(
-            &shape.shape,
-            egui::Shape::Text(text) if text.galley.job.text == "Not prepared · original audio"
-        )),
+        panel.status() == "Not prepared · original audio",
         "the editor must report unavailable preparation after deactivation"
     );
 }
@@ -171,7 +177,7 @@ fn editor_lifecycle_interruptions_cancel_an_in_flight_arming_click() {
             .shapes
             .iter()
             .find_map(|shape| match &shape.shape {
-                egui::Shape::Text(text) if text.galley.job.text == "Arm experimental gate" => {
+                egui::Shape::Text(text) if text.galley.job.text == "Enable gate" => {
                     Some(text.pos + text.galley.size() / 2.0)
                 }
                 _ => None,
@@ -242,30 +248,24 @@ fn editor_reports_original_fallback_when_an_armed_callback_faults() {
         Arc::clone(&gate.consent),
         Arc::clone(&gate.detection_state),
     );
-    let output = draw_gate_panel(&context, &mut panel, Vec::new());
+    draw_gate_panel(&context, &mut panel, Vec::new());
     assert!(
-        output.shapes.iter().any(|shape| matches!(
-            &shape.shape,
-            egui::Shape::Text(text) if text.galley.job.text == "Processing unavailable · original audio"
-        )),
+        panel.status() == "Processing unavailable · original audio",
         "the editor must report callback fallback, rather than only armed consent"
     );
     let mut valid_audio = vec![vec![0.0001; 1536]];
     process_test_block(&mut gate, &mut valid_audio);
     assert!(valid_audio[0].iter().all(|sample| *sample == 0.0001));
-    let output = draw_gate_panel(&context, &mut panel, Vec::new());
-    assert!(output.shapes.iter().any(|shape| matches!(
-        &shape.shape,
-        egui::Shape::Text(text) if text.galley.job.text == "Processing unavailable · original audio"
-    )), "valid audio alone must not hide a latched processing fault");
+    draw_gate_panel(&context, &mut panel, Vec::new());
+    assert!(
+        panel.status() == "Processing unavailable · original audio",
+        "valid audio alone must not hide a latched processing fault"
+    );
     gate.reset();
     assert!(!gate.experimental_armed());
-    let output = draw_gate_panel(&context, &mut panel, Vec::new());
+    draw_gate_panel(&context, &mut panel, Vec::new());
     assert!(
-        output.shapes.iter().any(|shape| matches!(
-            &shape.shape,
-            egui::Shape::Text(text) if text.galley.job.text == "Not armed · original audio"
-        )),
+        panel.status() == "Not armed · original audio",
         "successful engine reset must publish recovered original-audio state"
     );
 }
@@ -291,19 +291,12 @@ fn editor_distinguishes_waiting_from_current_last_block_data_and_reset() {
         Arc::clone(&gate.consent),
         Arc::clone(&gate.detection_state),
     );
-    let has_status = |output: &egui::FullOutput, expected: &str| {
-        output.shapes.iter().any(|shape| {
-            matches!(
-                &shape.shape,
-                egui::Shape::Text(text) if text.galley.job.text == expected
-            )
-        })
-    };
+    let has_status = |panel: &editor::Panel, expected: &str| panel.status() == expected;
     let waiting = "Waiting for current detection data · original audio";
     let current = "Last block · current detection data";
-    let output = draw_gate_panel(&context, &mut panel, Vec::new());
+    draw_gate_panel(&context, &mut panel, Vec::new());
     assert!(
-        has_status(&output, waiting),
+        has_status(&panel, waiting),
         "temporary consent is not proof that detection data has arrived"
     );
     for _ in 0..2 {
@@ -311,20 +304,20 @@ fn editor_distinguishes_waiting_from_current_last_block_data_and_reset() {
         process_test_block(&mut gate, &mut audio);
         assert!(audio[0].iter().all(|sample| *sample == 0.0001));
     }
-    let output = draw_gate_panel(&context, &mut panel, Vec::new());
+    draw_gate_panel(&context, &mut panel, Vec::new());
     assert!(
-        has_status(&output, current),
+        has_status(&panel, current),
         "real detection data can be current while the gain still preserves original audio"
     );
     gate.reset();
     assert!(!gate.experimental_armed());
-    let output = draw_gate_panel(&context, &mut panel, Vec::new());
-    assert!(has_status(&output, "Not armed · original audio"));
-    assert!(!has_status(&output, current));
+    draw_gate_panel(&context, &mut panel, Vec::new());
+    assert!(has_status(&panel, "Not armed · original audio"));
+    assert!(!has_status(&panel, current));
     gate.arm_experimental();
-    let output = draw_gate_panel(&context, &mut panel, Vec::new());
+    draw_gate_panel(&context, &mut panel, Vec::new());
     assert!(
-        has_status(&output, waiting),
+        has_status(&panel, waiting),
         "rearming after reset cannot revive the preceding stream's detection data"
     );
 }
@@ -427,11 +420,40 @@ fn actual_gate_editor_states_remain_visible_at_declared_size() {
                     content = ui.min_rect();
                 },
             );
-            let status = output.shapes.iter().any(|shape| matches!(
-            &shape.shape,
-            egui::Shape::Text(text) if text.galley.job.text == expected
-                && shape.clip_rect.contains_rect(egui::Rect::from_min_size(text.pos, text.galley.size()))
-        ));
+            let status = panel.status() == expected;
+            assert!(!output.shapes.iter().any(|shape| matches!(&shape.shape,
+                egui::Shape::Text(text) if ["CleanSlate Smart Gate", "Experimental speech gate", "Reduction", "Fixed:", "Mono / stereo"]
+                    .iter().any(|prefix| text.galley.job.text.starts_with(prefix)))),
+                "the signal view must not regain the removed header or footer copy");
+            let graph = output
+                .shapes
+                .iter()
+                .find_map(|shape| match &shape.shape {
+                    egui::Shape::Rect(rect) if rect.fill == egui::Color32::from_rgb(18, 21, 27) => {
+                        Some(rect.rect)
+                    }
+                    _ => None,
+                })
+                .expect("actual signal graph");
+            let arm = output
+                .shapes
+                .iter()
+                .find_map(|shape| match &shape.shape {
+                    egui::Shape::Text(text)
+                        if matches!(
+                            text.galley.job.text.as_str(),
+                            "Enable gate" | "Disable gate"
+                        ) =>
+                    {
+                        Some(text.pos)
+                    }
+                    _ => None,
+                })
+                .expect("actual arm control");
+            assert!(
+                arm.y >= graph.bottom(),
+                "controls must not overlap the signal graph"
+            );
             if let Ok(directory) = std::env::var("CLEANSLATE_PLUGIN_CAPTURES") {
                 std::fs::create_dir_all(&directory).unwrap();
                 crate::editor_capture::write_capture(
@@ -449,7 +471,7 @@ fn actual_gate_editor_states_remain_visible_at_declared_size() {
             assert!(content.right() <= width as f32 && content.bottom() <= height as f32);
             assert!(
                 status,
-                "{name} status must be drawn within the declared editor size"
+                "{name} status must remain available in the gate-control hint"
             );
         }
     }
@@ -469,7 +491,7 @@ fn applied_reduction_display_expires_when_audio_callbacks_stop() {
         Arc::new(AtomicU8::new(DetectionState::Current as u8)),
     );
     let context = egui::Context::default();
-    for (time, expected) in [(0.0, "Attenuating"), (0.3, "No recent audio callback")] {
+    for (time, expected) in [(0.0, "6.0"), (0.3, "0.0")] {
         let mut output = context.run_ui(
             egui::RawInput {
                 time: Some(time),

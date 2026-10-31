@@ -366,6 +366,22 @@ pub fn run(instance: &Instance, mode: Mode) -> Result<(), String> {
             {
                 return Err("Cannot attach real Gate editor".into());
             }
+            let mut size = ViewRect {
+                left: 0,
+                top: 0,
+                right: 0,
+                bottom: 0,
+            };
+            if editor.getSize(&mut size) != kResultOk
+                || !native_editor::resize(
+                    parent.handle() as usize,
+                    size.right - size.left,
+                    size.bottom - size.top,
+                )
+                || editor.onSize(&mut size) != kResultOk
+            {
+                return Err("Cannot size the host to the real editor".into());
+            }
         }
         attached = true;
         if preview {

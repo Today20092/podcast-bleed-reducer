@@ -419,7 +419,7 @@ fn main() {
                     .unwrap();
             let mut rect = mem::zeroed();
             assert_eq!(view.getSize(&mut rect), kResultOk);
-            assert!(rect.right - rect.left >= 640 && rect.bottom - rect.top >= 440);
+            assert!(rect.right - rect.left >= 1000 && rect.bottom - rect.top >= 620);
         }
         for channels in [1, 2] {
             for rate in [44100.0, 48000.0, 96000.0] {
