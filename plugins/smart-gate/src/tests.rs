@@ -978,13 +978,19 @@ fn prepared_realtime_callbacks_preserve_initial_bypass_fault_and_reset_audio() {
             }
             audio.clone_from(&original);
             process_test_block(&mut gate, &mut audio);
-            assert_eq!(audio, original, "fault fallback must preserve subsequent input");
+            assert_eq!(
+                audio, original,
+                "fault fallback must preserve subsequent input"
+            );
             gate.reset();
             process_test_block(&mut gate, &mut audio);
             assert_eq!(audio, original, "reset must disarm and preserve input");
             gate.arm_experimental();
             process_test_block(&mut gate, &mut audio);
-            assert_eq!(audio, original, "new realtime epoch starts at original audio");
+            assert_eq!(
+                audio, original,
+                "new realtime epoch starts at original audio"
+            );
             gate.deactivate();
         }
     }
@@ -1059,7 +1065,7 @@ fn process_test_block(gate: &mut SmartGate, audio: &mut [Vec<f32>]) {
                 inputs: &mut [],
                 outputs: &mut [],
             },
-            &mut UnusedHost
+            &mut UnusedHost,
         )
     });
     assert!(matches!(status, ProcessStatus::Normal));

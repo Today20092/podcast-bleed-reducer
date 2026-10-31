@@ -36,6 +36,31 @@ The callback/realtime/alignment draft is committed as an explicitly unrun baseli
 compilation, allocation-check instrumentation and behavioral results remain
 unverified until the coordinator grants a compiler/test slot.
 
+The coordinator subsequently granted execution. Clean source `3c2e529` adds an
+explicit debug-assertions precondition, so another profile cannot silently claim
+coverage with nice-plug's allocator instrumentation compiled out. The selected
+pinned-LLD test target compiled in 21.75 seconds. Focused prepared realtime,
+explicitly armed offline and stereo marker cases all pass, followed by all 27
+library tests (2.64 seconds) and strict library/tests/examples Clippy. No monitored
+Rust allocator violation occurred, so no semantic allocation RED is claimed.
+The assertion shares the existing single allocator crate/TLS state; worker model
+allocations occur on its separate thread and remain allowed.
+
+Formatting initially reported only two assertion line wraps and a trailing
+comma. Those formatting-only changes were applied; formatting and
+`git diff --check` now pass. The tested executable and exact receipts are retained
+under `%LOCALAPPDATA%/CleanSlate/VerifiedBuilds/gate93/20261030-callback-allocation/`.
+Test executable SHA256:
+`6e4a9fa95f0d4b6589e60101c3ae46f360b5682cac6db286c5f74a5186f9b29e`.
+Successful receipts report exit 0, empty remaining job PIDs, cleanup verified
+and timeout/serialization-only job flags `0x2000`; no RAM gate or cap was used.
+
+This verifies debug Rust callbacks through existing preparation/consent/reset,
+bypass and fault fallback, plus same-sample shared-gain marker alignment at
+44.1/48/96 kHz with actual offline attenuation. It does not establish foreign
+allocator behavior, realtime inference deadline performance, ordinary-host PDC
+or armed CLAP/VST3 acceptance. No native ABI arming was claimed.
+
 ### Scoped source consolidation — 2026-10-30
 
 Merged native packaging source `ef94023` into loader/readiness checkpoint
