@@ -1,6 +1,12 @@
 //! Device-free Gate/probe factory, state, bypass and audio checks using the actual VST3 ABI.
 #[path = "support/candidate_loader.rs"]
 mod candidate_loader;
+#[cfg(windows)]
+#[path = "support/native_editor.rs"]
+mod native_editor;
+#[cfg(windows)]
+#[path = "support/vst3_native_editor.rs"]
+mod vst3_native_editor;
 use std::{
     ffi::c_void,
     io::{Cursor, Read, Seek, SeekFrom, Write},
@@ -255,41 +261,17 @@ impl Instance {
                         .map(|c| c.iter().map(|x| x.to_bits()).collect())
                         .collect();
                     let mut output = vec![vec![f32::NAN; frames]; channels as usize];
-                    let mut ins: Vec<_> = input.iter_mut().map(|c| c.as_mut_ptr()).collect();
-                    let mut outs: Vec<_> = if in_place {
-                        ins.clone()
-                    } else {
-                        output.iter_mut().map(|c| c.as_mut_ptr()).collect()
-                    };
-                    let mut input_bus = AudioBusBuffers {
-                        numChannels: channels,
-                        silenceFlags: 0,
-                        __field0: AudioBusBuffers__type0 {
-                            channelBuffers32: ins.as_mut_ptr(),
-                        },
-                    };
-                    let mut output_bus = AudioBusBuffers {
-                        numChannels: channels,
-                        silenceFlags: 0,
-                        __field0: AudioBusBuffers__type0 {
-                            channelBuffers32: outs.as_mut_ptr(),
-                        },
-                    };
-                    let mut data = ProcessData {
-                        processMode: mode,
-                        symbolicSampleSize: SymbolicSampleSizes_::kSample32,
-                        numSamples: frames as i32,
-                        numInputs: 1,
-                        numOutputs: 1,
-                        inputs: &mut input_bus,
-                        outputs: &mut output_bus,
-                        inputParameterChanges: ptr::null_mut(),
-                        outputParameterChanges: ptr::null_mut(),
-                        inputEvents: ptr::null_mut(),
-                        outputEvents: ptr::null_mut(),
-                        processContext: ptr::null_mut(),
-                    };
-                    assert_eq!(self.processor.process(&mut data), kResultOk);
+                    assert_eq!(
+                        process_audio(
+                            &self.processor,
+                            &mut input,
+                            &mut output,
+                            mode,
+                            in_place,
+                            ptr::null_mut()
+                        ),
+                        kResultOk
+                    );
                     let actual = if in_place { input } else { output };
                     let actual: Vec<Vec<u32>> = actual
                         .iter()
@@ -312,8 +294,81 @@ impl Drop for Instance {
     }
 }
 
+unsafe fn process_audio(
+    processor: &ComPtr<IAudioProcessor>,
+    input: &mut [Vec<f32>],
+    output: &mut [Vec<f32>],
+    mode: i32,
+    in_place: bool,
+    changes: *mut IParameterChanges,
+) -> tresult {
+    let mut ins: Vec<_> = input
+        .iter_mut()
+        .map(|channel| channel.as_mut_ptr())
+        .collect();
+    let mut outs: Vec<_> = if in_place {
+        ins.clone()
+    } else {
+        output
+            .iter_mut()
+            .map(|channel| channel.as_mut_ptr())
+            .collect()
+    };
+    let mut input_bus = AudioBusBuffers {
+        numChannels: input.len() as i32,
+        silenceFlags: 0,
+        __field0: AudioBusBuffers__type0 {
+            channelBuffers32: ins.as_mut_ptr(),
+        },
+    };
+    let mut output_bus = AudioBusBuffers {
+        numChannels: output.len() as i32,
+        silenceFlags: 0,
+        __field0: AudioBusBuffers__type0 {
+            channelBuffers32: outs.as_mut_ptr(),
+        },
+    };
+    let mut data = ProcessData {
+        processMode: mode,
+        symbolicSampleSize: SymbolicSampleSizes_::kSample32,
+        numSamples: input[0].len() as i32,
+        numInputs: 1,
+        numOutputs: 1,
+        inputs: &mut input_bus,
+        outputs: &mut output_bus,
+        inputParameterChanges: changes,
+        outputParameterChanges: ptr::null_mut(),
+        inputEvents: ptr::null_mut(),
+        outputEvents: ptr::null_mut(),
+        processContext: ptr::null_mut(),
+    };
+    // SAFETY: all bus pointers refer to equally-sized live buffers until this call returns.
+    unsafe { processor.process(&mut data) }
+}
+
 fn main() {
     let mut paths: Vec<_> = std::env::args().skip(1).collect();
+    if paths.first().is_some_and(|arg| arg == "--native-editor") {
+        assert_eq!(paths.len(), 2, "--native-editor <Gate binary>");
+        #[cfg(windows)]
+        {
+            candidate_loader::configure(&paths[1]);
+            // SAFETY: the engineering candidate remains loaded until editor/audio teardown completes.
+            unsafe {
+                let gate = Bundle::load(&paths[1], *b"CleanSlateGate01", true);
+                let instance = gate.create();
+                let result = vst3_native_editor::run(&instance);
+                candidate_loader::verify(&paths[1]);
+                result.unwrap();
+            }
+            println!(
+                "PASS: real-editor consent and controlled offline VST3 attenuation; no realtime/PDC/listening qualification."
+            );
+            return;
+        }
+        #[cfg(not(windows))]
+        panic!("Native editor check requires Windows");
+    }
     let isolated = paths.first().is_some_and(|arg| arg == "--candidate-loader");
     if isolated {
         paths.remove(0);

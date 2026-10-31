@@ -22,6 +22,28 @@ Acceptance:
 
 ## Results
 
+### Native VST3 consent verification preparation — 2026-10-30
+
+Claimed on `codex/gate-native-runtime` after callback evidence `25d384b`.
+The optional `smart_gate_vst3_check --native-editor <candidate-binary>` mode is
+source preparation only: no new compilation or native window has run. A small
+host-owned Win32 parent embeds the real editor and has a separate render-request
+button, which never writes consent. Processing starts and passes an unarmed
+baseline before the editor is shown; no restart/reset follows the actual arming
+click. A dedicated processing thread renders synthetic stereo through the real
+ABI; genuine bypass GUI edits use IComponentHandler/IParameterChanges. The normal
+coexistence invocation is preserved and shares only the ABI buffer construction.
+
+The draft checks finite/shared gain, marked sample alignment, actual attenuation,
+zero reported latency/tail and ordered worker/editor/parent/component teardown.
+Win32 signatures/layouts were checked against Microsoft's installed SDK 10.0.22621
+headers after Context7 quota exhaustion; compile-time x64 layout checks are
+included. No framework/dependency/private arm hook or DPI/global-setting change
+was added. See the product README for the bounded explicit invocation. Native
+results, physical DPI/presentation and all new host behavior remain unverified;
+this draft cannot establish realtime deadlines, ordinary-host PDC or listening
+acceptance. CLAP native attachment remains a subsequent slice.
+
 ### Callback allocation/alignment continuation claimed — 2026-10-30
 
 Claimed on `codex/gate-native-runtime` after fast-forwarding consolidated Gate

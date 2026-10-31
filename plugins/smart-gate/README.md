@@ -131,6 +131,39 @@ Reserved future Windows links are `%COMMONPROGRAMFILES%/CLAP/CleanSlate Smart Ga
 and `%COMMONPROGRAMFILES%/VST3/CleanSlate Smart Gate.vst3`. They are distinct from
 probe and Podcast paths. This ticket/build script creates no installed links.
 
+### Prepared native VST3 consent check (unverified)
+
+The Windows-only optional mode `smart_gate_vst3_check.exe --native-editor <candidate VST3 binary>`
+embeds the actual editor in a new host-owned parent. It first configures bypass
+off through the ABI, starts processing, and checks an unarmed unity baseline.
+Click the actual editor's **Arm experimental gate**, then the separate **Run
+armed ABI check** host button. That button only requests synthetic processing;
+it does not arm the plugin. The same active session remains live until close.
+Real bypass checkbox edits are forwarded at the next block through the VST3
+parameter-change interface. No audio device is opened.
+
+After the scoped build/launch grant, use a new isolated evidence directory and
+the existing timeout-only wrapper, for example:
+
+```powershell
+$run = Join-Path $env:LOCALAPPDATA ("CleanSlate/NativeConsentChecks/" + [Guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path $run | Out-Null
+& ./scripts/resource-guard.ps1 -FilePath '<preserved-host>/smart_gate_vst3_check.exe' `
+    -ArgumentList @('--native-editor', '<candidate>/CleanSlate Smart Gate.vst3/Contents/x86_64-win/CleanSlate Smart Gate.vst3') `
+    -WorkingDirectory $run -ReceiptPath (Join-Path $run 'native-consent.json') -TimeoutSeconds 180
+```
+
+The window ends after 120 seconds or explicit close. A run records 36,000 stereo
+samples at 48 kHz in offline mode, gain extrema/final gain, marked sample alignment
+and reported latency/tail. A PASS requires actual attenuation and successful
+teardown. Retain the log plus native editor screenshots showing the actual
+consent/status. The editor requests its existing 640×440 logical size; the host
+adds a 48-unit control strip and uses default process DPI behavior. No global
+display setting changes. Physical presentation, realtime performance, ordinary
+DAW/PDC behavior and listening acceptance require separate evidence. This mode
+has not yet been compiled or launched; ordinary coexistence invocation remains
+unchanged.
+
 ## Source/checkpoint
 
 Product source starts at Gate integration `3bbda73010143f25a36de78a8bac56e5dac89bf3`.
