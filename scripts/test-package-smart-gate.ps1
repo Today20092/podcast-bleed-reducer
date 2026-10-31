@@ -27,6 +27,10 @@ foreach ($relative in @($inventory.files.path)) {
     if ((Get-FileHash -LiteralPath (Join-Path $candidate $relative)).Hash -ne (Get-FileHash -LiteralPath (Join-Path $runtime $relative)).Hash) {
         throw "Runtime inventory was not staged exactly: $relative"
     }
+    if ((Get-FileHash -LiteralPath (Join-Path $candidate "CleanSlate Smart Gate.vst3/Contents/x86_64-win/$relative")).Hash -ne
+        (Get-FileHash -LiteralPath (Join-Path $runtime $relative)).Hash) {
+        throw "VST3 bundle runtime/notice inventory was not preserved: $relative"
+    }
 }
 if ((Get-FileHash -LiteralPath (Join-Path $candidate 'CleanSlate Smart Gate.vst3/Contents/x86_64-win/DirectML.dll')).Hash -ne
     (Get-FileHash -LiteralPath (Join-Path $runtime 'DirectML.dll')).Hash) { throw 'VST3 runtime sidecar is missing or changed.' }

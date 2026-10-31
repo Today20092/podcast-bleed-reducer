@@ -59,7 +59,7 @@ Use `scripts/build-smart-gate.ps1 -RuntimeDirectory <verified-flat-runtime-direc
 from this product checkout. Both runtime inputs are explicit; this entrypoint and
 `scripts/package-smart-gate.ps1` never download dependencies. The package helper
 checks the runtime and all three official notices against the pinned observed
-NuGet inventory, copies the DLL next to both format binaries, and publishes a
+NuGet inventory, copies the DLL and notices next to both format binaries, and publishes a
 new candidate with an atomic directory rename after copy/hash verification.
 It also retains the repository's existing embedded-model, dependency and MSVC
 notices. The staging fixture is

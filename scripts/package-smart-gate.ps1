@@ -55,8 +55,8 @@ foreach ($destination in @((Join-Path $stage 'CleanSlate Smart Gate.clap'), (Joi
     if ((Get-FileHash -LiteralPath $destination).Hash -ne $pluginHash) { throw 'Plugin bytes changed during staging.' }
 }
 foreach ($file in $inventory.files) {
-    $destinations = @((Join-Path $stage $file.path))
-    if ($file.path -like '*.dll') { $destinations += Join-Path $bundle $file.path }
+    # Keep the verified notices with the redistributable if the VST3 bundle is copied alone.
+    $destinations = @((Join-Path $stage $file.path), (Join-Path $bundle $file.path))
     foreach ($destination in $destinations) {
         Copy-Item -LiteralPath (Join-Path $RuntimeDirectory $file.path) -Destination $destination
         if ((Get-FileHash -LiteralPath $destination).Hash.ToLowerInvariant() -ne $file.sha256) { throw 'Runtime bytes changed during staging.' }

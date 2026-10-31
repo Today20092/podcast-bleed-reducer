@@ -55,6 +55,13 @@ went RED then GREEN after pinning the observed inventory. Missing notice, unknow
 version, invalid/duplicate path, input/output junction and new-candidate preservation
 checks pass. Final fixture evidence:
 `%TEMP%/cleanslate-gate-package-08ad417a-a87d-45b5-bc3b-c9a962d9fd2c/`.
+Parent review identified that the standalone VST3 bundle also needs the official
+notices alongside its runtime. The added public-CLI assertions failed on missing
+bundled `LICENSE.txt`; the helper now retains all four pinned inventory files
+beside both format binaries, preserving the three notices when the bundle moves.
+GREEN fixture evidence:
+`%TEMP%/cleanslate-gate-package-14606d2c-dd13-4192-813e-5687a635ac89/`;
+PowerShell source parsing and `git diff --check` also pass.
 Existing output-parent refusal fixtures pass with outside sentinels unchanged:
 `%TEMP%/cleanslate-gate-output-f559b09c-d6bd-414d-96ee-f9ebd1127dbc/`.
 
