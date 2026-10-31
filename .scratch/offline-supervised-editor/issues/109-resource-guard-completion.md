@@ -15,9 +15,16 @@ Diagnose the two post-command guard stalls recorded in [the resumption receipt](
 - [x] Add a failing diagnostic regression before the diagnostic implementation; no root-cause fix without reproduction.
 - [x] Pass the existing disposable resource-guard suite and the regression.
 - [x] Record remaining limitations and scoped evidence. Direct execution of all 74 Podcast tests passes with a finalized guarded receipt; a complete product build using the alternative linker remains pending.
-- [ ] Prove named-job membership for the actual Cargo/compiler chain before another heavy run. Receipt statistics alone do not establish descendant containment.
+- [ ] Diagnose actual compiler descendant membership for truthful cleanup/accounting. Receipt statistics alone do not establish complete containment.
 
 ## Results
+
+Owner override after these investigations: completed ticket 111 removes all
+memory limits, reserves and launch preflights. Earlier RAM-cap qualification
+stops below are historical, not a replacement memory gate. Normal authorized
+work uses the timeout/serialization wrapper without a memory preflight. The
+descendant accounting/cleanup observation remains unresolved and must not be
+presented as fixed; receipts describe recorded job members only.
 
 ### Actual compiler containment gap — 2026-10-30
 

@@ -1,5 +1,13 @@
 # Plan the offline supervised CleanSlate migration
 
+2026-10-30 [111](../offline-supervised-editor/issues/111-remove-memory-limits.md)
+is done: RAM/commit launch thresholds, reserves, job memory caps and recovery
+waiting are removed across Desktop, Podcast and Gate. Native job flags, retained
+guard/runner suites, active caller parsing and two-axis review pass. Timeout,
+cancellation and single-compiler coordination remain. Old RAM-cap qualification
+stops are superseded; 109 remains a separate accounting/cleanup limitation.
+Resume 110's prepared GREEN without a memory preflight or replacement cap.
+
 2026-10-30 owner override: remove all local build memory guards after the upgrade
 to 40 GB RAM. [111](../offline-supervised-editor/issues/111-remove-memory-limits.md)
 removes launch thresholds, running RAM/commit reserves, job memory caps and
