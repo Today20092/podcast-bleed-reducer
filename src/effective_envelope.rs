@@ -484,6 +484,18 @@ impl EffectiveTrackEnvelope {
         }
         segments[*cursor].gain(time)
     }
+    pub(crate) fn bounds_edge_count(
+        &self,
+        grid: SourceTimebase,
+        start: usize,
+        end: usize,
+    ) -> Option<usize> {
+        let start_time = grid.time_at_frame(start as u64, Rounding::Floor).ok()?;
+        let end_time = grid.time_at_frame(end as u64, Rounding::Ceil).ok()?;
+        let first = self.edges.partition_point(|edge| *edge < start_time);
+        let last = self.edges.partition_point(|edge| *edge <= end_time);
+        Some(last - first)
+    }
     pub(crate) fn bounds(
         &self,
         grid: SourceTimebase,

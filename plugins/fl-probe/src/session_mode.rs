@@ -328,6 +328,27 @@ pub struct WavePeak {
     pub min: f32,
     pub max: f32,
 }
+#[derive(Debug, PartialEq)]
+pub enum GainDetail {
+    Bounds(f32, f32),
+    TooDense,
+}
+#[derive(Debug, PartialEq)]
+pub struct GainColumn {
+    pub start: i64,
+    pub end: i64,
+    pub detail: GainDetail,
+}
+#[derive(Debug)]
+pub struct TrackGain {
+    pub member: usize,
+    pub columns: Vec<GainColumn>,
+}
+#[derive(Debug)]
+pub struct AnalysisGainView {
+    pub revision: u64,
+    pub tracks: Vec<TrackGain>,
+}
 pub struct TrackView {
     pub member: usize,
     pub present: bool,
@@ -813,6 +834,18 @@ impl SessionCapture {
         self.invalidate();
         self.commands.lock().push(Command::Clear);
         Ok(())
+    }
+    pub fn analysis_view(
+        &self,
+        _start: i64,
+        _end: i64,
+        _columns: usize,
+        _member_mask: u8,
+    ) -> Option<AnalysisGainView> {
+        None
+    }
+    pub fn analysis_view_is_current(&self, _view: &AnalysisGainView) -> bool {
+        false
     }
     pub fn view(
         &self,

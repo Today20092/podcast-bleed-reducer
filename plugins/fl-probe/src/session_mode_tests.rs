@@ -7,6 +7,57 @@ use std::time::Instant;
 const RATE: u32 = 8000;
 
 #[test]
+fn analysis_gain_view_clips_exact_bounds_and_maps_only_visible_members() {
+    let fixture = Fixture::new(3);
+    let engine = fixture.engine();
+    direct_capture(engine, 2, 0, 4096, false);
+    let mut member_map = [None; MEMBERS];
+    member_map[2] = Some(0);
+    *engine.analysis.write() = Some(Published {
+        revision: engine.revision.load(SeqCst),
+        analysis: Analysis {
+            origin: 500,
+            end: 2548,
+            rate: RATE,
+            envelopes: vec![GainEnvelope::constant_at_rate(2048, RATE, 0.25).unwrap()],
+        },
+        hashes: vec![Vec::new(); MEMBERS],
+        member_map,
+    });
+    let view = engine.analysis_view(0, 4096, 4, 0b101).unwrap();
+    assert!(engine.analysis_view_is_current(&view));
+    assert_eq!(view.tracks.len(), 1);
+    assert_eq!(view.tracks[0].member, 2);
+    assert_eq!(
+        view.tracks[0].columns,
+        vec![
+            GainColumn {
+                start: 500,
+                end: 1024,
+                detail: GainDetail::Bounds(0.25, 0.25)
+            },
+            GainColumn {
+                start: 1024,
+                end: 2048,
+                detail: GainDetail::Bounds(0.25, 0.25)
+            },
+            GainColumn {
+                start: 2048,
+                end: 2548,
+                detail: GainDetail::Bounds(0.25, 0.25)
+            },
+        ],
+    );
+    assert!(
+        engine
+            .analysis_view(0, 4096, 4, 0b001)
+            .unwrap()
+            .tracks
+            .is_empty()
+    );
+}
+
+#[test]
 fn cancel_request_returns_while_capture_storage_is_locked() {
     let fixture = Fixture::new(1);
     let (send, receive) = std::sync::mpsc::channel();
