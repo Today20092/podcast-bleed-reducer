@@ -1,12 +1,20 @@
 # Plan the offline supervised CleanSlate migration
 
+2026-10-30 owner override: remove all local build memory guards after the upgrade
+to 40 GB RAM. [111](../offline-supervised-editor/issues/111-remove-memory-limits.md)
+removes launch thresholds, running RAM/commit reserves, job memory caps and
+memory-recovery waiting. This supersedes every older memory profile below and in
+historical research. Timeouts, cancellation and single-compiler serialization
+remain. Memory statistics are informational; no hidden replacement limit is
+authorized. The compiler membership observations in 109 remain a separate issue.
+
 2026-10-30 [110 — bounded exact gain query](../offline-supervised-editor/issues/110-bounded-exact-gain-query.md)
 is claimed as the shared prerequisite for 103's accepted bounded Analysis gain
-display. Preserve existing envelope query APIs and exact source/manual/protection
-semantics; refuse dense indexed candidate work explicitly before evaluation.
-The public query seam and API proposal are approved. Only RED preparation is
-authorized until the sole compiler slot is granted; no GUI or gain behavior has
-changed and 103 remains claimed.
+display. The public query budget regression produced semantic RED; the prepared
+minimal implementation and exact manual/protection tests remain unverified.
+Resume using 111's execution policy after the coordinator grants the sole compiler
+slot, without a RAM threshold or cap. Preserve existing envelope query APIs and
+source semantics; no GUI implementation or ticket 103 completion is claimed.
 
 2026-10-30 Podcast editor-close lifecycle source `fa1f3f4` passes its RED/GREEN
 and all 75 library tests. The component close boundary clears pending Catch up
