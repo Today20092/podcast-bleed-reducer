@@ -1037,6 +1037,11 @@ fn armed_offline_stereo_markers_stay_at_their_source_sample_at_supported_rates()
 }
 
 fn process_test_block(gate: &mut SmartGate, audio: &mut [Vec<f32>]) {
+    let allocation_checks_enabled = cfg!(debug_assertions);
+    assert!(
+        allocation_checks_enabled,
+        "callback allocation coverage requires debug assertions"
+    );
     let frames = audio[0].len();
     let mut buffer = Buffer::default();
     // SAFETY: all channels have equal lengths and remain exclusively borrowed until buffer drops.
