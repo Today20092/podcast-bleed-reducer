@@ -20,6 +20,17 @@ Implement the owner's FabFilter/sonible quality target in the existing Podcast e
 
 ## Results
 
+2026-10-30 normal native build handoff: source `b41d51e` compiles the actual
+Podcast DLL and named CLAP/VST3 ABI hosts; strict examples Clippy passes. Normal
+exports/imports are inventoried, and a fresh uninstalled hash-pinned candidate
+includes the already verified Gate DirectML/four CRT runtimes and notices beside
+both formats. Full candidate, hosts, source hashes and receipts are preserved.
+CLAP build required explicit exact-owned VCTIP cleanup after Cargo0; the
+intervention is recorded separately. **No host execution yet**: held for
+coordinator handoff. [Exact native candidate and limits](../../../docs/research/podcast103-normal-native-2026-10-30.md).
+No runtime isolation, full Session VST3 state, native80 closure, installed-link
+change or publication is claimed.
+
 2026-10-30 bounded Analysis gain checkpoint: core `9881369` projects exact extrema
 only for verified native source columns and visible members, using the selective
 three-file shared110 aggregate from `e29cb58..942420f`. Arc publication snapshots
