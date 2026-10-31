@@ -1,8 +1,11 @@
 #requires -Version 7.0
 param(
     [Parameter(Mandatory)][string]$PluginBinary,
+    [Parameter(Mandatory)][ValidatePattern('^[0-9a-f]{40}$')][string]$PluginSourceCommit,
+    [Parameter(Mandatory)][ValidatePattern('^[0-9a-f]{64}$')][string]$ExpectedPluginSha256,
     [Parameter(Mandatory)][string]$RuntimeDirectory,
     [Parameter(Mandatory)][string]$RuntimeReceipt,
+    [Parameter(Mandatory)][string]$MsvcRuntimeDirectory,
     [Parameter(Mandatory)][string]$OutputParent
 )
 $ErrorActionPreference = 'Stop'
@@ -18,9 +21,10 @@ function Assert-PlainPath([string]$Path) {
         $current = [IO.Path]::GetDirectoryName($current)
     }
 }
-foreach ($path in @($PluginBinary, $RuntimeDirectory, $RuntimeReceipt, $OutputParent)) { Assert-PlainPath $path }
+foreach ($path in @($PluginBinary, $RuntimeDirectory, $RuntimeReceipt, $MsvcRuntimeDirectory, $OutputParent)) { Assert-PlainPath $path }
 $PluginBinary = (Resolve-Path -LiteralPath $PluginBinary).Path
 $RuntimeDirectory = (Resolve-Path -LiteralPath $RuntimeDirectory).Path
+$MsvcRuntimeDirectory = (Resolve-Path -LiteralPath $MsvcRuntimeDirectory).Path
 $OutputParent = [IO.Path]::GetFullPath($OutputParent)
 $inventory = Get-Content -LiteralPath $RuntimeReceipt -Raw | ConvertFrom-Json
 $reviewed = Get-Content -LiteralPath (Join-Path $root 'docs/licenses/directml-1.15.4-runtime.json') -Raw | ConvertFrom-Json
@@ -29,21 +33,27 @@ foreach ($field in @('package', 'version', 'url', 'license_url', 'package_bytes'
     if ($inventory.source.$field -cne $reviewed.source.$field) { throw 'Runtime provenance does not identify the reviewed DirectML package.' }
 }
 if ($inventory.files.Count -ne $reviewed.files.Count) { throw 'The complete reviewed runtime/notice inventory is required.' }
-$seen = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+$filesToStage = @()
 foreach ($file in $inventory.files) {
-    if ($file.path -notmatch '^[A-Za-z0-9_.-]+\.(dll|txt)$' -or -not $seen.Add($file.path) -or
-        $file.sha256 -cnotmatch '^[0-9a-f]{64}$') { throw 'Runtime inventory contains an invalid or duplicate file.' }
     $expected = @($reviewed.files | Where-Object { $_.path -ceq $file.path })
     if ($expected.Count -ne 1 -or $file.sha256 -cne $expected[0].sha256 -or
         $file.archive_entry -cne $expected[0].archive_entry -or $file.bytes -ne $expected[0].bytes) {
         throw 'Runtime receipt differs from the reviewed archive inventory.'
     }
-    $source = Join-Path $RuntimeDirectory $file.path
-    Assert-PlainPath $source
-    if ((Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash.ToLowerInvariant() -ne $file.sha256) { throw "Runtime bytes changed: $($file.path)" }
+    $filesToStage += @{File=$file; Source=(Join-Path $RuntimeDirectory $file.path)}
 }
-if (-not $seen.Contains('DirectML.dll') -or -not @($inventory.files | Where-Object { $_.path -like '*.txt' }).Count) { throw 'The runtime and accompanying notices are required.' }
+$msvc = Get-Content -LiteralPath (Join-Path $root 'docs/licenses/msvc-14.44.35211-runtime.json') -Raw | ConvertFrom-Json
+foreach ($file in $msvc.files) { $filesToStage += @{File=$file; Source=(Join-Path $MsvcRuntimeDirectory $file.path)} }
+$seen = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+foreach ($entry in $filesToStage) {
+    $file = $entry.File
+    if ($file.path -notmatch '^[A-Za-z0-9_.-]+\.(dll|txt)$' -or -not $seen.Add($file.path) -or
+        $file.sha256 -cnotmatch '^[0-9a-f]{64}$') { throw 'Runtime inventory contains an invalid or duplicate file.' }
+    Assert-PlainPath $entry.Source
+    if ((Get-FileHash -LiteralPath $entry.Source -Algorithm SHA256).Hash.ToLowerInvariant() -cne $file.sha256) { throw "Runtime bytes changed: $($file.path)" }
+}
 $pluginHash = (Get-FileHash -LiteralPath $PluginBinary -Algorithm SHA256).Hash
+if ($pluginHash.ToLowerInvariant() -cne $ExpectedPluginSha256) { throw 'Plugin bytes differ from the build artifact receipt.' }
 New-Item -ItemType Directory -Path $OutputParent -Force | Out-Null
 $id = [Guid]::NewGuid().ToString('N')
 $stage = Join-Path $OutputParent ('.staging-' + $id)
@@ -54,26 +64,34 @@ foreach ($destination in @((Join-Path $stage 'CleanSlate Smart Gate.clap'), (Joi
     Copy-Item -LiteralPath $PluginBinary -Destination $destination
     if ((Get-FileHash -LiteralPath $destination).Hash -ne $pluginHash) { throw 'Plugin bytes changed during staging.' }
 }
-foreach ($file in $inventory.files) {
+foreach ($entry in $filesToStage) {
+    $file = $entry.File
     # Keep the verified notices with the redistributable if the VST3 bundle is copied alone.
     $destinations = @((Join-Path $stage $file.path), (Join-Path $bundle $file.path))
     foreach ($destination in $destinations) {
-        Copy-Item -LiteralPath (Join-Path $RuntimeDirectory $file.path) -Destination $destination
+        Copy-Item -LiteralPath $entry.Source -Destination $destination
         if ((Get-FileHash -LiteralPath $destination).Hash.ToLowerInvariant() -ne $file.sha256) { throw 'Runtime bytes changed during staging.' }
     }
 }
 Copy-Item -LiteralPath (Join-Path $root 'plugins/smart-gate/README.md') -Destination $stage
 Copy-Item -LiteralPath (Join-Path $root 'LICENSE') -Destination $stage
 $licenses = Join-Path $stage 'licenses'
-New-Item -ItemType Directory -Path $licenses | Out-Null
+$bundleResources = Join-Path $stage 'CleanSlate Smart Gate.vst3/Contents/Resources'
+$bundleLicenses = Join-Path $bundleResources 'licenses'
+New-Item -ItemType Directory -Path $licenses, $bundleLicenses | Out-Null
+Copy-Item -LiteralPath (Join-Path $root 'LICENSE') -Destination $bundleResources
 foreach ($notice in @('embedded-model-runtime.txt', 'bundled-dependencies.txt', 'msvc-runtime.txt')) {
     Copy-Item -LiteralPath (Join-Path $root "docs/licenses/$notice") -Destination $licenses
+    Copy-Item -LiteralPath (Join-Path $root "docs/licenses/$notice") -Destination $bundleLicenses
 }
 $inventory | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $stage 'runtime-receipt.json') -Encoding utf8
+$msvc | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $stage 'msvc-runtime-receipt.json') -Encoding utf8
 $record = [ordered]@{
-    source_commit = (& git -C $root rev-parse HEAD)
+    plugin_source_commit = $PluginSourceCommit
+    packaging_source_commit = (& git -C $root rev-parse HEAD)
     plugin_sha256 = $pluginHash.ToLowerInvariant()
     runtime = $inventory
+    msvc_runtime = $msvc
     installed = $false
     qualification = 'Uninstalled engineering candidate; runtime inventory hashes checked. Host, gating, native GUI and release qualification are separate.'
 }

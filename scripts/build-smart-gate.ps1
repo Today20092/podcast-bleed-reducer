@@ -1,5 +1,5 @@
 #requires -Version 7.0
-param([string]$TargetDir, [string]$ProbeBinary, [string]$RuntimeDirectory, [string]$RuntimeReceipt)
+param([string]$TargetDir, [string]$ProbeBinary, [string]$RuntimeDirectory, [string]$RuntimeReceipt, [string]$MsvcRuntimeDirectory)
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 if ([Environment]::OSVersion.Platform -ne 'Win32NT') { throw 'This candidate script currently targets Windows x64 only.' }
@@ -18,11 +18,12 @@ function Assert-GateOutputParents {
     }
 }
 Assert-GateOutputParents
-if (-not $RuntimeDirectory -or -not $RuntimeReceipt) {
-    throw 'Explicit verified -RuntimeDirectory and -RuntimeReceipt are required; the build entrypoint does not download runtimes.'
+if (-not $RuntimeDirectory -or -not $RuntimeReceipt -or -not $MsvcRuntimeDirectory) {
+    throw 'Explicit verified -RuntimeDirectory, -RuntimeReceipt and -MsvcRuntimeDirectory are required; the build entrypoint does not download runtimes.'
 }
 $manifest = Join-Path $root 'plugins/smart-gate/Cargo.toml'
 $settings = & (Join-Path $PSScriptRoot 'local-build-settings.ps1') -TargetDir $TargetDir
+$pluginSourceCommit = (& git -C $root rev-parse HEAD)
 function Invoke-GateCargo([string[]]$Arguments) {
     & (Join-Path $PSScriptRoot 'resource-guard.ps1') -FilePath cargo -ArgumentList $Arguments -WorkingDirectory $root
 }
@@ -33,7 +34,8 @@ Invoke-GateCargo (@('clippy', '--manifest-path', $manifest, '--all-targets') + $
 Invoke-GateCargo (@('build', '--manifest-path', $manifest, '--lib', '--examples') + $settings.CargoArguments)
 Assert-GateOutputParents
 $dll = Join-Path $settings.TargetDir 'debug/cleanslate_smart_gate.dll'
-$candidate = & (Join-Path $PSScriptRoot 'package-smart-gate.ps1') -PluginBinary $dll -RuntimeDirectory $RuntimeDirectory -RuntimeReceipt $RuntimeReceipt -OutputParent $parent
+$pluginHash = (Get-FileHash -LiteralPath $dll -Algorithm SHA256).Hash.ToLowerInvariant()
+$candidate = & (Join-Path $PSScriptRoot 'package-smart-gate.ps1') -PluginBinary $dll -PluginSourceCommit $pluginSourceCommit -ExpectedPluginSha256 $pluginHash -RuntimeDirectory $RuntimeDirectory -RuntimeReceipt $RuntimeReceipt -MsvcRuntimeDirectory $MsvcRuntimeDirectory -OutputParent $parent
 $bundle = Join-Path $candidate 'CleanSlate Smart Gate.vst3/Contents/x86_64-win'
 $artifacts = @((Join-Path $candidate 'CleanSlate Smart Gate.clap'), (Join-Path $bundle 'CleanSlate Smart Gate.vst3'))
 & (Join-Path $PSScriptRoot 'test-smart-gate-hosts.ps1') -PluginDirectory $candidate -TargetDir $settings.TargetDir -ProbeBinary $ProbeBinary
