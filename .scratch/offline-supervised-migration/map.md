@@ -1,11 +1,13 @@
 # Plan the offline supervised CleanSlate migration
 
-2026-10-31 latest owner override: finish only the current bounded sonible VST3
-investigation, save all findings, evidence pointers and limitations in a research
-report, then stop this chat's work and subagents. Do not proceed to the previously
-requested implementation ticket, backend changes or GUI iteration. Resume those
-only on a new owner instruction. The native pass remains in progress until its
-completed or explicitly limited report and owned-resource cleanup are saved.
+2026-10-31 OWNER STOP: the bounded sonible VST3 investigation is saved in the
+[native research report](../../docs/research/smartgate-native-engine-2026-10-31.md),
+with supporting control/engine/model reports and complete external diagnostics.
+Main-VST3 auto-analysis timed out at 1,000,000 ms before usable code/xref results;
+no full algorithm recovery is claimed. Owned processes closed, cleanup verified
+and shared lock released. This chat's work and subagents are stopped. Do not
+proceed to the previously requested implementation ticket, backend changes or GUI
+iteration. Resume only on a new owner instruction.
 
 2026-10-31 owner sequencing: finish the actual sonible smart:gate VST3 native
 investigation, then present a complete vocal/podcast-focused algorithm and
