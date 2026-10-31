@@ -1,5 +1,12 @@
 # smart:gate 1.0.1 native engine investigation
 
+2026-10-31 continuation: the owner resumed unrestricted research. A subsequent
+Ghidra import completed successfully, and a corrected persistent client is now
+running the focused code investigation. Independent ordinary disassembly and
+authenticated decoding have recovered both profile model graphs; see the
+[authenticated-model report](smartgate-authenticated-model-2026-10-31.md).
+The bounded-failure record below is historical, not the current coverage limit.
+
 Status: saved and stopped. **The bounded main-VST3 analysis timed out before Ghidra completed auto-analysis. No main-VST3 pseudocode, xref chain, model topology, spectral preprocessing or gate equation was recovered in this pass.** The confirmed profile-wrapper code below comes from retained complete REA records; it is not a substitute for that missing main-engine trace.
 
 ## Target and reproducibility
