@@ -255,6 +255,9 @@ not native fonts, DPI negotiation, editor wake timing, FPS or sound acceptance.
 The updated test executable, receipts and both original/final capture batches
 are preserved under `%LOCALAPPDATA%/CleanSlate/VerifiedBuilds/gate93/20261030-fault-feedback/`.
 Executable SHA256: `594e46b5091215be99fe4e7e6903a41640a36e0612e816f987ae034e72001fcb`.
+Verified behavioral source: `6dcc337f3bf1644ed427cf3653f71afbfd6647e6`;
+the compile receipt's base `e27ca48` plus the now-committed patch identifies that
+source. This identity note changes documentation only after the completed checks.
 The older 20-test source/executable remain separately preserved above. No normal
 plugin candidate, native host, install link, product integration or release was
 changed. Stale-evidence feedback, native arming/readiness/wake, runtime deployment,
