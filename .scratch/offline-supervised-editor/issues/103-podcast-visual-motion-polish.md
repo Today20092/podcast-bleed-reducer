@@ -29,9 +29,10 @@ Analyze-required sound behavior is retained. The editor draws batched purple
 gain bounds/red attenuation and explicit dense-detail guidance. Compact footer
 budgeting and real-label legend overlap were exposed by semantic REDs and fixed.
 Actual Podcast now passes all86 tests (1.43 seconds), strict lib/tests Clippy,
-formatting and 24 CPU gallery/bounds cases. First gallery has a known synthetic
-ready-message omission and remains intermediate pending the prepared test-only
-fixture correction/rerun. [Source, receipts, artifact and limitations](../../../docs/research/podcast103-analysis-gain-2026-10-30.md).
+formatting and 24 CPU gallery/bounds cases. First gallery's synthetic ready-message
+omission was corrected separately without production changes; the corrected24-case
+gallery/bounds rerun passes (6.94 seconds), with both artifact/source identities
+preserved. [Source, receipts, artifact and limitations](../../../docs/research/podcast103-analysis-gain-2026-10-30.md).
 Source query/geometry budgets do not establish total UI/native performance.
 103 remains claimed; final comparisons/captures review/native acceptance remain.
 

@@ -112,3 +112,31 @@ fixture omission. Keep these images as intermediate evidence; a separate
 test-fixture correction and gallery rerun is required before representative
 gallery acceptance. No broader performance, native host, listening/PDC/export,
 stable release, whole103 completion or independent final visual review is claimed.
+
+## Corrected representative gallery
+
+Production source remains `d3ebcbe0e50dd8236813bf3d452b20d54e420bb5`, qualified by
+the 86-test/full strict lint results above. A separate test-only correction sets
+the synthetic publisher's message to the exact production ready message and uses
+the real settings setter for the stale case. Its displayed Analyze-again reason
+is asserted. No production behavior changed, and the full suite was not repeated
+for fixture copy alone.
+
+Actual product harness compile
+`20261030-225700-19d720281ef54c6cad53c311b8d70efa` passes (34.08 compiler seconds).
+The corrected 24-case gallery/bounds rerun
+`20261030-225747-2b7710007e7a43398cb612f106abec0f` passes in 6.94 seconds.
+Both receipts finalize root0, no remaining job PIDs and cleanup verified, without
+memory gates. Formatting and diff checks pass. Impeccable's mechanical detector
+returned no findings for the Rust editor; that is not native presentation proof.
+
+Corrected executable, both receipt sets and 24 PPM/PNG pairs:
+`%LOCALAPPDATA%/CleanSlate/Podcast/Workflow103Checkpoints/20261030-analysis-gain-fixture-7bbbffaf02184307b5ae27552cfbd909/`.
+Executable SHA256:
+`fa99ac03b4c0dc2d57429f79b8d27943cfa6771d39a4ddc85a3f00143d059093`.
+The earlier executable/gallery remain preserved separately. Corrected compact
+ready/stale100 were visually inspected; ready copy agrees with readiness and
+stale copy explains Analyze while gain/attenuation are absent. The independent
+root reviewer also inspected the earlier compact ready/dense100 and full
+unverified200, finding readable hints, label separation, footer reachability and
+gain suppression across the unverified span. Native/performance limits remain.

@@ -234,6 +234,7 @@ pub(crate) fn publish_display_analysis(
         hashes: vec![Vec::new(); MEMBERS],
         member_map,
     }));
+    engine.state.lock().message = "Analysis ready. Enable processing and replay to validate the source audio. Unverified sections stay original.".into();
 }
 
 #[test]

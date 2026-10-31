@@ -1260,7 +1260,9 @@ mod tests {
                 fixture.unverify_display_range(0, 2048, 4096);
             }
             if mode == "stale" {
-                fixture.engine().cancel_analysis();
+                let mut settings = fixture.engine().view(None, None, 32).unwrap().settings;
+                settings.reduction_db = -18.0;
+                fixture.engine().set_settings(settings).unwrap();
             }
             for (size, width, height) in [("compact", 720, 560), ("full", 1000, 680)] {
                 for (dpi, scale) in [(100, 1.0), (150, 1.5), (200, 2.0)] {
@@ -1306,6 +1308,8 @@ mod tests {
                     });
                     if mode == "stale" {
                         assert!(legend.is_none());
+                        assert!(output.shapes.iter().any(|shape| matches!(&shape.shape,
+                            egui::Shape::Text(text) if text.galley.job.text.contains("Sound settings changed. Analyze again"))));
                     } else if mode == "dense" {
                         assert_eq!(legend.as_deref(), Some("Analysis gain\nZoom in for detail"));
                         assert_eq!(
