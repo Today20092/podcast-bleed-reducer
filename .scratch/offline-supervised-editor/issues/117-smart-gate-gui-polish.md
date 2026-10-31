@@ -9,6 +9,22 @@ Related: 85, 93, 94, 114, 115, 116
 
 ## Owner-authorized parallel scope
 
+2026-10-31 owner rejects the first pass after opening it. Required revision:
+actual native resizing; internal title/toolbar like the reference hierarchy;
+custom high-quality Range and buttons; smooth responsive drawing. Supplied
+FabFilter CLAP targets: Pro-G, Pro-L2, Pro-Q4 under Program Files/FabFilter.
+Use a separate REA worker and supplied screenshots; original CleanSlate artwork
+and honest supported controls remain required. The title/toolbar explicitly
+supersedes the previous removal preference. First-pass review acceptance below
+is historical and is not owner visual acceptance. Continue in the same GUI
+workspace; provide a fast live-signal preview for meaningful motion iteration.
+
+Revision Run `run_0b716777320d` started successfully in the same GUI workspace:
+builder `task_1a34670fad19` / `ctx_15b57d6dfc49`; FabFilter REA
+`task_9b98000e547b` / `ctx_118ee4ff5afc`; source mechanics
+`task_26e0c176dfc3` / `ctx_4cf772ad4d8d`. Builder is sole production writer and
+compiler; investigation workers own only their separate research reports.
+
 2026-10-31: Owner explicitly requests supervised GUI implementation now, using
 the FabFilter and sonible reference research to produce a clean, professional,
 well-animated and responsive vocal/podcast plugin. This authorizes this bounded

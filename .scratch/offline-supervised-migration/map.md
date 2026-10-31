@@ -1,5 +1,15 @@
 # Plan the offline supervised CleanSlate migration
 
+2026-10-31 OWNER GUI CORRECTION: the owner rejects GUI117's first visual pass
+as below the FabFilter target. Continue117 in its existing workspace: make the
+native editor resizable, add an internal product title/toolbar, replace stock
+Range/buttons with crafted original controls, and fix visibly slow refresh.
+The new title-bar request supersedes the earlier minimal-header preference.
+Use supplied FabFilter CLAP binaries through a separate REA worker and the
+owner screenshots; UI implementation need not wait for full binary indexing.
+Improve the live preview loop so visual/motion iteration is quick and useful.
+No new gating algorithm, vendor artwork copying or release is authorized.
+
 2026-10-31 GUI CHECKPOINT: GUI117's bounded first polish iteration is preserved
 on `codex/smart-gate-gui-polish` (`0853097`, evidence `bc1c717`), with a runnable
 preview and independent baseline/after review. All three Orca Tasks succeeded;
