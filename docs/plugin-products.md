@@ -2,6 +2,8 @@
 
 Accepted by the owner on 2026-10-25. This separates the previous combined Session/Live Mic product direction. The [active map](../.scratch/offline-supervised-migration/map.md) remains the authoritative roadmap.
 
+For source locations, workspace roles, builds and safe integration, see the [product workspace guide](product-workspaces.md).
+
 | Product | Workflow | Development branch | Continuing ticket |
 | --- | --- | --- | --- |
 | CleanSlate Desktop | Standalone Rust GUI, supervised offline bleed reduction | `development` | Existing desktop queue |
