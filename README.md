@@ -24,7 +24,7 @@ Purchases help sustain maintenance, usability improvements, testing and reliable
   <a href="Cargo.toml"><img alt="Desktop GUI: Iced 0.14" src="https://img.shields.io/badge/GUI-Iced%200.14-B5DFE8?style=for-the-badge&amp;labelColor=29626B"></a>
 </p>
 
-[Download](#download) · [Usage guide](docs/editor-workflow.md) · [Release notes](docs/release-notes.md) · [How it works](docs/ownership-explained.md) · [Roadmap](ROADMAP.md) · [Contribute](CONTRIBUTING.md) · [Report an issue](https://github.com/Today20092/podcast-bleed-reducer/issues/new/choose)
+[Download](#download) · [Usage guide](docs/editor-workflow.md) · [Release notes](docs/release-notes.md) · [How it works](docs/ownership-explained.md) · [Smart Gate plug-in](docs/smart-gate.md) · [Roadmap](ROADMAP.md) · [Contribute](CONTRIBUTING.md) · [Report an issue](https://github.com/Today20092/podcast-bleed-reducer/issues/new/choose)
 
 **CleanSlate 1.0.0 is the first stable release**, with downloads for Windows, both Mac architectures and Linux. Stable means the documented workflow and saved-data compatibility are maintained; listen to your own recording before exporting.
 
@@ -114,6 +114,14 @@ CleanSlate prepares 16 kHz analysis audio, measures speech and microphone relati
 
 Read [How CleanSlate reduces microphone bleed](docs/ownership-explained.md) for the operation order, model inputs, how weights are learned, overlap and practical limits.
 
+## Smart Gate plug-in
+
+The desktop app is for a recording that already has separate microphone tracks. Smart Gate is a separate Windows VST3 for the live case: one vocal, a speech detector, and a gate. I made it for situations such as OBS, TikTok Live, and a live podcast, where I want the channel down whenever nobody is talking.
+
+This preview loads in FL Studio or REAPER. OBS Studio 33.0.1 does not load VST3, and TikTok Live does not host a VST. The [Smart Gate guide](docs/smart-gate.md#use-it-with-obs) sends the host output through a virtual cable into OBS. The plug-in shares the desktop speech model and does not learn who owns a microphone.
+
+The [Smart Gate guide](docs/smart-gate.md) covers the controls, the gain path, the zip built by the Windows workflow, and the limits of preview 0.1.0. That zip is not part of the desktop 1.0.0 downloads above.
+
 ## Defaults and limits
 
 Analysis uses acoustic measurements and your speaker examples. It runs locally; there is no Nemotron runtime, download or analysis option.
@@ -156,6 +164,7 @@ Report bugs, confusing controls, user-flow problems, listening results or featur
 - [Roadmap](ROADMAP.md): current priorities and ideas that need investigation.
 
 - [How it works](docs/ownership-explained.md): speech detection, operation order, model inputs, learned weights and gain decisions, with an illustrated workflow.
+- [Smart Gate plug-in](docs/smart-gate.md): the live Windows VST3, its controls, and how its speech gate differs from the desktop app.
 - [Developer guide](docs/development.md): builds and checks.
 - [Release guide](docs/releasing.md): Windows ZIPs, Mac application bundles, Linux AppImages, package checks and draft releases.
 - [GUI development](docs/gui-development.md): repeatable build-and-launch workflow using a separate project copy.

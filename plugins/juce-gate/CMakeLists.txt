@@ -22,3 +22,8 @@ target_link_libraries(CleanSlateSmartGate PRIVATE
     juce::juce_audio_processors
     juce::juce_gui_extra
     PUBLIC juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
+
+juce_add_console_app(CleanSlateGateInteractionCheck PRODUCT_NAME "CleanSlate Gate Interaction Check")
+target_sources(CleanSlateGateInteractionCheck PRIVATE Tests/InteractionCheck.cpp)
+target_compile_definitions(CleanSlateGateInteractionCheck PRIVATE JUCE_MODAL_LOOPS_PERMITTED=1)
+target_link_libraries(CleanSlateGateInteractionCheck PRIVATE CleanSlateSmartGate juce::juce_audio_utils juce::juce_audio_formats juce::juce_audio_processors juce::juce_gui_extra)

@@ -1,5 +1,7 @@
 # CleanSlate products and plugin workspaces
 
+The current user guide is [Smart Gate](smart-gate.md). That preview is the JUCE Windows VST3 in `plugins/juce-gate`, version 0.1.0. It stays in this repository because it compiles the shared Silero model. The sections below are the product split accepted on 2026-10-25. Their CLAP, VST2, and separate-worktree notes are earlier targets, not the preview download.
+
 Accepted by the owner on 2026-10-25. This separates the previous combined Session/Live Mic product direction. The [active map](../.scratch/offline-supervised-migration/map.md) remains the authoritative roadmap.
 
 | Product | Workflow | Development branch | Continuing ticket |

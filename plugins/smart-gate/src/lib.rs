@@ -1,9 +1,9 @@
 mod editor;
-mod ffi;
 #[cfg(test)]
 #[path = "../../fl-probe/src/editor_capture.rs"]
 mod editor_capture;
 mod engine;
+mod ffi;
 pub mod gain;
 mod history;
 pub mod worker;
@@ -253,10 +253,12 @@ impl Plugin for SmartGate {
                 self.params.range.value(),
                 0.10,
                 300.0,
-                250.0,
                 5.0,
+                250.0,
+                0.0,
                 0.0,
                 &self.params.history,
+                false,
             );
             let sequence = (self.params.meter.load(Ordering::Relaxed) >> 32) as u32;
             self.params.meter.store(
@@ -291,7 +293,12 @@ impl Vst3Plugin for SmartGate {
         &[Vst3SubCategory::Fx, Vst3SubCategory::Tools];
 }
 
+// The JUCE VST3 is the product. These factories are the older experimental host.
+// Build them with `--features experimental-host`. The DLL beside the JUCE plug-in
+// does not export them.
+#[cfg(feature = "experimental-host")]
 nice_export_clap!(SmartGate);
+#[cfg(feature = "experimental-host")]
 nice_export_vst3!(SmartGate);
 
 #[cfg(test)]

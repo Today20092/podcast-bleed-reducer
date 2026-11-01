@@ -299,15 +299,23 @@ fn editor_distinguishes_waiting_from_current_last_block_data_and_reset() {
         has_status(&panel, waiting),
         "temporary consent is not proof that detection data has arrived"
     );
-    for _ in 0..2 {
+    for block in 0..2 {
         let mut audio = vec![vec![0.0001; 1536]];
         process_test_block(&mut gate, &mut audio);
-        assert!(audio[0].iter().all(|sample| *sample == 0.0001));
+        if block == 0 {
+            // The first detector frame is not available until sample 1536.
+            assert!(audio[0].iter().all(|sample| *sample == 0.0001));
+        } else {
+            // A quiet score on the Voice line closes. Hold does not delay that first close.
+            assert!(audio[0][0] < 0.0001);
+            assert!(audio[0].last().unwrap() < &audio[0][0]);
+            assert!(audio[0].iter().all(|sample| sample.is_finite() && *sample > 0.0));
+        }
     }
     draw_gate_panel(&context, &mut panel, Vec::new());
     assert!(
         has_status(&panel, current),
-        "real detection data can be current while the gain still preserves original audio"
+        "real detection data can be current once the quiet score has closed the gate"
     );
     gate.reset();
     assert!(!gate.experimental_armed());
@@ -572,6 +580,64 @@ fn fresh_absence_can_attenuate_but_expiring_evidence_returns_to_original() {
     }
     assert_eq!(gain.next_gain(expiry, true), 1.0);
     assert_eq!(gain.next_gain(expiry + 1, true), 1.0);
+}
+
+#[test]
+fn release_above_200_ms_is_honored() {
+    use cleanslate_gate_detector::Event;
+    let mut policy = gain::GainPolicy::new(48_000).unwrap();
+    policy.set_range_db(60.0);
+    policy.set_timing(0.1, 0.0, 5.0, 500.0);
+    policy.reset(0);
+    let mut value = 1.0;
+    for position in 0..12_000 {
+        if position > 0 && position % 1_536 == 0 {
+            policy.observe(Event {
+                epoch: 0,
+                end_16k: position / 3,
+                available_at: position,
+                probability: 0.0,
+            });
+        }
+        value = policy.next_gain(position, true);
+    }
+    assert!(
+        value > 0.4 && value < 0.7,
+        "gain after 218 ms of closing: {value}"
+    );
+}
+
+#[test]
+fn gate_timing_and_full_depth_follow_the_selected_controls() {
+    use cleanslate_gate_detector::Event;
+    let mut policy = gain::GainPolicy::new(48_000).unwrap();
+    policy.set_range_db(60.0);
+    policy.set_timing(0.1, 0.0, 10.0, 20.0);
+    policy.reset(0);
+    let mut value = 1.0;
+    for position in 0..6_144 {
+        if position > 0 && position % 1_536 == 0 {
+            policy.observe(Event {
+                epoch: 0,
+                end_16k: position / 3,
+                available_at: position,
+                probability: 0.0,
+            });
+        }
+        value = policy.next_gain(position, true);
+    }
+    assert_eq!(value, 0.0);
+    policy.observe(Event {
+        epoch: 0,
+        end_16k: 2_048,
+        available_at: 6_144,
+        probability: 1.0,
+    });
+    assert!(policy.next_gain(6_144, true) < 1.0);
+    for position in 6_145..6_624 {
+        value = policy.next_gain(position, true);
+    }
+    assert_eq!(value, 1.0);
 }
 
 #[test]
@@ -1244,7 +1310,12 @@ fn speech_event(position: u64, probability: f32) -> cleanslate_gate_detector::Ev
     }
 }
 
-fn drive(bias: f32, samples: u64, probability_at: impl Fn(u64) -> f32, peak_at: impl Fn(u64) -> f32) -> f32 {
+fn drive(
+    bias: f32,
+    samples: u64,
+    probability_at: impl Fn(u64) -> f32,
+    peak_at: impl Fn(u64) -> f32,
+) -> f32 {
     let mut policy = gain::GainPolicy::new(48_000).unwrap();
     policy.set_level_bias(bias);
     let mut value = 1.0;
@@ -1284,7 +1355,153 @@ fn loud_steady_nonspeech_closes_as_level_bias_rises() {
     assert_eq!(open, 1.0);
     assert!(
         closed < 0.55,
-        "a loud tone the floor has caught should close when bias is high, gain {closed}"
+        "a loud tone with no quieter pause should stay closed when bias is high, gain {closed}"
+    );
+}
+
+#[test]
+fn twelve_db_above_a_pause_is_full_scale() {
+    let mut policy = gain::GainPolicy::new(48_000).unwrap();
+    let quiet = 0.02_f32;
+    let full = quiet * 10.0_f32.powf(12.0 / 20.0);
+    for position in 0..48_000 {
+        policy.note_peak(if position < 24_000 { quiet } else { full });
+    }
+    let score = policy.level_score();
+    assert!(
+        (score - 1.0).abs() < 0.01,
+        "+12 dB over the pause should score 1, got {score}"
+    );
+}
+
+#[test]
+fn sustained_phrase_above_a_pause_stays_open() {
+    let quiet = 0.02_f32;
+    let phrase = quiet * 10.0_f32.powf(8.0 / 20.0);
+    let pause = 48_000_u64;
+    let gain = drive(
+        1.0,
+        pause + 48_000 * 4,
+        |_| 0.0,
+        |position| {
+            if position < pause { quiet } else { phrase }
+        },
+    );
+    assert_eq!(
+        gain, 1.0,
+        "a phrase 8 dB above the pause should stay open, gain {gain}"
+    );
+}
+
+#[test]
+fn quiet_start_does_not_spend_the_hold() {
+    let mut policy = gain::GainPolicy::new(48_000).unwrap();
+    policy.set_range_db(60.0);
+    policy.set_timing(0.57, 300.0, 5.0, 250.0);
+    policy.reset(0);
+    let mut value = 1.0;
+    for position in 0..8_000 {
+        if position > 0 && position % 1_536 == 0 {
+            policy.observe(speech_event(position, 0.20));
+        }
+        value = policy.next_gain(position, true);
+    }
+    assert!(
+        value < 0.95,
+        "hold follows speech, so a quiet start must already be closing, gain {value}"
+    );
+}
+
+#[test]
+fn activity_under_the_voice_line_closes() {
+    let mut policy = gain::GainPolicy::new(48_000).unwrap();
+    policy.set_range_db(21.0);
+    policy.set_timing(0.57, 0.0, 5.0, 20.0);
+    policy.reset(0);
+    let mut value = 1.0;
+    for position in 0..8_000 {
+        if position > 0 && position % 1_536 == 0 {
+            policy.observe(speech_event(position, 0.30));
+        }
+        value = policy.next_gain(position, true);
+    }
+    let floor = 10.0_f32.powf(-21.0 / 20.0);
+    assert!(
+        (value - floor).abs() < 0.05,
+        "a speech score under the Voice line must reach Depth, gain {value}"
+    );
+}
+
+#[test]
+fn a_few_db_above_a_pause_opens_at_voice_0_39() {
+    let mut policy = gain::GainPolicy::new(48_000).unwrap();
+    policy.set_level_bias(1.0);
+    policy.set_timing(0.39, 300.0, 5.0, 250.0);
+    let quiet = 0.02_f32;
+    let phrase = quiet * 10.0_f32.powf(6.0 / 20.0);
+    let mut value = 0.0;
+    for position in 0..48_000 * 5 {
+        policy.note_peak(if position < 48_000 { quiet } else { phrase });
+        if position > 0 && position % 1536 == 0 {
+            policy.observe(speech_event(position, 0.0));
+        }
+        value = policy.next_gain(position, true);
+    }
+    assert_eq!(
+        value, 1.0,
+        "6 dB above the pause should stay open at Voice 0.39, gain {value}"
+    );
+}
+
+#[test]
+fn a_near_floor_hum_is_absorbed_and_closes() {
+    let quiet = 0.02_f32;
+    let hum = quiet * 10.0_f32.powf(1.5 / 20.0);
+    let pause = 48_000_u64;
+    let gain = drive(
+        1.0,
+        pause + 48_000 * 8,
+        |_| 0.0,
+        |position| {
+            if position < pause { quiet } else { hum }
+        },
+    );
+    assert!(
+        gain < 0.55,
+        "a hum 1.5 dB above the pause should be absorbed into the floor, gain {gain}"
+    );
+}
+
+#[test]
+fn a_room_pause_closes_after_digital_silence_latched_the_floor() {
+    let mut policy = gain::GainPolicy::new(48_000).unwrap();
+    policy.set_level_bias(1.0);
+    policy.set_timing(0.10, 0.0, 5.0, 1.0);
+    let speech = 10.0_f32.powf(-20.0 / 20.0);
+    let room = 10.0_f32.powf(-50.0 / 20.0);
+    let mut value = 1.0;
+    for position in 0..48_000 * 4 {
+        let peak = if position < 9_600 {
+            0.0
+        } else if position < 48_000 * 2 {
+            speech
+        } else {
+            room
+        };
+        policy.note_peak(peak);
+        if position > 0 && position % 1536 == 0 {
+            policy.observe(speech_event(position, 0.0));
+        }
+        value = policy.next_gain(position, true);
+    }
+    let score = policy.level_score();
+    assert!(
+        score == 0.0,
+        "a room-tone pause should leave the ceiling, score {score}"
+    );
+    assert!(
+        value < 0.55,
+        "a room-tone pause should close at full bias, gain {value}"
     );
 }
 

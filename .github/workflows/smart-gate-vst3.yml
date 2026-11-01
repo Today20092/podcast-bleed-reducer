@@ -1,0 +1,109 @@
+name: Smart Gate VST3
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_only:
+        description: Upload the zip as an artifact and skip the draft release
+        type: boolean
+        default: true
+  push:
+    tags: ['smart-gate-v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: smart-gate-vst3-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  package:
+    name: Package Windows VST3
+    runs-on: windows-2025
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install pinned Rust
+        run: |
+          rustup toolchain install 1.99.0 --profile minimal
+          if ($LASTEXITCODE -ne 0) { throw 'Compiler installation failed' }
+          rustup override set 1.99.0
+          if ($LASTEXITCODE -ne 0) { throw 'Compiler selection failed' }
+      - name: Build the speech-gate library
+        run: cargo build --release --manifest-path plugins/smart-gate/Cargo.toml
+      - name: Build the VST3
+        run: |
+          cmake -S plugins/juce-gate -B plugins/juce-gate/ci-build -A x64
+          if ($LASTEXITCODE -ne 0) { throw 'CMake configure failed' }
+          cmake --build plugins/juce-gate/ci-build --config Release --target CleanSlateSmartGate_VST3
+          if ($LASTEXITCODE -ne 0) { throw 'VST3 build failed' }
+      - name: Assemble the downloadable bundle
+        run: |
+          $bundle = Get-ChildItem -LiteralPath plugins/juce-gate/ci-build -Recurse -Directory -Filter 'CleanSlate Smart Gate.vst3' |
+            Select-Object -First 1
+          if (-not $bundle) { throw 'VST3 bundle was not produced' }
+          $binaryDir = Join-Path $bundle.FullName 'Contents\x86_64-win'
+          $gate = Join-Path $binaryDir 'CleanSlate Smart Gate.vst3'
+          if (-not (Test-Path -LiteralPath $gate)) { throw 'VST3 binary is missing' }
+          Copy-Item -LiteralPath plugins/smart-gate/target/release/cleanslate_smart_gate.dll -Destination $binaryDir
+          Get-ChildItem -LiteralPath plugins/smart-gate/target/release -Filter 'onnxruntime*.dll' |
+            Copy-Item -Destination $binaryDir
+          $copied = Join-Path $binaryDir 'cleanslate_smart_gate.dll'
+          if (-not (Test-Path -LiteralPath $copied)) { throw 'Speech-gate DLL was not copied' }
+          $notices = @(
+            @{ Src = 'plugins/juce-gate/THIRD-PARTY-NOTICES.txt'; Name = 'THIRD-PARTY-NOTICES.txt' },
+            @{ Src = 'plugins/juce-gate/LICENSES/AGPL-3.0.txt'; Name = 'AGPL-3.0.txt' },
+            @{ Src = 'docs/licenses/embedded-model-runtime.txt'; Name = 'embedded-model-runtime.txt' }
+          )
+          foreach ($notice in $notices) {
+            if (-not (Test-Path -LiteralPath $notice.Src)) { throw "Missing $($notice.Src)" }
+            Copy-Item -LiteralPath $notice.Src -Destination (Join-Path $binaryDir $notice.Name)
+          }
+          $stage = Join-Path $env:RUNNER_TEMP 'smart-gate-stage'
+          New-Item -ItemType Directory -Path $stage | Out-Null
+          Copy-Item -LiteralPath $bundle.FullName -Destination $stage -Recurse
+          $zip = Join-Path (Get-Location) 'CleanSlate-Smart-Gate-0.1.0-windows-x64-vst3.zip'
+          if (Test-Path -LiteralPath $zip) { Remove-Item -LiteralPath $zip }
+          Compress-Archive -Path (Join-Path $stage 'CleanSlate Smart Gate.vst3') -DestinationPath $zip
+          $hash = Get-FileHash -LiteralPath $zip -Algorithm SHA256
+          Set-Content -LiteralPath "$zip.sha256" -Value "$($hash.Hash)  $(Split-Path -Leaf $zip)"
+      - name: Upload the zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-x64-vst3
+          path: |
+            CleanSlate-Smart-Gate-0.1.0-windows-x64-vst3.zip
+            CleanSlate-Smart-Gate-0.1.0-windows-x64-vst3.zip.sha256
+          if-no-files-found: error
+
+  release:
+    name: Attach the zip to a draft release
+    needs: package
+    if: github.event_name == 'push' || !inputs.build_only
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-x64-vst3
+          path: release-assets
+      - name: Publish one draft
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        shell: pwsh
+        run: |
+          if ($env:RELEASE_TAG -notmatch '^smart-gate-v\d+\.\d+\.\d+$') { throw 'Tag must look like smart-gate-v0.1.0' }
+          $zip = 'release-assets/CleanSlate-Smart-Gate-0.1.0-windows-x64-vst3.zip'
+          $sum = "$zip.sha256"
+          if (-not (Test-Path -LiteralPath $zip) -or -not (Test-Path -LiteralPath $sum)) { throw 'Checked zip is missing' }
+          $notes = @(
+            'Windows x64 VST3 preview of CleanSlate Smart Gate.'
+            'Copy the bundle to C:\Program Files\Common Files\VST3 and rescan.'
+            'See docs/smart-gate.md for controls, the speech gate, and the hosts this zip does not load in.'
+          ) -join "`n"
+          gh release create $env:RELEASE_TAG $zip $sum --draft --title "CleanSlate Smart Gate $($env:RELEASE_TAG.Substring(11))" --notes $notes
