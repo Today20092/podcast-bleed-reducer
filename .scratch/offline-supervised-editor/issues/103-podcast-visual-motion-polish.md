@@ -30,6 +30,46 @@ Implement the owner's FabFilter/sonible quality target in the existing Podcast e
 
 ## Results
 
+2026-10-30 fresh CPU comparison: test-only `b5052b2` passes the unchanged waveform
+case against untouched `d2b30c91`, plus separate gain and actual egui dispatch
+cases. Matched source/lock/profile/tool identities and raw samples are preserved
+under `%LOCALAPPDATA%/CleanSlate/VerifiedBuilds/podcast103/20261030-cpu-b5052b2/`.
+Waveform p99 totals are .991→.939 ms compact and 1.355→1.259 ms full; small sample
+differences do not establish improvement. Gain-refresh p99 is 2.274/4.686 ms;
+worst observed warm gain-case total is 6.253 ms. No 40-sample warm case exceeds
+the 16.667 ms CPU budget. These are correlated CPU spans, not presented frames.
+Strict lint/formatting and focused benchmarks pass. Registration-only `72cdbe5`
+keeps the new timing cases out of ordinary parallel suites. Native presentation,
+allocation counts, per-instance CPU/memory and listening/PDC/export remain open.
+
+2026-10-30 normal native regression: artifact source `b41d51e`, evidence tip
+`9d700cb`, preserves ordinary DLL SHA256
+`d8b796862e9c0547d1c82a568708044bc8a64f42fd42023bb59e618e07eba6e2`
+and its named normal ABI hosts outside the cache. Verified runtime files/notices
+are beside both uninstalled format binaries. Receipt `230706-9133d720` passes
+the actual normal CLAP and VST3 pair: Podcast state/foreign-Probe checks and
+two-instance/channel/rate/buffer/transport cases. VST3 creates/releases an editor
+without a window. No acceptance driver is exported. Full Session VST3 restoration,
+runtime isolation, native presentation, listening/PDC/export and comparable
+performance remain unqualified; 103 stays claimed. The overwritten cache DLL
+is not the tested artifact; preserved candidate hashes are authoritative.
+
+2026-10-30 bounded gain continuation: core `9881369` and UI `d3ebcbe` pass all
+86 actual Podcast tests, strict library/test Clippy, formatting and independent
+Standards/Spec reviews. The additive projection snapshots immutable analysis,
+queries outside processing locks and rechecks source verification/revision;
+visible columns have an eight-edge exact budget. Stale, unverified and dense
+detail never becomes invented unity. UI meshes preserve gaps, legend avoids
+human labels, and compact footer overflow is corrected. Source peaks and
+Analyze-required sound semantics remain unchanged. Test-only fixture `b41d51e`
+then passes all 24 ready/unverified/dense/stale compact/full 100/150/200% CPU
+gallery cases with coherent production messages; representative images were
+visually inspected. These are CPU geometry/capture results, not native DPI,
+presentation or comparable performance acceptance. Last-Arc destruction is
+outside the query budget. Normal DLL/format regression and performance work
+continue; 103 stays claimed. See the
+[continuation record](../../../docs/research/implement-spec-continuation-2026-10-30.md).
+
 2026-10-30 independent review correction: actual native-adapter body source
 `d16ef0d` stops hidden timed repaints before context/setter/workspace access,
 reuses session cancellation and clears only the legacy drag anchor. A thin

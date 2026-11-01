@@ -16,6 +16,14 @@ Related: 85, 86
 
 ## Scope and acceptance
 
+2026-10-31 planning handoff: retain this ticket as the detector/worker and
+actual-audio foundation. The proposed [114 control contract](114-smart-gate-algorithm-parameter-contract.md),
+[115 processing expansion](115-smart-gate-processing-controls.md) and
+[116 candidate delivery](116-smart-gate-working-plugin-delivery.md) separate the
+new research-derived feature set from this existing work. Foundation fixes can
+be planned in parallel with 114. Draft tickets do not qualify the latest plugin
+or restart implementation. Existing acceptance/results below remain authoritative.
+
 Implement the detector/result contract accepted in 92 in the Gate workspace. Keep confidence estimation separate from gain policy. Single-input mono/stereo must apply one consistent envelope without peer dependence; document channel-selection/downmix semantics.
 
 Acceptance:
@@ -28,6 +36,19 @@ Acceptance:
 - [ ] Inspect the inference-linked artifact's actual native imports, stage verified runtime prerequisites/applicable notices, and validate CLAP/VST3 loading/inference from candidate paths without Cargo-cache, developer PATH or incidental host-module assistance. Embedded model bytes alone do not make the native runtime self-contained.
 
 ## Results
+
+2026-10-30 callback instrumentation continuation: tested source `3c2e529`,
+format/evidence tip `25d384b` and consolidated `dcc573b` pass all 27 library
+tests, strict library/test/example Clippy, formatting and diff checks. Direct
+Rust callbacks now use the existing allocator assertion with an explicit debug
+profile precondition. Prepared realtime lifecycle/fallback, existing armed
+offline processing and marked stereo alignment at 44.1/48/96 kHz pass without
+monitored Rust allocator violations. No semantic allocation RED was observed.
+Worker/foreign allocators, sustained realtime deadlines, armed ABI and native
+host PDC remain unqualified. No production engine code changed in this slice;
+the preserved native candidate's source/hash remains unchanged. Evidence:
+`%LOCALAPPDATA%/CleanSlate/VerifiedBuilds/gate93/20261030-callback-allocation/`.
+Ticket stays claimed and 94 remains blocked.
 
 2026-10-30 scoped native checkpoint: Gate DLL source `2e3adbf` builds and its
 uninstalled candidate is staged by `ef94023` with pinned DirectML, four verified
