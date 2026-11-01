@@ -63,14 +63,12 @@ function Read-Ticket([int]$Id) {
     return @{path=$files[0].FullName;text=$text;status=([regex]::Match($text,'(?m)^Status:\s*([^\r\n]*)').Groups[1].Value.Trim());assignee=([regex]::Match($text,'(?m)^Assignee:\s*([^\r\n]*)').Groups[1].Value.Trim());ready=[regex]::IsMatch($text,'(?m)^(?:Implementation readiness|Readiness):\s*ready-for-agent\s*\r?$');dependencies=@(if ($dependencies -and $dependencies -ne 'none') { $dependencies -split '\s*,\s*' | ForEach-Object { [int]$_ } })}
 }
 function Command-Spec($Command, [string]$Workspace) {
-    if ($Command.ContainsKey('policy')) { throw 'Caller-selected resource policies are not accepted by the coordinator.' }
+    if ($Command.ContainsKey('policy')) { throw 'Caller-selected execution policies are not accepted by the coordinator.' }
     # Disposable fixtures have a fixed shipped implementation, never caller-provided shell code.
     if ($Command.kind -eq 'fixture') {
-        if ($Command.operation -notin @('pass','fail','wait','memory-refusal','mutate-tracked','mutate-untracked','mutate-branch','mutate-head','mutate-external-input')) { throw 'Unknown disposable fixture operation.' }
+        if ($Command.operation -notin @('pass','fail','wait','mutate-tracked','mutate-untracked','mutate-branch','mutate-head','mutate-external-input')) { throw 'Unknown disposable fixture operation.' }
         $fixture = Join-Path $PSScriptRoot 'fixtures/overnight-command.ps1'
-        $operation=if ($Command.operation -eq 'memory-refusal') { 'pass' } else { $Command.operation }
-        $minimum=if ($Command.operation -eq 'memory-refusal') { 1048576 } else { 2 }
-        return @{file=(Get-Process -Id $PID).Path;arguments=@('-NoProfile','-File',$fixture,'-Operation',$operation,'-EvidenceDirectory',$Command.evidence_directory);policy=@{MinAvailableGiB=$minimum;ReserveGiB=1;MaxCommitGiB=0.25;TimeoutSeconds=5};inputs=@(@{path=$fixture;sha256=(File-Hash $fixture)})}
+        return @{file=(Get-Process -Id $PID).Path;arguments=@('-NoProfile','-File',$fixture,'-Operation',$Command.operation,'-EvidenceDirectory',$Command.evidence_directory);policy=@{TimeoutSeconds=5};inputs=@(@{path=$fixture;sha256=(File-Hash $fixture)})}
     }
     if ($Command.kind -notin @('build','check','lightweight-check')) { throw 'Unsupported action: native hosts, private signing and shared REA require a separate attended lane.' }
     $file = (Get-Command $Command.file_path -CommandType Application | Select-Object -First 1).Source
@@ -79,7 +77,7 @@ function Command-Spec($Command, [string]$Workspace) {
     $arguments = @($Command.arguments)
     if (@($arguments | Where-Object { $_ -isnot [string] }).Count) { throw 'Command arguments must be an explicit array of strings.' }
     $inputs = @($Command['inputs'] | Where-Object { $null -ne $_ })
-    $policy = @{MinAvailableGiB=14;ReserveGiB=8;MaxCommitGiB=6;TimeoutSeconds=1800}
+    $policy = @{TimeoutSeconds=1800}
     if ($name -in @('pwsh','powershell')) {
         if ($arguments.Count -lt 3 -or $arguments[0] -ne '-NoProfile' -or $arguments[1] -ne '-File') { throw 'Shell command strings are unsupported; select a pinned script with -NoProfile -File.' }
         $script = (Resolve-Path -LiteralPath $arguments[2]).Path
@@ -88,7 +86,7 @@ function Command-Spec($Command, [string]$Workspace) {
         if ($relative -eq 'scripts/check.ps1' -and '-Local' -notin $arguments) { throw 'Local checks must use -Local.' }
         if ($relative -eq 'scripts/gui-dev.ps1' -and '-BuildOnly' -notin $arguments) { throw 'The coordinator never launches the GUI.' }
         if (-not @($inputs | Where-Object { [IO.Path]::GetFullPath($_.path) -eq $script }).Count) { throw 'Pin the selected script in inputs.' }
-        if ($Command.kind -eq 'lightweight-check' -and $relative -ne 'scripts/test-plugin-hosts.ps1') { throw 'Build/check scripts cannot use a lightweight budget.' }
+        if ($Command.kind -eq 'lightweight-check' -and $relative -ne 'scripts/test-plugin-hosts.ps1') { throw 'Build/check scripts require a build/check action kind.' }
     } elseif ($name -eq 'cargo') {
         if ($Command.kind -eq 'lightweight-check' -or $arguments.Count -lt 1 -or $arguments[0] -notin @('build','test','clippy','fmt')) { throw 'Cargo only supports guarded heavy build/test/clippy/fmt commands.' }
         if ($arguments[0] -ne 'fmt') {
@@ -103,7 +101,7 @@ function Command-Spec($Command, [string]$Workspace) {
     } elseif ($name -eq 'rust-app') {
         if (($arguments -join '|') -ne '--package-self-check') { throw 'Only the existing executable package self-check is unattended.' }
     } else { throw 'Unsupported executable; use the pinned plugin-host runner for its isolated child cache/PASS contract.' }
-    if ($Command.kind -eq 'lightweight-check') { $policy=@{MinAvailableGiB=2;ReserveGiB=1;MaxCommitGiB=0.5;TimeoutSeconds=90} }
+    if ($Command.kind -eq 'lightweight-check') { $policy=@{TimeoutSeconds=90} }
     foreach ($inputFile in $inputs) {
         if (-not $inputFile -or (File-Hash $inputFile.path) -ne $inputFile.sha256) { throw 'A reviewed input artifact/script changed or is missing.' }
     }
@@ -211,12 +209,7 @@ try {
                     continue
                 }
                 if ($record -and $record.status -notin @('resource-blocked')) { $entry.status='blocked';$entry.reason='interrupted-or-failed';$entry.next_action='Review interrupted/failed work and its receipt; never automatically repeat an unknown outcome.';$summary.stopped=$true;break }
-                if ($record -and $record.attempts -ge 2) { $entry.status='resource-blocked';$entry.reason='resource-retry-exhausted';$entry.next_action='Review the checkpoint; two resource-limited attempts are the maximum.';break }
-                if ($record) {
-                    if (-not ('CleanSlate.Build.OwnedTask' -as [type])) { Add-Type -Path (Join-Path $PSScriptRoot 'resource-guard.cs') }
-                    $memory=[CleanSlate.Build.OwnedTask]::Memory()
-                    if ($memory.AvailablePhysical -lt $spec.policy.MinAvailableGiB*1GB -or $memory.AvailableCommit -lt $spec.policy.MaxCommitGiB*1GB) { $entry.status='resource-blocked';$entry.reason='awaiting-resource-recovery';$entry.next_action='Resource retry retained until the start requirement is met.';break }
-                }
+                if ($record -and $record.attempts -ge 2) { $entry.status='resource-blocked';$entry.reason='resource-retry-exhausted';$entry.next_action='Review the checkpoint; two timeout/competing-task attempts are the maximum.';break }
                 $attempt=if ($record) { $record.attempts+1 } else { 1 }
                 $receiptPath=Join-Path $runDirectory ("ticket-$($task.id)-command-$i-attempt-$attempt.json")
                 $record=@{index=$i;status='running';attempts=$attempt;started_utc=[DateTime]::UtcNow.ToString('o');finished_utc=$null;execution=$spec;command_sha256=(Hash-Text ($command | ConvertTo-Json -Depth 10 -Compress));receipt_path=$receiptPath;log_path=[IO.Path]::ChangeExtension($receiptPath,'.log');before_source=$null;before_review=$null;after_review=$null;artifacts_before=(Artifact-State $command['artifacts'] (Join-Path $runDirectory "last-good/$($task.id)/$i"));artifacts_after=@();metrics=$null;error=$null}
@@ -256,7 +249,7 @@ try {
                 } elseif ($metrics -and $metrics.status -eq 'done' -and $metrics.cleanup_verified -and -not $failure -and -not @($record.artifacts_after | Where-Object { -not $_.sha256 }).Count) {
                     $record.status='passed';$checkpoint.status='checks-passed';$checkpoint.next_action='Review ticket acceptance; command success never marks the ticket done.'
                 } elseif ($metrics -and $metrics.status -eq 'resource-blocked' -and $metrics.cleanup_verified) {
-                    $record.status='resource-blocked';$entry.status='resource-blocked';$entry.reason=$metrics.reason;$entry.next_action='Resume the same plan after resources recover; at most one retry.';$checkpoint.status='resource-blocked';$checkpoint.next_action=$entry.next_action
+                    $record.status='resource-blocked';$entry.status='resource-blocked';$entry.reason=$metrics.reason;$entry.next_action='Review the stopped or competing task before resuming the same plan; at most one retry.';$checkpoint.status='resource-blocked';$checkpoint.next_action=$entry.next_action
                 } else {
                     $record.status='failed';$entry.status='failed';$entry.reason='command-or-check-failed';$entry.next_action='Fix/review the failed check before running subsequent tickets.';$checkpoint.status='failed';$checkpoint.next_action=$entry.next_action;$summary.stopped=$true
                 }

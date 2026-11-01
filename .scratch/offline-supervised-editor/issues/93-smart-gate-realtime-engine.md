@@ -1,5 +1,12 @@
 # Single-input gate DSP and actual-format checks
 
+2026-10-30 resumption: scoped branch is preserved at documentation checkpoint
+`0e8de06` after callback source `af4d921`. One same-process native preflight
+found 4.77 GiB physical / 3.66 GiB commit, below fixed warm 8/6 and native 10/9
+requirements. No compiler/index/inference/host launched and no retry occurred.
+See [resumption](../../../docs/research/implement-spec-resumption-2026-10-30.md).
+93 remains claimed; 94 remains blocked; no new acceptance is claimed.
+
 Status: claimed
 Assignee: Codex (Gate realtime prototype)
 Readiness: ready-for-agent
@@ -8,6 +15,14 @@ Blocked by: 92
 Related: 85, 86
 
 ## Scope and acceptance
+
+2026-10-31 planning handoff: retain this ticket as the detector/worker and
+actual-audio foundation. The proposed [114 control contract](114-smart-gate-algorithm-parameter-contract.md),
+[115 processing expansion](115-smart-gate-processing-controls.md) and
+[116 candidate delivery](116-smart-gate-working-plugin-delivery.md) separate the
+new research-derived feature set from this existing work. Foundation fixes can
+be planned in parallel with 114. Draft tickets do not qualify the latest plugin
+or restart implementation. Existing acceptance/results below remain authoritative.
 
 Implement the detector/result contract accepted in 92 in the Gate workspace. Keep confidence estimation separate from gain policy. Single-input mono/stereo must apply one consistent envelope without peer dependence; document channel-selection/downmix semantics.
 
@@ -21,6 +36,126 @@ Acceptance:
 - [ ] Inspect the inference-linked artifact's actual native imports, stage verified runtime prerequisites/applicable notices, and validate CLAP/VST3 loading/inference from candidate paths without Cargo-cache, developer PATH or incidental host-module assistance. Embedded model bytes alone do not make the native runtime self-contained.
 
 ## Results
+
+2026-10-30 callback instrumentation continuation: tested source `3c2e529`,
+format/evidence tip `25d384b` and consolidated `dcc573b` pass all 27 library
+tests, strict library/test/example Clippy, formatting and diff checks. Direct
+Rust callbacks now use the existing allocator assertion with an explicit debug
+profile precondition. Prepared realtime lifecycle/fallback, existing armed
+offline processing and marked stereo alignment at 44.1/48/96 kHz pass without
+monitored Rust allocator violations. No semantic allocation RED was observed.
+Worker/foreign allocators, sustained realtime deadlines, armed ABI and native
+host PDC remain unqualified. No production engine code changed in this slice;
+the preserved native candidate's source/hash remains unchanged. Evidence:
+`%LOCALAPPDATA%/CleanSlate/VerifiedBuilds/gate93/20261030-callback-allocation/`.
+Ticket stays claimed and 94 remains blocked.
+
+2026-10-30 scoped native checkpoint: Gate DLL source `2e3adbf` builds and its
+uninstalled candidate is staged by `ef94023` with pinned DirectML, four verified
+MSVC redistributables and notices for both formats. Receipts distinguish plugin
+source, packaging source and expected plugin hash. Loader hosts `cdf5ce0` compile,
+pass strict example Clippy/formatting and pass actual isolated CLAP/VST3 positive
+and missing-sidecar cases in `223232-8c628442`. Both positives load the pinned
+candidate DirectML; both negatives explicitly reject an outside runtime (exit
+42). An independently reviewed regression corrected the original invalid
+any-failure negative checker. Three previously absent CRTs load from the
+candidate; VCRUNTIME140 is already loaded from System32. This proves the explicit
+engineering-host search strategy, not ordinary DAW deployment, independent CRT
+loading or armed inference. No installed link, prior candidate or release changed.
+Full provenance and remaining work are in the
+[continuation record](../../../docs/research/implement-spec-continuation-2026-10-30.md).
+93 stays claimed and 94 remains blocked.
+
+### Resumed readiness verification
+
+Gate behavior `57e2cc2`, checkpoint `8f95ba8`, passes 25 tests, strict
+library/test Clippy and formatting. Waiting/current/failed feedback describes the
+last processed block and reuses the audio policy's exact evidence-age check.
+Real callback/render tests and deterministic expiry/future/invalid/reset cases
+cover all supported rates. Five actual 640×440 CPU captures were inspected.
+Artifacts and receipts are preserved under
+`%LOCALAPPDATA%/CleanSlate/VerifiedBuilds/gate93/20261030-readiness/`;
+test executable SHA256:
+`332ae4b4530de6f04c7341226957819572821c81adc6d1eeb17d0de4834d8d38`.
+Native wake, timing, isolated deployment, ABI arming/PDC and listening remain
+unqualified. 93 stays claimed and 94 blocked. Native candidate work uses a
+separate scoped worktree and does not change installed links.
+
+### Tested consent continuation — 2026-10-30
+
+Scoped `Today20092/gate93-resume` source `146b057` exposes temporary Arm/Disarm
+through the actual Panel UI while preserving bypass. Actual pointer, Tab/Enter,
+reset/deactivate/reactivate and preparation-copy regressions pass with all 20
+library tests and formatting. Lifecycle generation retires a pre-reset click;
+consent does not claim processing readiness. Final guarded runs have exit 0,
+no remaining job PIDs and verified cleanup. The tested executable SHA256 is
+`6aed9cfcea707f193fefd0865f65cc5b15e116e1a3b859d78da0a6aadedd1194`, under
+`%LOCALAPPDATA%/CleanSlate/VerifiedBuilds/gate93/20261030-editor-consent/`.
+The source's CLAP description was corrected after that compile as a text-only
+change; no new native plugin artifact or metadata qualification is claimed.
+Callback fault/stale readiness, isolated runtime deployment, actual-format
+arming/inference, deadlines/PDC and listening remain open. 93 stays claimed and
+94 blocked. Selected-target compilation uses 109's pinned-linker workaround.
+
+### Resumed all-target check — 2026-10-30
+
+Fresh preflight recovered to 26.26 GiB physical / 28.69 GiB commit with no
+compiler processes. On unchanged source `0e8de06`, the guarded all-target test
+log reports 17 library tests passed and both example test targets passed (zero
+tests). The guard did not finalize after test completion; scoped Ctrl-C ended
+its session. No finalized success/cleanup receipt exists. Guard PID 17488 and
+its observed conhost 18364 were gone afterwards, no compiler remained, and the
+global heavy-task mutex was successfully acquired/released. The next build
+attempt had safely refused that still-held mutex; no native candidate was built.
+See [check evidence](../../../docs/research/gate93-check-2026-10-30.md).
+Status remains claimed; native arming, runtime packaging, host/PDC/deadline and
+listening acceptance remain open, and 94 remains blocked.
+
+### Callback/worker checkpoint — 2026-10-28
+
+Owner-authorized cleanup stopped verified unused REA/Astro/shadcn tool servers
+without closing applications/services or changing the memory guard. Worker
+`64c5525` and callback `af4d921` are committed/clean on scoped
+`codex/smart-gate-realtime-93`; no permanent Gate or desktop integration.
+The callback now applies real finite gain through the existing embedded detector,
+independent stereo confidence and one shared envelope. This supersedes earlier
+unity-callback descriptions for current source, not the preserved native build.
+
+All 17 library tests, formatting and strict library/test Clippy pass. Real
+missing-worker, stereo and callback RED/GREEN slices plus block-size, fault,
+reset and queue checks are recorded in the
+[current receipt](../../../docs/research/smart-gate-resumption-2026-10-28.md).
+Final test receipt `20261028-182205-dba42bf392524f4eafb4aa44cc386e83` and Clippy
+`20261028-182304-6e43b8120a4947c9aa8aaba04dd7a279` verify cleanup. The tested
+executable/hash is preserved in the report. No dependency changed.
+
+Native compilation preflight stopped at 9.76 GiB physical / 7.82 GiB commit,
+below the separate 10/9 GiB requirements. No native build/host or new candidate
+was produced. Arming remains Rust API/test-only; native arming/readiness,
+callback allocation/deadline, all-rate/CLAP/VST3/PDC/runtime packaging and
+listening checks remain open. Exact original fallback/default bypass remain;
+whisper/laughter/onset preservation is not qualified. 93 stays claimed, 94 blocked.
+
+### Resumption — 2026-10-28
+
+The owner requested continuing Smart Gate and permits additional sonible research
+if needed. Existing static research is sufficient for this worker/DSP slice; no
+new vendor execution or investigation is required. Ticket 93 remains claimed on
+`codex/smart-gate-realtime-93` in the retained `smart-gate-identity-91` worktree.
+The next change is the prepared worker epoch-reset regression, followed by its
+smallest passing worker implementation before any callback connection.
+
+Native preflight measured 7.51 GiB available physical / 6.52 GiB commit headroom
+with no compiler processes. Physical memory is below the fixed 8 GiB warm-build
+minimum; no compiler, indexer, inference or host was launched. Preserve the
+8/3/2.5 GiB / 600-second policy and >=6 GiB commit preflight; no lower threshold
+or automatic retry. Source/test preparation may continue, but no new semantic
+RED/GREEN or runtime acceptance is claimed. Last tested policy stays `bb9e1a4`.
+
+The pending worker regression now covers all three supported rates and repeated
+resets with undrained results; it is unrun and the worker module remains absent.
+[Resumption boundary and next slices](../../../docs/research/smart-gate-resumption-2026-10-28.md)
+record the affected callers/checks, graph coverage gap and runtime requirements.
 
 Latest source checkpoint is `bb9e1a4efcceec168e461813cf3373fd8d882ed2`, not yet integrated: eight library tests and formatting pass for state safety and a finite gain policy with .10 open/.01 close, .14 quiet-confidence opening, bounded ramps and exact original at evidence expiry. [Policy receipts/limits](../../../docs/research/smart-gate-gain-policy-93.md). Callback still passes through; worker/inference/actual-format/offline/packaging/UI acceptance remains unchecked. A single worker epoch-reset RED is prepared but unrun, backed up outside the repo; no worker implementation. Further compilation stopped on the shared 3 GiB commit reserve during 103; [resource recovery checkpoint](../../../docs/research/cleanslate-memory-recovery-2026-10-27.md) records the owned tool-server footprint and protected app-recovery plan.
 

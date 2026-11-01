@@ -1,5 +1,15 @@
 # Podcast visual, motion and performance refinement
 
+2026-10-30 reconciliation: retained clean scoped tip `2b0595f` is newer than
+the historical results below. Inline shared numeric controls at `90d30da` /
+`da703a5` already passed public UI RED/GREEN, all 73 tests, strict Clippy,
+formatting and six CPU captures, as recorded in that branch's report. Remaining
+work includes seek/hidden/interruption coverage, 110 ms indicators, bounded
+Analysis gain, final comparisons/native qualification and review. No heavy
+work ran today: coordinator preflight was below fixed memory requirements.
+See [resumption](../../../docs/research/implement-spec-resumption-2026-10-30.md).
+Status remains claimed; no broader acceptance is newly checked.
+
 Status: claimed
 Assignee: Codex
 Readiness: ready-for-agent
@@ -19,6 +29,90 @@ Implement the owner's FabFilter/sonible quality target in the existing Podcast e
 - [ ] Preserve tested source/artifacts and compact/full/DPI captures; independent Standards/Spec review before integration. Use existing guarded product scripts, one compiler job globally, no new GUI dependency without a demonstrated blocker and a separately measured integration proof.
 
 ## Results
+
+2026-10-30 fresh CPU comparison: test-only `b5052b2` passes the unchanged waveform
+case against untouched `d2b30c91`, plus separate gain and actual egui dispatch
+cases. Matched source/lock/profile/tool identities and raw samples are preserved
+under `%LOCALAPPDATA%/CleanSlate/VerifiedBuilds/podcast103/20261030-cpu-b5052b2/`.
+Waveform p99 totals are .991→.939 ms compact and 1.355→1.259 ms full; small sample
+differences do not establish improvement. Gain-refresh p99 is 2.274/4.686 ms;
+worst observed warm gain-case total is 6.253 ms. No 40-sample warm case exceeds
+the 16.667 ms CPU budget. These are correlated CPU spans, not presented frames.
+Strict lint/formatting and focused benchmarks pass. Registration-only `72cdbe5`
+keeps the new timing cases out of ordinary parallel suites. Native presentation,
+allocation counts, per-instance CPU/memory and listening/PDC/export remain open.
+
+2026-10-30 normal native regression: artifact source `b41d51e`, evidence tip
+`9d700cb`, preserves ordinary DLL SHA256
+`d8b796862e9c0547d1c82a568708044bc8a64f42fd42023bb59e618e07eba6e2`
+and its named normal ABI hosts outside the cache. Verified runtime files/notices
+are beside both uninstalled format binaries. Receipt `230706-9133d720` passes
+the actual normal CLAP and VST3 pair: Podcast state/foreign-Probe checks and
+two-instance/channel/rate/buffer/transport cases. VST3 creates/releases an editor
+without a window. No acceptance driver is exported. Full Session VST3 restoration,
+runtime isolation, native presentation, listening/PDC/export and comparable
+performance remain unqualified; 103 stays claimed. The overwritten cache DLL
+is not the tested artifact; preserved candidate hashes are authoritative.
+
+2026-10-30 bounded gain continuation: core `9881369` and UI `d3ebcbe` pass all
+86 actual Podcast tests, strict library/test Clippy, formatting and independent
+Standards/Spec reviews. The additive projection snapshots immutable analysis,
+queries outside processing locks and rechecks source verification/revision;
+visible columns have an eight-edge exact budget. Stale, unverified and dense
+detail never becomes invented unity. UI meshes preserve gaps, legend avoids
+human labels, and compact footer overflow is corrected. Source peaks and
+Analyze-required sound semantics remain unchanged. Test-only fixture `b41d51e`
+then passes all 24 ready/unverified/dense/stale compact/full 100/150/200% CPU
+gallery cases with coherent production messages; representative images were
+visually inspected. These are CPU geometry/capture results, not native DPI,
+presentation or comparable performance acceptance. Last-Arc destruction is
+outside the query budget. Normal DLL/format regression and performance work
+continue; 103 stays claimed. See the
+[continuation record](../../../docs/research/implement-spec-continuation-2026-10-30.md).
+
+2026-10-30 independent review correction: actual native-adapter body source
+`d16ef0d` stops hidden timed repaints before context/setter/workspace access,
+reuses session cancellation and clears only the legacy drag anchor. A thin
+trait forwarder reaches the tested frame-independent body. Actual caller RED
+`222330-4d1e078d` fails before the guard; final actual-product suite
+`222421-34b240de` passes all 80 tests and strict library/test Clippy
+`222430-97e25e45` passes. Visible playback/idle polling resumes correctly;
+committed selection/history stay intact. Root source review found no further
+issue. Preserved executable SHA256:
+`276f90b0115cb952533d49865528d9f6aa309bae83850ec8ac3223731ec2c87f`.
+Component/adapter evidence does not establish native window delivery or broader
+103 acceptance. Bounded Analysis gain remains next; ticket stays claimed.
+
+2026-10-30 hidden-workspace continuation: product source `72727be` on
+`Today20092/podcast-seek-resume` passes all 79 tests from the actual
+`plugins/podcast/Cargo.toml` target, strict library/test Clippy, formatting and
+diff checks. Hidden Catch up and stale primary-selection regressions fail before
+the fix; the invisible component now reuses close cancellation before layout,
+queries or animation. Selection, Alt zoom and Middle pan interruption are
+covered while viewport, committed selection and follow are retained.
+Final suite receipt `215915-cfa01c351edc438c9a969c1ece2dd43d` reports 79 passed
+in 1.35 seconds; strict Clippy `215918-fb1a2b08882e4e77a2cd6be1bdf6141f`
+passes in 3.91 seconds. Checks use the timeout-only policy without memory gates.
+Earlier legacy-manifest lint and zero-match test attempts do not qualify the
+product; these actual-target results supersede them. Native visibility,
+bounded gain display and broader acceptance remain open; 103 stays claimed.
+
+### Tested continuation — 2026-10-30
+
+Scoped `Today20092/podcast-seek-resume` now contains backward-seek cancellation
+`595d0aa`, close-animation cancellation `fa1f3f4` and shared gesture cancellation
+`4083b0f`. The last slice passes all 76 library tests and formatting with finalized
+guarded receipts, no remaining job PIDs and verified cleanup. Actual pointer
+tests cover selection, Alt range zoom and middle pan across component close/reopen;
+selection/follow and the interrupted viewport remain correct. Source review of
+the Panel forwarding is separate from native callback delivery/hidden scheduling.
+The preserved executable SHA256 is
+`9516b908db9c592c7db73bebb10505a99c5fc85c0efefeb1e5c795cfa66a48e8`, under
+`%LOCALAPPDATA%/CleanSlate/Podcast/Workflow103Checkpoints/20261030-gesture-close-green/`.
+The selected target uses 109's documented pinned-linker workaround; no default
+build policy changed. Indicators, bounded Analysis gain, final comparable captures,
+strict checks and native acceptance remain open. Shared bounded-query work is
+[110](110-bounded-exact-gain-query.md); this ticket stays claimed.
 
 Current machine-green motion source `671c4b5c556bef51a6b1ccb53055f09e2943f274`: all 72 tests, formatting and targeted strict normal Clippy pass in receipt `20261027-105758-d786de06357743d2bef92408eb328502`. The finite 250 ms slide, local Reduced motion snap/stop behavior and existing navigation timing case are verified. The owner-authorized warm profile is fixed at 8 GiB start / 3 GiB running reserve / 2.5 GiB owned cap / 600 seconds, with immediate native physical >=8 / commit >=6 GiB preflight; script defaults are unchanged. Peak owned commit 1,801,764,864 bytes, minimum physical 11,908,128,768 bytes, minimum commit headroom 8,564,899,840 bytes, exit 0 and cleanup verified. A prior linker failure was repaired by reversible quarantine of the exact failed Podcast test incremental leaf, preserving other caches/dependencies and tested binaries; exact paths and receipts are in the report. The green test executable/source hash is preserved outside the worktree. This is not a normal plugin build or 103 completion. The heavy slot was released to 93; no further compiler/renderer/packaging work follows without coordinator grant.
 

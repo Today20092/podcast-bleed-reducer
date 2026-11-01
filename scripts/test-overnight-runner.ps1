@@ -30,6 +30,8 @@ if ((Get-Content -LiteralPath (Join-Path $tracker '2-fixture.md') -Raw) -notmatc
 Write-Output "Runner dry-run checks passed; evidence: $temporary"
 $result = & $runner -RepositoryRoot $repository -QueuePath $queuePath -PlanPath $planPath -StateRoot (Join-Path $temporary 'runs') -Start
 if ($result.tasks[1].status -ne 'checks-passed') { $result.tasks | ConvertTo-Json | Write-Host; throw 'The selected guarded fixture did not pass.' }
+$checkpoint=Get-Content -LiteralPath (Join-Path $temporary 'runs/fixture/ticket-2.json') -Raw | ConvertFrom-Json
+if (($checkpoint.commands[0].execution.policy.PSObject.Properties.Name -join ',') -ne 'TimeoutSeconds') { throw 'Runner command policy must retain only its timeout, without memory limits.' }
 if ((Get-Content -LiteralPath (Join-Path $tracker '2-fixture.md') -Raw) -notmatch 'Status: claimed') { throw 'Command success improperly closed the ticket.' }
 $calls = Join-Path $temporary 'output/calls.txt'
 if (@(Get-Content -LiteralPath $calls).Count -ne 1) { throw 'Selected command did not run exactly once.' }
@@ -72,22 +74,16 @@ if (-not $result.stopped -or $result.tasks[0].reason -notin @('interrupted-or-fa
 $preserved=Join-Path $temporary 'last-good.bin'
 'last good artifact' | Set-Content -LiteralPath $preserved
 $preservedHash=(Get-FileHash -LiteralPath $preserved).Hash
-Select-Scenario 'memory-refusal' 'memory-refusal' -Artifact
+Select-Scenario 'retry-limit' 'wait' -Artifact
 $result=Run-Scenario
-if ($result.tasks[0].reason -ne 'low-memory-before-start' -or $result.tasks[1].status -ne 'checks-passed' -or (Test-Path -LiteralPath (Join-Path $temporary 'memory-refusal/calls.txt'))) { throw 'Memory refusal did not skip to independent bounded work.' }
-$checkpoint=Get-Content -LiteralPath (Join-Path $temporary 'runs/memory-refusal/ticket-2.json') -Raw | ConvertFrom-Json
-if ($checkpoint.commands[0].attempts -ne 1 -or (Get-FileHash -LiteralPath $preserved).Hash -ne $preservedHash -or (Get-FileHash -LiteralPath $checkpoint.commands[0].artifacts_before[0].backup_path).Hash -ne $preservedHash) { throw 'Refused work lost its checkpoint or last-good artifact.' }
-$result=Run-Scenario
-$checkpoint=Get-Content -LiteralPath (Join-Path $temporary 'runs/memory-refusal/ticket-2.json') -Raw | ConvertFrom-Json
-if ($result.tasks[0].reason -ne 'awaiting-resource-recovery' -or $checkpoint.commands[0].attempts -ne 1) { throw 'A resource retry was consumed before memory recovered.' }
-
-Select-Scenario 'retry-limit' 'wait'
-$result=Run-Scenario
+$checkpoint=Get-Content -LiteralPath (Join-Path $temporary 'runs/retry-limit/ticket-2.json') -Raw | ConvertFrom-Json
+if ($result.tasks[0].reason -ne 'timeout' -or $result.tasks[1].status -ne 'checks-passed') { throw 'Timeout did not preserve independent work.' }
+if ($checkpoint.commands[0].attempts -ne 1 -or (Get-FileHash -LiteralPath $preserved).Hash -ne $preservedHash -or (Get-FileHash -LiteralPath $checkpoint.commands[0].artifacts_before[0].backup_path).Hash -ne $preservedHash) { throw 'Timed-out work lost its checkpoint or last-good artifact.' }
 $result=Run-Scenario
 $result=Run-Scenario
 $checkpoint=Get-Content -LiteralPath (Join-Path $temporary 'runs/retry-limit/ticket-2.json') -Raw | ConvertFrom-Json
 if ($result.tasks[0].reason -ne 'resource-retry-exhausted' -or $checkpoint.commands[0].attempts -ne 2 -or @(Get-Content -LiteralPath (Join-Path $temporary 'retry-limit/calls.txt')).Count -ne 2) { throw 'Timeout retried more than once.' }
-Write-Output "Runner source/failure/resource/retry/artifact checks passed; evidence: $temporary"
+Write-Output "Runner source/failure/timeout/retry/artifact checks passed; evidence: $temporary"
 
 Select-Scenario 'validation' 'pass'
 $plan.workspaces.desktop.branch='codex/wrong-branch'

@@ -1,0 +1,42 @@
+[package]
+name = "cleanslate-smart-gate"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+# Older CLAP/VST3 factory. The shipping JUCE build leaves this off.
+experimental-host = []
+
+[[example]]
+name = "smart_gate_clap_check"
+required-features = ["experimental-host"]
+
+[[example]]
+name = "smart_gate_vst3_check"
+required-features = ["experimental-host"]
+
+# Separate product; never pull the desktop/trainer or legacy probe into this graph.
+[workspace]
+
+[dependencies]
+cleanslate-gate-detector = { path = "../gate-detector" }
+nice-plug = { version = "=0.4.2", default-features = false, features = ["vst3", "editor", "assert_process_allocs"] }
+nice-plug-egui = "=0.6.0"
+egui = { version = "=0.37.0", default-features = false, features = ["default_fonts"] }
+
+[dev-dependencies]
+nice-assert-no-alloc = "=1.0.0"
+serde_json = "1.0"
+clap-sys = "=0.5.0"
+libloading = "=0.8.9"
+vst3 = "=0.3.0"
+
+[profile.dev]
+opt-level = 1
+incremental = true
+codegen-units = 16

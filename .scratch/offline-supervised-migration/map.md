@@ -1,6 +1,203 @@
 # Plan the offline supervised CleanSlate migration
 
-2026-10-28 owner authorizes source promotion after the completed Rust audit batch. [108](../offline-supervised-editor/issues/108-rust-guidelines-promotion.md) is claimed for skill discovery/install documentation and a checked development → main PR describing the entire existing development backlog. Public package publication retains ticket 74's final-package/private-signing gates; ticket 100's remaining native acceptance and separate plugin lanes remain open.
+2026-10-31 OWNER GUI CORRECTION: the owner rejects GUI117's first visual pass
+as below the FabFilter target. Continue117 in its existing workspace: make the
+native editor resizable, add an internal product title/toolbar, replace stock
+Range/buttons with crafted original controls, and fix visibly slow refresh.
+The new title-bar request supersedes the earlier minimal-header preference.
+Use supplied FabFilter CLAP binaries through a separate REA worker and the
+owner screenshots; UI implementation need not wait for full binary indexing.
+Improve the live preview loop so visual/motion iteration is quick and useful.
+No new gating algorithm, vendor artwork copying or release is authorized.
+
+2026-10-31 GUI CHECKPOINT: GUI117's bounded first polish iteration is preserved
+on `codex/smart-gate-gui-polish` (`0853097`, evidence `bc1c717`), with a runnable
+preview and independent baseline/after review. All three Orca Tasks succeeded;
+workers released. Tests/lint and both format checks pass. Full native GUI117
+acceptance remains open: interaction/DPI observation unavailable, compact native
+negotiation rejected, and idle/hidden performance unqualified. See
+[117 results](../offline-supervised-editor/issues/117-smart-gate-gui-polish.md).
+No DSP implementation resumed, primary integration, install replacement or
+release occurred; retain the GUI workspace/artifacts for owner iteration.
+
+2026-10-31 GUI RESUMPTION: owner explicitly authorizes supervised parallel GUI
+implementation and visual/performance refinement now. Claimed
+[117](../offline-supervised-editor/issues/117-smart-gate-gui-polish.md) owns a
+professional original CleanSlate surface informed by FabFilter/sonible research,
+with one UI writer and independent review. It uses committed product GUI base
+`a6ca1f6` in `codex/smart-gate-gui-polish`; source, DSP and installed previews are
+kept separate from this coordinator checkout. Backend tickets remain unfinished;
+real control wiring must never imply unimplemented processing. The earlier
+research stop is superseded for this GUI scope only; no REA restart or public
+release is authorized.
+
+2026-10-31 TICKET PLANNING ONLY: the owner asks how to turn the finished research
+into separate backend and GUI work. Drafts [114](../offline-supervised-editor/issues/114-smart-gate-algorithm-parameter-contract.md),
+[115](../offline-supervised-editor/issues/115-smart-gate-processing-controls.md) and
+[116](../offline-supervised-editor/issues/116-smart-gate-working-plugin-delivery.md)
+propose contract → expanded processing → verified VST3/CLAP delivery, reusing
+existing foundation93 and GUI94. All new drafts are needs-triage; exact parameter
+choices still belong to114. No implementation, GUI edits, build or REA restart
+is authorized by this planning step. See the draft sequence at the top of the
+[implementation tracker](implementation.md). The research-stop records below
+remain applicable to execution until a new implementation instruction.
+
+2026-10-31 RESEARCH COMPLETE / OWNER STOP AFTER REPORT: the
+[completed native report](../../docs/research/smartgate-native-engine-2026-10-31.md)
+and linked model, DSP, parameter and comparison reports are saved. Full Ghidra
+analysis succeeded; authenticated Speech/Vocals graphs and63 focused code
+dossiers establish the neural, spectral and PostGate processing with explicit
+remaining limits. Final export has78 Evidence records; owned processes closed
+normally and all analysis subagents stopped. No implementation ticket, plugin
+change or GUI change is authorized after this research. Resume only on a new
+owner instruction. The older live-session and failure records below are history.
+
+2026-10-31 OWNER RESUMPTION — native research only: the owner explicitly revokes
+the research stop, requests complete sonible VST3 reverse engineering and removes
+the artificial job deadlines/resource guards for that investigation. Use the
+available 32 logical CPUs and 40 GiB host RAM through supported Ghidra settings;
+verify the actual JVM configuration. Keep one live REA/Ghidra session through
+analysis and focused queries. Retain complete evidence and update the research
+report. This authorizes no plugin/GUI implementation or ticket after research.
+REA requires finite timers, so use its maximum supported 2,147,483,647 ms rather
+than another short deadline; remove the outer wrapper and driver expiry.
+
+Research checkpoint: the first unrestricted import succeeded (89,365 procedure
+entries retained), then an ordinary output-budget error exposed an incorrect
+client close-on-error branch. The reviewed v2 client retains the session on tool,
+transport and partial-request errors and closes only on explicit stop. Its live
+run is `Documents/Codex/Investigations/smartgate-native-completion-2026-10-31/run-02/`;
+driver 33484, REA 30044 and Ghidra 26560 started 06:16 UTC. JVM flags verified
+32 GiB heap and 32-worker analysis pool. The independent
+[authenticated-model report](../../docs/research/smartgate-authenticated-model-2026-10-31.md)
+now recovers Speech/Vocals graphs, activity mathematics and artifact-backed
+Silero comparison without vendor/model execution. Full native preprocessing,
+output consumption and post-gate DSP tracing continue. External worktree cleanup
+left only development and lusca registered; all live analysis/evidence is outside
+those retired worktrees. No product or GUI implementation is authorized here.
+
+2026-10-31 OWNER STOP: the bounded sonible VST3 investigation is saved in the
+[native research report](../../docs/research/smartgate-native-engine-2026-10-31.md),
+with supporting control/engine/model reports and complete external diagnostics.
+Main-VST3 auto-analysis timed out at 1,000,000 ms before usable code/xref results;
+no full algorithm recovery is claimed. Owned processes closed, cleanup verified
+and shared lock released. This chat's work and subagents are stopped. Do not
+proceed to the previously requested implementation ticket, backend changes or GUI
+iteration. Resume only on a new owner instruction.
+
+2026-10-31 owner sequencing: finish the actual sonible smart:gate VST3 native
+investigation, then present a complete vocal/podcast-focused algorithm and
+parameter recommendation and create its backend implementation ticket. Implement
+and minimally verify the DSP, parameter/state contract and actual VST3/CLAP audio
+processing before separately refining the GUI. Keep checks focused on loading,
+real parameter effects/attenuation, state and audio stability; avoid expanding
+the verification matrix or treating an attractive GUI as a working gate. Native
+analysis is running; its model architecture and any quality advantage remain
+unproven. Existing GUI-owner files and installed candidates stay untouched.
+
+Resumed verification: Podcast gain core `9881369` / UI `d3ebcbe` pass all 86
+actual-product tests, strict library/test Clippy and independent review. Hidden
+motion/gestures and actual-adapter repaint cancellation are verified. Bounded
+source-valid Analysis gain and 24 CPU gallery cases are implemented; native
+format/performance acceptance remains open. Gate consolidated `dcc573b` preserves
+27 passing tests, strict lint/formatting, verified runtime staging and corrected
+CLAP/VST3 isolated-loader checks. Debug Rust callback allocation/alignment checks
+pass; native arming/inference/deadlines/PDC remain open. Memory guards remain
+removed. The owner now prioritizes a usable Smart Gate GUI development install;
+its verified preview/delivery and remaining realtime checks are delegated.
+Probe/Podcast installed files stay unchanged; no public release occurred. See the
+[continuation record](../../docs/research/implement-spec-continuation-2026-10-30.md).
+
+Owner explicitly resumed implementation after the pause below. Continue from
+the preserved Podcast/Gate worktrees: finish Podcast indicator lint/review, then
+bounded gain display; run Gate's prepared readiness regression before changing
+its feedback. Memory guards remain removed under completed 111. Product source
+stays separate; native qualification and publication remain unclaimed.
+
+2026-10-30 OWNER PAUSE: all implementation and local checks stopped; no automatic
+resume. [Pause receipt](../../docs/research/implement-spec-pause-2026-10-30.md)
+records clean product checkpoints, 78 passing Podcast tests (indicator Clippy
+cancelled), 23 passing Gate tests/captures, completed 110/111 and successful
+four-platform CI for shared development `942420f`. The next Gate readiness test
+is an uncompiled/unrun draft. No product release/native qualification occurred.
+Resume only when the owner explicitly requests it.
+
+2026-10-30 [111](../offline-supervised-editor/issues/111-remove-memory-limits.md)
+is done: RAM/commit launch thresholds, reserves, job memory caps and recovery
+waiting are removed across Desktop, Podcast and Gate. Native job flags, retained
+guard/runner suites, active caller parsing and two-axis review pass. Timeout,
+cancellation and single-compiler coordination remain. Old RAM-cap qualification
+stops are superseded; 109 remains a separate accounting/cleanup limitation.
+Resume 110's prepared GREEN without a memory preflight or replacement cap.
+
+2026-10-30 owner override: remove all local build memory guards after the upgrade
+to 40 GB RAM. [111](../offline-supervised-editor/issues/111-remove-memory-limits.md)
+removes launch thresholds, running RAM/commit reserves, job memory caps and
+memory-recovery waiting. This supersedes every older memory profile below and in
+historical research. Timeouts, cancellation and single-compiler serialization
+remain. Memory statistics are informational; no hidden replacement limit is
+authorized. The compiler membership observations in 109 remain a separate issue.
+
+2026-10-30 [110 — bounded exact gain query](../offline-supervised-editor/issues/110-bounded-exact-gain-query.md)
+is done as the shared prerequisite for 103's accepted bounded Analysis gain display.
+Behavioral source `4df16d4` passes 100 library tests (seven ignored), 14 effective-
+envelope tests and three timebase tests; final lint-only source `1106d3e` passes
+standard strict library Clippy and formatting. The additive public API refuses
+over-budget indexed work before exact evaluation, preserving old APIs and source/
+manual/protection semantics. Ticket 111's timeout-only policy applies; 109's job
+accounting caveat remains separate. No GUI or ticket 103 completion is claimed.
+
+2026-10-30 Podcast editor-close lifecycle source `fa1f3f4` passes its RED/GREEN
+and all 75 library tests. The component close boundary clears pending Catch up
+motion while preserving selection/follow; the actual Panel close callback is
+source-reviewed. Pinned-linker compilation, direct suite and formatting finalize
+normally under unchanged guards. Preserved executable SHA256:
+`012ef420ecf533e04a58dbc030f05cb7dbc450fafab190c0a2d96d1387118d8d`.
+This is component lifecycle evidence, not native hidden-window scheduling or
+ticket 103 completion. Gesture interruption, indicators, gain display,
+comparisons and native acceptance remain open on `Today20092/podcast-seek-resume`.
+
+2026-10-30 Gate arming lifecycle source `bdb94e9` passes its RED/GREEN and all
+18 library tests with finalized guarded receipts. The selected unit-test target
+links with the pinned Rust linker without the persistent MSVC helper; formatting
+passes and the executable is preserved. [109](../offline-supervised-editor/issues/109-resource-guard-completion.md)
+records that bounded workaround and its limits. Native editor consent/readiness,
+runtime/host/PDC/deadline/listening acceptance remain open; 93 stays claimed and
+94 blocked. Source remains on `Today20092/gate93-resume`, separate from Desktop.
+
+2026-10-30 tested continuation: Podcast backward-seek fix `595d0aa` passes all
+74 library tests from preserved artifact
+`fab1a2c6127ec80fd47f5a3e1826abffd516ffa415488a84b700cb89dba35883`.
+The direct executable run finalized receipt
+`844f49a11ce642b69b72908ad31d801c` with root/command exit 0, no remaining job
+PIDs and verified cleanup. Product evidence is `2afd150` on
+`Today20092/podcast-seek-resume`; 103 remains claimed. The diagnostic Cargo
+run identified an actual owned `VCTIP.EXE` surviving root exit, reproduced by
+tiny MSVC compiler/linker probes. [109](../offline-supervised-editor/issues/109-resource-guard-completion.md)
+now has a concrete build-helper cause; no descendant is ignored and the
+normal MSVC build-completion blocker remains open. Product source stays separate.
+
+2026-10-30 continuation on `Today20092/finish-implement-spec`: restored the
+preserved Podcast seek and Gate 93 branches into managed worktrees after finding
+their former checkout directories contained only markers. Shared guard
+diagnostics `e00b78f` pass the existing disposable suite and a real delayed-child
+completion regression. [109](../offline-supervised-editor/issues/109-resource-guard-completion.md)
+remains claimed: the historical stall is unreproduced, completion/containment
+semantics and resource limits are unchanged, and the next representative product
+run must retain root-exit and actual job-PID evidence. Product source remains
+separate; no native qualification, ticket closure or release is implied.
+
+2026-10-30 implement-spec resumed on coordination branch
+`codex/implement-spec-2026-10-30`. One native preflight found 4.77 GiB physical /
+3.66 GiB commit, below unchanged requirements; no heavy process launched or
+retry occurred. Gate 93 is preserved at `0e8de06`, Podcast 103 at `2b0595f`.
+The latter already includes verified inline numeric controls and 73 tests;
+older pending-inline-control notes below are superseded. Both remain claimed,
+94 blocked. [Current frontier and limits](../../docs/research/implement-spec-resumption-2026-10-30.md).
+
+2026-10-28 Smart Gate 93 resumed after owner-authorized unused tool-server cleanup. Scoped worker `64c5525` and callback `af4d921` now perform real offline mono/stereo inference-to-gain processing; 17 library tests, formatting and strict library/test Clippy pass with verified guarded cleanup. [Receipt and remaining checks](../../docs/research/smart-gate-resumption-2026-10-28.md). No new native candidate, permanent Gate/desktop merge, native arming/readiness, deadline/PDC/runtime or listening acceptance. Larger native compilation preflight stopped at 9.76 GiB physical / 7.82 GiB commit, below its 10/9 GiB requirements; no threshold reduction or native launch. 93 stays claimed and 94 blocked. Earlier unity-callback notes describe prior source/native candidates.
+
+2026-10-28 [108](../offline-supervised-editor/issues/108-rust-guidelines-promotion.md) is done: [PR 24](https://github.com/Today20092/podcast-bleed-reducer/pull/24) passed all four platform checks and promoted the existing development backlog plus Rust corrections through merge f0ea4f0. Development is synchronized. AGENTS.md points to the canonical Google Rust skill; CONTRIBUTING.md documents optional NPX installation and use. Public package publication retains ticket 74's final-package/private-signing gates; ticket 100's remaining native acceptance and separate plugin lanes remain open.
 
 2026-10-28 Google Rust correction batch complete: 104 worker-start recovery, 105 shared acoustic evidence, 106 updater safety contracts and 107 timing/model API contracts are done. Combined source 618aed8 passed all four CI platforms; independent Standards/Spec reviews are 0/0, and merge 31e2c33 is integrated into primary development. [Receipt](../../docs/research/rust-guidelines-corrections-2026-10-28.md) distinguishes hosted GREEN from the default guard's local pre-launch memory refusal (11.08 GiB physical / 7.82 GiB commit), and records 107 archived / 104–106 retained by the app's in-use guard. Existing plugin/owner acceptance and release boundaries remain unchanged.
 

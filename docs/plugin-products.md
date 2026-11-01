@@ -1,6 +1,10 @@
 # CleanSlate products and plugin workspaces
 
+The current user guide is [Smart Gate](smart-gate.md). That preview is the JUCE Windows VST3 in `plugins/juce-gate`, version 0.1.0. It stays in this repository because it compiles the shared Silero model. The sections below are the product split accepted on 2026-10-25. Their CLAP, VST2, and separate-worktree notes are earlier targets, not the preview download.
+
 Accepted by the owner on 2026-10-25. This separates the previous combined Session/Live Mic product direction. The [active map](../.scratch/offline-supervised-migration/map.md) remains the authoritative roadmap.
+
+For source locations, workspace roles, builds and safe integration, see the [product workspace guide](product-workspaces.md).
 
 | Product | Workflow | Development branch | Continuing ticket |
 | --- | --- | --- | --- |
@@ -9,6 +13,8 @@ Accepted by the owner on 2026-10-25. This separates the previous combined Sessio
 | CleanSlate Podcast | Supervised multitrack post-production inside a host | `codex/plugin-podcast` | [86](../.scratch/offline-supervised-editor/issues/86-podcast-plugin.md) |
 
 Smart Gate means speech-controlled attenuation; automatic voice-volume leveling is not in its initial scope. Podcast does not need live multitrack recording support. Both are separate products, not modes selected inside one shipping plugin. Product names are working names.
+
+The published [desktop downloads](../README.md#download) are for the standalone application. The plugins remain in development; source checkpoints and prototype host checks do not establish released or fully qualified plugin packages. Follow the [active map](../.scratch/offline-supervised-migration/map.md) for current acceptance status.
 
 ## Code and integration boundaries
 

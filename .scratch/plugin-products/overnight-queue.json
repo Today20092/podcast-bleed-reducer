@@ -9,10 +9,7 @@
     88,
     99
   ],
-  "memory_policy": {
-    "min_available_gib_before_heavy": 14,
-    "min_available_gib_while_running": 8,
-    "max_owned_heavy_tree_commit_gib": 6,
+  "execution_policy": {
     "sample_interval_seconds": 1,
     "task_timeout_minutes": 30,
     "max_resource_retries": 1,

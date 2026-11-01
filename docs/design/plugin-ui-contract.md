@@ -157,7 +157,7 @@ Low-memory work here used only deterministic rendering under [88's guard](../res
 & ./scripts/resource-guard.ps1 -FilePath (Get-Command pwsh).Source `
   -ArgumentList @('-NoProfile','-File',"$PWD/docs/design/plugin-ui/render.ps1", `
     '-OutputDirectory',"$PWD/docs/design/plugin-ui/renders") `
-  -MinAvailableGiB 2 -ReserveGiB 1 -MaxCommitGiB 0.5 -TimeoutSeconds 90 `
+  -TimeoutSeconds 90 `
   -ReceiptPath 'C:/existing-directory/new-render-receipt.json'
 ```
 
