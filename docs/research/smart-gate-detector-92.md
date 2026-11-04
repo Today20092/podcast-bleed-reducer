@@ -6,7 +6,7 @@ speech presence, including another speaker's bleed, never microphone ownership.
 
 ## Chosen bounded experiment
 
-Reuse the existing MIT Silero VAD v5 ONNX bytes in `assets/silero_vad.onnx`,
+Reuse the existing MIT Silero VAD 6.2 ONNX bytes in `assets/silero_vad.onnx`,
 SHA256 `1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3`,
 2,327,524 bytes. Reuse locked `ort=2.0.0-rc.10`, CPU execution with one intra-op
 and one inter-op thread. No vendor weights, model download or trainer.
