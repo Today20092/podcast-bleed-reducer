@@ -58,6 +58,8 @@ See [Cargo's build-cache documentation](https://doc.rust-lang.org/cargo/referenc
 | Push development or merge an ordinary PR | No application release packages from that action alone. |
 | Open/update a PR | Four-platform checks; no application release. |
 | Manually run **Desktop draft release** on development with `build_only: true` | Checked native packages under the Actions run's Artifacts; no release is created or updated. Set release_tag to the current Cargo version with a leading v. |
+| Manually run **Smart Gate VST3** with `build_only: true` | One Windows VST3 zip under that run's Artifacts. It does not build or replace the desktop packages. |
+| Push a `smart-gate-v*` tag, or run **Smart Gate VST3** with `build_only` off | A draft GitHub release containing that zip. Desktop `v*` tags stay on the desktop workflow. |
 | Deliberately push a `v*` version tag | Checks and packages four platforms, then prepares one draft after all package jobs succeed. Its stable/prerelease status follows the version tag. |
 | Publish the verified draft | Public release assets and the README-download update workflow. |
 

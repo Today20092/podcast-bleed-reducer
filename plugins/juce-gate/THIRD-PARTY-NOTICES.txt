@@ -1,0 +1,13 @@
+CleanSlate Smart Gate 0.1.0
+The plug-in the host loads is the JUCE VST3. cleanslate_smart_gate.dll beside that binary is the engine. It does not export a CLAP or VST3 factory.
+
+JUCE 8.0.8
+Source: https://github.com/juce-framework/JUCE
+This plug-in is released under the GNU AGPL-3.0 because it contains JUCE. The license text is AGPL-3.0.txt beside this note. The desktop app in the same repository stays MIT. Corresponding source is https://github.com/Today20092/podcast-bleed-reducer
+
+Speech detector
+The engine embeds Silero VAD v5 (MIT, Copyright (c) 2020-present Silero Team) and ONNX Runtime.
+Their notices are embedded-model-runtime.txt beside this note.
+
+Microsoft Visual C++ runtime
+If the installer adds the VC++ runtime DLLs, include docs/licenses/msvc-runtime.txt.

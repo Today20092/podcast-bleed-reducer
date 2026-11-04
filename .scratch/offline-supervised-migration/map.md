@@ -1,14 +1,112 @@
 # Plan the offline supervised CleanSlate migration
 
-Resumed verification: Podcast hidden-workspace source `d16ef0d` passes all 80
-actual-product tests, strict library/test Clippy and formatting. Hidden Catch up
-and interrupted gestures use the existing close cancellation path; the actual
-Panel caller also stops hidden timed repaint. Bounded
-Analysis gain display remains next. Gate readiness `57e2cc2` / `8f95ba8` passes
-25 tests, strict lint/formatting and five actual CPU captures. Feedback shares
-the existing gain validity predicate; native qualification remains open. Memory
-guards remain removed. Separate native-candidate staging work has not installed
-or released a plugin.
+2026-10-31 OWNER GUI CORRECTION: the owner rejects GUI117's first visual pass
+as below the FabFilter target. Continue117 in its existing workspace: make the
+native editor resizable, add an internal product title/toolbar, replace stock
+Range/buttons with crafted original controls, and fix visibly slow refresh.
+The new title-bar request supersedes the earlier minimal-header preference.
+Use supplied FabFilter CLAP binaries through a separate REA worker and the
+owner screenshots; UI implementation need not wait for full binary indexing.
+Improve the live preview loop so visual/motion iteration is quick and useful.
+No new gating algorithm, vendor artwork copying or release is authorized.
+
+2026-10-31 GUI CHECKPOINT: GUI117's bounded first polish iteration is preserved
+on `codex/smart-gate-gui-polish` (`0853097`, evidence `bc1c717`), with a runnable
+preview and independent baseline/after review. All three Orca Tasks succeeded;
+workers released. Tests/lint and both format checks pass. Full native GUI117
+acceptance remains open: interaction/DPI observation unavailable, compact native
+negotiation rejected, and idle/hidden performance unqualified. See
+[117 results](../offline-supervised-editor/issues/117-smart-gate-gui-polish.md).
+No DSP implementation resumed, primary integration, install replacement or
+release occurred; retain the GUI workspace/artifacts for owner iteration.
+
+2026-10-31 GUI RESUMPTION: owner explicitly authorizes supervised parallel GUI
+implementation and visual/performance refinement now. Claimed
+[117](../offline-supervised-editor/issues/117-smart-gate-gui-polish.md) owns a
+professional original CleanSlate surface informed by FabFilter/sonible research,
+with one UI writer and independent review. It uses committed product GUI base
+`a6ca1f6` in `codex/smart-gate-gui-polish`; source, DSP and installed previews are
+kept separate from this coordinator checkout. Backend tickets remain unfinished;
+real control wiring must never imply unimplemented processing. The earlier
+research stop is superseded for this GUI scope only; no REA restart or public
+release is authorized.
+
+2026-10-31 TICKET PLANNING ONLY: the owner asks how to turn the finished research
+into separate backend and GUI work. Drafts [114](../offline-supervised-editor/issues/114-smart-gate-algorithm-parameter-contract.md),
+[115](../offline-supervised-editor/issues/115-smart-gate-processing-controls.md) and
+[116](../offline-supervised-editor/issues/116-smart-gate-working-plugin-delivery.md)
+propose contract → expanded processing → verified VST3/CLAP delivery, reusing
+existing foundation93 and GUI94. All new drafts are needs-triage; exact parameter
+choices still belong to114. No implementation, GUI edits, build or REA restart
+is authorized by this planning step. See the draft sequence at the top of the
+[implementation tracker](implementation.md). The research-stop records below
+remain applicable to execution until a new implementation instruction.
+
+2026-10-31 RESEARCH COMPLETE / OWNER STOP AFTER REPORT: the
+[completed native report](../../docs/research/smartgate-native-engine-2026-10-31.md)
+and linked model, DSP, parameter and comparison reports are saved. Full Ghidra
+analysis succeeded; authenticated Speech/Vocals graphs and63 focused code
+dossiers establish the neural, spectral and PostGate processing with explicit
+remaining limits. Final export has78 Evidence records; owned processes closed
+normally and all analysis subagents stopped. No implementation ticket, plugin
+change or GUI change is authorized after this research. Resume only on a new
+owner instruction. The older live-session and failure records below are history.
+
+2026-10-31 OWNER RESUMPTION — native research only: the owner explicitly revokes
+the research stop, requests complete sonible VST3 reverse engineering and removes
+the artificial job deadlines/resource guards for that investigation. Use the
+available 32 logical CPUs and 40 GiB host RAM through supported Ghidra settings;
+verify the actual JVM configuration. Keep one live REA/Ghidra session through
+analysis and focused queries. Retain complete evidence and update the research
+report. This authorizes no plugin/GUI implementation or ticket after research.
+REA requires finite timers, so use its maximum supported 2,147,483,647 ms rather
+than another short deadline; remove the outer wrapper and driver expiry.
+
+Research checkpoint: the first unrestricted import succeeded (89,365 procedure
+entries retained), then an ordinary output-budget error exposed an incorrect
+client close-on-error branch. The reviewed v2 client retains the session on tool,
+transport and partial-request errors and closes only on explicit stop. Its live
+run is `Documents/Codex/Investigations/smartgate-native-completion-2026-10-31/run-02/`;
+driver 33484, REA 30044 and Ghidra 26560 started 06:16 UTC. JVM flags verified
+32 GiB heap and 32-worker analysis pool. The independent
+[authenticated-model report](../../docs/research/smartgate-authenticated-model-2026-10-31.md)
+now recovers Speech/Vocals graphs, activity mathematics and artifact-backed
+Silero comparison without vendor/model execution. Full native preprocessing,
+output consumption and post-gate DSP tracing continue. External worktree cleanup
+left only development and lusca registered; all live analysis/evidence is outside
+those retired worktrees. No product or GUI implementation is authorized here.
+
+2026-10-31 OWNER STOP: the bounded sonible VST3 investigation is saved in the
+[native research report](../../docs/research/smartgate-native-engine-2026-10-31.md),
+with supporting control/engine/model reports and complete external diagnostics.
+Main-VST3 auto-analysis timed out at 1,000,000 ms before usable code/xref results;
+no full algorithm recovery is claimed. Owned processes closed, cleanup verified
+and shared lock released. This chat's work and subagents are stopped. Do not
+proceed to the previously requested implementation ticket, backend changes or GUI
+iteration. Resume only on a new owner instruction.
+
+2026-10-31 owner sequencing: finish the actual sonible smart:gate VST3 native
+investigation, then present a complete vocal/podcast-focused algorithm and
+parameter recommendation and create its backend implementation ticket. Implement
+and minimally verify the DSP, parameter/state contract and actual VST3/CLAP audio
+processing before separately refining the GUI. Keep checks focused on loading,
+real parameter effects/attenuation, state and audio stability; avoid expanding
+the verification matrix or treating an attractive GUI as a working gate. Native
+analysis is running; its model architecture and any quality advantage remain
+unproven. Existing GUI-owner files and installed candidates stay untouched.
+
+Resumed verification: Podcast gain core `9881369` / UI `d3ebcbe` pass all 86
+actual-product tests, strict library/test Clippy and independent review. Hidden
+motion/gestures and actual-adapter repaint cancellation are verified. Bounded
+source-valid Analysis gain and 24 CPU gallery cases are implemented; native
+format/performance acceptance remains open. Gate consolidated `dcc573b` preserves
+27 passing tests, strict lint/formatting, verified runtime staging and corrected
+CLAP/VST3 isolated-loader checks. Debug Rust callback allocation/alignment checks
+pass; native arming/inference/deadlines/PDC remain open. Memory guards remain
+removed. The owner now prioritizes a usable Smart Gate GUI development install;
+its verified preview/delivery and remaining realtime checks are delegated.
+Probe/Podcast installed files stay unchanged; no public release occurred. See the
+[continuation record](../../docs/research/implement-spec-continuation-2026-10-30.md).
 
 Owner explicitly resumed implementation after the pause below. Continue from
 the preserved Podcast/Gate worktrees: finish Podcast indicator lint/review, then
