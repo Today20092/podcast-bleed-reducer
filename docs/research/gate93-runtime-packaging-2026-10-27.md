@@ -52,7 +52,7 @@ accepted product source `c7513c8`.
   hash-preservation protects executable bytes but is not a self-contained package.
 - `plugins/gate-detector/src/lib.rs` embeds `assets/silero_vad.onnx` using
   `include_bytes!` and prepares it with `commit_from_memory`. The model is
-  Silero v5, 2,327,524 bytes, SHA256
+  Silero 6.2, 2,327,524 bytes, SHA256
   `1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3`.
   This implementation requires **no model sidecar or runtime model download**.
 - Current `plugins/smart-gate/Cargo.toml` does not depend on gate-detector/ort.

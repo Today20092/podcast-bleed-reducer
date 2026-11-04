@@ -42,7 +42,7 @@ Microsoft app-local runtime DLLs. PE imports were inspected and non-system CRT
 imports are covered. Windows 11 system DirectML/D3D libraries remain system inputs.
 
 The package contains executable, 8 CRT DLLs, MIT license, quick start, real Rust
-dependency texts plus full Silero v5/ONNX1.22 notices and an inventory/identity
+dependency texts plus full Silero 6.2/ONNX1.22 notices and an inventory/identity
 manifest. 292 resolved dependency records have license coverage, including 38
 crate archives supplemented from recorded upstream license sources. ZIP extraction
 and checker passed. Deliberately changed README bytes were rejected; restoring
