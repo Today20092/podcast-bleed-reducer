@@ -63,7 +63,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Compiler installation failed' }
           rustup override set 1.99.0
           if ($LASTEXITCODE -ne 0) { throw 'Compiler selection failed' }
-      - uses: actions/cache/restore@v5
+      - uses: actions/cache/restore@v6
         id: rust-cache
         with:
           path: |
@@ -107,7 +107,7 @@ jobs:
         if: always() && runner.os == 'Windows'
         run: |
           Get-ChildItem -LiteralPath target -Recurse -File -Filter '*.pdb' -ErrorAction SilentlyContinue | Remove-Item -Force
-      - uses: actions/cache/save@v5
+      - uses: actions/cache/save@v6
         if: always() && steps.rust-cache.outputs.cache-primary-key != '' && steps.rust-cache.outputs.cache-hit != 'true'
         with:
           path: |
