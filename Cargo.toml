@@ -17,16 +17,16 @@ required-features = ["desktop-ui"]
 [dependencies]
 bwavfile = "2.0.1"
 iced = { version = "0.14.0", features = ["advanced", "canvas", "svg", "sysinfo", "tokio"] }
-ort = "=2.0.0-rc.10"
+ort = "=2.0.0-rc.15"
 rfd = "0.18.0"
 rodio = { version = "0.21", default-features = false, features = ["playback"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0"
 sha2 = "0.10"
 semver = "=1.0.28"
-ureq = { version = "=3.4.0", default-features = false, features = ["rustls"] }
+ureq = { version = "=3.5.2", default-features = false, features = ["rustls"] }
 minisign-verify = "=0.3.0"
-zip = { version = "=9.0.5", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+zip = { version = "=9.5.1", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 getrandom = "0.3"
 
 nalgebra = { version = "=0.35.0", default-features = false, features = ["std"] }
@@ -41,7 +41,7 @@ winresource = "0.1"
 windows-sys = { version = "0.61", features = ["Win32_Storage_FileSystem", "Win32_System_Threading", "Win32_Foundation"] }
 
 [dev-dependencies]
-iced_tiny_skia = "=0.14.0"
+iced_tiny_skia = "=0.14.1"
 
 [[example]]
 name = "pan-drawing-probe"
