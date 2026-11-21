@@ -1,17 +1,17 @@
 CleanSlate embedded model and runtime notices
 
-The acoustic-first desktop packages embed Silero VAD v5 and use
+The acoustic-first desktop packages embed Silero VAD 6.2 (the v5-architecture ONNX model, unchanged through v6.2.3) and use
 ONNX Runtime 1.22.0. ort-sys 2.0.0-rc.10 build.rs pins ONNXRUNTIME_VERSION
 1.22.0; this file includes the matching upstream runtime notices in full.
 ONNX Runtime's notice inventory may include components not enabled in this build.
 Nemotron is unavailable in this alpha distribution and is not bundled.
 
-Silero VAD v5 model SHA-256:
+Silero VAD 6.2 model SHA-256:
 1A153A22F4509E292A94E67D6F9B85E8DEB25B4988682B7E174C65279D8788E3
 
 ======================================================================
-Silero-VAD-v5
-Source: https://raw.githubusercontent.com/snakers4/silero-vad/v5.0/LICENSE
+Silero-VAD-6.2
+Source: https://raw.githubusercontent.com/snakers4/silero-vad/v6.2/LICENSE
 
 MIT License
 
