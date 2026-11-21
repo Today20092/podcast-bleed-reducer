@@ -2,6 +2,9 @@ name: Pull request checks
 
 on:
   pull_request:
+  # Rechecks each merge, since main does not require PRs to be up to date.
+  push:
+    branches: [main]
   workflow_dispatch:
 
 permissions:

@@ -4,7 +4,7 @@ Current policy: 2026-10-22. Stable 1.0.0 is published under [ticket 71](../.scra
 
 ## One place to work
 
-The primary desktop checkout is `C:/Users/User/Documents/podcast-automix-rust-gui`, on `development`. Main remains the reviewed desktop release branch and GitHub's default branch. The separate Smart Gate and Podcast product branches are described in [product boundaries](plugin-products.md). The detached `ticket14-frozen-baseline` checkout is intentional comparison evidence, not another development branch.
+The primary desktop checkout is `C:/Users/User/Documents/podcast-automix-rust-gui`, on `main`, the only long-lived desktop branch and GitHub's default. Tasks run in their own worktrees; `development` was retired on 2026-11-21 after its last commits landed through PR 27. The separate Smart Gate and Podcast product branches are described in [product boundaries](plugin-products.md). The detached `ticket14-frozen-baseline` checkout is intentional comparison evidence, not another development branch.
 
 The integrated development history includes adjustable shortcuts, the owner-approved FabFilter-inspired GUI pass (`6b99a9a`), rotary controls/Lucide/performance (`1235ca1`), the October 22 follow-up through `6160da9`, and the accepted menu/action/toolbar batch (60/63/69). Development at `8096d6f` also includes discovery and release-policy documentation. The owner accepted the current GUI and explicitly waived further computer control; the [integration receipt](research/menu-actions-integration-2026-10-22.md) discloses unperformed native checks. Generated diagnostics and private scratch material remain local. Earlier receipts preserve the historical build and measurement limits.
 
@@ -12,14 +12,16 @@ The integrated development history includes adjustable shortcuts, the owner-appr
 
 ## Everyday work
 
-1. For one task at a time, claim its ticket and work on development in the primary checkout. Commit useful checkpoints, build, try the application and revise locally.
-2. When the owner explicitly requests parallel work, give each concurrent feature a temporary scoped `codex/` branch/worktree from development. Source editing can happen in parallel; use the shared build target for compilation.
-3. Merge a runnable feature into local development and rebuild there to test the combined app. Further feature-branch revisions need another merge before they appear in that build. A local merge already updates your files; no GitHub round trip is needed.
-4. Push development regularly as a backup. Solo local feature integration does not require a feature PR. External contributors use PRs targeting development.
-5. Once a batch passes its checks and the required desktop/audio review, open one development → main GitHub PR. Preserve ancestry with a merge commit. Bring main-only fixes and version metadata back to development.
-6. Remove integrated temporary branches/worktrees after preserving their needed files and executable. Keep the frozen baseline intact.
+1. Claim the task's ticket and work on its own scoped branch from current `main`, in a worktree the host manages. A T3 Code thread on the main checkout moves itself with `t3_worktree_handoff` before editing. Builds use the shared cache below, so a new worktree needs no separate dependency step.
+2. Commit work in progress instead of using `git stash`: stashes are shared by every worktree.
+3. End every code task with a commit and a PR to `main`, without being asked. Opening a PR is safe: a merge publishes nothing.
+4. The four-platform checks run on the PR. Watch them and fix failures until they pass. Add the desktop/audio review the ticket requires.
+5. Merge only when the owner asks, with a merge commit. To merge without waiting, queue it with `gh pr merge --auto --merge`; GitHub merges once the four checks pass. `main` does not require PRs to be up to date: the checks run again on each push to `main`, and a release comes only from a deliberate tag.
+6. After the merge, GitHub deletes the branch. Remove the worktree after preserving its needed files and executable. Keep the frozen baseline intact.
 
 Pull with `git pull --ff-only` when GitHub has commits absent locally. A PR is a review/merge request, not an application download. Changing branches or merging source does not update an existing executable until you build again.
+
+[Dependabot](../.github/dependabot.yml) opens one monthly minor-and-patch PR per ecosystem (Cargo, GitHub Actions), majors one PR each, with a 7-day cooldown. [Auto-merge](../.github/workflows/dependabot-auto-merge.yml) queues minor and patch PRs to merge once the four checks pass; majors wait for a person.
 
 ## One local build cache
 
@@ -55,9 +57,9 @@ See [Cargo's build-cache documentation](https://doc.rust-lang.org/cargo/referenc
 | Action | Current result |
 | --- | --- |
 | Edit, merge or build locally | Source changes or a local executable only. |
-| Push development or merge an ordinary PR | No application release packages from that action alone. |
+| Merge an ordinary PR | Four-platform checks on `main`; no application release packages. |
 | Open/update a PR | Four-platform checks; no application release. |
-| Manually run **Desktop draft release** on development with `build_only: true` | Checked native packages under the Actions run's Artifacts; no release is created or updated. Set release_tag to the current Cargo version with a leading v. |
+| Manually run **Desktop draft release** on a branch with `build_only: true` | Checked native packages under the Actions run's Artifacts; no release is created or updated. Set release_tag to the current Cargo version with a leading v. |
 | Manually run **Smart Gate VST3** with `build_only: true` | One Windows VST3 zip under that run's Artifacts. It does not build or replace the desktop packages. |
 | Push a `smart-gate-v*` tag, or run **Smart Gate VST3** with `build_only` off | A draft GitHub release containing that zip. Desktop `v*` tags stay on the desktop workflow. |
 | Deliberately push a `v*` version tag | Checks and packages four platforms, then prepares one draft after all package jobs succeed. Its stable/prerelease status follows the version tag. |
