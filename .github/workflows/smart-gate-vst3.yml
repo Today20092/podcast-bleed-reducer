@@ -71,7 +71,7 @@ jobs:
           $hash = Get-FileHash -LiteralPath $zip -Algorithm SHA256
           Set-Content -LiteralPath "$zip.sha256" -Value "$($hash.Hash)  $(Split-Path -Leaf $zip)"
       - name: Upload the zip
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: windows-x64-vst3
           path: |
